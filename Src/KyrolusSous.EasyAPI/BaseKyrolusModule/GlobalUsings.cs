@@ -1,0 +1,14 @@
+global using KyrolusSous.EasyAPI.BaseKyrolusModule.Enum;
+global using Microsoft.Extensions.DependencyInjection;
+global using KyrolusSous.EasyAPI.BaseKyrolusModule.Interfaces;
+global using KyrolusSous.CQRS.Base.Command.Add;
+global using KyrolusSous.CQRS.Base.Command.Remove;
+global using KyrolusSous.CQRS.Base.Command.Update;
+global using Microsoft.AspNetCore.Builder;
+global using KyrolusSous.ExceptionHandling.ClasesAndHelpers;
+global using Mapster;
+global using System.Net;
+global using KyrolusSous.SourceMediator;
+global using KyrolusSous.CQRS.Base.Query;
+global using Microsoft.AspNetCore.Http;
+global using Microsoft.AspNetCore.Mvc;
