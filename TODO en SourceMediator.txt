@@ -1,0 +1,22 @@
+بناءً على ما بنيناه حتى الآن في SourceMediator، هذه بعض الميزات المتقدمة أو الخيارات الموجودة في مكتبة MediatR القياسية والتي لا توجد لدينا حاليًا بشكل مباشر (وإن كان يمكن محاكاة بعضها):
+
+استراتيجيات نشر الإشعارات القابلة للتهيئة (Configurable Notification Publishing Strategies):
+
+MediatR: يسمح لك باختيار الطريقة التي يتم بها استدعاء معالجات الإشعارات المتعددة. الافتراضي هو TaskWhenAllPublisher (يشغلهم بالتوازي وينتظرهم جميعًا)، ولكن يوفر أيضًا ForeachAwaitPublisher (يشغلهم بالتسلسل واحدًا تلو الآخر)، ويتيح لك كتابة استراتيجية نشر خاصة بك عبر تطبيق INotificationPublisher.
+SourceMediator: الكلاس SourcePublisher الذي كتبناه يستخدم حاليًا استراتيجية مشابهة لـ TaskWhenAllPublisher مع تجميع للأخطاء، ولكنها غير قابلة للتهيئة حاليًا (لا يمكنك بسهولة اختيار التشغيل التسلسلي مثلاً).
+معالجات ما قبل/ما بعد الطلب (Request Pre/Post-Processors):
+
+MediatR: يوفر واجهات بسيطة ومحددة هي IRequestPreProcessor<TRequest> و IRequestPostProcessor<TRequest, TResponse>. يتم تشغيلها تلقائيًا قبل وبعد الـ Handler مباشرة (ولكن داخل سلسلة الـ Pipeline Behaviors).
+SourceMediator: ليس لدينا هذه الواجهات المحددة. يمكن تحقيق نفس الهدف تقريبًا باستخدام IPipelineBehavior العادية وترتيبها بشكل صحيح (Behavior له Order منخفض جدًا ليعمل كـ Pre-Processor، و Behavior له Order مرتفع جدًا ليعمل كـ Post-Processor)، لكنها ليست ميزة منفصلة ومباشرة كما في MediatR.
+معالجات الاستثناءات المخصصة للطلبات (Specific Request Exception Handlers/Actions):
+
+MediatR: يوفر واجهات مثل IRequestExceptionHandler<TRequest, TResponse, TException> و IRequestExceptionAction<TRequest, TException>. هذه تسمح بكتابة كود متخصص يتم استدعاؤه فقط عندما يحدث Exception معين أثناء معالجة طلب معين (عادة داخل الـ Handler). هذا يوفر تحكمًا دقيقًا جدًا في معالجة الأخطاء الخاصة بطلبات معينة.
+SourceMediator: لا نوفر هذه الواجهات المتخصصة. معالجة الأخطاء لدينا تعتمد إما على try-catch القياسية داخل الـ Handlers، أو على Pipeline Behaviors عامة لمعالجة الأخطاء، أو على Middleware مركزي في التطبيق.
+طلبات التدفق (Stream Requests):
+
+MediatR: يدعم سيناريوهات التدفق (Streaming) حيث يمكن للـ Handler أن يعيد IAsyncEnumerable<TResponse> بدلًا من Task<TResponse>. يتم ذلك عبر واجهات IStreamRequest<TResponse> و IStreamRequestHandler<TRequest, TResponse>.
+SourceMediator: لم نقم بتصميم أو تطبيق أي دعم لطلبات التدفق حاليًا.
+خيارات تهيئة DI التفصيلية:
+
+MediatR: الميثود AddMediatR(cfg => ...) توفر كائن MediatRServiceConfiguration يسمح بتهيئة أشياء كثيرة مثل دورة الحياة الافتراضية للـ Handlers، طريقة تسجيل الـ Behaviors، اختيار استراتيجية النشر، وغيرها.
+SourceMediator: الـ Extension Methods التي لدينا (خاصة المولدة) تقوم بالتسجيل الأساسي. لا يوجد لدينا حاليًا API تهيئة مركزي بنفس مستوى التفصيل للتحكم الدقيق في كل جوانب التسجيل والسلوك.
