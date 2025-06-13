@@ -1,0 +1,10 @@
+global using KyrolusSous.BaseRepositoryEF.Repository;
+global using Microsoft.EntityFrameworkCore;
+global using System.Linq.Expressions;
+global using KyrolusSous.IRespositoryInterfaces.IRepository;
+global using System.Text.Json;
+global using FluentValidation;
+global using FluentValidation.Results;
+global using System.Data;
+global using KyrolusSous.IRespositoryInterfaces.IUnitOfWork;
+global using KyrolusSous.IRespositoryInterfaces;

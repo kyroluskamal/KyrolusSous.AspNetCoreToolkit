@@ -1,0 +1,14 @@
+global using System.Linq.Expressions;
+global using KyrolusSous.IRespositoryInterfaces.IRepository;
+global using System.Collections;
+global using System.Reflection;
+global using FluentValidation.Results;
+global using JasperFx.Core;
+global using Marten.Linq;
+global using Marten;
+global using Marten.Events;
+global using Microsoft.Extensions.DependencyInjection;
+global using Weasel.Core;
+global using KyrolusSous.StaticFunctions;
+global using JasperFx;
+global using JasperFx.Events;
