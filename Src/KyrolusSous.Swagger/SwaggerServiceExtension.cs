@@ -22,7 +22,7 @@ public static class SwaggerServiceExtension
 
         services.AddSwaggerGen(c =>
         {
-            foreach (var versionInfo in options.ApiVersions) AddSwaggerVersion(c, versionInfo);
+            ApiVersioning(c, options);
             if (options.EnableXmlComments) EnableXmlComments(c, options);
             if (options.EnableJwtBearerAuth) EnableJwtBearerAuth(c, options);
             if (options.EnableOAuth2Auth) EnableOAuth2Auth(c, options);
@@ -45,6 +45,31 @@ public static class SwaggerServiceExtension
                 ApplyGeneralUiOptions(uiOptions, options);
                 uiOptions.SupportedSubmitMethods([.. options.UiSupportedSubmitMethods.Select(s => Enum.Parse<SubmitMethod>(s, true))]);
                 configureOptions?.Invoke(uiOptions);
+            });
+        }
+    }
+    private static void ApiVersioning(SwaggerGenOptions c, SwaggerServiceOptions options)
+    {
+        if (options.EnableApiVersioning && options.ApiVersions.Any())
+        {
+            foreach (var versionInfo in options.ApiVersions)
+            {
+                AddSwaggerVersion(c, versionInfo);
+            }
+        }
+        else
+        {
+            AddSwaggerVersion(c, new ApiVersionInfo
+            {
+                Version = "v1",
+                Title = options.ApiVersions.FirstOrDefault()?.Title ?? "API Documentation",
+                Description = options.ApiVersions.FirstOrDefault()?.Description,
+                ContactName = options.ApiVersions.FirstOrDefault()?.ContactName,
+                ContactEmail = options.ApiVersions.FirstOrDefault()?.ContactEmail,
+                ContactUrl = options.ApiVersions.FirstOrDefault()?.ContactUrl,
+                LicenseName = options.ApiVersions.FirstOrDefault()?.LicenseName,
+                LicenseUrl = options.ApiVersions.FirstOrDefault()?.LicenseUrl,
+                TermsOfServiceUrl = options.ApiVersions.FirstOrDefault()?.TermsOfServiceUrl
             });
         }
     }
@@ -177,9 +202,16 @@ public static class SwaggerServiceExtension
 
     private static void ConfigureSwaggerEndpoints(SwaggerUIOptions uiOptions, SwaggerServiceOptions options)
     {
-        foreach (var versionInfo in options.ApiVersions)
+        if (options.EnableApiVersioning && options.ApiVersions.Any())
         {
-            uiOptions.SwaggerEndpoint($"/swagger/{versionInfo.Version}/swagger.json", $"{versionInfo.Title} {versionInfo.Version}");
+            foreach (var versionInfo in options.ApiVersions)
+            {
+                uiOptions.SwaggerEndpoint($"/swagger/{versionInfo.Version}/swagger.json", $"{versionInfo.Title} {versionInfo.Version}");
+            }
+        }
+        else
+        {
+            uiOptions.SwaggerEndpoint($"/swagger/v1/swagger.json", $"{options.ApiVersions.FirstOrDefault()?.Title ?? "API Documentation"} v1");
         }
     }
 

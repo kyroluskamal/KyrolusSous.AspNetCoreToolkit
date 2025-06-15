@@ -12,7 +12,12 @@ public class SwaggerServiceOptions
     /// Defines information for multiple API versions. At least one version must be provided.
     /// </summary>
     public List<ApiVersionInfo> ApiVersions { get; set; } = [new()];
-
+    /// <summary>
+    /// Enables API Versioning support in Swagger.
+    /// If set to false, Swagger will generate a single document (default "v1")
+    /// and ApiVersions list will be ignored. Default is false.
+    /// </summary>
+    public bool EnableApiVersioning { get; set; } = false;
     // XML Comments Options
     /// <summary>
     /// Enables Swagger to include XML comments from documentation files.
