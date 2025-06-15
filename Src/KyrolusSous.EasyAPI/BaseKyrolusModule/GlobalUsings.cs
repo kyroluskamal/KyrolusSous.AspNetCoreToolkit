@@ -8,7 +8,6 @@ global using Microsoft.AspNetCore.Builder;
 global using KyrolusSous.ExceptionHandling.ClasesAndHelpers;
 global using Mapster;
 global using System.Net;
-global using KyrolusSous.SourceMediator;
 global using KyrolusSous.CQRS.Base.Query;
 global using Microsoft.AspNetCore.Http;
 global using Microsoft.AspNetCore.Mvc;

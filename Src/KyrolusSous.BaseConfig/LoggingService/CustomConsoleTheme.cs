@@ -8,10 +8,7 @@ public class CustomConsoleTheme : ConsoleTheme
 
     public CustomConsoleTheme(IReadOnlyDictionary<ConsoleThemeStyle, string> styles)
     {
-        if (styles == null)
-        {
-            throw new ArgumentNullException(nameof(styles));
-        }
+        ArgumentNullException.ThrowIfNull(styles);
 
         this._styles = styles.ToDictionary(kv => kv.Key, kv => kv.Value);
     }

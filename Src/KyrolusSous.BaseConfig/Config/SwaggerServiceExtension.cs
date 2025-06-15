@@ -1,5 +1,4 @@
-using Microsoft.Extensions.Hosting;
-using Microsoft.OpenApi.Models;
+
 
 namespace KyrolusSous.BaseConfig.Config;
 
@@ -16,13 +15,15 @@ public static class SwaggerServiceExtension
         }).AddEndpointsApiExplorer();
     }
 
-    public static void UseConfiguredSwaggerUI(this WebApplication app)
+    public static void UseConfiguredSwaggerUI(this WebApplication app, Action<SwaggerUIOptions>? configureOptions = null)
     {
         if (app.Environment.IsDevelopment())
         {
-
             app.UseSwagger();
-            app.UseSwaggerUI();
+            app.UseSwaggerUI(options =>
+            {
+                configureOptions?.Invoke(options);
+            });
         }
     }
 }
