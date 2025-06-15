@@ -11,8 +11,7 @@ public class CustomAnsiConsoleTheme : AnsiConsoleTheme
     public CustomAnsiConsoleTheme(IReadOnlyDictionary<ConsoleThemeStyle, string> styles)
         : base(styles)
     {
-        if (styles == null)
-            throw new ArgumentNullException(nameof(styles));
+        ArgumentNullException.ThrowIfNull(styles);
 
         this._styles = styles.ToDictionary(kv => kv.Key, kv => kv.Value);
     }
