@@ -29,8 +29,13 @@ public class SwaggerServiceOptions
     /// A list of assemblies from which to load XML documentation files.
     /// If empty and EnableXmlComments is true, it defaults to the entry assembly.
     /// </summary>
-    public List<Assembly> XmlCommentAssemblies { get; set; } = new List<Assembly>();
-
+    public List<Assembly> XmlCommentAssemblies { get; set; } = [];
+    /// <summary>
+    /// A list of absolute file paths to XML documentation files.
+    /// These paths will be used directly if provided, in addition to or instead of
+    /// paths derived from XmlCommentAssemblies. Useful for Docker or specific deployment scenarios.
+    /// </summary>
+    public List<string> XmlDocAbsolutePaths { get; set; } = [];
     // Security (Authentication) Options
     /// <summary>
     /// Enables JWT Bearer token authentication in Swagger UI.
@@ -165,6 +170,7 @@ public class SwaggerServiceOptions
     /// Default includes "get", "post", "put", "delete", "patch".
     /// </summary>
     public List<string> UiSupportedSubmitMethods { get; set; } = ["get", "post", "put", "delete", "patch"];
+
 }
 
 /// <summary>

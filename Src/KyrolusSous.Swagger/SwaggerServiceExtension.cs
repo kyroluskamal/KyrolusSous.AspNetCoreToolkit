@@ -105,7 +105,21 @@ public static class SwaggerServiceExtension
     }
     private static void EnableXmlComments(SwaggerGenOptions c, SwaggerServiceOptions options)
     {
-        var assembliesToProcess = options.XmlCommentAssemblies.Count != 0 ? options.XmlCommentAssemblies : [Assembly.GetEntryAssembly()!];
+        // Prioritize explicit absolute paths
+        foreach (var absolutePath in options.XmlDocAbsolutePaths)
+        {
+            if (File.Exists(absolutePath))
+            {
+                c.IncludeXmlComments(absolutePath);
+            }
+            else
+            {
+                Console.WriteLine($"[SwaggerService] Warning: XML documentation file not found at absolute path: {absolutePath}");
+            }
+        }
+
+        // Fallback to assemblies if no absolute paths are provided or if specified
+        var assembliesToProcess = options.XmlCommentAssemblies.Any() ? options.XmlCommentAssemblies : [Assembly.GetEntryAssembly()!];
         foreach (var assembly in assembliesToProcess)
         {
             var xmlFile = $"{assembly.GetName().Name}.xml";
@@ -113,6 +127,10 @@ public static class SwaggerServiceExtension
             if (File.Exists(xmlPath))
             {
                 c.IncludeXmlComments(xmlPath);
+            }
+            else
+            {
+                Console.WriteLine($"[SwaggerService] Warning: XML documentation file not found for assembly '{assembly.GetName().Name}' at default path: {xmlPath}");
             }
         }
     }
