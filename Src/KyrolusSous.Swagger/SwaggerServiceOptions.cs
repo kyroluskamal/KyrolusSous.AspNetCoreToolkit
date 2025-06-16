@@ -165,20 +165,6 @@ public class SwaggerServiceOptions
     /// Default includes "get", "post", "put", "delete", "patch".
     /// </summary>
     public List<string> UiSupportedSubmitMethods { get; set; } = ["get", "post", "put", "delete", "patch"];
-    /// <summary>
-    /// A list of types that implement ISchemaFilter to apply custom schema modifications.
-    /// </summary>
-    public List<Type> SchemaFilters { get; set; } = [];
-
-    /// <summary>
-    /// A list of types that implement IOperationFilter to apply custom operation modifications.
-    /// </summary>
-    public List<Type> OperationFilters { get; set; } = [];
-
-    /// <summary>
-    /// A list of types that implement IDocumentFilter to apply custom document modifications.
-    /// </summary>
-    public List<Type> DocumentFilters { get; set; } = [];
 }
 
 /// <summary>
@@ -202,7 +188,6 @@ public class ApiVersionInfo
     /// A general description of this API version.
     /// </summary>
     public string? Description { get; set; }
-
     /// <summary>
     /// A URL to the terms of service for this API version.
     /// </summary>
@@ -213,7 +198,6 @@ public class ApiVersionInfo
     /// The name of the contact person/organization for this API version.
     /// </summary>
     public string? ContactName { get; set; }
-
     /// <summary>
     /// The email address of the contact person for this API version.
     /// </summary>
@@ -234,6 +218,4 @@ public class ApiVersionInfo
     /// A URL to the license for this API version.
     /// </summary>
     public string? LicenseUrl { get; set; }
-
-
 }
