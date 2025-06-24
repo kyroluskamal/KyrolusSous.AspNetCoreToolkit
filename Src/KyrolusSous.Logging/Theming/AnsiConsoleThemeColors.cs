@@ -1,4 +1,4 @@
-namespace KyrolusSous.BaseConfig.LoggingService;
+namespace KyrolusSous.Logging.Theming;
 
 public static class AnsiConsoleThemeColors
 {

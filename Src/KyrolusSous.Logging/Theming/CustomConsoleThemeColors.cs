@@ -1,6 +1,6 @@
 ﻿using Serilog.Sinks.SystemConsole.Themes;
 
-namespace KyrolusSous.BaseConfig.LoggingService;
+namespace KyrolusSous.Logging.Theming;
 public static class CustomConsoleThemeColors
 {
     private const string WhiteText = "\u001b[37m";

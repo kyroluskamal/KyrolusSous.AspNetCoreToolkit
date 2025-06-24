@@ -31,7 +31,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.OpenIddictAuth"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Dataprotection", "Src\KyrolusSous.Dataprotection\KyrolusSous.Dataprotection.csproj", "{C1A2D12E-20FC-4942-8AA8-34570D1EEA02}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.BaseConfig", "Src\KyrolusSous.BaseConfig\KyrolusSous.BaseConfig.csproj", "{69D0FBD5-AC15-407E-AE93-DE1F96F865C5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Logging", "Src\KyrolusSous.Logging\KyrolusSous.Logging.csproj", "{69D0FBD5-AC15-407E-AE93-DE1F96F865C5}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.SourceMediator", "Src\KyrolusSous.SourceMediator\KyrolusSous.SourceMediator.csproj", "{4D539FC5-8298-4DBA-A358-4B229365C694}"
 EndProject

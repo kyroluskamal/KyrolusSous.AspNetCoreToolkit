@@ -1,9 +1,5 @@
-global using Microsoft.AspNetCore.Builder;
 using System.Diagnostics;
-using KyrolusSous.BaseConfig.LoggingService;
-using Microsoft.Extensions.Hosting;
-using Serilog;
-namespace KyrolusSous.BaseConfig.Config;
+namespace KyrolusSous.Logging;
 
 public static class SeriLogServiceExtension
 {
@@ -17,7 +13,7 @@ public static class SeriLogServiceExtension
                                   .Enrich.WithProperty("OSVersion", Environment.OSVersion)
                                   .Enrich.WithProperty("Version", Environment.Version)
                                   .Enrich.WithProperty("UserName", Environment.UserName)
-                                  .Enrich.WithProperty("ProcessId", Environment.ProcessId)
+                                  //   .Enrich.WithProperty("ProcessId", Environment.ProcessId)
                                   .Enrich.WithProperty("ProcessName", Process.GetCurrentProcess().ProcessName)
                                   .WriteTo.Console(theme: CustomAnsiConsoleTheme.VisualStudioMacLight)
                                   .WriteTo.File(
