@@ -1,6 +1,6 @@
 ﻿global using Serilog.Sinks.SystemConsole.Themes;
 
-namespace KyrolusSous.BaseConfig.LoggingService;
+namespace KyrolusSous.Logging.Theming;
 
 public class CustomConsoleTheme : ConsoleTheme
 {

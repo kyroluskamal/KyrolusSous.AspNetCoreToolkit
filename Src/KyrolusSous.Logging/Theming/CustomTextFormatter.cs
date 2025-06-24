@@ -1,7 +1,7 @@
 ﻿using Serilog.Events;
 using Serilog.Formatting;
 
-namespace KyrolusSous.BaseConfig.LoggingService;
+namespace KyrolusSous.Logging.Theming;
 
 public class CustomTextFormatter : ITextFormatter
 {

@@ -1,8 +1,4 @@
-
-
-using KyrolusSous.BaseConfig.LoggingService;
-
-namespace KyrolusSous.BaseConfig.LoggingService;
+namespace KyrolusSous.Logging.Theming;
 
 public class CustomAnsiConsoleTheme : AnsiConsoleTheme
 {
