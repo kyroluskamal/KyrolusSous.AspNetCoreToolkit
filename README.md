@@ -39,6 +39,13 @@ builder.Services.AddKyrolusLogging(builder.Configuration, opts =>
             [LogEventLevel.Fatal] = TextFormatterOptions.ExceptionDetailLevel.Full
         }
     };
+
+    // AOT-friendly path (no reflection/Assembly.Load): register sinks/enrichers explicitly.
+    // opts.UseReflectionDiscovery = false;
+    // opts.AotEnricherRegistrations.Add(enrich => enrich.WithProperty("Feature", "AOT"));
+    // opts.AotSinkRegistrations.Add(cfg =>
+    //     cfg.WriteTo.Console(formatter: new CustomTextFormatter(
+    //         opts.FormatterOptionsBySink.GetValueOrDefault("Console", opts.DefaultFormatterOptions))));
 });
 
 builder.Host.UseKyrolusLogging();
@@ -75,6 +82,12 @@ Set via `LoggingOptions.FormatterOptionsBySink["Console"]` or `DefaultFormatterO
 - `ExceptionDetail` and `ExceptionDetailByLevel` (`None`, `MessageOnly`, `TypeAndMessage`, `Full`)
 
 If no formatter is provided for the Console sink, a `CustomTextFormatter` is injected using the per-sink or default options.
+
+## AOT-friendly mode
+- Set `UseReflectionDiscovery = false` to bypass reflection/Assembly.Load.
+- Register sinks/enrichers explicitly via `AotSinkRegistrations` / `AotEnricherRegistrations`.
+- Or call the helper `options.UseAotDefaults(environment)` to auto-register Console + File sinks (uses current formatter options).
+- This is the recommended path for Native AOT; make sure the app references the needed Serilog sink packages directly.
 
 ## Sink support notes
 - Common sinks advertised: Console, File, Seq, MSSqlServer, Elasticsearch, PostgreSQL, SQLite.

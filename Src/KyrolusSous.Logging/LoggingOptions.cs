@@ -1,5 +1,6 @@
 using KyrolusSous.Logging.Theming;
 using Serilog.Formatting;
+using Serilog.Configuration;
 
 namespace KyrolusSous.Logging;
 
@@ -101,6 +102,21 @@ public class LoggingOptions
     /// Defaults to true for a fail-fast developer experience.
     /// </summary>
     public bool ThrowIfPackageMissing { get; set; } = true;
+
+    /// <summary>
+    /// When false, skips reflection-based discovery and relies on AOT-friendly delegate registrations.
+    /// </summary>
+    public bool UseReflectionDiscovery { get; set; } = true;
+
+    /// <summary>
+    /// AOT-friendly sink registrations (executed when UseReflectionDiscovery is false).
+    /// </summary>
+    public List<Action<LoggerConfiguration>> AotSinkRegistrations { get; } = new();
+
+    /// <summary>
+    /// AOT-friendly enricher registrations (executed when UseReflectionDiscovery is false).
+    /// </summary>
+    public List<Action<LoggerEnrichmentConfiguration>> AotEnricherRegistrations { get; } = [];
 
     /// <summary>
     /// Default formatter options applied when no per-sink override is provided.

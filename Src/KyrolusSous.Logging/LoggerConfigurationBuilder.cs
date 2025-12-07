@@ -12,15 +12,15 @@ namespace KyrolusSous.Logging
     /// </summary>
     public static class LoggerConfigurationBuilder
     {
-        private static readonly Dictionary<CommonSinkType, (string MethodName, string PackageName)> CommonSinkMap = new()
+        private static readonly Dictionary<CommonSinkType, string> CommonSinkMap = new()
         {
-            { CommonSinkType.Console, ("Console", "Console") },
-            { CommonSinkType.File, ("File", "File") },
-            { CommonSinkType.Seq, ("Seq", "Seq") },
-            { CommonSinkType.MSSqlServer, ("MSSqlServer", "MSSqlServer") },
-            { CommonSinkType.Elasticsearch, ("Elasticsearch", "Elasticsearch") },
-            { CommonSinkType.PostgreSQL, ("PostgreSQL", "PostgreSQL") },
-            { CommonSinkType.SQLite, ("SQLite", "SQLite") }
+            { CommonSinkType.Console, "Console" },
+            { CommonSinkType.File, "File" },
+            { CommonSinkType.Seq, "Seq" },
+            { CommonSinkType.MSSqlServer,  "MSSqlServer" },
+            { CommonSinkType.Elasticsearch, "Elasticsearch" },
+            { CommonSinkType.PostgreSQL, "PostgreSQL" },
+            { CommonSinkType.SQLite,  "SQLite" }
         };
         private static readonly Dictionary<CommonEnricherType, (string MethodName, string PackageName)> CommonEnricherMap = new()
         {
@@ -44,8 +44,16 @@ namespace KyrolusSous.Logging
             {
                 loggerConfig.MinimumLevel.Override(overrideRule.Key, overrideRule.Value);
             }
-            ApplyEnrichers(loggerConfig, options.Enrichers, options);
-            ApplySinks(loggerConfig, options.Sinks, environment, options);
+
+            if (options.UseReflectionDiscovery)
+            {
+                ApplyEnrichers(loggerConfig, options.Enrichers, options);
+                ApplySinks(loggerConfig, options.Sinks, environment, options);
+            }
+            else
+            {
+                ApplyAotDelegates(loggerConfig, options);
+            }
             ApplyFilters(loggerConfig, options.ExcludeByMessageSubstring, options.ExcludeBySourceContextPrefix);
         }
 
@@ -178,6 +186,20 @@ namespace KyrolusSous.Logging
             TryApplyMethod(loggerConfig.WriteTo, methodName, packageName, parameters, options.ThrowIfPackageMissing, label, config.MinimumLevel);
         }
 
+        private static void ApplyAotDelegates(LoggerConfiguration loggerConfig, LoggingOptions options)
+        {
+            // Allow AOT path to still benefit from default output template and file path normalization if user wants to reuse helpers.
+            foreach (var enricherRegistration in options.AotEnricherRegistrations)
+            {
+                enricherRegistration(loggerConfig.Enrich);
+            }
+
+            foreach (var sinkRegistration in options.AotSinkRegistrations)
+            {
+                sinkRegistration(loggerConfig);
+            }
+        }
+
         /// <summary>
         /// A helper method to convert a strongly-typed options object (like FileSinkOptions) 
         /// or an existing dictionary into a unified dictionary format for processing.
@@ -219,9 +241,9 @@ namespace KyrolusSous.Logging
         {
             if (config.CommonType != CommonSinkType.None)
             {
-                if (CommonSinkMap.TryGetValue(config.CommonType, out var sinkInfo))
+                if (CommonSinkMap.TryGetValue(config.CommonType, out var methodName))
                 {
-                    return (sinkInfo.MethodName, $"Serilog.Sinks.{sinkInfo.PackageName}");
+                    return (methodName, $"Serilog.Sinks.{methodName}");
                 }
             }
             else if (!string.IsNullOrEmpty(config.SinkMethodName) && !string.IsNullOrEmpty(config.SinkPackageName))
