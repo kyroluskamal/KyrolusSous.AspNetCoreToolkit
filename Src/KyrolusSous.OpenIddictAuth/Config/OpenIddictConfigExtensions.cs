@@ -154,7 +154,8 @@ public class AccessTokenCheckHandler : IOpenIddictServerHandler<ApplyIntrospecti
     {
         var response = context.Response;
 
-        if (response["active"] is OpenIddictParameter activeParameter && activeParameter.Value is bool isActive && !isActive)
+        if (response["active"] is OpenIddictParameter activeParameter &&
+            (bool?)activeParameter is bool isActive && !isActive)
         {
             throw new UnauthorizedException("The access token is no longer valid or expired.");
         }
