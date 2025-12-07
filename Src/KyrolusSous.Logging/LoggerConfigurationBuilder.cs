@@ -1,6 +1,7 @@
 global using Serilog.Events;
 global using Serilog.Core;
 global using System.Reflection;
+using System.Diagnostics;
 using KyrolusSous.Logging.Theming;
 using static KyrolusSous.Logging.LoggingOptions;
 namespace KyrolusSous.Logging
@@ -43,7 +44,7 @@ namespace KyrolusSous.Logging
             {
                 loggerConfig.MinimumLevel.Override(overrideRule.Key, overrideRule.Value);
             }
-            ApplyEnrichers(loggerConfig, options.Enrichers);
+            ApplyEnrichers(loggerConfig, options.Enrichers, options);
             ApplySinks(loggerConfig, options.Sinks, environment, options);
             ApplyFilters(loggerConfig, options.ExcludeByMessageSubstring, options.ExcludeBySourceContextPrefix);
         }
@@ -53,7 +54,7 @@ namespace KyrolusSous.Logging
         /// Applies the configured enrichers to the logger configuration.
         /// This is the main entry point for applying all enricher configurations.
         /// </summary>
-        private static void ApplyEnrichers(LoggerConfiguration loggerConfig, List<EnricherConfiguration> enricherConfigs)
+        private static void ApplyEnrichers(LoggerConfiguration loggerConfig, List<EnricherConfiguration> enricherConfigs, LoggingOptions options)
         {
 
             foreach (var config in enricherConfigs)
@@ -63,17 +64,17 @@ namespace KyrolusSous.Logging
                     loggerConfig.Enrich.FromLogContext();
                     continue;
                 }
-                ProcessSingleEnricher(loggerConfig, config);
+                ProcessSingleEnricher(loggerConfig, config, options);
             }
         }
         /// <summary>
         /// Processes a single enricher configuration by determining its type and applying it.
         /// </summary>
-        private static void ProcessSingleEnricher(LoggerConfiguration loggerConfig, LoggingOptions.EnricherConfiguration config)
+        private static void ProcessSingleEnricher(LoggerConfiguration loggerConfig, LoggingOptions.EnricherConfiguration config, LoggingOptions options)
         {
             if (config.CommonType.HasValue)
             {
-                HandleCommonEnricher(loggerConfig, config);
+                HandleCommonEnricher(loggerConfig, config, options.ThrowIfPackageMissing);
                 return;
             }
             if (config.CustomType != null)
@@ -83,18 +84,20 @@ namespace KyrolusSous.Logging
             }
             if (!string.IsNullOrEmpty(config.MethodName) && !string.IsNullOrEmpty(config.PackageName))
             {
-                TryApplyMethod(loggerConfig.Enrich, config.MethodName, config.PackageName, config.Parameters);
+                var label = $"enricher '{config.MethodName}'";
+                TryApplyMethod(loggerConfig.Enrich, config.MethodName, config.PackageName, config.Parameters, options.ThrowIfPackageMissing, label);
             }
         }
 
         /// <summary>
         /// Handles the logic for applying a common enricher from the enum map.
         /// </summary>
-        private static void HandleCommonEnricher(LoggerConfiguration loggerConfig, LoggingOptions.EnricherConfiguration config)
+        private static void HandleCommonEnricher(LoggerConfiguration loggerConfig, LoggingOptions.EnricherConfiguration config, bool throwIfPackageMissing)
         {
             if (CommonEnricherMap.TryGetValue(config.CommonType!.Value, out var enricherInfo))
             {
-                TryApplyMethod(loggerConfig.Enrich, enricherInfo.MethodName, enricherInfo.PackageName, config.Parameters);
+                var label = $"enricher '{config.CommonType}'";
+                TryApplyMethod(loggerConfig.Enrich, enricherInfo.MethodName, enricherInfo.PackageName, config.Parameters, throwIfPackageMissing, label);
             }
         }
 
@@ -136,6 +139,11 @@ namespace KyrolusSous.Logging
         /// </summary>
         private static void ProcessSingleSink(LoggerConfiguration loggerConfig, SinkConfiguration config, IHostEnvironment environment, LoggingOptions options)
         {
+            var sinkKey = GetSinkKey(config);
+            var formatterOptions = options.FormatterOptionsBySink.TryGetValue(sinkKey, out var customFormatterOptions)
+                ? customFormatterOptions
+                : options.DefaultFormatterOptions;
+
             if (config.CustomType != null)
             {
                 HandleCustomSink(loggerConfig, config);
@@ -148,11 +156,26 @@ namespace KyrolusSous.Logging
                 return;
             }
 
+            // If this is the console sink and no formatter was explicitly provided, inject a CustomTextFormatter using the per-sink or default options.
+            if (config.CommonType == CommonSinkType.Console && config.SinkOptions is LoggingOptions.ConsoleSinkOptions consoleSinkOptions && consoleSinkOptions.Formatter is null)
+            {
+                consoleSinkOptions.Formatter = new CustomTextFormatter(formatterOptions);
+            }
+
             var parameters = ConvertOptionsToDictionary(config.SinkOptions);
 
             PrepareSinkParameters(parameters, config.CommonType, environment, options);
 
-            TryApplyMethod(loggerConfig.WriteTo, methodName, packageName, parameters, config.MinimumLevel);
+            if (config.CommonType == CommonSinkType.Console && !parameters.ContainsKey("formatter"))
+            {
+                parameters["formatter"] = new CustomTextFormatter(formatterOptions);
+            }
+
+            var label = config.CommonType != CommonSinkType.None
+                ? $"sink '{config.CommonType}'"
+                : $"sink method '{methodName}'";
+
+            TryApplyMethod(loggerConfig.WriteTo, methodName, packageName, parameters, options.ThrowIfPackageMissing, label, config.MinimumLevel);
         }
 
         /// <summary>
@@ -208,6 +231,23 @@ namespace KyrolusSous.Logging
             return (null, null);
         }
 
+        private static string GetSinkKey(SinkConfiguration config)
+        {
+            if (config.CommonType != CommonSinkType.None)
+            {
+                return config.CommonType.ToString();
+            }
+            if (!string.IsNullOrEmpty(config.SinkMethodName))
+            {
+                return config.SinkMethodName;
+            }
+            if (config.CustomType != null)
+            {
+                return config.CustomType.Name;
+            }
+            return "default";
+        }
+
         private static void HandleCustomSink(LoggerConfiguration loggerConfig, SinkConfiguration config)
         {
             try
@@ -249,7 +289,7 @@ namespace KyrolusSous.Logging
         /// Tries to find and invoke an extension method for a sink or enricher.
         /// Throws exceptions if required packages are missing.
         /// </summary>
-        private static void TryApplyMethod(object configurationObject, string methodName, string assemblyName, IDictionary<string, object?> parameters, LogEventLevel? restrictedToMinimumLevel = null)
+        private static void TryApplyMethod(object configurationObject, string methodName, string assemblyName, IDictionary<string, object?> parameters, bool throwIfPackageMissing, string componentLabel, LogEventLevel? restrictedToMinimumLevel = null)
         {
             try
             {
@@ -310,11 +350,22 @@ namespace KyrolusSous.Logging
             }
             catch (FileNotFoundException)
             {
-                throw new InvalidOperationException($"The NuGet package '{assemblyName}' is required for method '{methodName}', but was not found.");
+                var message = $"KyrolusLogging: skipped {componentLabel} because package '{assemblyName}' was not found.";
+                if (throwIfPackageMissing)
+                {
+                    throw new InvalidOperationException(message);
+                }
+                Debug.WriteLine(message);
+                return;
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException($"An error occurred while calling the '{methodName}' method. Check inner exception for details.", ex.InnerException ?? ex);
+                var message = $"KyrolusLogging: skipped {componentLabel} due to error: {ex.Message}";
+                if (throwIfPackageMissing)
+                {
+                    throw new InvalidOperationException(message, ex.InnerException ?? ex);
+                }
+                Debug.WriteLine(message);
             }
         }
         private static (MethodInfo? BestMethod, List<object?>? SortedArgs) FindBestMethodOverload(List<MethodInfo> methods, object configObject, IDictionary<string, object?> providedParams)

@@ -95,6 +95,22 @@ public class LoggingOptions
     /// Excludes log events where the source context starts with any of the specified prefixes.
     /// </summary>
     public List<string> ExcludeBySourceContextPrefix { get; set; } = [];
+
+    /// <summary>
+    /// Controls whether missing sink/enricher packages should throw (strict) or be skipped with a warning.
+    /// Defaults to true for a fail-fast developer experience.
+    /// </summary>
+    public bool ThrowIfPackageMissing { get; set; } = true;
+
+    /// <summary>
+    /// Default formatter options applied when no per-sink override is provided.
+    /// </summary>
+    public TextFormatterOptions DefaultFormatterOptions { get; set; } = new();
+
+    /// <summary>
+    /// Optional per-sink formatter options keyed by sink name/type (e.g., "Console", "File", "Seq").
+    /// </summary>
+    public Dictionary<string, TextFormatterOptions> FormatterOptionsBySink { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     // --- Nested Configuration Classes ---
 
     /// <summary>
@@ -147,7 +163,7 @@ public class LoggingOptions
     {
         public string? OutputTemplate { get; set; }
         public ConsoleTheme? Theme { get; set; } = CustomAnsiConsoleTheme.VisualStudioMacLight;
-        public ITextFormatter? Formatter { get; set; } = new CustomTextFormatter();
+        public ITextFormatter? Formatter { get; set; }
 
     }
     /// <summary>
@@ -224,6 +240,7 @@ public class LoggingOptions
         /// Common Parameters:
         /// - serverUrl (string): The URL of your Seq server. Example: "http://localhost:5341".
         /// - apiKey (string): [Optional] A Seq API key if required for authentication.
+        /// Advanced: requires Serilog.Sinks.Seq and can be configured via SinkOptions dictionary or SeqSinkOptions.
         /// </summary>
         Seq,
 
@@ -233,6 +250,7 @@ public class LoggingOptions
         /// Common Parameters:
         /// - connectionString (string): The connection string to the SQL Server database.
         /// - sinkOptions (MSSqlServerSinkOptions object): An object for advanced configuration like table name, schema, and column options.
+        /// Advanced: requires Serilog.Sinks.MSSqlServer; configure via SinkOptions dictionary.
         /// </summary>
         MSSqlServer,
 
@@ -243,6 +261,7 @@ public class LoggingOptions
         /// - nodeUris (string): A comma-separated list of Elasticsearch node URIs. Example: "http://localhost:9200".
         /// - indexFormat (string): The format for the index name, usually including a date. Example: "my-app-logs-{0:yyyy.MM.dd}".
         /// - autoRegisterTemplate (bool): [Optional] Set to true to automatically register an index template. Default is false.
+        /// Advanced: requires Serilog.Sinks.Elasticsearch; configure via SinkOptions dictionary.
         /// </summary>
         Elasticsearch,
 
@@ -253,6 +272,7 @@ public class LoggingOptions
         /// - connectionString (string): The connection string to the PostgreSQL database.
         /// - tableName (string): The name of the table where logs will be stored.
         /// - needAutoCreateTable (bool): [Optional] Set to true to automatically create the log table if it doesn't exist. Default is false.
+        /// Advanced: requires Serilog.Sinks.PostgreSQL; configure via SinkOptions dictionary.
         /// </summary>
         PostgreSQL,
 
@@ -263,6 +283,7 @@ public class LoggingOptions
         /// - sqliteDbPath (string): The path to the SQLite database file.
         /// - tableName (string): The name of the table to store log events. Default is "Logs".
         /// - storeTimestampInUtc (bool): [Optional] Set to true to store timestamps in UTC. Default is false.
+        /// Advanced: requires Serilog.Sinks.SQLite; configure via SinkOptions dictionary.
         /// </summary>
         SQLite
     }
