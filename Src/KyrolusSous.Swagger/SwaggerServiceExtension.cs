@@ -3,10 +3,10 @@ using System.Reflection;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerUI;
 using Swashbuckle.AspNetCore.SwaggerGen;
 using Microsoft.Extensions.Options;
+using Microsoft.OpenApi;
 
 
 namespace KyrolusSous.Swagger;
@@ -145,20 +145,15 @@ public static class SwaggerServiceExtension
             Scheme = options.JwtBearerScheme
         });
 
-        c.AddSecurityRequirement(new OpenApiSecurityRequirement
-                {
-                    {
-                        new OpenApiSecurityScheme
-                        {
-                            Reference = new OpenApiReference
-                            {
-                                Type = ReferenceType.SecurityScheme,
-                                Id = options.JwtBearerScheme
-                            }
-                        },
-                        Array.Empty<string>()
-                    }
-                });
+        var jwtBearerReference = new OpenApiSecuritySchemeReference(options.JwtBearerScheme, hostDocument: null, externalResource: null);
+
+        c.AddSecurityRequirement(_ => new OpenApiSecurityRequirement
+        {
+            {
+                jwtBearerReference,
+                new List<string>()
+            }
+        });
     }
 
     private static void EnableOAuth2Auth(SwaggerGenOptions c, SwaggerServiceOptions options)
@@ -230,17 +225,12 @@ public static class SwaggerServiceExtension
             Flows = flows
         });
 
-        c.AddSecurityRequirement(new OpenApiSecurityRequirement
+        var oauthReference = new OpenApiSecuritySchemeReference(options.OAuth2SchemeName, hostDocument: null, externalResource: null);
+
+        c.AddSecurityRequirement(_ => new OpenApiSecurityRequirement
         {
             {
-                new OpenApiSecurityScheme
-                {
-                    Reference = new OpenApiReference
-                    {
-                        Type = ReferenceType.SecurityScheme,
-                        Id = options.OAuth2SchemeName
-                    }
-                },
+                oauthReference,
                 options.OAuth2Scopes.Keys.ToList()
             }
         });
