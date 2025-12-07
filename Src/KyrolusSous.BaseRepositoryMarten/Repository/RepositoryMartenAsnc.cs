@@ -105,7 +105,7 @@ public class RepositoryMartenAsnc<TDocument, TEntity, TKey>(TDocument _session)
                 convertedValue = KyrolusRepoistoryHelpers<TEntity>.ConvertJsonElement(jsonElement);
             }
             patchCommand.Set(update.Key, convertedValue);
-            KyrolusRepoistoryHelpers<TEntity>.SetProperty(entityInDb, update.Key, value: convertedValue);
+            KyrolusRepoistoryHelpers<TEntity>.SetProperty(entityInDb, update.Key, value: convertedValue!);
         }
 
         return entityInDb;

@@ -1,12 +1,11 @@
 ﻿using Microsoft.AspNetCore.Mvc.Testing;
-using FluentAssertions;
 using System.Net;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
-using KyrolusSous.Swagger;
 using Microsoft.AspNetCore.Hosting;
-namespace IntegrationTests;
+using Shouldly;
 
+namespace KyrolusSous.Swagger.IntegrationTests;
 
 public class SwaggerIntegrationTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
 {
@@ -78,19 +77,19 @@ public class SwaggerIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         // Assert: Check the HTTP response.
         response.EnsureSuccessStatusCode();
-        response.Content.Headers.ContentType?.ToString().Should().Contain("application/json");
+        response.Content.Headers.ContentType?.ToString().ShouldContain("application/json");
 
         var jsonString = await response.Content.ReadAsStringAsync();
         var doc = JsonDocument.Parse(jsonString);
 
-        doc.RootElement.GetProperty("info").GetProperty("title").GetString().Should().Be("My API - V1 (Full Test)");
-        doc.RootElement.GetProperty("info").GetProperty("version").GetString().Should().Be("v1");
-        doc.RootElement.GetProperty("info").GetProperty("description").GetString().Should().Be("This is the first version of my API.");
-        doc.RootElement.GetProperty("info").GetProperty("termsOfService").GetString().Should().Be("https://example.com/terms");
-        doc.RootElement.GetProperty("info").GetProperty("contact").GetProperty("name").GetString().Should().Be("Support Team");
-        doc.RootElement.GetProperty("info").GetProperty("contact").GetProperty("email").GetString().Should().Be("support@example.com");
-        doc.RootElement.GetProperty("info").GetProperty("contact").GetProperty("url").GetString().Should().Be("https://example.com/contact");
-        doc.RootElement.GetProperty("paths").EnumerateObject().Should().NotBeEmpty();
+        doc.RootElement.GetProperty("info").GetProperty("title").GetString().ShouldBe("My API - V1 (Full Test)");
+        doc.RootElement.GetProperty("info").GetProperty("version").GetString().ShouldBe("v1");
+        doc.RootElement.GetProperty("info").GetProperty("description").GetString().ShouldBe("This is the first version of my API.");
+        doc.RootElement.GetProperty("info").GetProperty("termsOfService").GetString().ShouldBe("https://example.com/terms");
+        doc.RootElement.GetProperty("info").GetProperty("contact").GetProperty("name").GetString().ShouldBe("Support Team");
+        doc.RootElement.GetProperty("info").GetProperty("contact").GetProperty("email").GetString().ShouldBe("support@example.com");
+        doc.RootElement.GetProperty("info").GetProperty("contact").GetProperty("url").GetString().ShouldBe("https://example.com/contact");
+        doc.RootElement.GetProperty("paths").EnumerateObject().ShouldNotBeEmpty();
     }
 
     [Fact(DisplayName = "Swagger JSON for V2 should return success and correct content")]
@@ -104,15 +103,15 @@ public class SwaggerIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         // Assert
         response.EnsureSuccessStatusCode();
-        response.Content.Headers.ContentType?.ToString().Should().Contain("application/json");
+        response.Content.Headers.ContentType?.ToString().ShouldContain("application/json");
 
         var jsonString = await response.Content.ReadAsStringAsync();
         var doc = JsonDocument.Parse(jsonString);
 
-        doc.RootElement.GetProperty("info").GetProperty("title").GetString().Should().Be("My API - V2 (Full Test)"); // From TestProgram.cs config
-        doc.RootElement.GetProperty("info").GetProperty("version").GetString().Should().Be("v2");
-        doc.RootElement.GetProperty("info").GetProperty("description").GetString().Should().Be("Version 2 with new features.");
-        doc.RootElement.GetProperty("info").GetProperty("license").GetProperty("name").GetString().Should().Be("MIT License");
+        doc.RootElement.GetProperty("info").GetProperty("title").GetString().ShouldBe("My API - V2 (Full Test)"); // From TestProgram.cs config
+        doc.RootElement.GetProperty("info").GetProperty("version").GetString().ShouldBe("v2");
+        doc.RootElement.GetProperty("info").GetProperty("description").GetString().ShouldBe("Version 2 with new features.");
+        doc.RootElement.GetProperty("info").GetProperty("license").GetProperty("name").GetString().ShouldBe("MIT License");
     }
 
     [Fact(DisplayName = "Swagger UI should return success and HTML content with custom route and title")]
@@ -125,12 +124,12 @@ public class SwaggerIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         var response = await client.GetAsync("/my-docs");
         // Assert
         response.EnsureSuccessStatusCode();
-        response.Content.Headers.ContentType?.ToString().Should().Contain("text/html");
+        response.Content.Headers.ContentType?.ToString().ShouldContain("text/html");
 
         var htmlString = await response.Content.ReadAsStringAsync();
 
-        htmlString.Should().Contain("<title>Custom API Documentation</title>");
-        htmlString.Should().Contain("swagger-ui");
+        htmlString.ShouldContain("<title>Custom API Documentation</title>");
+        htmlString.ShouldContain("swagger-ui");
 
     }
 
@@ -148,7 +147,7 @@ public class SwaggerIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         var response = await client.GetAsync("/my-docs");
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact(DisplayName = "Swagger JSON for default v1 should return success when API versioning is explicitly disabled")]
@@ -184,12 +183,12 @@ public class SwaggerIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         var jsonString = await response.Content.ReadAsStringAsync();
         var doc = JsonDocument.Parse(jsonString);
 
-        doc.RootElement.GetProperty("info").GetProperty("title").GetString().Should().Be("Single Version Test"); //
-        doc.RootElement.GetProperty("info").GetProperty("version").GetString().Should().Be("v1");
+        doc.RootElement.GetProperty("info").GetProperty("title").GetString().ShouldBe("Single Version Test"); //
+        doc.RootElement.GetProperty("info").GetProperty("version").GetString().ShouldBe("v1");
 
         // Ensure V2 is not available when versioning is disabled
         var v2Response = await client.GetAsync("/swagger/v2/swagger.json");
-        v2Response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        v2Response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact(DisplayName = "Swagger JSON should include XML comments when enabled and file exists")]
@@ -221,8 +220,8 @@ public class SwaggerIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         var jsonString = await response.Content.ReadAsStringAsync();
         var doc = JsonDocument.Parse(jsonString);
 
-        doc.RootElement.GetProperty("paths").GetProperty("/weatherforecast").EnumerateObject().Should().NotBeEmpty();
-        doc.RootElement.GetProperty("paths").GetProperty("/weatherforecast").GetProperty("get").GetProperty("operationId").GetString().Should().Be("GetWeatherForecast");
+        doc.RootElement.GetProperty("paths").GetProperty("/weatherforecast").EnumerateObject().ShouldNotBeEmpty();
+        doc.RootElement.GetProperty("paths").GetProperty("/weatherforecast").GetProperty("get").GetProperty("operationId").GetString().ShouldBe("GetWeatherForecast");
     }
 }
 
