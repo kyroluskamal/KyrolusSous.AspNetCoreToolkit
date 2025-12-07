@@ -85,6 +85,84 @@ public class BuilderCoverageTests
         sinkOptions.Formatter.ShouldNotBeNull();
     }
 
+    [Fact]
+    public void Build_Should_Use_Aot_Delegates_When_Reflection_Disabled()
+    {
+        var testSink = new TestSink();
+        var options = new LoggingOptions
+        {
+            UseReflectionDiscovery = false,
+            ThrowIfPackageMissing = true // should be irrelevant in AOT path
+        };
+
+        options.AotEnricherRegistrations.Add(enrich => enrich.WithProperty("Feature", "AOT"));
+        options.AotSinkRegistrations.Add(cfg => cfg.WriteTo.Sink(testSink));
+
+        var loggerConfig = new LoggerConfiguration();
+        var env = new Mock<IHostEnvironment>();
+        env.Setup(e => e.ContentRootPath).Returns(Directory.GetCurrentDirectory());
+
+        LoggerConfigurationBuilder.Build(loggerConfig, options, env.Object);
+        var logger = loggerConfig.CreateLogger();
+
+        logger.Information("hello");
+
+        testSink.Events.ShouldHaveSingleItem();
+        testSink.Events[0].Properties.ShouldContainKey("Feature");
+    }
+
+    [Fact]
+    public void AotPresets_Should_Register_Console_And_File_Sinks()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+
+        var options = new LoggingOptions
+        {
+            DefaultOutputTemplate = "[{Level}] {Message}"
+        };
+
+        var env = new Mock<IHostEnvironment>();
+        env.Setup(e => e.ContentRootPath).Returns(tempDir);
+
+        options.UseAotDefaults(env.Object);
+
+        options.UseReflectionDiscovery.ShouldBeFalse();
+        options.AotSinkRegistrations.Count.ShouldBe(2);
+        options.AotEnricherRegistrations.Count.ShouldBe(1);
+
+        var loggerConfig = new LoggerConfiguration();
+        LoggerConfigurationBuilder.Build(loggerConfig, options, env.Object);
+        var logger = loggerConfig.CreateLogger();
+        try
+        {
+            logger.Information("file check");
+        }
+        finally
+        {
+            (logger as IDisposable)?.Dispose();
+            Log.CloseAndFlush();
+        }
+
+        var logsDir = Path.Combine(tempDir, "Logs");
+        Directory.Exists(logsDir).ShouldBeTrue();
+        Directory.GetFiles(logsDir, "log-*.txt").ShouldNotBeEmpty();
+
+        // Retry delete in case file handle lingers briefly.
+        for (int i = 0; i < 5; i++)
+        {
+            try
+            {
+                Directory.Delete(tempDir, true);
+                break;
+            }
+            catch (IOException) when (i < 4)
+            {
+                Thread.Sleep(100);
+            }
+        }
+    }
+
     private class SampleOptions
     {
         public string OutputTemplate { get; set; } = string.Empty;
