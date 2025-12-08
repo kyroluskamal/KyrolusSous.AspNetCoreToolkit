@@ -118,6 +118,8 @@ public class LoggingOptions
     /// </summary>
     public List<Action<LoggerEnrichmentConfiguration>> AotEnricherRegistrations { get; } = [];
 
+    internal bool AotDefaultsApplied { get; set; }
+
     /// <summary>
     /// Default formatter options applied when no per-sink override is provided.
     /// </summary>

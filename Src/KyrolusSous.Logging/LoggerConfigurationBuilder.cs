@@ -292,7 +292,7 @@ namespace KyrolusSous.Logging
         private static void ApplyFilters(LoggerConfiguration loggerConfig, List<string> msgSubstrings, List<string> srcPrefixes)
         {
             if (msgSubstrings.Count != 0)
-                loggerConfig.Filter.ByExcluding(le => msgSubstrings.Any(s => le.RenderMessage().IndexOf(s, StringComparison.OrdinalIgnoreCase) >= 0));
+                loggerConfig.Filter.ByExcluding(le => msgSubstrings.Any(s => le.RenderMessage().Contains(s, StringComparison.OrdinalIgnoreCase)));
 
             if (srcPrefixes.Count != 0)
                 loggerConfig.Filter.ByExcluding(le =>
