@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Moq;
 using Shouldly;
 using static KyrolusSous.Logging.LoggingOptions;
+using Serilog.Context;
 
 namespace KyrolusSous.Logging.Tests;
 
@@ -161,6 +162,39 @@ public class BuilderCoverageTests
                 Thread.Sleep(100);
             }
         }
+    }
+
+    [Fact]
+    public void AotPresets_Should_Add_FromLogContext_Even_When_Custom_Enrichers_Present()
+    {
+        var testSink = new TestSink();
+        var options = new LoggingOptions
+        {
+            UseReflectionDiscovery = false
+        };
+
+        options.AotEnricherRegistrations.Add(enrich => enrich.WithProperty("Custom", 1));
+        options.AotSinkRegistrations.Add(cfg => cfg.WriteTo.Sink(testSink));
+
+        var env = new Mock<IHostEnvironment>();
+        env.Setup(e => e.ContentRootPath).Returns(Directory.GetCurrentDirectory());
+
+        options.UseAotDefaults(env.Object);
+        // Calling again should not duplicate defaults
+        options.UseAotDefaults(env.Object);
+
+        var loggerConfig = new LoggerConfiguration();
+        LoggerConfigurationBuilder.Build(loggerConfig, options, env.Object);
+        var logger = loggerConfig.CreateLogger();
+
+        using (LogContext.PushProperty("Ctx", "value"))
+        {
+            logger.Information("hello");
+        }
+
+        var evt = testSink.Events.ShouldHaveSingleItem();
+        evt.Properties.ShouldContainKey("Ctx");
+        evt.Properties.ShouldContainKey("Custom");
     }
 
     private class SampleOptions
