@@ -2,7 +2,6 @@
 global using Moq;
 global using Serilog;
 global using Shouldly;
-using System.Reflection;
 using Serilog.Context;
 using static KyrolusSous.Logging.LoggingOptions;
 namespace KyrolusSous.Logging.Tests;
@@ -11,6 +10,7 @@ public class NotAnEnricher { }
 #pragma warning restore S2094
 #pragma warning disable CS9113
 public class EnricherWithNoDefaultConstructor(string name) : ILogEventEnricher
+#pragma warning restore CS9113
 {
     public void Enrich(LogEvent logEvent, ILogEventPropertyFactory propertyFactory) { }
 }

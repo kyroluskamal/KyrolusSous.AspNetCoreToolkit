@@ -1,7 +1,4 @@
 using System.Reflection;
-using Microsoft.Extensions.Hosting;
-using Moq;
-using Shouldly;
 using static KyrolusSous.Logging.LoggingOptions;
 using Serilog.Context;
 
@@ -17,7 +14,7 @@ public class BuilderCoverageTests
         return (T)result!;
     }
 
-    [Fact]
+    [Fact(DisplayName = "ConvertOptionsToDictionary should camelCase public properties")]
     public void ConvertOptionsToDictionary_Should_CamelCase_Properties()
     {
         var sample = new SampleOptions { OutputTemplate = "tpl", FileSizeLimitBytes = 1024 };
@@ -30,7 +27,7 @@ public class BuilderCoverageTests
         dict["fileSizeLimitBytes"].ShouldBe(1024L);
     }
 
-    [Fact]
+    [Fact(DisplayName = "PrepareSinkParameters should add default template and normalize file path")]
     public void PrepareSinkParameters_Should_Add_DefaultTemplate_And_Normalize_Path()
     {
         var parameters = new Dictionary<string, object?> { ["path"] = "Logs/app.txt" };
@@ -44,7 +41,7 @@ public class BuilderCoverageTests
         parameters["path"].ShouldBe(Path.Combine("C:\\root", "Logs/app.txt"));
     }
 
-    [Fact]
+    [Fact(DisplayName = "GetSinkKey should pick CommonType, MethodName or CustomType name")]
     public void GetSinkKey_Should_Use_CommonType_MethodName_Or_CustomType()
     {
         var common = new SinkConfiguration { CommonType = CommonSinkType.Console };
@@ -57,7 +54,7 @@ public class BuilderCoverageTests
         InvokePrivate<string>("GetSinkKey", custom).ShouldBe(nameof(TestSink));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Console sink should receive injected formatter when missing")]
     public void Build_Should_Inject_Formatter_For_Console_Sink_When_Missing()
     {
         var options = new LoggingOptions
@@ -86,7 +83,7 @@ public class BuilderCoverageTests
         sinkOptions.Formatter.ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "AOT delegates should be used when reflection is disabled")]
     public void Build_Should_Use_Aot_Delegates_When_Reflection_Disabled()
     {
         var testSink = new TestSink();
@@ -111,9 +108,8 @@ public class BuilderCoverageTests
         testSink.Events.ShouldHaveSingleItem();
         testSink.Events[0].Properties.ShouldContainKey("Feature");
     }
-
-    [Fact]
-    public void AotPresets_Should_Register_Console_And_File_Sinks()
+    [Fact(DisplayName = "UseAotDefaults should register console/file sinks and not duplicate defaults")]
+    public async Task AotPresets_Should_Register_Console_And_File_Sinks()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
@@ -142,7 +138,7 @@ public class BuilderCoverageTests
         finally
         {
             (logger as IDisposable)?.Dispose();
-            Log.CloseAndFlush();
+            await Log.CloseAndFlushAsync();
         }
 
         var logsDir = Path.Combine(tempDir, "Logs");
@@ -159,12 +155,13 @@ public class BuilderCoverageTests
             }
             catch (IOException) when (i < 4)
             {
-                Thread.Sleep(100);
+                await Task.Delay(100);
             }
         }
     }
+    
 
-    [Fact]
+    [Fact(DisplayName = "UseAotDefaults should prepend FromLogContext even with custom enrichers")]
     public void AotPresets_Should_Add_FromLogContext_Even_When_Custom_Enrichers_Present()
     {
         var testSink = new TestSink();

@@ -1,12 +1,11 @@
 using KyrolusSous.Logging.Theming;
 using Serilog.Sinks.SystemConsole.Themes;
-using Shouldly;
 
 namespace KyrolusSous.Logging.Tests;
 
 public class ThemeTests
 {
-    [Fact]
+    [Fact(DisplayName = "CustomConsoleTheme should write mapped style and length")]
     public void CustomConsoleTheme_Should_Write_Mapped_Style()
     {
         var theme = CustomConsoleThemeColors.VisualStudioMacLight;
@@ -19,7 +18,7 @@ public class ThemeTests
         len.ShouldBe(expected.Length);
     }
 
-    [Fact]
+    [Fact(DisplayName = "CustomConsoleTheme should reset with escape sequence")]
     public void CustomConsoleTheme_Should_Reset_With_Escape_Sequence()
     {
         var theme = CustomConsoleThemeColors.VisualStudioMacLight;
@@ -31,7 +30,7 @@ public class ThemeTests
         theme.CanBuffer.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "CustomAnsiConsoleTheme should write configured style")]
     public void CustomAnsiConsoleTheme_Should_Write_Configured_Style()
     {
         var styles = new Dictionary<ConsoleThemeStyle, string>
@@ -49,7 +48,7 @@ public class ThemeTests
         len.ShouldBe("\x1b[33m".Length);
     }
 
-    [Fact]
+    [Fact(DisplayName = "CustomAnsiConsoleTheme should reset with escape sequence")]
     public void CustomAnsiConsoleTheme_Should_Reset_With_Escape_Sequence()
     {
         var theme = CustomAnsiConsoleTheme.VisualStudioMacLight;
@@ -60,7 +59,7 @@ public class ThemeTests
         writer.ToString().ShouldBe("\x1b[0m");
     }
 
-    [Fact]
+    [Fact(DisplayName = "CustomConsoleThemeColors should expose predefined theme")]
     public void CustomConsoleThemeColors_Should_Expose_Predefined_Theme()
     {
         var theme = CustomConsoleThemeColors.VisualStudioMacLight;

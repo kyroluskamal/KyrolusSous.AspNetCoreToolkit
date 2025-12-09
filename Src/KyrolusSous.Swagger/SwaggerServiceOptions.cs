@@ -118,6 +118,12 @@ public class SwaggerServiceOptions
     public string? UiRoutePrefix { get; set; } = "swagger";
 
     /// <summary>
+    /// Allows enabling Swagger UI outside Development environments (e.g., staging/production) when secured externally.
+    /// Default is false.
+    /// </summary>
+    public bool EnableInNonDevelopmentEnvironments { get; set; }
+
+    /// <summary>
     /// The title of the HTML document for Swagger UI.
     /// If null, it defaults to the title of the first API version.
     /// </summary>
