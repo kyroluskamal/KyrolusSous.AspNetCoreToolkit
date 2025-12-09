@@ -1,9 +1,5 @@
 using System.Text;
-using Microsoft.Extensions.Hosting;
-using Moq;
-using Serilog;
 using Serilog.Parsing;
-using Shouldly;
 using static KyrolusSous.Logging.LoggingOptions;
 using KyrolusSous.Logging.Theming;
 
@@ -36,7 +32,7 @@ public class FormatterAndStrictnessTests
         return writer.ToString();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Formatter should honor visibility flags (properties/source/ansi off)")]
     public void Formatter_Should_Honor_Visibility_Settings()
     {
         var options = new TextFormatterOptions
@@ -57,7 +53,7 @@ public class FormatterAndStrictnessTests
         output.ShouldNotContain("\u001b"); // no ANSI codes when UseColors = false
     }
 
-    [Fact]
+    [Fact(DisplayName = "Formatter should apply exception detail per level")]
     public void Formatter_Should_Apply_Exception_Detail_Per_Level()
     {
         var options = new TextFormatterOptions
@@ -84,7 +80,7 @@ public class FormatterAndStrictnessTests
         errorOutput.ShouldContain("Inner: Exception: inner");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build should throw when sink package missing in strict mode")]
     public void Build_Should_Throw_When_Package_Missing_And_Strict()
     {
         var options = new LoggingOptions
@@ -103,7 +99,7 @@ public class FormatterAndStrictnessTests
         Should.Throw<InvalidOperationException>(() => LoggerConfigurationBuilder.Build(loggerConfig, options, env.Object));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build should skip sink when package missing and not strict")]
     public void Build_Should_Skip_When_Package_Missing_And_Not_Strict()
     {
         var options = new LoggingOptions

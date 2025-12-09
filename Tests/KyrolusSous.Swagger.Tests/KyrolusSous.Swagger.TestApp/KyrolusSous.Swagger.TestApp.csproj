@@ -14,6 +14,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\Src\KyrolusSous.Swagger\KyrolusSous.Swagger.csproj" />
   </ItemGroup>
-
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverageAttribute" />
+  </ItemGroup>
 </Project>
-

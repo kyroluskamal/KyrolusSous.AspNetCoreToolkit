@@ -1,5 +1,3 @@
-using System;
-
 namespace KyrolusSous.Logging.Tests;
 
 public static class MyCorrelationIdContext

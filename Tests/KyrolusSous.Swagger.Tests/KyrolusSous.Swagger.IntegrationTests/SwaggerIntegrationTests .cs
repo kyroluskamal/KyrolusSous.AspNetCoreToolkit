@@ -223,5 +223,104 @@ public class SwaggerIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         doc.RootElement.GetProperty("paths").GetProperty("/weatherforecast").EnumerateObject().ShouldNotBeEmpty();
         doc.RootElement.GetProperty("paths").GetProperty("/weatherforecast").GetProperty("get").GetProperty("operationId").GetString().ShouldBe("GetWeatherForecast");
     }
+
+    [Fact(DisplayName = "Swagger UI should be enabled in Production when option explicitly allows it")]
+    public async Task SwaggerUI_InProduction_WhenExplicitlyEnabled_ReturnsSuccess()
+    {
+        // Arrange
+        var productionFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting(WebHostDefaults.EnvironmentKey, "Production");
+            builder.ConfigureServices(services =>
+            {
+                services.PostConfigure<SwaggerServiceOptions>(options =>
+                {
+                    options.EnableInNonDevelopmentEnvironments = true;
+                });
+            });
+        });
+
+        var client = productionFactory.CreateClient();
+
+        // Act
+        var response = await client.GetAsync("/my-docs");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        response.Content.Headers.ContentType?.ToString().ShouldContain("text/html");
+    }
+
+    [Fact(DisplayName = "Swagger UI should still render when submit methods list contains invalid entries")]
+    public async Task SwaggerUI_AllowsInvalidSubmitMethodsAndStillRenders()
+    {
+        // Arrange
+        var factoryWithInvalidMethod = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.PostConfigure<SwaggerServiceOptions>(options =>
+                {
+                    options.UiSupportedSubmitMethods = new List<string> { "get", "walk", "post" };
+                });
+            });
+        });
+
+        var client = factoryWithInvalidMethod.CreateClient();
+
+        // Act
+        var response = await client.GetAsync("/my-docs");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        response.Content.Headers.ContentType?.ToString().ShouldContain("text/html");
+    }
+
+    [Fact(DisplayName = "Swagger UI should render when all submit methods are invalid")]
+    public async Task SwaggerUI_AllowsAllInvalidSubmitMethods_AndStillRenders()
+    {
+        // Arrange
+        var factoryWithAllInvalid = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.PostConfigure<SwaggerServiceOptions>(options =>
+                {
+                    options.UiSupportedSubmitMethods = new List<string> { "walk", "dance" };
+                });
+            });
+        });
+
+        var client = factoryWithAllInvalid.CreateClient();
+
+        // Act
+        var response = await client.GetAsync("/my-docs");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        response.Content.Headers.ContentType?.ToString().ShouldContain("text/html");
+    }
+
+    [Fact(DisplayName = "Swagger JSON should include JWT and OAuth2 security schemes")]
+    public async Task SwaggerJson_IncludesSecuritySchemes_ForJwtAndOAuth2()
+    {
+        // Arrange
+        var client = _factory.CreateClient();
+
+        // Act
+        var response = await client.GetAsync("/swagger/v1/swagger.json");
+        response.EnsureSuccessStatusCode();
+
+        var jsonString = await response.Content.ReadAsStringAsync();
+        var doc = JsonDocument.Parse(jsonString);
+        var schemes = doc.RootElement.GetProperty("components").GetProperty("securitySchemes");
+
+        schemes.TryGetProperty("Bearer", out var bearerScheme).ShouldBeTrue();
+        bearerScheme.GetProperty("type").GetString().ShouldBe("http");
+        bearerScheme.GetProperty("scheme").GetString().ShouldBe("bearer");
+
+        schemes.TryGetProperty("CustomOAuth2", out var oauthScheme).ShouldBeTrue();
+        oauthScheme.GetProperty("type").GetString().ShouldBe("oauth2");
+        oauthScheme.GetProperty("flows").EnumerateObject().ShouldNotBeEmpty();
+    }
 }
 

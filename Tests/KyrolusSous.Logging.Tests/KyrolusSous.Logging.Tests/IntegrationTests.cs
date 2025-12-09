@@ -1,7 +1,6 @@
 
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
-using Serilog;
 
 using static KyrolusSous.Logging.LoggingOptions;
 
@@ -83,7 +82,7 @@ public class LoggingIntegrationTestBase : IClassFixture<WebApplicationFactory<Pr
 
 public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingIntegrationTestBase(factory)
 {
-    [Fact(DisplayName = "Should creates and writes to the default file sink")]
+    [Fact(DisplayName = "Integration: default options should create and write to file sink")]
     public async Task Build_WithDefaultOptions_CreatesAndWritesToDefaultFileSink()
     {
         // Arrange
@@ -109,7 +108,7 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
         var fileContent = await ReadFileWithRetryAsync(newest.FullName);
         fileContent.ShouldContain("Integration Test: Information Message");
     }
-    [Fact(DisplayName = "Should not create default log file when sinks are cleared")]
+    [Fact(DisplayName = "Integration: clearing sinks should not create default log file")]
     public async Task Build_WithClearDefaultSinks_DoesNotCreateDefaultLogFile()
     {
         // Arrange
@@ -141,7 +140,7 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
         recentFiles.ShouldBeEmpty("No new log files should be created when default sinks are cleared.");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Integration: custom file sink options should write to custom path")]
     public async Task Build_WithCustomFileSinkOptions_WritesToCustomPath()
     {
         // Arrange
@@ -211,7 +210,7 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
         }
         return string.Empty;
     }
-    [Fact]
+    [Fact(DisplayName = "Integration: custom sink type should be used when configured")]
     public async Task Build_WithCustomSinkType_UsesTheCustomSink()
     {
         // Arrange
@@ -238,7 +237,7 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
 
         loggedEvent.ShouldNotBeNull("An event containing the test message should have been logged.");
     }
-    [Fact]
+    [Fact(DisplayName = "Integration: sink options dictionary should create file sink")]
     public async Task Build_WithSinkOptionsAsDictionary_CreatesAndWritesToFileSink()
     {
         // Arrange
@@ -297,26 +296,4 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
         // Cleanup
         Directory.Delete(customLogPath, true);
     }
-    /// <summary>
-    /// A helper method that polls the file system until a file matching the pattern is found,
-    /// or until the timeout is reached.
-    /// </summary>
-    // private static async Task<FileInfo?> WaitForFileToExistAsync(string directory, string pattern, TimeSpan timeout)
-    // {
-    //     var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-    //     while (stopwatch.Elapsed < timeout)
-    //     {
-    //         if (Directory.Exists(directory))
-    //         {
-    //             // Directory.GetFiles can be replaced with DirectoryInfo if it causes issues.
-    //             var files = Directory.GetFiles(directory, pattern);
-    //             if (files.Length != 0)
-    //             {
-    //                 return new FileInfo(files[0]);
-    //             }
-    //         }
-    //         await Task.Delay(100); // Wait for 100ms before checking again.
-    //     }
-    //     return null;
-    // }
 }
