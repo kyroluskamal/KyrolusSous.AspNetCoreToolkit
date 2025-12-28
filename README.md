@@ -113,6 +113,119 @@ await repo.ExecuteUpdateAsync(o => o.Status == Status.Draft,
 
 ---
 
+## KyrolusSous.Repositories.Marten (Abstractions + Runtime)
+Generic Marten repositories مع خيارات متقدمة (Specifications، Soft Delete، Event Store، Saga، Projections، Decorators، UoW).
+
+**Register**
+```csharp
+// builder.Services.AddMarten(...); // your Marten setup
+builder.Services.AddKyrolusMartenRuntime(opts =>
+{
+    opts.AutoStart = true;
+    opts.ShardsToStart = new[] { "ProjectionName" };     // optional
+    opts.RebuildProjections = new[] { "ProjectionName" }; // optional
+    opts.WaitForNonStaleTimeout = TimeSpan.FromSeconds(30);
+    // opts.ConfigureSettings = settings => { /* daemon settings via reflection */ };
+});
+```
+
+**Basic repository usage**
+```csharp
+// inject IKyrolusMartenRepositoryAsync<IDocumentSession, Order, Guid>
+var repo = provider.GetRequiredService<IKyrolusMartenRepositoryAsync<IDocumentSession, Order, Guid>>();
+var order = await repo.GetByIdAsync(id);
+var page = await repo.QueryPageAsync(q => q.Where(o => o.Status == Status.Active), pageNumber: 1, pageSize: 20);
+await repo.PatchAsync(id, new() { ["Status"] = Status.Archived });
+await foreach (var item in repo.StreamAsync(o => o.Status == Status.Active)) { /* ... */ }
+```
+
+**Soft delete**
+```csharp
+// inject IKyrolusMartenSoftDeleteRepositoryAsync<IDocumentSession, Product, Guid>
+await softRepo.RemoveAsync(product);          // sets IsDeleted (or configured property)
+await softRepo.RestoreAsync(product);         // clears IsDeleted
+var active = await softRepo.GetAllAsync(includeSoftDeleted: false);
+```
+
+**Unit of Work (per session)**
+```csharp
+var uow = provider.GetRequiredService<IKyrolusMartenUnitOfWork<IDocumentSession>>();
+var orders = await uow.Get<Order, Guid>().GetAllAsync();
+await uow.SaveChangesAsync(ct); // single session save
+```
+
+**Specifications**
+```csharp
+public sealed class ActiveOrdersSpec : IQuerySpecification<Order>
+{
+    public IMartenQueryable<Order> Apply(IMartenQueryable<Order> query)
+        => query.Where(o => o.Status == Status.Active);
+}
+var active = await repo.QueryAsync(new ActiveOrdersSpec(), q => q);
+```
+
+**Patching**
+```csharp
+await repo.PatchAsync(id, new() { ["Status"] = Status.Active });
+await repo.PatchWhereAsync(o => o.Status == Status.Draft, new() { ["Status"] = Status.Active });
+```
+
+**Streaming**
+```csharp
+await foreach (var order in repo.StreamAsync(o => o.Status == Status.Active, cancellationToken: ct)) { /* process */ }
+```
+
+**Event Store**
+```csharp
+var eventStore = provider.GetRequiredService<IKyrolusMartenEventStore>();
+await eventStore.AppendAsync(streamId, new object[] { new OrderCreated(...), new OrderApproved(...) });
+var stream = await eventStore.LoadStreamAsync<OrderAggregate>(streamId);
+```
+
+**Saga**
+```csharp
+var saga = provider.GetRequiredService<IKyrolusMartenSagaCoordinator>();
+await saga.StartAsync("saga-id", new PaymentSagaState { Step = 1 });
+await saga.UpdateAsync("saga-id", state => state with { Step = 2 });
+```
+
+**Projections daemon**
+```csharp
+var orchestrator = provider.GetRequiredService<IKyrolusMartenProjectionOrchestrator>();
+await orchestrator.EnqueueRebuildAsync("ProjectionName");
+await orchestrator.EnsureUpToDateAsync("ProjectionName");
+```
+
+**Decorator (caching/resilience/tracing/authorization/validation)**
+```csharp
+var decorated = services.CreateDecoratedRepository<IDocumentSession, Order, Guid>(
+    session,
+    new KyrolusMartenRepositoryDependencies
+    {
+        CacheProvider = cache,
+        ResiliencePolicy = resilience,
+        Tracing = tracing,
+        Authorization = authorization,
+        Validation = validation
+    });
+```
+
+**Soft delete policy & dependencies**
+Pass `KyrolusMartenRepositoryDependencies` when creating the repo (or override via decorator) to supply:
+- `IKyrolusMartenSoftDeletePolicy` (property name, enabled flag)
+- `IKyrolusMartenObserver`, `IKyrolusMartenAuthorization`, `IKyrolusMartenValidation`
+- `IKyrolusMartenCacheProvider`, `IKyrolusMartenResiliencePolicy`, `IKyrolusMartenTracing`
+
+**Service registration summary**
+- `IKyrolusMartenRepositoryAsync<,,> -> KyrolusMartenRepositoryAsync<,,>`
+- `IKyrolusMartenSoftDeleteRepositoryAsync<,,> -> KyrolusMartenSoftDeleteRepositoryAsync<,,>`
+- `IKyrolusMartenUnitOfWork<> -> KyrolusMartenUnitOfWork<>`
+- `IKyrolusMartenEventStore -> KyrolusMartenEventStore`
+- `IKyrolusMartenSagaCoordinator -> KyrolusMartenSagaCoordinator`
+- `IKyrolusMartenProjectionOrchestrator -> KyrolusMartenProjectionOrchestrator`
+
+---
+
 ## KyrolusSous.Repositories.EF.Generator (Source Generator)
 Generates high-performance EF repositories to avoid runtime reflection and boilerplate, with caching, observer hooks, global filters, and compiled queries.
 
