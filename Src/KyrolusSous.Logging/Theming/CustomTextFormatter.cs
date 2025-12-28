@@ -28,7 +28,7 @@ public class TextFormatterOptions
     /// <summary>
     /// Optional per-level exception detail overrides (e.g., Full for Error/Fatal, MessageOnly for Info).
     /// </summary>
-    public Dictionary<LogEventLevel, ExceptionDetailLevel> ExceptionDetailByLevel { get; set; } = new();
+    public Dictionary<LogEventLevel, ExceptionDetailLevel> ExceptionDetailByLevel { get; set; } = [];
 
     public Dictionary<LogEventLevel, string> LevelColors { get; set; } = new()
     {

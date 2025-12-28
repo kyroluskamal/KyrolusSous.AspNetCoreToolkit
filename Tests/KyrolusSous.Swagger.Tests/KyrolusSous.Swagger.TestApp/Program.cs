@@ -7,8 +7,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSwaggerService(options =>
 {
     options.EnableApiVersioning = true;
-    options.ApiVersions = new List<ApiVersionInfo>
-    {
+    options.ApiVersions =
+    [
         new ApiVersionInfo
         {
             Version = "v1",
@@ -27,7 +27,7 @@ builder.Services.AddSwaggerService(options =>
             LicenseName = "MIT License",
             LicenseUrl = "https://example.com/license"
         }
-    };
+    ];
 
     options.EnableXmlComments = true;
     var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
@@ -59,7 +59,7 @@ builder.Services.AddSwaggerService(options =>
     options.UiEnableFilter = true;
     options.UiShowExtensions = true;
     options.UiEnablePersistAuthorization = true;
-    options.UiSupportedSubmitMethods = new List<string> { "get", "post", "put", "delete", "patch" };
+    options.UiSupportedSubmitMethods = ["get", "post", "put", "delete", "patch"];
 });
 
 builder.Services.AddAuthentication(options =>
@@ -93,25 +93,6 @@ var summaries = new[]
 {
     "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
 };
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
-
 await app.RunAsync();
-/// <summary>Represents a weather forecast.</summary>
-internal record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
+
 public partial class Program;

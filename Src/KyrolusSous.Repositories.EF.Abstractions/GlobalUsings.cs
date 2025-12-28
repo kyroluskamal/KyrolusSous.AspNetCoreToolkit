@@ -1,0 +1,9 @@
+global using System.Linq.Expressions;
+global using System.Data;
+global using KyrolusSous.Repositories.EF.Abstractions.Helpers;
+global using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
+global using System.Diagnostics.CodeAnalysis;
+global using System.Diagnostics;
+global using Microsoft.EntityFrameworkCore;
+global using Microsoft.EntityFrameworkCore.Query;
+global using KyrolusSous.Repositories.EF.Abstractions.Policy;

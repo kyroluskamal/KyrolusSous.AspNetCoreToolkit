@@ -5,7 +5,7 @@ public static class KyrolusExtensions
 {
 
     // Scan assemblies for IKyrolusModule implementations
-    private static readonly List<IModuleRegistration> _modules = new List<IModuleRegistration>();
+    private static readonly List<IModuleRegistration> _modules = [];
 
     public static IServiceCollection AddKyrolus(this IServiceCollection services, Action<KyrolusModuleBuilder> configure)
     {

@@ -12,7 +12,6 @@
   <ItemGroup>
     <ProjectReference Include="..\KyrolusSous.CQRSInterfaces\KyrolusSous.CQRSInterfaces.csproj" />
     <ProjectReference Include="..\KyrolusSous.ExceptionHandling\KyrolusSous.ExceptionHandling.csproj" />
-    <ProjectReference Include="..\KyrolusSous.IRespositoryInterfaces\KyrolusSous.IRespositoryInterfaces.csproj" />
     <ProjectReference Include="..\KyrolusSous.SourceMediator\KyrolusSous.SourceMediator.csproj" />
   </ItemGroup>
   <ItemGroup>
@@ -21,4 +20,3 @@
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
   </ItemGroup>
 </Project>
-

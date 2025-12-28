@@ -164,7 +164,7 @@ public class SwaggerIntegrationTests : IClassFixture<WebApplicationFactory<Progr
                 services.PostConfigure<SwaggerServiceOptions>(options =>
                 {
                     options.EnableApiVersioning = false;
-                    options.ApiVersions = new List<ApiVersionInfo> { new ApiVersionInfo { Version = "v1", Title = "Single Version Test" } };
+                    options.ApiVersions = [new ApiVersionInfo { Version = "v1", Title = "Single Version Test" }];
 
                     options.EnableJwtBearerAuth = false;
                     options.EnableOAuth2Auth = false;
@@ -260,7 +260,7 @@ public class SwaggerIntegrationTests : IClassFixture<WebApplicationFactory<Progr
             {
                 services.PostConfigure<SwaggerServiceOptions>(options =>
                 {
-                    options.UiSupportedSubmitMethods = new List<string> { "get", "walk", "post" };
+                    options.UiSupportedSubmitMethods = ["get", "walk", "post"];
                 });
             });
         });
@@ -285,7 +285,7 @@ public class SwaggerIntegrationTests : IClassFixture<WebApplicationFactory<Progr
             {
                 services.PostConfigure<SwaggerServiceOptions>(options =>
                 {
-                    options.UiSupportedSubmitMethods = new List<string> { "walk", "dance" };
+                    options.UiSupportedSubmitMethods = ["walk", "dance"];
                 });
             });
         });

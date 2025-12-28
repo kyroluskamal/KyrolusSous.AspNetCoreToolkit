@@ -421,7 +421,7 @@ namespace KyrolusSous.Logging
         /// </summary>
         private static bool TryGetArgumentsForMethod(MethodInfo method, IDictionary<string, object?> userProvidedParams, out List<object?> arguments, out int score)
         {
-            arguments = new List<object?>();
+            arguments = [];
             score = 0;
 
             // Skip the first 'this' parameter of the extension method

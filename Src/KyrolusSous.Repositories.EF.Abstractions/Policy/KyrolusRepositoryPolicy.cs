@@ -1,0 +1,14 @@
+namespace KyrolusSous.Repositories.EF.Abstractions.Policy;
+
+public sealed class KyrolusRepositoryPolicy
+{
+    public bool? AsNoTrackingDefault { get; init; }
+    public bool? UseSplitQueryDefault { get; init; }
+    public bool? EnableSoftDeleteDefault { get; init; }
+    public string? SoftDeleteProperty { get; init; } = "IsDeleted";
+    public Delegate? GlobalQueryFilter { get; init; }
+    public int ConcurrencyRetryCount { get; init; } = 0;
+    public TimeSpan? ConcurrencyRetryDelay { get; init; }
+    public int? DefaultPageSize { get; init; }
+    public static KyrolusRepositoryPolicy Default { get; } = new();
+}

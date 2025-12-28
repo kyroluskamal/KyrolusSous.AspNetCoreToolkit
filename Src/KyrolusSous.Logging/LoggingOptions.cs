@@ -111,7 +111,7 @@ public class LoggingOptions
     /// <summary>
     /// AOT-friendly sink registrations (executed when UseReflectionDiscovery is false).
     /// </summary>
-    public List<Action<LoggerConfiguration>> AotSinkRegistrations { get; } = new();
+    public List<Action<LoggerConfiguration>> AotSinkRegistrations { get; } = [];
 
     /// <summary>
     /// AOT-friendly enricher registrations (executed when UseReflectionDiscovery is false).
