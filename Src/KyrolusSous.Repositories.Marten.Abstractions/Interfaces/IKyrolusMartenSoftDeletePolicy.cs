@@ -4,4 +4,5 @@ public interface IKyrolusMartenSoftDeletePolicy
 {
     bool Enabled { get; }
     bool FilterDeletedByDefault { get; }
+    string? PropertyName { get; }
 }

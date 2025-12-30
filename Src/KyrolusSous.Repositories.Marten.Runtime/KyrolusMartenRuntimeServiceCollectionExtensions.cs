@@ -4,6 +4,14 @@ using KyrolusSous.Repositories.Marten.Runtime.Repository;
 using KyrolusSous.Repositories.Marten.Runtime.Repository.Decorators;
 using KyrolusSous.Repositories.Marten.Runtime.Saga;
 using KyrolusSous.Repositories.Marten.Runtime.UnitOfWork;
+using KyrolusSous.Repositories.Marten.Abstractions.Authorization;
+using KyrolusSous.Repositories.Marten.Abstractions.Cache;
+using KyrolusSous.Repositories.Marten.Abstractions.Observer;
+using KyrolusSous.Repositories.Marten.Abstractions.Resilience;
+using KyrolusSous.Repositories.Marten.Abstractions.SoftDelete;
+using KyrolusSous.Repositories.Marten.Abstractions.Tracing;
+using KyrolusSous.Repositories.Marten.Abstractions.Validation;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace KyrolusSous.Repositories.Marten.Runtime;
 
@@ -18,6 +26,14 @@ public static class KyrolusMartenRuntimeServiceCollectionExtensions
         {
             services.Configure(configureDaemon);
         }
+
+        services.TryAddSingleton(KyrolusMartenNoopObserver.Instance);
+        services.TryAddSingleton(KyrolusMartenAllowAllAuthorization.Instance);
+        services.TryAddSingleton(KyrolusMartenNoopValidation.Instance);
+        services.TryAddSingleton(KyrolusMartenNoSoftDeletePolicy.Instance);
+        services.TryAddSingleton(KyrolusMartenNoopCacheProvider.Instance);
+        services.TryAddSingleton(KyrolusMartenNoopResiliencePolicy.Instance);
+        services.TryAddSingleton(KyrolusMartenNoopTracing.Instance);
 
         services.AddScoped(typeof(IKyrolusMartenRepositoryAsync<,,>), typeof(KyrolusMartenRepositoryAsync<,,>));
         services.AddScoped(typeof(IKyrolusMartenSoftDeleteRepositoryAsync<,,>), typeof(KyrolusMartenSoftDeleteRepositoryAsync<,,>));
@@ -39,10 +55,20 @@ public static class KyrolusMartenRuntimeServiceCollectionExtensions
         where TEntity : class
         where TKey : IEquatable<TKey>
     {
-        var cache = services.GetService<IKyrolusMartenCacheProvider>();
-        var resilience = services.GetService<IKyrolusMartenResiliencePolicy>();
-        var tracing = services.GetService<IKyrolusMartenTracing>();
-        var inner = ActivatorUtilities.CreateInstance<KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>>(services, session, deps ?? new KyrolusMartenRepositoryDependencies());
-        return new KyrolusMartenRepositoryDecorator<TSession, TEntity, TKey>(inner, cache, resilience, tracing);
+        var effectiveDeps = deps ?? new KyrolusMartenRepositoryDependencies(
+            Observer: services.GetService<IKyrolusMartenObserver>(),
+            Authorization: services.GetService<IKyrolusMartenAuthorization>(),
+            Validation: services.GetService<IKyrolusMartenValidation>(),
+            SoftDeletePolicy: services.GetService<IKyrolusMartenSoftDeletePolicy>(),
+            CacheProvider: services.GetService<IKyrolusMartenCacheProvider>(),
+            ResiliencePolicy: services.GetService<IKyrolusMartenResiliencePolicy>(),
+            Tracing: services.GetService<IKyrolusMartenTracing>());
+
+        var inner = ActivatorUtilities.CreateInstance<KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>>(services, session, effectiveDeps);
+        return new KyrolusMartenRepositoryDecorator<TSession, TEntity, TKey>(
+            inner,
+            effectiveDeps.CacheProvider,
+            effectiveDeps.ResiliencePolicy,
+            effectiveDeps.Tracing);
     }
 }

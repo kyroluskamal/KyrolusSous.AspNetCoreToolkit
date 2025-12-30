@@ -1,4 +1,5 @@
 global using System.Linq.Expressions;
+global using System.Linq;
 global using System.Collections;
 global using System.Reflection;
 global using Marten;

@@ -3,24 +3,17 @@ using KyrolusSous.Repositories.Marten.Runtime.Repository;
 
 namespace KyrolusSous.Repositories.Marten.Runtime.UnitOfWork;
 
-public sealed class KyrolusMartenUnitOfWork<TSession> : IKyrolusMartenUnitOfWork<TSession>
+public sealed class KyrolusMartenUnitOfWork<TSession>(
+    TSession session,
+    IServiceProvider? serviceProvider = null,
+    Func<Type, object?>? repositoryFactory = null) : IKyrolusMartenUnitOfWork<TSession>
     where TSession : class, IDocumentSession
 {
-    private readonly TSession session;
-    private readonly IServiceProvider? serviceProvider;
-    private readonly Func<Type, object?>? repositoryFactory;
+    private readonly TSession session = session ?? throw new ArgumentNullException(nameof(session));
+    private readonly IServiceProvider? serviceProvider = serviceProvider;
+    private readonly Func<Type, object?>? repositoryFactory = repositoryFactory;
     private readonly Dictionary<Type, object> cache = [];
     private bool disposed;
-
-    public KyrolusMartenUnitOfWork(
-        TSession session,
-        IServiceProvider? serviceProvider = null,
-        Func<Type, object?>? repositoryFactory = null)
-    {
-        this.session = session ?? throw new ArgumentNullException(nameof(session));
-        this.serviceProvider = serviceProvider;
-        this.repositoryFactory = repositoryFactory;
-    }
 
     public TRepo GetRepository<TRepo>() where TRepo : class
     {
@@ -46,7 +39,7 @@ public sealed class KyrolusMartenUnitOfWork<TSession> : IKyrolusMartenUnitOfWork
             var factory = typeof(KyrolusMartenRepositoryFactory)
                 .GetMethod(nameof(KyrolusMartenRepositoryFactory.Create), BindingFlags.Public | BindingFlags.Static)!
                 .MakeGenericMethod(args);
-            return factory.Invoke(null, new object?[] { serviceProvider, session, null, true });
+            return factory.Invoke(null, [serviceProvider, session, null, true]);
         }
         // handle soft delete specialization
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IKyrolusMartenSoftDeleteRepositoryAsync<,,>))

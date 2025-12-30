@@ -128,23 +128,39 @@ builder.Services.AddKyrolusMartenRuntime(opts =>
     // opts.ConfigureSettings = settings => { /* daemon settings via reflection */ };
 });
 ```
+Default registrations are provided via `TryAdd*` (no-op or permissive) for:
+`IKyrolusMartenObserver`, `IKyrolusMartenAuthorization`, `IKyrolusMartenValidation`,
+`IKyrolusMartenSoftDeletePolicy`, `IKyrolusMartenCacheProvider`,
+`IKyrolusMartenResiliencePolicy`, `IKyrolusMartenTracing`.
+Register your own implementations to override them.
 
 **Basic repository usage**
 ```csharp
 // inject IKyrolusMartenRepositoryAsync<IDocumentSession, Order, Guid>
 var repo = provider.GetRequiredService<IKyrolusMartenRepositoryAsync<IDocumentSession, Order, Guid>>();
-var order = await repo.GetByIdAsync(id);
-var page = await repo.QueryPageAsync(q => q.Where(o => o.Status == Status.Active), pageNumber: 1, pageSize: 20);
-await repo.PatchAsync(id, new() { ["Status"] = Status.Archived });
-await foreach (var item in repo.StreamAsync(o => o.Status == Status.Active)) { /* ... */ }
+var result = await repo.GetByIdAsync(id);
+var order = result?.Entity;
+var version = result?.Version;
+
+var page = await repo.QueryPageAsync(
+    new MartenQueryOptions<Order>(Filter: o => o.Status == Status.Active),
+    q => q,
+    new MartenPageRequest(PageNumber: 1, PageSize: 20));
+
+var patched = await repo.PatchAsync(id, new() { ["Status"] = Status.Archived });
+var patchedVersion = patched?.Version;
+
+await foreach (var item in repo.StreamAsync(
+    new MartenQueryOptions<Order>(Filter: o => o.Status == Status.Active),
+    cancellationToken: ct)) { /* ... */ }
 ```
 
 **Soft delete**
 ```csharp
 // inject IKyrolusMartenSoftDeleteRepositoryAsync<IDocumentSession, Product, Guid>
 await softRepo.RemoveAsync(product);          // sets IsDeleted (or configured property)
-await softRepo.RestoreAsync(product);         // clears IsDeleted
-var active = await softRepo.GetAllAsync(includeSoftDeleted: false);
+await softRepo.RestoreAsync(product.Id);      // clears IsDeleted
+var active = await softRepo.GetAllAsync(new MartenQueryOptions<Product>(IncludeSoftDeleted: false));
 ```
 
 **Unit of Work (per session)**
@@ -161,18 +177,20 @@ public sealed class ActiveOrdersSpec : IQuerySpecification<Order>
     public IMartenQueryable<Order> Apply(IMartenQueryable<Order> query)
         => query.Where(o => o.Status == Status.Active);
 }
-var active = await repo.QueryAsync(new ActiveOrdersSpec(), q => q);
+var active = await repo.QueryAsync(new MartenQueryOptions<Order>(Specification: new ActiveOrdersSpec()), q => q);
 ```
 
 **Patching**
 ```csharp
-await repo.PatchAsync(id, new() { ["Status"] = Status.Active });
+var patched = await repo.PatchAsync(id, new() { ["Status"] = Status.Active });
 await repo.PatchWhereAsync(o => o.Status == Status.Draft, new() { ["Status"] = Status.Active });
 ```
 
 **Streaming**
 ```csharp
-await foreach (var order in repo.StreamAsync(o => o.Status == Status.Active, cancellationToken: ct)) { /* process */ }
+await foreach (var order in repo.StreamAsync(
+    new MartenQueryOptions<Order>(Filter: o => o.Status == Status.Active),
+    cancellationToken: ct)) { /* process */ }
 ```
 
 **Event Store**
@@ -210,11 +228,552 @@ var decorated = services.CreateDecoratedRepository<IDocumentSession, Order, Guid
     });
 ```
 
+### Marten Authorization Use Cases
+Implementations live in `Src/KyrolusSous.Repositories.Marten.Abstractions/Authorization`.
+Plug them into `KyrolusMartenRepositoryDependencies.Authorization` or use directly.
+
+**Allow all**
+Use for dev or when you want to bypass checks.
+```csharp
+var auth = KyrolusMartenAllowAllAuthorization.Instance;
+```
+
+**Deny all**
+Use for lock-down or maintenance mode.
+```csharp
+var auth = KyrolusMartenDenyAllAuthorization.Instance;
+```
+
+**Delegate**
+Custom lambda-based rule.
+```csharp
+var auth = new KyrolusMartenDelegateAuthorization((op, target, ct) =>
+{
+    if (op == "RemoveById") return Task.FromResult(false);
+    return Task.FromResult(true);
+});
+```
+
+**Operation whitelist**
+Allow only specific operations.
+```csharp
+var auth = new KyrolusMartenOperationWhitelistAuthorization(new[] { "GetAll", "GetById" });
+```
+
+**Operation blacklist**
+Block specific operations.
+```csharp
+var auth = new KyrolusMartenOperationBlacklistAuthorization(new[] { "RemoveById", "DeleteWhere" });
+```
+
+**Operation prefix**
+Allow only operations with a prefix.
+```csharp
+var auth = new KyrolusMartenOperationPrefixAuthorization(new[] { "Get", "Query" });
+```
+
+**Operation map**
+Different rule per operation, with fallback.
+```csharp
+var auth = new KyrolusMartenOperationMapAuthorization(new Dictionary<string, IKyrolusMartenAuthorization>
+{
+    ["GetAll"] = KyrolusMartenAllowAllAuthorization.Instance,
+    ["RemoveById"] = KyrolusMartenDenyAllAuthorization.Instance
+});
+```
+
+**Composite (all)**
+All rules must pass.
+```csharp
+var auth = new KyrolusMartenCompositeAllAuthorization(new IKyrolusMartenAuthorization[]
+{
+    new KyrolusMartenOperationPrefixAuthorization(new[] { "Get" }),
+    new KyrolusMartenOperationBlacklistAuthorization(new[] { "GetById" })
+});
+```
+
+**Composite (any)**
+Any rule passing is enough.
+```csharp
+var auth = new KyrolusMartenCompositeAnyAuthorization(new IKyrolusMartenAuthorization[]
+{
+    new KyrolusMartenOperationWhitelistAuthorization(new[] { "GetAll" }),
+    new KyrolusMartenOperationWhitelistAuthorization(new[] { "GetPage" })
+});
+```
+
+**Target type map**
+Pick authorization based on payload type.
+```csharp
+var auth = new KyrolusMartenTargetTypeAuthorization(new Dictionary<Type, IKyrolusMartenAuthorization>
+{
+    [typeof(Order)] = new KyrolusMartenOperationWhitelistAuthorization(new[] { "Add", "Update" }),
+    [typeof(Payment)] = new KyrolusMartenOperationBlacklistAuthorization(new[] { "RemoveById" })
+});
+```
+
+**Tenant match**
+Ensure the target tenant matches the current tenant.
+```csharp
+var auth = new KyrolusMartenTenantMatchAuthorization(
+    tenantResolver,
+    target => (target as ITenantScoped)?.TenantId,
+    allowWhenUnknown: false);
+```
+
+**Role based**
+Authorize using roles from a context object.
+```csharp
+var auth = new KyrolusMartenRoleAuthorization(new[] { "Admin" });
+var ctx = new KyrolusMartenAuthorizationContext(UserId: "u1", Roles: new[] { "Admin" });
+var allowed = await auth.AuthorizeAsync("Add", ctx);
+```
+
+**Permission based**
+Authorize using permissions from a context object.
+```csharp
+var auth = new KyrolusMartenPermissionAuthorization(new[] { "order.write" });
+var ctx = new KyrolusMartenAuthorizationContext(UserId: "u1", Permissions: new[] { "order.write" });
+var allowed = await auth.AuthorizeAsync("Update", ctx);
+```
+
+### Marten Validation Use Cases
+Implementations live in `Src/KyrolusSous.Repositories.Marten.Abstractions/Validation`.
+Plug them into `KyrolusMartenRepositoryDependencies.Validation`.
+
+**No-op**
+Disable validation.
+```csharp
+var validation = KyrolusMartenNoopValidation.Instance;
+```
+
+**Delegate**
+Custom validation logic.
+```csharp
+var validation = new KyrolusMartenDelegateValidation((op, payload, ct) =>
+{
+    if (op == "Add" && payload is Order o && o.Total <= 0)
+        throw new KyrolusMartenValidationException("Total must be > 0");
+    return Task.CompletedTask;
+});
+```
+
+**Payload not null**
+```csharp
+var validation = new KyrolusMartenPayloadNotNullValidation();
+```
+
+**Payload type**
+```csharp
+var validation = new KyrolusMartenPayloadTypeValidation(new[] { typeof(Order) }, allowNull: false);
+```
+
+**String length**
+```csharp
+var validation = new KyrolusMartenStringLengthValidation(minLength: 3, maxLength: 64);
+```
+
+**Collection count**
+```csharp
+var validation = new KyrolusMartenCollectionCountValidation(minCount: 1, maxCount: 100);
+```
+
+**Validatable payload (sync/async)**
+```csharp
+public sealed class Order : IKyrolusMartenValidatable
+{
+    public decimal Total { get; set; }
+    public void Validate()
+    {
+        if (Total <= 0) throw new KyrolusMartenValidationException("Total must be > 0");
+    }
+}
+var validation = new KyrolusMartenValidatablePayloadValidation();
+```
+
+**Operation map**
+```csharp
+var validation = new KyrolusMartenOperationMapValidation(new Dictionary<string, IKyrolusMartenValidation>
+{
+    ["Add"] = new KyrolusMartenPayloadNotNullValidation(),
+    ["Update"] = new KyrolusMartenValidatablePayloadValidation()
+});
+```
+
+**Composite**
+```csharp
+var validation = new KyrolusMartenCompositeValidation(new IKyrolusMartenValidation[]
+{
+    new KyrolusMartenPayloadNotNullValidation(),
+    new KyrolusMartenValidatablePayloadValidation()
+}, stopOnFirst: false);
+```
+
+**Exceptions**
+- `KyrolusMartenValidationException` for a single failure.
+- `KyrolusMartenAggregateValidationException` for multiple errors in composite mode.
+
+### Marten Observer Use Cases
+Implementations live in `Src/KyrolusSous.Repositories.Marten.Abstractions/Observer`.
+Plug them into `KyrolusMartenRepositoryDependencies.Observer` or use directly.
+
+**No-op**
+Disable observer hooks.
+```csharp
+var observer = KyrolusMartenNoopObserver.Instance;
+```
+
+**Delegate**
+Custom hooks per operation.
+```csharp
+var observer = new KyrolusMartenDelegateObserver(
+    onBefore: (op, payload, ct) =>
+    {
+        Console.WriteLine($"Starting {op}");
+        return Task.CompletedTask;
+    },
+    onAfter: (op, result, elapsed, ex, ct) =>
+    {
+        Console.WriteLine($"Finished {op} in {elapsed.TotalMilliseconds} ms");
+        return Task.CompletedTask;
+    });
+```
+
+**Debug output**
+Quick tracing via `Debug.WriteLine`.
+```csharp
+var observer = new KyrolusMartenDebugObserver();
+```
+
+**Errors only**
+Notify only when an operation fails.
+```csharp
+var observer = new KyrolusMartenErrorOnlyObserver((op, result, elapsed, ex, ct) =>
+{
+    Console.WriteLine($"Error in {op}: {ex.Message}");
+    return Task.CompletedTask;
+});
+```
+
+**Slow operations**
+Trigger when duration exceeds a threshold.
+```csharp
+var observer = new KyrolusMartenSlowOperationObserver(
+    TimeSpan.FromMilliseconds(250),
+    (op, result, elapsed, ct) =>
+    {
+        Console.WriteLine($"Slow {op}: {elapsed.TotalMilliseconds} ms");
+        return Task.CompletedTask;
+    });
+```
+
+**Operation filter**
+Observe only certain operations.
+```csharp
+var observer = new KyrolusMartenOperationFilterObserver(
+    op => op.StartsWith("Get", StringComparison.Ordinal),
+    new KyrolusMartenDebugObserver());
+```
+
+**Composite**
+Chain multiple observers together.
+```csharp
+var observer = new KyrolusMartenCompositeObserver(new IKyrolusMartenObserver[]
+{
+    new KyrolusMartenDebugObserver(),
+    new KyrolusMartenCountingObserver()
+});
+```
+
+**Counting**
+Collect per-operation counts.
+```csharp
+var observer = new KyrolusMartenCountingObserver();
+// later:
+var snapshot = observer.Snapshot();
+```
+
+### Marten Cache Provider Use Cases
+Implementations are intentionally external (so you can plug IMemoryCache, IDistributedCache, Redis, etc.).
+Hook it via `KyrolusMartenRepositoryDependencies.CacheProvider`.
+
+**No-op**
+Use when you want to disable caching.
+```csharp
+public sealed class KyrolusMartenNoopCacheProvider : IKyrolusMartenCacheProvider
+{
+    public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default) => Task.FromResult<T?>(default);
+    public Task SetAsync<T>(string key, T value, TimeSpan ttl, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task InvalidateAsync(string key, CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+```
+
+**In-memory cache**
+Fast for single-instance apps or tests.
+```csharp
+public sealed class KyrolusMartenMemoryCacheProvider(IMemoryCache cache) : IKyrolusMartenCacheProvider
+{
+    public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default)
+        => Task.FromResult(cache.TryGetValue(key, out var value) ? (T?)value : default);
+
+    public Task SetAsync<T>(string key, T value, TimeSpan ttl, CancellationToken cancellationToken = default)
+    {
+        cache.Set(key, value, ttl);
+        return Task.CompletedTask;
+    }
+
+    public Task InvalidateAsync(string key, CancellationToken cancellationToken = default)
+    {
+        cache.Remove(key);
+        return Task.CompletedTask;
+    }
+}
+```
+
+**Distributed cache**
+Good for multi-instance deployments.
+```csharp
+public sealed class KyrolusMartenDistributedCacheProvider(IDistributedCache cache, JsonSerializerOptions? options = null)
+    : IKyrolusMartenCacheProvider
+{
+    private readonly JsonSerializerOptions json = options ?? new JsonSerializerOptions(JsonSerializerDefaults.Web);
+
+    public async Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default)
+    {
+        var bytes = await cache.GetAsync(key, cancellationToken).ConfigureAwait(false);
+        return bytes is null ? default : JsonSerializer.Deserialize<T>(bytes, json);
+    }
+
+    public async Task SetAsync<T>(string key, T value, TimeSpan ttl, CancellationToken cancellationToken = default)
+    {
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(value, json);
+        await cache.SetAsync(key, bytes, new DistributedCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = ttl
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task InvalidateAsync(string key, CancellationToken cancellationToken = default)
+        => cache.RemoveAsync(key, cancellationToken);
+}
+```
+
+**Tenant-aware keys**
+Use when multi-tenancy is enabled to avoid cross-tenant leakage.
+```csharp
+var key = $"{tenantId}:Order:{id}";
+```
+
+**TTL strategy**
+Use short TTL for list queries, longer TTL for GetById.
+Example: 10-30s for list pages, 2-5 minutes for single entity.
+
+### Marten Resilience Policy Use Cases
+Implementations live in `Src/KyrolusSous.Repositories.Marten.Abstractions/Resilience`.
+Plug them into `KyrolusMartenRepositoryDependencies.ResiliencePolicy`.
+
+**No-op**
+Disable resilience handling.
+```csharp
+var policy = KyrolusMartenNoopResiliencePolicy.Instance;
+```
+
+**Delegate**
+Wrap any custom logic.
+```csharp
+var policy = new KyrolusMartenDelegateResiliencePolicy(
+    execute: async (op, action, ct) =>
+    {
+        Console.WriteLine($"Starting {op}");
+        await action().ConfigureAwait(false);
+    });
+```
+
+**Retry with fixed delay**
+```csharp
+var policy = new KyrolusMartenRetryResiliencePolicy(
+    maxRetries: 3,
+    delay: TimeSpan.FromMilliseconds(200),
+    shouldRetry: ex => ex is TimeoutException);
+```
+
+**Retry with exponential backoff**
+```csharp
+var policy = new KyrolusMartenRetryResiliencePolicy(
+    maxRetries: 5,
+    delayFactory: attempt => TimeSpan.FromMilliseconds(100 * Math.Pow(2, attempt)));
+```
+
+**Timeout**
+Fail if the operation takes too long.
+```csharp
+var policy = new KyrolusMartenTimeoutResiliencePolicy(TimeSpan.FromSeconds(2));
+```
+
+**Circuit breaker**
+Open after N failures, then block for a window.
+```csharp
+var policy = new KyrolusMartenCircuitBreakerResiliencePolicy(
+    failureThreshold: 5,
+    breakDuration: TimeSpan.FromSeconds(30));
+```
+
+**Composite**
+Combine multiple policies in order.
+```csharp
+var policy = new KyrolusMartenCompositeResiliencePolicy(new IKyrolusMartenResiliencePolicy[]
+{
+    new KyrolusMartenRetryResiliencePolicy(3, TimeSpan.FromMilliseconds(150)),
+    new KyrolusMartenTimeoutResiliencePolicy(TimeSpan.FromSeconds(2))
+});
+```
+
+### Marten Tracing Use Cases
+Implementations live in `Src/KyrolusSous.Repositories.Marten.Abstractions/Tracing`.
+Plug them into `KyrolusMartenRepositoryDependencies.Tracing`.
+
+**No-op**
+Disable tracing.
+```csharp
+var tracing = KyrolusMartenNoopTracing.Instance;
+```
+
+**Delegate**
+Custom hooks for scope/record.
+```csharp
+var tracing = new KyrolusMartenDelegateTracing(
+    start: (op, payload) =>
+    {
+        Console.WriteLine($"Start {op}");
+        return null;
+    },
+    record: (op, payload, elapsed, ex, ct) =>
+    {
+        Console.WriteLine($"End {op} in {elapsed.TotalMilliseconds} ms");
+        return Task.CompletedTask;
+    });
+```
+
+**ActivitySource**
+Integrate with OpenTelemetry or built-in Activity tracing.
+```csharp
+var tracing = new KyrolusMartenActivityTracing("MyApp.Marten");
+```
+
+**Debug output**
+Simple diagnostics.
+```csharp
+var tracing = new KyrolusMartenDebugTracing();
+```
+
+**In-memory**
+Useful for tests or diagnostics in dev.
+```csharp
+var tracing = new KyrolusMartenInMemoryTracing();
+var records = tracing.Snapshot();
+```
+
+**Operation filter**
+Trace only specific operations.
+```csharp
+var tracing = new KyrolusMartenOperationFilterTracing(
+    op => op.StartsWith("Get", StringComparison.Ordinal),
+    new KyrolusMartenDebugTracing());
+```
+
+**Error-only**
+Only record failures.
+```csharp
+var tracing = new KyrolusMartenErrorOnlyTracing(new KyrolusMartenDebugTracing());
+```
+
+**Threshold**
+Record only slow operations.
+```csharp
+var tracing = new KyrolusMartenThresholdTracing(TimeSpan.FromMilliseconds(250), new KyrolusMartenDebugTracing());
+```
+
+**Sampling**
+Reduce tracing volume.
+```csharp
+var tracing = new KyrolusMartenSamplingTracing(0.1, new KyrolusMartenActivityTracing("MyApp.Marten"));
+```
+
+**Composite**
+Chain multiple tracers.
+```csharp
+var tracing = new KyrolusMartenCompositeTracing(new IKyrolusMartenTracing[]
+{
+    new KyrolusMartenActivityTracing("MyApp.Marten"),
+    new KyrolusMartenInMemoryTracing()
+});
+```
+
 **Soft delete policy & dependencies**
 Pass `KyrolusMartenRepositoryDependencies` when creating the repo (or override via decorator) to supply:
 - `IKyrolusMartenSoftDeletePolicy` (property name, enabled flag)
 - `IKyrolusMartenObserver`, `IKyrolusMartenAuthorization`, `IKyrolusMartenValidation`
 - `IKyrolusMartenCacheProvider`, `IKyrolusMartenResiliencePolicy`, `IKyrolusMartenTracing`
+
+### Marten Soft Delete Policy Use Cases
+Implementations live in `Src/KyrolusSous.Repositories.Marten.Abstractions/SoftDelete`.
+Plug them into `KyrolusMartenRepositoryDependencies.SoftDeletePolicy`.
+
+**Disable soft delete**
+```csharp
+var policy = KyrolusMartenNoSoftDeletePolicy.Instance;
+```
+
+**Custom property**
+```csharp
+var policy = KyrolusMartenSoftDeletePolicy.For("IsArchived", filterDeletedByDefault: true);
+```
+
+**Default property (`IsDeleted`)**
+```csharp
+var policy = KyrolusMartenSoftDeletePolicy.IsDeleted();
+```
+
+### Marten Specification Use Cases
+Implementations live in `Src/KyrolusSous.Repositories.Marten.Abstractions/Specifications`.
+
+**Delegate**
+```csharp
+var spec = new KyrolusMartenDelegateSpecification<Order>(q => q.Where(o => o.Status == Status.Active));
+```
+
+**Filter**
+```csharp
+var spec = new KyrolusMartenFilterSpecification<Order>(o => o.Status == Status.Active);
+```
+
+**Order**
+```csharp
+var spec = new KyrolusMartenOrderSpecification<Order>(q => q.OrderBy(o => o.CreatedAt));
+```
+
+**Pagination**
+```csharp
+var spec = new KyrolusMartenPaginationSpecification<Order>(skip: 20, take: 10);
+```
+
+**Include**
+Use Marten's include/graph API inside a specification.
+```csharp
+var spec = new KyrolusMartenIncludeSpecification<Order>(q =>
+{
+    q.Include<Order, Customer>(o => o.CustomerId, c => { });
+});
+```
+
+**Composite**
+```csharp
+var spec = new KyrolusMartenCompositeSpecification<Order>(new IQuerySpecification<Order>[]
+{
+    new KyrolusMartenFilterSpecification<Order>(o => o.Status == Status.Active),
+    new KyrolusMartenOrderSpecification<Order>(q => q.OrderByDescending(o => o.CreatedAt))
+});
+```
 
 **Service registration summary**
 - `IKyrolusMartenRepositoryAsync<,,> -> KyrolusMartenRepositoryAsync<,,>`
