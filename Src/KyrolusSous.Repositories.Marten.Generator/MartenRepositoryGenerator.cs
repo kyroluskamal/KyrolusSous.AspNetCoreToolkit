@@ -1,0 +1,2451 @@
+using System.Collections.Immutable;
+using System.Text;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
+
+namespace KyrolusSous.Repositories.Marten.Generator;
+
+[Generator(LanguageNames.CSharp)]
+public sealed class MartenRepositoryGenerator : IIncrementalGenerator
+{
+    private const string AttributeName = "KyrolusMartenRepositoryAttribute";
+    private const string AttributeNamespace = "KyrolusSous.Repositories.Marten.Generator";
+    private const string AbstractionsNamespace = "KyrolusSous.Repositories.Marten.Abstractions";
+    private const string GeneratedNamespace = "KyrolusSous.Repositories.Marten.Generated";
+    private const int Indent4 = 4;
+    private const int Indent8 = 8;
+    private const int Indent12 = 12;
+    private const string LineDefaultOptions = "var opts = options ?? new MartenQueryOptions<TEntity>();";
+    private const string LineExecEnd = "}, cancellationToken);";
+    private const string LineArrayInit = "var array = entities.ToArray();";
+    private const string LineResolveSessionTenant = "var activeSession = ResolveSession(tenantId);";
+    private const string LineStoreEntity = "activeSession.Store(entity);";
+    private const string LineStoreArray = "activeSession.Store(array);";
+    private const string LineInvalidateEntity = "_ = InvalidateCacheAsync(entity, tenantId, cancellationToken);";
+    private const string LineInvalidateArray = "_ = InvalidateCacheAsync(array, tenantId, cancellationToken);";
+    private const string LineReturnZero = "return Task.FromResult(0);";
+    private const string LineReturnTrue = "return Task.FromResult(true);";
+
+    public void Initialize(IncrementalGeneratorInitializationContext context)
+    {
+        context.RegisterPostInitializationOutput(ctx =>
+        {
+            ctx.AddSource("KyrolusMartenRepositoryAttribute.g.cs", SourceText.From(GeneratorAttribute, Encoding.UTF8));
+        });
+
+        var classesWithAttribute = context.SyntaxProvider.ForAttributeWithMetadataName(
+            $"{AttributeNamespace}.{AttributeName}",
+            predicate: static (_, _) => true,
+            transform: static (ctx, _) => new ClassInfo((INamedTypeSymbol)ctx.TargetSymbol, ctx.Attributes[0]));
+
+        var compilationAndClasses = context.CompilationProvider.Combine(classesWithAttribute.Collect());
+
+        context.RegisterSourceOutput(compilationAndClasses, Execute);
+    }
+
+    private void Execute(SourceProductionContext context, (Compilation compilation, ImmutableArray<ClassInfo> classes) tuple)
+    {
+        var diNamespaces = new HashSet<string>(StringComparer.Ordinal);
+        var diRegistrations = new List<string>();
+        var unitOfWorkMap = new Dictionary<INamedTypeSymbol, List<RepositoryRequest>>(SymbolEqualityComparer.Default);
+        var requests = new List<RepositoryRequest>();
+
+        foreach (var classInfo in tuple.classes)
+        {
+            if (!TryParseAttributeRequest(classInfo, out var request, out var errorMessage))
+            {
+                ReportDiagnostic(context, "MARTEN001", "Invalid KyrolusMartenRepositoryAttribute", errorMessage);
+                continue;
+            }
+
+            if (!ValidateRequest(context, request))
+            {
+                continue;
+            }
+
+            var includeMappings = BuildIncludeMappings(request);
+            var patchProperties = GetMutableProperties(request);
+            var keyProperty = FindKeyProperty(request);
+            requests.Add(request);
+
+            var sb = new StringBuilder();
+            UsingDirectives(sb);
+            GenerateRepository(sb, request, includeMappings, patchProperties, keyProperty);
+            context.AddSource($"{request.RepositoryName}.g.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
+
+            diNamespaces.Add(request.Namespace);
+            diRegistrations.Add($$"""            services.AddScoped<{{request.RepositoryName}}>();""");
+            var repoInterface = $$"""IKyrolusMartenRepositoryAsync<{{request.SessionType.ToDisplayString()}}, {{request.EntityType.ToDisplayString()}}, {{request.KeyType.ToDisplayString()}}>""";
+            diRegistrations.Add($$"""            services.AddScoped<{{repoInterface}}, {{request.RepositoryName}}>();""");
+            if (request.EnableSoftDelete)
+            {
+                var softInterface = $$"""IKyrolusMartenSoftDeleteRepositoryAsync<{{request.SessionType.ToDisplayString()}}, {{request.EntityType.ToDisplayString()}}, {{request.KeyType.ToDisplayString()}}>""";
+                diRegistrations.Add($$"""            services.AddScoped<{{softInterface}}, {{request.RepositoryName}}>();""");
+            }
+
+            if (!unitOfWorkMap.TryGetValue(request.SessionType, out var list))
+            {
+                list = [];
+                unitOfWorkMap[request.SessionType] = list;
+            }
+            list.Add(request);
+        }
+
+        foreach (var entry in unitOfWorkMap)
+        {
+            var sessionType = entry.Key.ToDisplayString();
+            var className = $"{entry.Key.Name}MartenUnitOfWork";
+            var iface = $"IKyrolusMartenUnitOfWork<{sessionType}>";
+            diRegistrations.Add($$"""            services.AddScoped<{{iface}}, {{className}}>();""");
+        }
+
+        EmitDiExtension(context, diNamespaces, diRegistrations);
+        EmitUnitOfWorks(context, unitOfWorkMap);
+        EmitInfrastructure(context, requests);
+    }
+
+    private static void ReportDiagnostic(SourceProductionContext context, string id, string title, string message)
+    {
+        context.ReportDiagnostic(Diagnostic.Create(
+            new DiagnosticDescriptor(id, title, message, "KyrolusSous.Repositories.Marten.Generator", DiagnosticSeverity.Error, true),
+            Location.None));
+    }
+
+    private static bool ValidateRequest(SourceProductionContext context, RepositoryRequest request)
+    {
+        if (!ImplementsIdocumentSession(request.SessionType))
+        {
+            ReportDiagnostic(context, "MARTEN002", "Session type invalid", $"Session type '{request.SessionType.ToDisplayString()}' must implement IDocumentSession.");
+            return false;
+        }
+
+        if (request.EntityType.TypeKind != TypeKind.Class)
+        {
+            ReportDiagnostic(context, "MARTEN003", "Entity type invalid", $"Entity type '{request.EntityType.ToDisplayString()}' must be a class.");
+            return false;
+        }
+
+        if (!ImplementsIEquatable(request.KeyType))
+        {
+            ReportDiagnostic(context, "MARTEN004", "Key type invalid", $"Key type '{request.KeyType.ToDisplayString()}' must implement IEquatable<{request.KeyType.ToDisplayString()}>.");
+            return false;
+        }
+
+        var allProps = GetAllProperties(request.EntityType).ToArray();
+        if (request.EnableSoftDelete)
+        {
+            var softProp = FindProperty(allProps, request.SoftDeleteProperty);
+            if (softProp is null || softProp.Type.SpecialType != SpecialType.System_Boolean)
+            {
+                ReportDiagnostic(context, "MARTEN005", "Soft delete property invalid",
+                    $"SoftDeleteProperty '{request.SoftDeleteProperty}' was not found on '{request.EntityType.ToDisplayString()}' or is not a bool.");
+                return false;
+            }
+        }
+
+        if (request.DefaultIncludes.Length > 0)
+        {
+            var includeSet = new HashSet<string>(request.DefaultIncludes, StringComparer.OrdinalIgnoreCase);
+            var includeMappings = BuildIncludeMappings(request);
+            var knownIncludes = new HashSet<string>(includeMappings.Select(m => m.IncludeName), StringComparer.OrdinalIgnoreCase);
+            var missingInclude = includeSet.FirstOrDefault(name => !knownIncludes.Contains(name));
+            if (missingInclude is not null)
+            {
+                ReportDiagnostic(context, "MARTEN006", "IncludeProperties invalid",
+                    $"IncludeProperties contains '{missingInclude}', but no matching include mapping could be built for '{request.EntityType.ToDisplayString()}'.");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool ImplementsIdocumentSession(INamedTypeSymbol sessionType)
+    {
+        return sessionType.AllInterfaces.Any(i => i.ToDisplayString() == "Marten.IDocumentSession")
+               || sessionType.ToDisplayString() == "Marten.IDocumentSession";
+    }
+
+    private static bool ImplementsIEquatable(INamedTypeSymbol keyType)
+    {
+        return keyType.AllInterfaces.Any(i =>
+            i.OriginalDefinition.ToDisplayString() == "System.IEquatable<T>" &&
+            i.TypeArguments.Length == 1 &&
+            SymbolEqualityComparer.Default.Equals(i.TypeArguments[0], keyType));
+    }
+
+    private static void EmitDiExtension(SourceProductionContext context, HashSet<string> diNamespaces, List<string> diRegistrations)
+    {
+        if (diRegistrations.Count == 0) return;
+
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated />");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine("using System;");
+        sb.AppendLine("using Marten;");
+        sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
+        sb.AppendLine("using Microsoft.Extensions.DependencyInjection.Extensions;");
+        sb.AppendLine($"using {AbstractionsNamespace};");
+        sb.AppendLine($"using {AbstractionsNamespace}.Interfaces;");
+        sb.AppendLine($"using {AbstractionsNamespace}.Authorization;");
+        sb.AppendLine($"using {AbstractionsNamespace}.Cache;");
+        sb.AppendLine($"using {AbstractionsNamespace}.Observer;");
+        sb.AppendLine($"using {AbstractionsNamespace}.Resilience;");
+        sb.AppendLine($"using {AbstractionsNamespace}.SoftDelete;");
+        sb.AppendLine($"using {AbstractionsNamespace}.Tracing;");
+        sb.AppendLine($"using {AbstractionsNamespace}.Validation;");
+        foreach (var ns in diNamespaces)
+        {
+            sb.AppendLine($"using {ns};");
+        }
+        sb.AppendLine();
+        sb.AppendLine($"namespace {GeneratedNamespace}");
+        sb.AppendLine("{");
+        sb.AppendLine("    public static class GeneratedMartenRepositoriesServiceCollectionExtensions");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        public static IServiceCollection AddGeneratedKyrolusMartenRepositories(this IServiceCollection services)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            services.TryAddSingleton(KyrolusMartenNoopObserver.Instance);");
+        sb.AppendLine("            services.TryAddSingleton(KyrolusMartenAllowAllAuthorization.Instance);");
+        sb.AppendLine("            services.TryAddSingleton(KyrolusMartenNoopValidation.Instance);");
+        sb.AppendLine("            services.TryAddSingleton(KyrolusMartenNoSoftDeletePolicy.Instance);");
+        sb.AppendLine("            services.TryAddSingleton(KyrolusMartenNoopCacheProvider.Instance);");
+        sb.AppendLine("            services.TryAddSingleton(KyrolusMartenNoopResiliencePolicy.Instance);");
+        sb.AppendLine("            services.TryAddSingleton(KyrolusMartenNoopTracing.Instance);");
+        sb.AppendLine("            services.AddScoped<IKyrolusMartenEventStore, KyrolusMartenEventStore>();");
+        sb.AppendLine("            services.AddScoped<IKyrolusMartenSagaCoordinator, KyrolusMartenSagaCoordinator>();");
+        sb.AppendLine("            services.AddScoped<IKyrolusMartenProjectionOrchestrator, KyrolusMartenProjectionOrchestrator>();");
+        sb.AppendLine("            services.AddScoped<IKyrolusMartenProjectionManager, KyrolusMartenProjectionManager>();");
+        foreach (var reg in diRegistrations)
+        {
+            sb.AppendLine(reg);
+        }
+        sb.AppendLine("            return services;");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        public static IKyrolusMartenRepositoryAsync<TSession, TEntity, TKey> CreateDecoratedRepository<TSession, TEntity, TKey>(");
+        sb.AppendLine("            this IServiceProvider services,");
+        sb.AppendLine("            TSession session,");
+        sb.AppendLine("            KyrolusMartenRepositoryDependencies? deps = null)");
+        sb.AppendLine("            where TSession : IDocumentSession");
+        sb.AppendLine("            where TEntity : class");
+        sb.AppendLine("            where TKey : IEquatable<TKey>");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            ArgumentNullException.ThrowIfNull(services);");
+        sb.AppendLine("            return KyrolusMartenRepositoryFactory.Create(services, session, deps, useDecorator: true);");
+        AppendCloseBrace(sb, Indent8);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine("}");
+        context.AddSource("GeneratedMartenRepositoriesServiceCollectionExtensions.g.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
+    }
+
+    private static void EmitUnitOfWorks(SourceProductionContext context, Dictionary<INamedTypeSymbol, List<RepositoryRequest>> unitOfWorkMap)
+    {
+        foreach (var entry in unitOfWorkMap)
+        {
+            var sessionType = entry.Key;
+            var repos = entry.Value;
+            var className = $"{sessionType.Name}MartenUnitOfWork";
+            var sb = new StringBuilder();
+            sb.AppendLine("// <auto-generated />");
+            sb.AppendLine("#nullable enable");
+            sb.AppendLine("using System;");
+            sb.AppendLine("using System.Collections.Generic;");
+            sb.AppendLine("using System.Threading;");
+            sb.AppendLine("using System.Threading.Tasks;");
+            sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
+            sb.AppendLine($"using {AbstractionsNamespace}.Interfaces;");
+            foreach (var repoNs in repos.Select(r => r.Namespace).Distinct(StringComparer.Ordinal))
+            {
+                sb.AppendLine($"using {repoNs};");
+            }
+            sb.AppendLine();
+            sb.AppendLine($"namespace {GeneratedNamespace}");
+            sb.AppendLine("{");
+            sb.AppendLine($"    public sealed class {className} : IKyrolusMartenUnitOfWork<{sessionType.ToDisplayString()}>");
+            AppendOpenBrace(sb, Indent4);
+            sb.AppendLine($"        private readonly {sessionType.ToDisplayString()} session;");
+            sb.AppendLine("        private readonly IServiceProvider serviceProvider;");
+            sb.AppendLine("        private readonly Dictionary<Type, object> cache = new();");
+            sb.AppendLine();
+            sb.AppendLine($"        public {className}({sessionType.ToDisplayString()} session, IServiceProvider serviceProvider)");
+            AppendOpenBrace(sb, Indent8);
+            sb.AppendLine("            this.session = session ?? throw new ArgumentNullException(nameof(session));");
+            sb.AppendLine("            this.serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));");
+            AppendCloseBrace(sb, Indent8);
+            sb.AppendLine();
+            foreach (var repoName in repos.Select(repo => repo.RepositoryName))
+            {
+                sb.AppendLine($"        public {repoName} {repoName} => GetRepository<{repoName}>();");
+            }
+            sb.AppendLine();
+            sb.AppendLine("        public TRepo GetRepository<TRepo>() where TRepo : class");
+            AppendOpenBrace(sb, Indent8);
+            sb.AppendLine("            var type = typeof(TRepo);");
+            sb.AppendLine("            if (cache.TryGetValue(type, out var existing)) return (TRepo)existing;");
+            sb.AppendLine("            var resolved = serviceProvider.GetRequiredService<TRepo>();");
+            sb.AppendLine("            cache[type] = resolved;");
+            sb.AppendLine("            return resolved;");
+            AppendCloseBrace(sb, Indent8);
+            sb.AppendLine();
+            sb.AppendLine("        public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)");
+            AppendOpenBrace(sb, Indent8);
+            sb.AppendLine("            await session.SaveChangesAsync(cancellationToken).ConfigureAwait(false);");
+            sb.AppendLine("            return 1;");
+            AppendCloseBrace(sb, Indent8);
+            sb.AppendLine();
+            sb.AppendLine("        public void Dispose()");
+            AppendOpenBrace(sb, Indent8);
+            sb.AppendLine("            cache.Clear();");
+            sb.AppendLine("            session.Dispose();");
+            sb.AppendLine("            GC.SuppressFinalize(this);");
+            AppendCloseBrace(sb, Indent8);
+            sb.AppendLine();
+            sb.AppendLine("        public async ValueTask DisposeAsync()");
+            AppendOpenBrace(sb, Indent8);
+            sb.AppendLine("            cache.Clear();");
+            sb.AppendLine("            await session.DisposeAsync().ConfigureAwait(false);");
+            sb.AppendLine("            GC.SuppressFinalize(this);");
+            AppendCloseBrace(sb, Indent8);
+            AppendCloseBrace(sb, Indent4);
+            sb.AppendLine("}");
+            context.AddSource($"{className}.g.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
+        }
+    }
+
+    private static void EmitInfrastructure(SourceProductionContext context, IReadOnlyList<RepositoryRequest> requests)
+    {
+        if (requests.Count == 0) return;
+        EmitEventStore(context);
+        EmitSagaCoordinator(context);
+        EmitProjectionOrchestrator(context);
+        EmitProjectionManager(context);
+        EmitRepositoryDecorator(context);
+        EmitRepositoryFactory(context, requests);
+    }
+
+    private static void EmitEventStore(SourceProductionContext context)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated />");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine("using System;");
+        sb.AppendLine("using System.Collections.Generic;");
+        sb.AppendLine("using System.Linq;");
+        sb.AppendLine("using System.Threading;");
+        sb.AppendLine("using System.Threading.Tasks;");
+        sb.AppendLine("using Marten;");
+        sb.AppendLine("using Marten.Events;");
+        sb.AppendLine($"using {AbstractionsNamespace}.Interfaces;");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {GeneratedNamespace}");
+        sb.AppendLine("{");
+        sb.AppendLine("    public sealed class KyrolusMartenEventStore(IDocumentSession session) : IKyrolusMartenEventStore");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        private readonly IDocumentSession session = session ?? throw new ArgumentNullException(nameof(session));");
+        sb.AppendLine();
+        sb.AppendLine("        public async Task AppendEventsAsync<TId>(TId streamId, IEnumerable<object> events, long? expectedVersion = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            where TId : notnull");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            ArgumentNullException.ThrowIfNull(events);");
+        sb.AppendLine("            var eventStore = session.Events;");
+        sb.AppendLine("            var key = streamId.ToString() ?? throw new ArgumentNullException(nameof(streamId));");
+        sb.AppendLine("            if (expectedVersion.HasValue)");
+        sb.AppendLine("                eventStore.Append(key, expectedVersion.Value, [.. events]);");
+        sb.AppendLine("            else");
+        sb.AppendLine("                eventStore.Append(key, [.. events]);");
+        sb.AppendLine("            await session.SaveChangesAsync(cancellationToken).ConfigureAwait(false);");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        public async Task<IReadOnlyList<object>> LoadStreamAsync<TId>(TId streamId, long fromVersion = 0, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            where TId : notnull");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var key = streamId.ToString() ?? throw new ArgumentNullException(nameof(streamId));");
+        sb.AppendLine("            var stream = await session.Events.FetchStreamAsync(key, fromVersion, token: cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            return [.. stream.Select(e => e.Data)];");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        public async Task<bool> StreamExistsAsync<TId>(TId streamId, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            where TId : notnull");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var key = streamId.ToString() ?? throw new ArgumentNullException(nameof(streamId));");
+        sb.AppendLine("            var state = await session.Events.FetchStreamStateAsync(key, token: cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            return state is not null;");
+        AppendCloseBrace(sb, Indent8);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine("}");
+        context.AddSource("KyrolusMartenEventStore.g.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
+    }
+
+    private static void EmitSagaCoordinator(SourceProductionContext context)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated />");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine("using System;");
+        sb.AppendLine("using System.Text.Json;");
+        sb.AppendLine("using System.Threading;");
+        sb.AppendLine("using System.Threading.Tasks;");
+        sb.AppendLine("using Marten;");
+        sb.AppendLine($"using {AbstractionsNamespace}.Interfaces;");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {GeneratedNamespace}");
+        sb.AppendLine("{");
+        sb.AppendLine("    public sealed class KyrolusMartenSagaEnvelope");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        public Guid Id { get; set; }");
+        sb.AppendLine("        public string? Type { get; set; }");
+        sb.AppendLine("        public string? Payload { get; set; }");
+        sb.AppendLine("        public bool Completed { get; set; }");
+        sb.AppendLine("        public DateTime UpdatedAt { get; set; }");
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    public sealed class KyrolusMartenSagaCoordinator : IKyrolusMartenSagaCoordinator");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        private readonly IDocumentSession session;");
+        sb.AppendLine();
+        sb.AppendLine("        public KyrolusMartenSagaCoordinator(IDocumentSession session)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            this.session = session ?? throw new ArgumentNullException(nameof(session));");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        public async Task<Guid> StartAsync(object sagaState, CancellationToken cancellationToken = default)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            ArgumentNullException.ThrowIfNull(sagaState);");
+        sb.AppendLine("            var envelope = new KyrolusMartenSagaEnvelope");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                Id = Guid.NewGuid(),");
+        sb.AppendLine("                Type = sagaState.GetType().AssemblyQualifiedName,");
+        sb.AppendLine("                Payload = JsonSerializer.Serialize(sagaState),");
+        sb.AppendLine("                Completed = false,");
+        sb.AppendLine("                UpdatedAt = DateTime.UtcNow");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            };");
+        sb.AppendLine("            session.Store(envelope);");
+        sb.AppendLine("            await session.SaveChangesAsync(cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            return envelope.Id;");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        public async Task<bool> ContinueAsync(Guid sagaId, object message, CancellationToken cancellationToken = default)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var envelope = await session.LoadAsync<KyrolusMartenSagaEnvelope>(sagaId, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            if (envelope is null || envelope.Completed) return false;");
+        sb.AppendLine("            envelope.Type = message.GetType().AssemblyQualifiedName;");
+        sb.AppendLine("            envelope.Payload = JsonSerializer.Serialize(message);");
+        sb.AppendLine("            envelope.UpdatedAt = DateTime.UtcNow;");
+        sb.AppendLine("            session.Store(envelope);");
+        sb.AppendLine("            await session.SaveChangesAsync(cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            return true;");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        public async Task<object?> GetStateAsync(Guid sagaId, CancellationToken cancellationToken = default)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var envelope = await session.LoadAsync<KyrolusMartenSagaEnvelope>(sagaId, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            if (envelope?.Payload is null || string.IsNullOrEmpty(envelope.Type)) return null;");
+        sb.AppendLine("            var type = Type.GetType(envelope.Type);");
+        sb.AppendLine("            return type is null ? envelope.Payload : JsonSerializer.Deserialize(envelope.Payload, type);");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        public async Task<bool> CompleteAsync(Guid sagaId, CancellationToken cancellationToken = default)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var envelope = await session.LoadAsync<KyrolusMartenSagaEnvelope>(sagaId, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            if (envelope is null) return false;");
+        sb.AppendLine("            envelope.Completed = true;");
+        sb.AppendLine("            envelope.UpdatedAt = DateTime.UtcNow;");
+        sb.AppendLine("            session.Store(envelope);");
+        sb.AppendLine("            await session.SaveChangesAsync(cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            return true;");
+        AppendCloseBrace(sb, Indent8);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine("}");
+        context.AddSource("KyrolusMartenSagaCoordinator.g.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
+    }
+
+    private static void EmitProjectionOrchestrator(SourceProductionContext context)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated />");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine("using System;");
+        sb.AppendLine("using System.Linq;");
+        sb.AppendLine("using System.Reflection;");
+        sb.AppendLine("using System.Threading;");
+        sb.AppendLine("using System.Threading.Tasks;");
+        sb.AppendLine("using Marten;");
+        sb.AppendLine("using Microsoft.Extensions.Logging;");
+        sb.AppendLine("using Microsoft.Extensions.Options;");
+        sb.AppendLine($"using {AbstractionsNamespace}.Interfaces;");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {GeneratedNamespace}");
+        sb.AppendLine("{");
+        sb.AppendLine("    public sealed class KyrolusMartenDaemonOptions");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        public Action<object>? ConfigureSettings { get; set; }");
+        sb.AppendLine("        public bool AutoStart { get; set; } = true;");
+        sb.AppendLine("        public IReadOnlyList<string>? ShardsToStart { get; set; }");
+        sb.AppendLine("        public IReadOnlyList<string>? RebuildProjections { get; set; }");
+        sb.AppendLine("        public TimeSpan? WaitForNonStaleTimeout { get; set; } = TimeSpan.FromSeconds(30);");
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    public sealed class KyrolusMartenProjectionOrchestrator : IKyrolusMartenProjectionOrchestrator");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        private readonly IDocumentStore store;");
+        sb.AppendLine("        private readonly ILogger<KyrolusMartenProjectionOrchestrator>? logger;");
+        sb.AppendLine("        private readonly KyrolusMartenDaemonOptions daemonOptions;");
+        sb.AppendLine("        private object? daemon;");
+        sb.AppendLine();
+        sb.AppendLine("        public KyrolusMartenProjectionOrchestrator(IDocumentStore store, IOptions<KyrolusMartenDaemonOptions>? options = null, ILogger<KyrolusMartenProjectionOrchestrator>? logger = null)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            this.store = store ?? throw new ArgumentNullException(nameof(store));");
+        sb.AppendLine("            this.logger = logger;");
+        sb.AppendLine("            daemonOptions = options?.Value ?? new KyrolusMartenDaemonOptions();");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        public async Task EnqueueRebuildAsync(string projectionName, CancellationToken cancellationToken = default)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var d = await GetDaemonAsync().ConfigureAwait(false);");
+        sb.AppendLine("            var rebuild = (d.GetType().GetMethod(\"RebuildProjection\", [typeof(string), typeof(CancellationToken)])");
+        sb.AppendLine("                         ?? d.GetType().GetMethod(\"RebuildProjection\", [typeof(string)]))");
+        sb.AppendLine("                         ?? throw new NotSupportedException(\"RebuildProjection not available on projection daemon.\");");
+        sb.AppendLine("            var result = rebuild.GetParameters().Length == 2");
+        sb.AppendLine("                ? rebuild.Invoke(d, [projectionName, cancellationToken])");
+        sb.AppendLine("                : rebuild.Invoke(d, [projectionName]);");
+        sb.AppendLine("            if (result is Task task) await task.ConfigureAwait(false);");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        public async Task ApplyEventAsync(object @event, CancellationToken cancellationToken = default)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            ArgumentNullException.ThrowIfNull(@event);");
+        sb.AppendLine("            using var session = store.LightweightSession();");
+        sb.AppendLine("            session.Events.Append(Guid.NewGuid(), @event);");
+        sb.AppendLine("            await session.SaveChangesAsync(cancellationToken).ConfigureAwait(false);");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        public async Task EnsureUpToDateAsync(string projectionName, CancellationToken cancellationToken = default)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var d = await GetDaemonAsync().ConfigureAwait(false);");
+        sb.AppendLine("            var timeout = daemonOptions.WaitForNonStaleTimeout;");
+        sb.AppendLine("            var token = cancellationToken;");
+        sb.AppendLine("            if (timeout.HasValue)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);");
+        sb.AppendLine("                cts.CancelAfter(timeout.Value);");
+        sb.AppendLine("                token = cts.Token;");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            var waitMethod = d.GetType().GetMethod(\"WaitForNonStaleData\", new[] { typeof(CancellationToken) })");
+        sb.AppendLine("                           ?? d.GetType().GetMethod(\"WaitForNonStaleData\");");
+        sb.AppendLine("            if (waitMethod != null)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                var result = waitMethod.GetParameters().Length == 1");
+        sb.AppendLine("                    ? waitMethod.Invoke(d, [token])");
+        sb.AppendLine("                    : waitMethod.Invoke(d, []);");
+        sb.AppendLine("                if (result is Task task) await task.ConfigureAwait(false);");
+        sb.AppendLine("                return;");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            logger?.LogInformation(\"Projection daemon does not expose WaitForNonStaleData; skipping freshness check for {Projection}\", projectionName);");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        private async Task<object> GetDaemonAsync()");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            if (daemon != null) return daemon;");
+        sb.AppendLine("            var settings = CreateDaemonSettings();");
+        sb.AppendLine("            daemon = await BuildDaemonAsync(settings).ConfigureAwait(false);");
+        sb.AppendLine("            await StartDaemonAsync(daemon).ConfigureAwait(false);");
+        sb.AppendLine("            await RebuildIfRequestedAsync(daemon).ConfigureAwait(false);");
+        sb.AppendLine("            return daemon!;");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        private object? CreateDaemonSettings()");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var settingsType = Type.GetType(\"Marten.Events.Daemon.DaemonSettings, Marten\")");
+        sb.AppendLine("                             ?? Type.GetType(\"Marten.Events.Daemon.DaemonSettings, Marten.AsyncDaemon\");");
+        sb.AppendLine("            if (settingsType == null) return null;");
+        sb.AppendLine("            var instance = Activator.CreateInstance(settingsType);");
+        sb.AppendLine("            if (instance != null)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                daemonOptions.ConfigureSettings?.Invoke(instance);");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            return instance;");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        private async Task<object> BuildDaemonAsync(object? settings)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var storeType = store.GetType();");
+        sb.AppendLine("            var methods = storeType.GetMethods(BindingFlags.Instance | BindingFlags.Public)");
+        sb.AppendLine("                .Where(m => m.Name is \"BuildProjectionDaemonAsync\" or \"BuildProjectionDaemon\").ToList();");
+        sb.AppendLine("            MethodInfo? selected = null;");
+        sb.AppendLine("            object?[]? args = null;");
+        sb.AppendLine("            if (settings != null)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                selected = methods.FirstOrDefault(m =>");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    var p = m.GetParameters();");
+        sb.AppendLine("                    return p.Length == 1 && p[0].ParameterType.IsInstanceOfType(settings);");
+        sb.AppendLine("                });");
+        sb.AppendLine("                if (selected != null) args = [settings];");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            selected ??= methods.FirstOrDefault(m => m.GetParameters().Length == 0)");
+        sb.AppendLine("                      ?? throw new NotSupportedException(\"Projection daemon factory not found on IDocumentStore.\");");
+        sb.AppendLine("            var result = selected.Invoke(store, args);");
+        sb.AppendLine("            if (result is Task task)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                await task.ConfigureAwait(false);");
+        sb.AppendLine("                return ((dynamic)task).Result;");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            return result ?? throw new InvalidOperationException(\"Failed to create projection daemon.\");");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        private async Task StartDaemonAsync(object daemonInstance)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            if (!daemonOptions.AutoStart) return;");
+        sb.AppendLine("            var startShard = daemonInstance.GetType().GetMethod(\"StartShard\");");
+        sb.AppendLine("            var startAll = daemonInstance.GetType().GetMethod(\"StartAllShards\", Type.EmptyTypes)");
+        sb.AppendLine("                          ?? daemonInstance.GetType().GetMethod(\"StartAllShards\");");
+        sb.AppendLine("            if (daemonOptions.ShardsToStart is { Count: > 0 } && startShard != null)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                await StartSpecificShardsAsync(daemonInstance, startShard, daemonOptions.ShardsToStart).ConfigureAwait(false);");
+        sb.AppendLine("                return;");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            if (startAll != null)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                await InvokePossiblyAsync(startAll, daemonInstance, startAll.GetParameters().Length == 0");
+        sb.AppendLine("                    ? []");
+        sb.AppendLine("                    : new object[] { CancellationToken.None }).ConfigureAwait(false);");
+        AppendCloseBrace(sb, Indent12);
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        private static async Task StartSpecificShardsAsync(object daemonInstance, MethodInfo startShard, IReadOnlyList<string> shards)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            foreach (var shardName in shards)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                var shardArg = BuildShardArgument(startShard, shardName);");
+        sb.AppendLine("                var parameters = startShard.GetParameters().Length == 1");
+        sb.AppendLine("                    ? [shardArg]");
+        sb.AppendLine("                    : new object?[] { shardArg, CancellationToken.None };");
+        sb.AppendLine("                await InvokePossiblyAsync(startShard, daemonInstance, parameters).ConfigureAwait(false);");
+        AppendCloseBrace(sb, Indent12);
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        private static object? BuildShardArgument(MethodInfo startShard, string shardName)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var shardParam = startShard.GetParameters().FirstOrDefault();");
+        sb.AppendLine("            if (shardParam?.ParameterType == typeof(string) || shardParam?.ParameterType == null)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                return shardName;");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            var shardType = shardParam.ParameterType;");
+        sb.AppendLine("            var ctor = shardType.GetConstructor([typeof(string)]);");
+        sb.AppendLine("            return ctor != null ? ctor.Invoke([shardName]) : shardName;");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        private static async Task InvokePossiblyAsync(MethodInfo method, object target, object?[] args)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var result = method.Invoke(target, args);");
+        sb.AppendLine("            if (result is Task task) await task.ConfigureAwait(false);");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        private async Task RebuildIfRequestedAsync(object daemonInstance)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            if (daemonOptions.RebuildProjections is not { Count: > 0 }) return;");
+        sb.AppendLine("            var rebuild = daemonInstance.GetType().GetMethod(\"RebuildProjection\");");
+        sb.AppendLine("            if (rebuild == null) return;");
+        sb.AppendLine("            foreach (var projection in daemonOptions.RebuildProjections)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                var res = rebuild.GetParameters().Length switch");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    1 => rebuild.Invoke(daemonInstance, [projection]),");
+        sb.AppendLine("                    2 => rebuild.Invoke(daemonInstance, [projection, CancellationToken.None]),");
+        sb.AppendLine("                    _ => rebuild.Invoke(daemonInstance, [projection])");
+        sb.AppendLine("                };");
+        sb.AppendLine("                if (res is Task t) await t.ConfigureAwait(false);");
+        AppendCloseBrace(sb, Indent12);
+        AppendCloseBrace(sb, Indent8);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine("}");
+        context.AddSource("KyrolusMartenProjectionOrchestrator.g.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
+    }
+
+    private static void EmitProjectionManager(SourceProductionContext context)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated />");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine("using System;");
+        sb.AppendLine("using System.Collections;");
+        sb.AppendLine("using System.Linq;");
+        sb.AppendLine("using System.Threading;");
+        sb.AppendLine("using System.Threading.Tasks;");
+        sb.AppendLine("using Marten;");
+        sb.AppendLine("using Microsoft.Extensions.Logging;");
+        sb.AppendLine($"using {AbstractionsNamespace}.Interfaces;");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {GeneratedNamespace}");
+        sb.AppendLine("{");
+        sb.AppendLine("    public sealed class KyrolusMartenProjectionManager : IKyrolusMartenProjectionManager");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        private readonly IKyrolusMartenProjectionOrchestrator orchestrator;");
+        sb.AppendLine("        private readonly IReadOnlyList<string> projectionNames;");
+        sb.AppendLine("        private readonly ILogger<KyrolusMartenProjectionManager>? logger;");
+        sb.AppendLine();
+        sb.AppendLine("        public KyrolusMartenProjectionManager(IDocumentStore store, IKyrolusMartenProjectionOrchestrator orchestrator, IEnumerable<string>? projectionNames = null, ILogger<KyrolusMartenProjectionManager>? logger = null)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            _ = store ?? throw new ArgumentNullException(nameof(store));");
+        sb.AppendLine("            this.orchestrator = orchestrator ?? throw new ArgumentNullException(nameof(orchestrator));");
+        sb.AppendLine("            this.logger = logger;");
+        sb.AppendLine("            this.projectionNames = NormalizeProjectionNames(projectionNames) ?? DiscoverProjectionNames(store);");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        public Task RebuildAsync(CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => ForEachProjectionAsync(orchestrator.EnqueueRebuildAsync, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task AssertIsUpToDateAsync(CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => ForEachProjectionAsync(orchestrator.EnsureUpToDateAsync, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        private async Task ForEachProjectionAsync(Func<string, CancellationToken, Task> action, CancellationToken cancellationToken)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            if (projectionNames.Count == 0)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                logger?.LogWarning(\"No projections were resolved. Skipping projection operation.\");");
+        sb.AppendLine("                return;");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            foreach (var name in projectionNames)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                await action(name, cancellationToken).ConfigureAwait(false);");
+        AppendCloseBrace(sb, Indent12);
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        private static IReadOnlyList<string>? NormalizeProjectionNames(IEnumerable<string>? projectionNames)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            if (projectionNames is null) return null;");
+        sb.AppendLine("            return projectionNames");
+        sb.AppendLine("                .Select(name => name?.Trim())");
+        sb.AppendLine("                .Where(static name => !string.IsNullOrWhiteSpace(name))");
+        sb.AppendLine("                .Select(static name => name!)");
+        sb.AppendLine("                .Distinct(StringComparer.OrdinalIgnoreCase)");
+        sb.AppendLine("                .ToArray();");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        private static IReadOnlyList<string> DiscoverProjectionNames(IDocumentStore store)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var options = store.GetType().GetProperty(\"Options\")?.GetValue(store);");
+        sb.AppendLine("            var projections = options?.GetType().GetProperty(\"Projections\")?.GetValue(options);");
+        sb.AppendLine("            var all = projections?.GetType().GetProperty(\"All\")?.GetValue(projections) as IEnumerable;");
+        sb.AppendLine("            if (all is null) return Array.Empty<string>();");
+        sb.AppendLine("            return all.Cast<object>()");
+        sb.AppendLine("                .Select(ExtractProjectionName)");
+        sb.AppendLine("                .Where(static name => !string.IsNullOrWhiteSpace(name))");
+        sb.AppendLine("                .Select(static name => name!)");
+        sb.AppendLine("                .Distinct(StringComparer.OrdinalIgnoreCase)");
+        sb.AppendLine("                .ToArray();");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        private static string? ExtractProjectionName(object? projection)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            if (projection is null) return null;");
+        sb.AppendLine("            var value = projection;");
+        sb.AppendLine("            var valueProp = projection.GetType().GetProperty(\"Value\");");
+        sb.AppendLine("            if (valueProp is not null) value = valueProp.GetValue(projection);");
+        sb.AppendLine("            if (value is null) return null;");
+        sb.AppendLine("            var type = value.GetType();");
+        sb.AppendLine("            var nameProp = type.GetProperty(\"ProjectionName\") ?? type.GetProperty(\"Name\");");
+        sb.AppendLine("            if (nameProp?.GetValue(value) is string name) return name;");
+        sb.AppendLine("            return type.Name;");
+        AppendCloseBrace(sb, Indent8);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    public sealed class KyrolusMartenExplicitProjectionManager : IKyrolusMartenProjectionManager");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        private readonly IKyrolusMartenProjectionOrchestrator orchestrator;");
+        sb.AppendLine("        private readonly IReadOnlyList<string> projectionNames;");
+        sb.AppendLine("        private readonly ILogger<KyrolusMartenExplicitProjectionManager>? logger;");
+        sb.AppendLine();
+        sb.AppendLine("        public KyrolusMartenExplicitProjectionManager(IKyrolusMartenProjectionOrchestrator orchestrator, IEnumerable<string> projectionNames, ILogger<KyrolusMartenExplicitProjectionManager>? logger = null)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            this.orchestrator = orchestrator ?? throw new ArgumentNullException(nameof(orchestrator));");
+        sb.AppendLine("            this.logger = logger;");
+        sb.AppendLine("            this.projectionNames = projectionNames");
+        sb.AppendLine("                .Select(name => name?.Trim())");
+        sb.AppendLine("                .Where(static name => !string.IsNullOrWhiteSpace(name))");
+        sb.AppendLine("                .Select(static name => name!)");
+        sb.AppendLine("                .Distinct(StringComparer.OrdinalIgnoreCase)");
+        sb.AppendLine("                .ToArray();");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        public Task RebuildAsync(CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => ForEachProjectionAsync(orchestrator.EnqueueRebuildAsync, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task AssertIsUpToDateAsync(CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => ForEachProjectionAsync(orchestrator.EnsureUpToDateAsync, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        private async Task ForEachProjectionAsync(Func<string, CancellationToken, Task> action, CancellationToken cancellationToken)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            if (projectionNames.Count == 0)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                logger?.LogWarning(\"No projection names provided. Skipping projection operation.\");");
+        sb.AppendLine("                return;");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            foreach (var name in projectionNames)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                await action(name, cancellationToken).ConfigureAwait(false);");
+        AppendCloseBrace(sb, Indent12);
+        AppendCloseBrace(sb, Indent8);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine("}");
+        context.AddSource("KyrolusMartenProjectionManager.g.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
+    }
+
+    private static void EmitRepositoryDecorator(SourceProductionContext context)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated />");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine("using System;");
+        sb.AppendLine("using System.Diagnostics;");
+        sb.AppendLine("using System.Linq.Expressions;");
+        sb.AppendLine("using System.Threading;");
+        sb.AppendLine("using System.Threading.Tasks;");
+        sb.AppendLine("using Marten;");
+        sb.AppendLine("using Marten.Linq;");
+        sb.AppendLine($"using {AbstractionsNamespace}.Interfaces;");
+        sb.AppendLine($"using {AbstractionsNamespace}.Records;");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {GeneratedNamespace}");
+        sb.AppendLine("{");
+        sb.AppendLine("    public class KyrolusMartenRepositoryDecorator<TSession, TEntity, TKey> : IKyrolusMartenRepositoryAsync<TSession, TEntity, TKey>");
+        sb.AppendLine("        where TSession : IDocumentSession");
+        sb.AppendLine("        where TEntity : class");
+        sb.AppendLine("        where TKey : IEquatable<TKey>");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        private readonly IKyrolusMartenRepositoryAsync<TSession, TEntity, TKey> inner;");
+        sb.AppendLine("        private readonly IKyrolusMartenCacheProvider? cache;");
+        sb.AppendLine("        private readonly IKyrolusMartenResiliencePolicy? resilience;");
+        sb.AppendLine("        private readonly IKyrolusMartenTracing? tracing;");
+        sb.AppendLine("        public IKyrolusMartenObserver? Observer => inner.Observer;");
+        sb.AppendLine("        public IKyrolusMartenAuthorization? Authorization => inner.Authorization;");
+        sb.AppendLine("        public IKyrolusMartenValidation? Validation => inner.Validation;");
+        sb.AppendLine("        public IKyrolusMartenSoftDeletePolicy? SoftDeletePolicy => inner.SoftDeletePolicy;");
+        sb.AppendLine("        public IKyrolusMartenCacheProvider? CacheProvider => cache;");
+        sb.AppendLine("        public IKyrolusMartenResiliencePolicy? ResiliencePolicy => resilience;");
+        sb.AppendLine("        public IKyrolusMartenTracing? Tracing => tracing;");
+        sb.AppendLine();
+        sb.AppendLine("        public KyrolusMartenRepositoryDecorator(IKyrolusMartenRepositoryAsync<TSession, TEntity, TKey> inner, IKyrolusMartenCacheProvider? cache = null, IKyrolusMartenResiliencePolicy? resilience = null, IKyrolusMartenTracing? tracing = null)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            this.inner = inner ?? throw new ArgumentNullException(nameof(inner));");
+        sb.AppendLine("            this.cache = cache;");
+        sb.AppendLine("            this.resilience = resilience;");
+        sb.AppendLine("            this.tracing = tracing;");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        public void SetObserver(IKyrolusMartenObserver? observer) => inner.SetObserver(observer);");
+        sb.AppendLine("        public string? ResolveTenantId(ITenantResolver? resolver) => inner.ResolveTenantId(resolver);");
+        sb.AppendLine();
+        sb.AppendLine("        private Task<T> ExecAsync<T>(string op, Func<Task<T>> action, object? target = null, CancellationToken ct = default)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            return TraceAsync(op, target, () =>");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                return resilience is null");
+        sb.AppendLine("                    ? GuardAsync(op, target, action, ct)");
+        sb.AppendLine("                    : resilience.ExecuteAsync(op, () => GuardAsync(op, target, action, ct), ct);");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            }, ct);");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        private async Task<TResult> TraceAsync<TResult>(string op, object? payload, Func<Task<TResult>> action, CancellationToken ct)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            IDisposable? scope = tracing?.StartScope(op, payload);");
+        sb.AppendLine("            var sw = Stopwatch.StartNew();");
+        sb.AppendLine("            Exception? ex = null;");
+        sb.AppendLine("            try");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                return await action().ConfigureAwait(false);");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            catch (Exception e) { ex = e; throw; }");
+        sb.AppendLine("            finally");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                sw.Stop();");
+        sb.AppendLine("                if (tracing is not null) await tracing.RecordAsync(op, payload, sw.Elapsed, ex, ct).ConfigureAwait(false);");
+        sb.AppendLine("                scope?.Dispose();");
+        AppendCloseBrace(sb, Indent12);
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        private async Task<T> GuardAsync<T>(string op, object? target, Func<Task<T>> action, CancellationToken ct)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            if (Validation is not null) await Validation.ValidateAsync(op, target, ct).ConfigureAwait(false);");
+        sb.AppendLine("            if (Authorization is not null && !await Authorization.AuthorizeAsync(op, target, ct).ConfigureAwait(false))");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                throw new UnauthorizedAccessException($\"Operation '{op}' not authorized.\");");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            return await action().ConfigureAwait(false);");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        public Task<IEnumerable<TEntity>> GetAllAsync(MartenQueryOptions<TEntity>? options = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => ExecAsync(\"GetAll\", () => inner.GetAllAsync(options, cancellationToken), options, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<MartenEntityResult<TEntity>?> GetByIdAsync(TKey id, MartenQueryOptions<TEntity>? options = null, CancellationToken cancellationToken = default)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var key = $\"marten:{typeof(TEntity).Name}:id:{id}\";");
+        sb.AppendLine("            var hasIncludes = (options?.IncludeProperties is { Count: > 0 }) || (options?.IncludeExpressions is { Length: > 0 });");
+        sb.AppendLine("            if (cache is null || hasIncludes) return inner.GetByIdAsync(id, options, cancellationToken);");
+        sb.AppendLine("            return TraceAsync(\"GetById\", id, async () =>");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                var cached = await cache.GetAsync<MartenEntityResult<TEntity>>(key, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("                if (cached is not null) return cached;");
+        sb.AppendLine("                var result = await inner.GetByIdAsync(id, options, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("                if (result is not null) await cache.SetAsync(key, result, TimeSpan.FromMinutes(5), cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("                return result;");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            , cancellationToken);");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        public Task<IEnumerable<TProjection>> QueryAsync<TProjection>(MartenQueryOptions<TEntity>? options, Func<IMartenQueryable<TEntity>, IMartenQueryable<TProjection>> selector, CancellationToken cancellationToken = default) where TProjection : notnull");
+        sb.AppendLine("            => inner.QueryAsync(options, selector, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<PageResult<TProjection>> QueryPageAsync<TProjection>(MartenQueryOptions<TEntity>? options, Func<IMartenQueryable<TEntity>, IMartenQueryable<TProjection>> selector, MartenPageRequest? page = null, CancellationToken cancellationToken = default) where TProjection : notnull");
+        sb.AppendLine("            => inner.QueryPageAsync(options, selector, page, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<PageResult<TEntity>> GetPageAsync(MartenQueryOptions<TEntity>? options = null, MartenPageRequest? page = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => ExecAsync(\"GetPage\", () => inner.GetPageAsync(options, page, cancellationToken), options, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<TEntity> AddAsync(TEntity entity, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => ExecAsync(\"Add\", () => inner.AddAsync(entity, cancellationToken), entity, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<IEnumerable<TEntity>> AddRangeAsync(IEnumerable<TEntity> entities, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => ExecAsync(\"AddRange\", () => inner.AddRangeAsync(entities, cancellationToken), entities, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<TEntity> UpsertAsync(TEntity entity, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => ExecAsync(\"Upsert\", () => inner.UpsertAsync(entity, expectedVersion, tenantId, cancellationToken), entity, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<IEnumerable<TEntity>> UpsertRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => ExecAsync(\"UpsertRange\", () => inner.UpsertRangeAsync(entities, tenantId, cancellationToken), entities, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<TEntity?> UpdateAsync(TEntity entity, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => ExecAsync(\"Update\", () => inner.UpdateAsync(entity, expectedVersion, tenantId, cancellationToken), entity, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<IEnumerable<TEntity>> UpdateRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => ExecAsync(\"UpdateRange\", () => inner.UpdateRangeAsync(entities, tenantId, cancellationToken), entities, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<MartenEntityResult<TEntity>?> PatchAsync(TKey id, Dictionary<string, object> updates, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => ExecAsync(\"Patch\", () => inner.PatchAsync(id, updates, tenantId, cancellationToken), updates, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<int> PatchWhereAsync(Expression<Func<TEntity, bool>> filter, Dictionary<string, object> updates, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => inner.PatchWhereAsync(filter, updates, tenantId, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<bool> RemoveAsync(TEntity entity, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => ExecAsync(\"RemoveEntity\", () => inner.RemoveAsync(entity, expectedVersion, tenantId, cancellationToken), entity, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<bool> RemoveAsync(TKey id, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => ExecAsync(\"RemoveById\", () => inner.RemoveAsync(id, expectedVersion, tenantId, cancellationToken), id, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<int> DeleteWhereAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => inner.DeleteWhereAsync(filter, tenantId, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<bool> RemoveRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => inner.RemoveRangeAsync(entities, tenantId, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<bool> ExistAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => inner.ExistAsync(filter, tenantId, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public IAsyncEnumerable<TEntity> StreamAsync(MartenQueryOptions<TEntity>? options = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => inner.StreamAsync(options, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<TResult> ExecuteCompiledQueryAsync<TCompiled, TResult>(TCompiled query, CancellationToken cancellationToken = default) where TCompiled : ICompiledQuery<TEntity, TResult>");
+        sb.AppendLine("            => inner.ExecuteCompiledQueryAsync<TCompiled, TResult>(query, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<TResult> WithSessionAsync<TResult>(MartenSessionMode mode, Func<TSession, Task<TResult>> work, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => inner.WithSessionAsync(mode, work, cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("        public Task<int> TransformWhereAsync(Expression<Func<TEntity, bool>> filter, string transformName, object? arguments = null, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("            => inner.TransformWhereAsync(filter, transformName, arguments, tenantId, cancellationToken);");
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine("}");
+        context.AddSource("KyrolusMartenRepositoryDecorator.g.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
+    }
+
+    private static void EmitRepositoryFactory(SourceProductionContext context, IReadOnlyList<RepositoryRequest> requests)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated />");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine("using System;");
+        sb.AppendLine("using Marten;");
+        sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
+        sb.AppendLine($"using {AbstractionsNamespace};");
+        sb.AppendLine($"using {AbstractionsNamespace}.Interfaces;");
+        foreach (var ns in requests.Select(r => r.Namespace).Distinct(StringComparer.Ordinal))
+        {
+            sb.AppendLine($"using {ns};");
+        }
+        sb.AppendLine();
+        sb.AppendLine($"namespace {GeneratedNamespace}");
+        sb.AppendLine("{");
+        sb.AppendLine("    public static class KyrolusMartenRepositoryFactory");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        public static IKyrolusMartenRepositoryAsync<TSession, TEntity, TKey> Create<TSession, TEntity, TKey>(");
+        sb.AppendLine("            IServiceProvider services,");
+        sb.AppendLine("            TSession session,");
+        sb.AppendLine("            KyrolusMartenRepositoryDependencies? deps = null,");
+        sb.AppendLine("            bool useDecorator = true)");
+        sb.AppendLine("            where TSession : IDocumentSession");
+        sb.AppendLine("            where TEntity : class");
+        sb.AppendLine("            where TKey : IEquatable<TKey>");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            ArgumentNullException.ThrowIfNull(services);");
+        sb.AppendLine("            ArgumentNullException.ThrowIfNull(session);");
+        sb.AppendLine("            var effectiveDeps = deps ?? new KyrolusMartenRepositoryDependencies(");
+        sb.AppendLine("                Observer: services.GetService<IKyrolusMartenObserver>(),");
+        sb.AppendLine("                Authorization: services.GetService<IKyrolusMartenAuthorization>(),");
+        sb.AppendLine("                Validation: services.GetService<IKyrolusMartenValidation>(),");
+        sb.AppendLine("                SoftDeletePolicy: services.GetService<IKyrolusMartenSoftDeletePolicy>(),");
+        sb.AppendLine("                CacheProvider: services.GetService<IKyrolusMartenCacheProvider>(),");
+        sb.AppendLine("                ResiliencePolicy: services.GetService<IKyrolusMartenResiliencePolicy>(),");
+        sb.AppendLine("                Tracing: services.GetService<IKyrolusMartenTracing>());");
+        sb.AppendLine("            var repo = CreateCore<TSession, TEntity, TKey>(session, effectiveDeps);");
+        sb.AppendLine("            if (!useDecorator) return repo;");
+        sb.AppendLine("            return new KyrolusMartenRepositoryDecorator<TSession, TEntity, TKey>(repo, effectiveDeps.CacheProvider, effectiveDeps.ResiliencePolicy, effectiveDeps.Tracing);");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine();
+        sb.AppendLine("        private static IKyrolusMartenRepositoryAsync<TSession, TEntity, TKey> CreateCore<TSession, TEntity, TKey>(");
+        sb.AppendLine("            TSession session,");
+        sb.AppendLine("            KyrolusMartenRepositoryDependencies deps)");
+        sb.AppendLine("            where TSession : IDocumentSession");
+        sb.AppendLine("            where TEntity : class");
+        sb.AppendLine("            where TKey : IEquatable<TKey>");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            ArgumentNullException.ThrowIfNull(deps);");
+        for (var index = 0; index < requests.Count; index++)
+        {
+            var request = requests[index];
+            var sessionType = request.SessionType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var entityType = request.EntityType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var keyType = request.KeyType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var repoName = request.RepositoryName;
+            var keyword = index == 0 ? "if" : "else if";
+            sb.AppendLine($"            {keyword} (typeof(TSession) == typeof({sessionType}) && typeof(TEntity) == typeof({entityType}) && typeof(TKey) == typeof({keyType}))");
+            AppendOpenBrace(sb, Indent12);
+            sb.AppendLine($"                var repo = new {repoName}(({sessionType})(object)session, deps);");
+            sb.AppendLine("                return (IKyrolusMartenRepositoryAsync<TSession, TEntity, TKey>)repo;");
+            AppendCloseBrace(sb, Indent12);
+        }
+        sb.AppendLine("            throw new InvalidOperationException($\"No generated Marten repository found for {typeof(TSession).FullName}, {typeof(TEntity).FullName}, {typeof(TKey).FullName}.\");");
+        AppendCloseBrace(sb, Indent8);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine("}");
+        context.AddSource("KyrolusMartenRepositoryFactory.g.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
+    }
+
+    private static void AppendIndentedLine(StringBuilder sb, int indent, string line)
+    {
+        sb.Append(' ', indent);
+        sb.AppendLine(line);
+    }
+
+    private static void AppendOpenBrace(StringBuilder sb, int indent)
+    {
+        AppendIndentedLine(sb, indent, "{");
+    }
+
+    private static void AppendCloseBrace(StringBuilder sb, int indent)
+    {
+        AppendIndentedLine(sb, indent, "}");
+    }
+
+    private static void UsingDirectives(StringBuilder sb)
+    {
+        sb.AppendLine("// <auto-generated />");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine("using System;");
+        sb.AppendLine("using System.Collections.Generic;");
+        sb.AppendLine("using System.Diagnostics;");
+        sb.AppendLine("using System.Globalization;");
+        sb.AppendLine("using System.Linq;");
+        sb.AppendLine("using System.Linq.Expressions;");
+        sb.AppendLine("using System.Runtime.CompilerServices;");
+        sb.AppendLine("using System.Text.Json;");
+        sb.AppendLine("using System.Threading;");
+        sb.AppendLine("using System.Threading.Tasks;");
+        sb.AppendLine("using Marten;");
+        sb.AppendLine("using Marten.Linq;");
+        sb.AppendLine($"using {AbstractionsNamespace};");
+        sb.AppendLine($"using {AbstractionsNamespace}.Interfaces;");
+        sb.AppendLine($"using {AbstractionsNamespace}.Records;");
+        sb.AppendLine();
+    }
+
+    private static void GenerateRepository(StringBuilder sb, RepositoryRequest request, IReadOnlyList<IncludeMapping> includeMappings, IReadOnlyList<IPropertySymbol> patchProperties, KeyPropertyInfo? keyProperty)
+    {
+        var sessionType = request.SessionType.ToDisplayString();
+        var entityType = request.EntityType.ToDisplayString();
+        var keyType = request.KeyType.ToDisplayString();
+        var repoName = request.RepositoryName;
+        var ns = request.Namespace;
+        var includesLiteral = request.DefaultIncludes.Length == 0
+            ? "Array.Empty<string>()"
+            : $"new[] {{ {string.Join(", ", request.DefaultIncludes.Select(value => $"\"{EscapeString(value)}\""))} }}";
+        var softDeleteEnabledLiteral = request.EnableSoftDelete ? "true" : "false";
+        var filterDeletedLiteral = request.FilterDeletedByDefault ? "true" : "false";
+        var cacheEnabledLiteral = request.EnableCaching ? "true" : "false";
+        var cacheTtlSeconds = request.CacheTtlSeconds < 1 ? 60 : request.CacheTtlSeconds;
+        var softDeleteProperty = EscapeString(request.SoftDeleteProperty);
+        var keyInfo = keyProperty;
+
+        sb.AppendLine($"namespace {ns};");
+        sb.AppendLine();
+        AppendRepositoryDeclaration(sb, request, sessionType, entityType, keyType, repoName);
+        sb.AppendLine("{");
+        sb.AppendLine($"    private static readonly string[] DefaultIncludes = {includesLiteral};");
+        sb.AppendLine($"    private const bool SoftDeleteEnabled = {softDeleteEnabledLiteral};");
+        sb.AppendLine($"    private const bool FilterDeletedByDefault = {filterDeletedLiteral};");
+        sb.AppendLine($"    private const bool CacheEnabled = {cacheEnabledLiteral};");
+        sb.AppendLine($"    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds({cacheTtlSeconds});");
+        AppendSoftDeletePropertyConstant(sb, request, softDeleteProperty);
+        sb.AppendLine();
+        sb.AppendLine($"    private readonly {sessionType} session;");
+        sb.AppendLine("    private IKyrolusMartenObserver? observer;");
+        sb.AppendLine("    private readonly IKyrolusMartenAuthorization? authorization;");
+        sb.AppendLine("    private readonly IKyrolusMartenValidation? validation;");
+        sb.AppendLine("    private readonly IKyrolusMartenSoftDeletePolicy? softDeletePolicy;");
+        sb.AppendLine("    private readonly IKyrolusMartenCacheProvider? cacheProvider;");
+        sb.AppendLine("    private readonly IKyrolusMartenResiliencePolicy? resilience;");
+        sb.AppendLine("    private readonly IKyrolusMartenTracing? tracing;");
+        sb.AppendLine();
+        sb.AppendLine($"    public {repoName}({sessionType} session, KyrolusMartenRepositoryDependencies? services = null)");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        this.session = session ?? throw new ArgumentNullException(nameof(session));");
+        sb.AppendLine("        observer = services?.Observer;");
+        sb.AppendLine("        authorization = services?.Authorization;");
+        sb.AppendLine("        validation = services?.Validation;");
+        sb.AppendLine("        softDeletePolicy = services?.SoftDeletePolicy;");
+        sb.AppendLine("        cacheProvider = services?.CacheProvider;");
+        sb.AppendLine("        resilience = services?.ResiliencePolicy;");
+        sb.AppendLine("        tracing = services?.Tracing;");
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    public IKyrolusMartenObserver? Observer => observer;");
+        sb.AppendLine("    public IKyrolusMartenAuthorization? Authorization => authorization;");
+        sb.AppendLine("    public IKyrolusMartenValidation? Validation => validation;");
+        sb.AppendLine("    public IKyrolusMartenSoftDeletePolicy? SoftDeletePolicy => softDeletePolicy;");
+        sb.AppendLine("    public IKyrolusMartenCacheProvider? CacheProvider => cacheProvider;");
+        sb.AppendLine("    public IKyrolusMartenResiliencePolicy? ResiliencePolicy => resilience;");
+        sb.AppendLine("    public IKyrolusMartenTracing? Tracing => tracing;");
+        sb.AppendLine();
+        sb.AppendLine("    public void SetObserver(IKyrolusMartenObserver? observer) => this.observer = observer;");
+        sb.AppendLine();
+        sb.AppendLine("    public string? ResolveTenantId(ITenantResolver? resolver) => resolver?.ResolveTenantId();");
+        sb.AppendLine();
+        sb.AppendLine("    private IDocumentSession ResolveSession(string? tenantId)");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        if (string.IsNullOrWhiteSpace(tenantId)) return session;");
+        sb.AppendLine("        var tenant = session.ForTenant(tenantId);");
+        sb.AppendLine("        return tenant is IDocumentSession resolved ? resolved : session;");
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    private IDocumentSession ResolveSession(MartenQueryOptions<TEntity> options) => ResolveSession(options.TenantId);");
+        sb.AppendLine();
+        AppendSoftDeleteFilterHelpers(sb, request);
+        sb.AppendLine("    private async Task<T> ExecAsync<T>(string operation, object? payload, Func<Task<T>> action, CancellationToken ct)");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        if (observer is not null) await observer.OnBeforeAsync(operation, payload, ct).ConfigureAwait(false);");
+        sb.AppendLine("        IDisposable? scope = tracing?.StartScope(operation, payload);");
+        sb.AppendLine("        var sw = Stopwatch.StartNew();");
+        sb.AppendLine("        Exception? ex = null;");
+        sb.AppendLine("        object? result = null;");
+        sb.AppendLine("        try");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            if (validation is not null) await validation.ValidateAsync(operation, payload, ct).ConfigureAwait(false);");
+        sb.AppendLine("            if (authorization is not null && !await authorization.AuthorizeAsync(operation, payload, ct).ConfigureAwait(false))");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                throw new UnauthorizedAccessException($\"Operation '{operation}' not authorized.\");");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            var value = resilience is null");
+        sb.AppendLine("                ? await action().ConfigureAwait(false)");
+        sb.AppendLine("                : await resilience.ExecuteAsync(operation, action, ct).ConfigureAwait(false);");
+        sb.AppendLine("            result = value;");
+        sb.AppendLine("            return value;");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine("        catch (Exception e) { ex = e; throw; }");
+        sb.AppendLine("        finally");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            sw.Stop();");
+        sb.AppendLine("            if (tracing is not null) await tracing.RecordAsync(operation, payload, sw.Elapsed, ex, ct).ConfigureAwait(false);");
+        sb.AppendLine("            if (observer is not null) await observer.OnAfterAsync(operation, result, sw.Elapsed, ex, ct).ConfigureAwait(false);");
+        sb.AppendLine("            scope?.Dispose();");
+        AppendCloseBrace(sb, Indent8);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    private async Task ExecAsync(string operation, object? payload, Func<Task> action, CancellationToken ct)");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        if (observer is not null) await observer.OnBeforeAsync(operation, payload, ct).ConfigureAwait(false);");
+        sb.AppendLine("        IDisposable? scope = tracing?.StartScope(operation, payload);");
+        sb.AppendLine("        var sw = Stopwatch.StartNew();");
+        sb.AppendLine("        Exception? ex = null;");
+        sb.AppendLine("        try");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            if (validation is not null) await validation.ValidateAsync(operation, payload, ct).ConfigureAwait(false);");
+        sb.AppendLine("            if (authorization is not null && !await authorization.AuthorizeAsync(operation, payload, ct).ConfigureAwait(false))");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                throw new UnauthorizedAccessException($\"Operation '{operation}' not authorized.\");");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            if (resilience is null)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                await action().ConfigureAwait(false);");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            else");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                await resilience.ExecuteAsync(operation, action, ct).ConfigureAwait(false);");
+        AppendCloseBrace(sb, Indent12);
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine("        catch (Exception e) { ex = e; throw; }");
+        sb.AppendLine("        finally");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            sw.Stop();");
+        sb.AppendLine("            if (tracing is not null) await tracing.RecordAsync(operation, payload, sw.Elapsed, ex, ct).ConfigureAwait(false);");
+        sb.AppendLine("            if (observer is not null) await observer.OnAfterAsync(operation, null, sw.Elapsed, ex, ct).ConfigureAwait(false);");
+        sb.AppendLine("            scope?.Dispose();");
+        AppendCloseBrace(sb, Indent8);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<IEnumerable<TEntity>> GetAllAsync(MartenQueryOptions<TEntity>? options = null, CancellationToken cancellationToken = default)");
+        AppendOpenBrace(sb, Indent4);
+        AppendIndentedLine(sb, Indent8, LineDefaultOptions);
+        sb.AppendLine("        return ExecAsync(\"GetAll\", opts, async () =>");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var query = BuildQuery(opts, out var activeSession);");
+        sb.AppendLine("            var list = await query.ToListAsync(cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            await ApplyIncludesAsync(list, opts, activeSession, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            return list;");
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<MartenEntityResult<TEntity>?> GetByIdAsync(TKey id, MartenQueryOptions<TEntity>? options = null, CancellationToken cancellationToken = default)");
+        AppendOpenBrace(sb, Indent4);
+        AppendIndentedLine(sb, Indent8, LineDefaultOptions);
+        sb.AppendLine("        return ExecAsync(\"GetById\", id, async () =>");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var includes = MergeIncludes(opts);");
+        sb.AppendLine("            var activeSession = ResolveSession(opts);");
+        sb.AppendLine("            if (CacheEnabled && cacheProvider is not null && includes.Count == 0)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                var cacheKey = BuildCacheKey(opts.TenantId, id);");
+        sb.AppendLine("                var cached = await cacheProvider.GetAsync<MartenEntityResult<TEntity>>(cacheKey, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("                if (cached is not null) return cached;");
+        sb.AppendLine("                var entity = await activeSession.LoadAsync<TEntity>(id!, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("                if (entity is null) return null;");
+        sb.AppendLine("                await ApplyIncludesAsync(entity, includes, activeSession, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("                var metadata = await activeSession.MetadataForAsync(entity, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("                var result = new MartenEntityResult<TEntity>(entity, metadata.CurrentVersion);");
+        sb.AppendLine("                await cacheProvider.SetAsync(cacheKey, result, CacheTtl, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("                return result;");
+        AppendCloseBrace(sb, Indent12);
+        sb.AppendLine("            var item = await activeSession.LoadAsync<TEntity>(id!, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            if (item is null) return null;");
+        sb.AppendLine("            await ApplyIncludesAsync(item, includes, activeSession, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            var meta = await activeSession.MetadataForAsync(item, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            return new MartenEntityResult<TEntity>(item, meta.CurrentVersion);");
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<IEnumerable<TProjection>> QueryAsync<TProjection>(MartenQueryOptions<TEntity>? options, Func<IMartenQueryable<TEntity>, IMartenQueryable<TProjection>> selector, CancellationToken cancellationToken = default) where TProjection : notnull");
+        AppendOpenBrace(sb, Indent4);
+        AppendIndentedLine(sb, Indent8, LineDefaultOptions);
+        sb.AppendLine("        return ExecAsync(\"Query\", opts, async () =>");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var baseQuery = BuildQuery(opts, out var activeSession);");
+        sb.AppendLine("            var projected = selector(baseQuery);");
+        sb.AppendLine("            var list = await projected.ToListAsync(cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            await ApplyIncludesIfEntityProjection(list, opts, activeSession, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            return list;");
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<PageResult<TProjection>> QueryPageAsync<TProjection>(MartenQueryOptions<TEntity>? options, Func<IMartenQueryable<TEntity>, IMartenQueryable<TProjection>> selector, MartenPageRequest? page = null, CancellationToken cancellationToken = default) where TProjection : notnull");
+        AppendOpenBrace(sb, Indent4);
+        AppendIndentedLine(sb, Indent8, LineDefaultOptions);
+        sb.AppendLine("        var request = page ?? new MartenPageRequest();");
+        sb.AppendLine("        var pageNumber = request.PageNumber < 1 ? 1 : request.PageNumber;");
+        sb.AppendLine("        var pageSize = request.PageSize < 1 ? 20 : request.PageSize;");
+        sb.AppendLine("        return ExecAsync(\"QueryPage\", opts, async () =>");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var baseQuery = BuildQuery(opts, out var activeSession);");
+        sb.AppendLine("            var projected = selector(baseQuery);");
+        sb.AppendLine("            var total = await projected.CountAsync(cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            var items = await projected.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            await ApplyIncludesIfEntityProjection(items, opts, activeSession, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            return new PageResult<TProjection>(items, total, pageNumber, pageSize);");
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<PageResult<TEntity>> GetPageAsync(MartenQueryOptions<TEntity>? options = null, MartenPageRequest? page = null, CancellationToken cancellationToken = default)");
+        AppendOpenBrace(sb, Indent4);
+        AppendIndentedLine(sb, Indent8, LineDefaultOptions);
+        sb.AppendLine("        var request = page ?? new MartenPageRequest();");
+        sb.AppendLine("        var pageNumber = request.PageNumber < 1 ? 1 : request.PageNumber;");
+        sb.AppendLine("        var pageSize = request.PageSize < 1 ? 20 : request.PageSize;");
+        sb.AppendLine("        return ExecAsync(\"GetPage\", opts, async () =>");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            var query = BuildQuery(opts, out var activeSession);");
+        sb.AppendLine("            var total = await query.CountAsync(cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            var items = await query.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            await ApplyIncludesAsync(items, opts, activeSession, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            return new PageResult<TEntity>(items, total, pageNumber, pageSize);");
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<TEntity> AddAsync(TEntity entity, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"Add\", entity, () =>");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            session.Store(entity);");
+        sb.AppendLine("            return Task.FromResult(entity);");
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<IEnumerable<TEntity>> AddRangeAsync(IEnumerable<TEntity> entities, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"AddRange\", entities, () =>");
+        AppendOpenBrace(sb, Indent8);
+        AppendIndentedLine(sb, Indent12, LineArrayInit);
+        sb.AppendLine("            session.Store(array);");
+        sb.AppendLine("            return Task.FromResult<IEnumerable<TEntity>>(array);");
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<TEntity> UpsertAsync(TEntity entity, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"Upsert\", entity, () =>");
+        AppendOpenBrace(sb, Indent8);
+        AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+        AppendIndentedLine(sb, Indent12, LineStoreEntity);
+        AppendIndentedLine(sb, Indent12, LineInvalidateEntity);
+        sb.AppendLine("            return Task.FromResult(entity);");
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<IEnumerable<TEntity>> UpsertRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"UpsertRange\", entities, () =>");
+        AppendOpenBrace(sb, Indent8);
+        AppendIndentedLine(sb, Indent12, LineArrayInit);
+        AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+        AppendIndentedLine(sb, Indent12, LineStoreArray);
+        AppendIndentedLine(sb, Indent12, LineInvalidateArray);
+        sb.AppendLine("            return Task.FromResult<IEnumerable<TEntity>>(array);");
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<TEntity?> UpdateAsync(TEntity entity, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"Update\", entity, () =>");
+        AppendOpenBrace(sb, Indent8);
+        AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+        AppendIndentedLine(sb, Indent12, LineStoreEntity);
+        AppendIndentedLine(sb, Indent12, LineInvalidateEntity);
+        sb.AppendLine("            return Task.FromResult<TEntity?>(entity);");
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<IEnumerable<TEntity>> UpdateRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"UpdateRange\", entities, () =>");
+        AppendOpenBrace(sb, Indent8);
+        AppendIndentedLine(sb, Indent12, LineArrayInit);
+        AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+        AppendIndentedLine(sb, Indent12, LineStoreArray);
+        AppendIndentedLine(sb, Indent12, LineInvalidateArray);
+        sb.AppendLine("            return Task.FromResult<IEnumerable<TEntity>>(array);");
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<MartenEntityResult<TEntity>?> PatchAsync(TKey id, Dictionary<string, object> updates, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"Patch\", updates, async () =>");
+        AppendOpenBrace(sb, Indent8);
+        AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+        sb.AppendLine("            var entity = await activeSession.LoadAsync<TEntity>(id!, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            if (entity is null) return null;");
+        sb.AppendLine("            ApplyPatch(entity, updates);");
+        AppendIndentedLine(sb, Indent12, LineStoreEntity);
+        sb.AppendLine("            await InvalidateCacheAsync(id, tenantId, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            var metadata = await activeSession.MetadataForAsync(entity, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            return new MartenEntityResult<TEntity>(entity, metadata.CurrentVersion);");
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<int> PatchWhereAsync(Expression<Func<TEntity, bool>> filter, Dictionary<string, object> updates, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"PatchWhere\", updates, () =>");
+        AppendOpenBrace(sb, Indent8);
+        AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+        sb.AppendLine("            var patch = activeSession.Patch<TEntity>(filter);");
+        sb.AppendLine("            foreach (var kv in updates) patch.Set(kv.Key, kv.Value);");
+        AppendIndentedLine(sb, Indent12, LineReturnZero);
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        sb.AppendLine();
+        AppendRemoveMethods(sb, request);
+        AppendRestoreMethods(sb, request);
+
+        sb.AppendLine("    public Task<bool> ExistAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"Exist\", filter, () =>");
+        AppendOpenBrace(sb, Indent8);
+        AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+        sb.AppendLine("            return activeSession.Query<TEntity>().AnyAsync(filter, token: cancellationToken);");
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        sb.AppendLine();
+        sb.AppendLine("    public async IAsyncEnumerable<TEntity> StreamAsync(MartenQueryOptions<TEntity>? options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)");
+        AppendOpenBrace(sb, Indent4);
+        AppendIndentedLine(sb, Indent8, LineDefaultOptions);
+        sb.AppendLine("        var query = BuildQuery(opts, out var activeSession);");
+        sb.AppendLine("        await foreach (var item in query.ToAsyncEnumerable().WithCancellation(cancellationToken))");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            await ApplyIncludesAsync(item, opts, activeSession, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            yield return item;");
+        AppendCloseBrace(sb, Indent8);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<TResult> ExecuteCompiledQueryAsync<TCompiled, TResult>(TCompiled query, CancellationToken cancellationToken = default) where TCompiled : ICompiledQuery<TEntity, TResult>");
+        sb.AppendLine("        => ExecAsync(\"CompiledQuery\", query, () => session.QueryAsync(query, cancellationToken), cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("    public Task<TResult> WithSessionAsync<TResult>(MartenSessionMode mode, Func<TSession, Task<TResult>> work, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"WithSession\", mode, () => work(session), cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("    public Task<int> TransformWhereAsync(Expression<Func<TEntity, bool>> filter, string transformName, object? arguments = null, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"TransformWhere\", filter, () => Task.FromResult(0), cancellationToken);");
+        sb.AppendLine();
+        sb.AppendLine("    private IMartenQueryable<TEntity> BuildQuery(MartenQueryOptions<TEntity> options, out IDocumentSession activeSession)");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        activeSession = ResolveSession(options);");
+        sb.AppendLine("        IMartenQueryable<TEntity> query = options.Specification is null");
+        sb.AppendLine("            ? activeSession.Query<TEntity>()");
+        sb.AppendLine("            : options.Specification.Apply(activeSession.Query<TEntity>());");
+        sb.AppendLine("        if (options.Filter is not null) query = (IMartenQueryable<TEntity>)query.Where(options.Filter);");
+        sb.AppendLine("        if (options.OrderBy is not null) query = (IMartenQueryable<TEntity>)options.OrderBy(query);");
+        sb.AppendLine("        options.ConfigureQuery?.Invoke(query);");
+        AppendSoftDeleteQueryFilter(sb, request);
+        sb.AppendLine("        return query;");
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    private static List<string> MergeIncludes(MartenQueryOptions<TEntity> options)");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        var list = new List<string>(DefaultIncludes);");
+        sb.AppendLine("        if (options.IncludeProperties is not null) list.AddRange(options.IncludeProperties);");
+        sb.AppendLine("        if (options.IncludeExpressions is not null)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            foreach (var expr in options.IncludeExpressions)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                var name = TryGetPropertyName(expr);");
+        sb.AppendLine("                if (!string.IsNullOrWhiteSpace(name)) list.Add(name);");
+        AppendCloseBrace(sb, Indent12);
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine("        return list.Count <= 1 ? list : list.Distinct(StringComparer.OrdinalIgnoreCase).ToList();");
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    private static string? TryGetPropertyName(Expression<Func<TEntity, object?>> expr)");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        var body = expr.Body is UnaryExpression u && u.NodeType == ExpressionType.Convert ? u.Operand : expr.Body;");
+        sb.AppendLine("        return body is MemberExpression m ? m.Member.Name : null;");
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    private async Task ApplyIncludesIfEntityProjection<TProjection>(IEnumerable<TProjection> items, MartenQueryOptions<TEntity> options, IDocumentSession activeSession, CancellationToken cancellationToken) where TProjection : notnull");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        if (typeof(TProjection) != typeof(TEntity)) return;");
+        sb.AppendLine("        await ApplyIncludesAsync(items.Cast<TEntity>(), options, activeSession, cancellationToken).ConfigureAwait(false);");
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    private async Task ApplyIncludesAsync(IEnumerable<TEntity> entities, MartenQueryOptions<TEntity> options, IDocumentSession activeSession, CancellationToken cancellationToken)");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        var includes = MergeIncludes(options);");
+        sb.AppendLine("        if (includes.Count == 0) return;");
+        sb.AppendLine("        foreach (var entity in entities)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            await ApplyIncludesAsync(entity, includes, activeSession, cancellationToken).ConfigureAwait(false);");
+        AppendCloseBrace(sb, Indent8);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    private Task ApplyIncludesAsync(TEntity entity, MartenQueryOptions<TEntity> options, IDocumentSession activeSession, CancellationToken cancellationToken)");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        var includes = MergeIncludes(options);");
+        sb.AppendLine("        if (includes.Count == 0) return Task.CompletedTask;");
+        sb.AppendLine("        return ApplyIncludesAsync(entity, includes, activeSession, cancellationToken);");
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    private async Task ApplyIncludesAsync(TEntity entity, List<string> includeProperties, IDocumentSession activeSession, CancellationToken cancellationToken)");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        foreach (var include in includeProperties)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            await ApplyIncludeAsync(entity, include, activeSession, cancellationToken).ConfigureAwait(false);");
+        AppendCloseBrace(sb, Indent8);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        AppendIncludeMethods(sb, includeMappings);
+        AppendPatchMethod(sb, patchProperties);
+        sb.AppendLine("    private static T ConvertValue<T>(object? value)");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        if (value is null) return default!;");
+        sb.AppendLine("        if (value is JsonElement je)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            value = je.ValueKind switch");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine("                JsonValueKind.String => je.GetString(),");
+        sb.AppendLine("                JsonValueKind.Number => je.TryGetInt64(out var l) ? l : je.GetDouble(),");
+        sb.AppendLine("                JsonValueKind.True => true,");
+        sb.AppendLine("                JsonValueKind.False => false,");
+        sb.AppendLine("                _ => null");
+        sb.AppendLine("            };" );
+        sb.AppendLine("            if (value is null) return default!;");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine("        if (value is T typed) return typed;");
+        sb.AppendLine("        var target = typeof(T);");
+        sb.AppendLine("        var underlying = Nullable.GetUnderlyingType(target) ?? target;");
+        sb.AppendLine("        if (underlying.IsEnum)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            if (value is string s) return (T)Enum.Parse(underlying, s, true);");
+        sb.AppendLine("            return (T)Enum.ToObject(underlying, value);");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine("        if (underlying == typeof(Guid))");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            if (value is Guid g) return (T)(object)g;");
+        sb.AppendLine("            return (T)(object)Guid.Parse(value.ToString()!);");
+        AppendCloseBrace(sb, Indent8);
+        sb.AppendLine("        var converted = Convert.ChangeType(value, underlying, CultureInfo.InvariantCulture);");
+        sb.AppendLine("        return (T)converted!;");
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        AppendCacheHelpers(sb, request, keyInfo, keyType);
+
+        sb.AppendLine("}");
+    }
+
+    private static void AppendIncludeMethods(StringBuilder sb, IReadOnlyList<IncludeMapping> includeMappings)
+    {
+        sb.AppendLine("    private async Task ApplyIncludeAsync(TEntity entity, string includeProperty, IDocumentSession activeSession, CancellationToken cancellationToken)");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        if (string.IsNullOrWhiteSpace(includeProperty)) return;");
+        foreach (var mapping in includeMappings)
+        {
+            var includeName = EscapeString(mapping.IncludeName);
+            sb.AppendLine($"        if (string.Equals(includeProperty, \"{includeName}\", StringComparison.OrdinalIgnoreCase))");
+            AppendOpenBrace(sb, Indent8);
+            AppendIncludeBody(sb, mapping);
+            AppendCloseBrace(sb, Indent8);
+        }
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+    }
+
+    private static void AppendIncludeBody(StringBuilder sb, IncludeMapping mapping)
+    {
+        if (mapping.IncludeKind == IncludeKind.Reference)
+        {
+            AppendReferenceInclude(sb, mapping);
+        }
+        else
+        {
+            AppendCollectionInclude(sb, mapping);
+        }
+        sb.AppendLine("            return;");
+    }
+
+    private static void AppendReferenceInclude(StringBuilder sb, IncludeMapping mapping)
+    {
+        if (mapping.IdIsNullableValueType)
+        {
+            sb.AppendLine($"            var idValue = entity.{mapping.IdPropertyName};");
+            sb.AppendLine("            if (!idValue.HasValue) return;");
+            sb.AppendLine($"            var loaded = await activeSession.LoadAsync<{mapping.IncludeTypeName}>((object)idValue.Value, cancellationToken).ConfigureAwait(false);");
+        }
+        else if (mapping.IdIsNullableReference)
+        {
+            sb.AppendLine($"            var idValue = entity.{mapping.IdPropertyName};");
+            sb.AppendLine("            if (idValue is null) return;");
+            sb.AppendLine($"            var loaded = await activeSession.LoadAsync<{mapping.IncludeTypeName}>((object)idValue, cancellationToken).ConfigureAwait(false);");
+        }
+        else
+        {
+            sb.AppendLine($"            var loaded = await activeSession.LoadAsync<{mapping.IncludeTypeName}>((object)entity.{mapping.IdPropertyName}, cancellationToken).ConfigureAwait(false);");
+        }
+        sb.AppendLine($"            entity.{mapping.IncludePropertyName} = loaded;");
+    }
+
+    private static void AppendCollectionInclude(StringBuilder sb, IncludeMapping mapping)
+    {
+        sb.AppendLine($"            var ids = entity.{mapping.IdPropertyName};");
+        sb.AppendLine("            if (ids is null) return;");
+        if (mapping.IdIsNullableValueType)
+        {
+            sb.AppendLine("            var idValues = ids.Where(x => x.HasValue).Select(x => x.Value);");
+            sb.AppendLine($"            var loaded = await activeSession.LoadManyAsync<{mapping.IncludeTypeName}>(idValues, cancellationToken).ConfigureAwait(false);");
+        }
+        else if (mapping.IdIsNullableReference)
+        {
+            if (mapping.IdValueTypeName == "string")
+            {
+                sb.AppendLine("            var idValues = ids.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x!);");
+            }
+            else
+            {
+                sb.AppendLine("            var idValues = ids.Where(x => x is not null).Select(x => x!);");
+            }
+            sb.AppendLine($"            var loaded = await activeSession.LoadManyAsync<{mapping.IncludeTypeName}>(idValues, cancellationToken).ConfigureAwait(false);");
+        }
+        else
+        {
+            sb.AppendLine($"            var loaded = await activeSession.LoadManyAsync<{mapping.IncludeTypeName}>(ids, cancellationToken).ConfigureAwait(false);");
+        }
+        AppendCollectionAssign(sb, mapping);
+    }
+
+    private static void AppendCollectionAssign(StringBuilder sb, IncludeMapping mapping)
+    {
+        switch (mapping.CollectionKind)
+        {
+            case CollectionKind.Array:
+                sb.AppendLine($"            entity.{mapping.IncludePropertyName} = loaded.ToArray();");
+                return;
+            case CollectionKind.HashSet:
+                sb.AppendLine($"            entity.{mapping.IncludePropertyName} = new HashSet<{mapping.IncludeTypeName}>(loaded);");
+                return;
+            case CollectionKind.List:
+                sb.AppendLine($"            entity.{mapping.IncludePropertyName} = loaded.ToList();");
+                return;
+            default:
+                sb.AppendLine($"            entity.{mapping.IncludePropertyName} = loaded;");
+                return;
+        }
+    }
+
+    private static void AppendPatchMethod(StringBuilder sb, IReadOnlyList<IPropertySymbol> patchProperties)
+    {
+        sb.AppendLine("    private static void ApplyPatch(TEntity entity, IReadOnlyDictionary<string, object> updates)");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        foreach (var kv in updates)");
+        AppendOpenBrace(sb, Indent8);
+        sb.AppendLine("            if (string.IsNullOrWhiteSpace(kv.Key)) continue;");
+        foreach (var prop in patchProperties)
+        {
+            var propName = EscapeString(prop.Name);
+            var propType = prop.Type.ToDisplayString();
+            sb.AppendLine($"            if (string.Equals(kv.Key, \"{propName}\", StringComparison.OrdinalIgnoreCase))");
+            AppendOpenBrace(sb, Indent12);
+            sb.AppendLine($"                entity.{prop.Name} = ConvertValue<{propType}>(kv.Value);");
+            sb.AppendLine("                continue;");
+            AppendCloseBrace(sb, Indent12);
+        }
+        AppendCloseBrace(sb, Indent8);
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+    }
+
+    private static void AppendCacheHelpers(StringBuilder sb, RepositoryRequest request, KeyPropertyInfo? keyInfo, string keyType)
+    {
+        sb.AppendLine("    private static string BuildCacheKey(string? tenantId, TKey id)");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        var tenantPart = string.IsNullOrWhiteSpace(tenantId) ? \"default\" : tenantId;");
+        sb.AppendLine($"        return \"{EscapeString(request.RepositoryName)}:\" + tenantPart + \":\" + id;");
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    private Task InvalidateCacheAsync(TKey id, string? tenantId, CancellationToken cancellationToken)");
+        AppendOpenBrace(sb, Indent4);
+        sb.AppendLine("        if (!CacheEnabled || cacheProvider is null) return Task.CompletedTask;");
+        sb.AppendLine("        var key = BuildCacheKey(tenantId, id);");
+        sb.AppendLine("        return cacheProvider.InvalidateAsync(key, cancellationToken);");
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    private Task InvalidateCacheAsync(TEntity entity, string? tenantId, CancellationToken cancellationToken)");
+        AppendOpenBrace(sb, Indent4);
+        if (keyInfo is null)
+        {
+            sb.AppendLine("        return Task.CompletedTask;");
+        }
+        else
+        {
+            sb.AppendLine("        if (!TryGetEntityId(entity, out var id)) return Task.CompletedTask;");
+            sb.AppendLine("        return InvalidateCacheAsync(id, tenantId, cancellationToken);");
+        }
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        sb.AppendLine("    private Task InvalidateCacheAsync(IEnumerable<TEntity> entities, string? tenantId, CancellationToken cancellationToken)");
+        AppendOpenBrace(sb, Indent4);
+        if (keyInfo is null)
+        {
+            sb.AppendLine("        return Task.CompletedTask;");
+        }
+        else
+        {
+            sb.AppendLine("        if (!CacheEnabled || cacheProvider is null) return Task.CompletedTask;");
+            sb.AppendLine("        var tasks = new List<Task>();");
+            sb.AppendLine("        foreach (var entity in entities)");
+            AppendOpenBrace(sb, Indent8);
+            sb.AppendLine("            if (!TryGetEntityId(entity, out var id)) continue;");
+            sb.AppendLine("            tasks.Add(InvalidateCacheAsync(id, tenantId, cancellationToken));");
+            AppendCloseBrace(sb, Indent8);
+            sb.AppendLine("        return Task.WhenAll(tasks);");
+        }
+        AppendCloseBrace(sb, Indent4);
+        sb.AppendLine();
+        AppendTryGetEntityId(sb, keyInfo, keyType);
+    }
+
+    private static void AppendRepositoryDeclaration(StringBuilder sb, RepositoryRequest request, string sessionType, string entityType, string keyType, string repoName)
+    {
+        sb.Append($"public sealed class {repoName} : IKyrolusMartenRepositoryAsync<{sessionType}, {entityType}, {keyType}>");
+        if (request.EnableSoftDelete)
+        {
+            sb.Append($", IKyrolusMartenSoftDeleteRepositoryAsync<{sessionType}, {entityType}, {keyType}>");
+        }
+        sb.AppendLine();
+    }
+
+    private static void AppendSoftDeletePropertyConstant(StringBuilder sb, RepositoryRequest request, string softDeleteProperty)
+    {
+        if (!request.EnableSoftDelete)
+        {
+            return;
+        }
+
+        sb.AppendLine($"    private const string SoftDeletePropertyName = \"{softDeleteProperty}\";");
+    }
+
+    private static void AppendSoftDeleteFilterHelpers(StringBuilder sb, RepositoryRequest request)
+    {
+        if (request.EnableSoftDelete)
+        {
+            sb.AppendLine("    private bool IsSoftDeleteEnabled => SoftDeleteEnabled && (softDeletePolicy?.Enabled ?? true);");
+            sb.AppendLine("    private bool ShouldFilter(MartenQueryOptions<TEntity> options)");
+            sb.AppendLine("        => IsSoftDeleteEnabled && (softDeletePolicy?.FilterDeletedByDefault ?? FilterDeletedByDefault) && !options.IncludeSoftDeleted;");
+            sb.AppendLine($"    private static readonly Expression<Func<TEntity, bool>> SoftDeleteFilter = entity => !entity.{request.SoftDeleteProperty};");
+            sb.AppendLine();
+            return;
+        }
+
+        sb.AppendLine("    private static bool ShouldFilter(MartenQueryOptions<TEntity> options) => false;");
+        sb.AppendLine();
+    }
+
+    private static void AppendRemoveMethods(StringBuilder sb, RepositoryRequest request)
+    {
+        if (request.EnableSoftDelete)
+        {
+            sb.AppendLine("    public Task<bool> RemoveAsync(TEntity entity, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)");
+            sb.AppendLine("        => ExecAsync(\"SoftDeleteEntity\", entity, () =>");
+            AppendOpenBrace(sb, Indent8);
+            sb.AppendLine("            if (!IsSoftDeleteEnabled) return Task.FromResult(false);");
+            sb.AppendLine($"            entity.{request.SoftDeleteProperty} = true;");
+            AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+            AppendIndentedLine(sb, Indent12, LineStoreEntity);
+            AppendIndentedLine(sb, Indent12, LineInvalidateEntity);
+            AppendIndentedLine(sb, Indent12, LineReturnTrue);
+            AppendIndentedLine(sb, Indent8, LineExecEnd);
+            sb.AppendLine();
+            sb.AppendLine("    public Task<bool> RemoveAsync(TKey id, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)");
+            sb.AppendLine("        => ExecAsync(\"SoftDeleteById\", id, async () =>");
+            AppendOpenBrace(sb, Indent8);
+            sb.AppendLine("            if (!IsSoftDeleteEnabled) return false;");
+            AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+            sb.AppendLine("            var entity = await activeSession.LoadAsync<TEntity>(id!, cancellationToken).ConfigureAwait(false);");
+            sb.AppendLine("            if (entity is null) return false;");
+            sb.AppendLine($"            entity.{request.SoftDeleteProperty} = true;");
+            AppendIndentedLine(sb, Indent12, LineStoreEntity);
+            sb.AppendLine("            await InvalidateCacheAsync(id, tenantId, cancellationToken).ConfigureAwait(false);");
+            sb.AppendLine("            return true;");
+            AppendIndentedLine(sb, Indent8, LineExecEnd);
+            sb.AppendLine();
+            sb.AppendLine("    public Task<int> DeleteWhereAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)");
+            sb.AppendLine("        => ExecAsync(\"SoftDeleteWhere\", filter, () =>");
+            AppendOpenBrace(sb, Indent8);
+            sb.AppendLine("            if (!IsSoftDeleteEnabled) return Task.FromResult(0);");
+            AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+            sb.AppendLine("            activeSession.Patch<TEntity>(filter).Set(SoftDeletePropertyName, true);");
+            AppendIndentedLine(sb, Indent12, LineReturnZero);
+            AppendIndentedLine(sb, Indent8, LineExecEnd);
+            sb.AppendLine();
+            sb.AppendLine("    public Task<bool> RemoveRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)");
+            sb.AppendLine("        => ExecAsync(\"SoftDeleteRange\", entities, () =>");
+            AppendOpenBrace(sb, Indent8);
+            sb.AppendLine("            if (!IsSoftDeleteEnabled) return Task.FromResult(false);");
+            AppendIndentedLine(sb, Indent12, LineArrayInit);
+            sb.AppendLine("            foreach (var entity in array)");
+            AppendOpenBrace(sb, Indent12);
+            sb.AppendLine($"                entity.{request.SoftDeleteProperty} = true;");
+            AppendCloseBrace(sb, Indent12);
+            AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+            AppendIndentedLine(sb, Indent12, LineStoreArray);
+            AppendIndentedLine(sb, Indent12, LineInvalidateArray);
+            AppendIndentedLine(sb, Indent12, LineReturnTrue);
+            AppendIndentedLine(sb, Indent8, LineExecEnd);
+            sb.AppendLine();
+            return;
+        }
+
+        sb.AppendLine("    public Task<bool> RemoveAsync(TEntity entity, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"RemoveEntity\", entity, () =>");
+        AppendOpenBrace(sb, Indent8);
+        AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+        sb.AppendLine("            activeSession.Delete(entity);");
+        AppendIndentedLine(sb, Indent12, LineInvalidateEntity);
+        AppendIndentedLine(sb, Indent12, LineReturnTrue);
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<bool> RemoveAsync(TKey id, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"RemoveById\", id, () =>");
+        AppendOpenBrace(sb, Indent8);
+        AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+        sb.AppendLine("            activeSession.Delete<TEntity>(id!);");
+        sb.AppendLine("            return InvalidateCacheAsync(id, tenantId, cancellationToken).ContinueWith(_ => true, cancellationToken);");
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<int> DeleteWhereAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"DeleteWhere\", filter, () =>");
+        AppendOpenBrace(sb, Indent8);
+        AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+        sb.AppendLine("            activeSession.DeleteWhere(filter);");
+        AppendIndentedLine(sb, Indent12, LineReturnZero);
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<bool> RemoveRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"RemoveRange\", entities, () =>");
+        AppendOpenBrace(sb, Indent8);
+        AppendIndentedLine(sb, Indent12, LineArrayInit);
+        AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+        sb.AppendLine("            activeSession.Delete(array);");
+        AppendIndentedLine(sb, Indent12, LineInvalidateArray);
+        AppendIndentedLine(sb, Indent12, LineReturnTrue);
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        sb.AppendLine();
+    }
+
+    private static void AppendRestoreMethods(StringBuilder sb, RepositoryRequest request)
+    {
+        if (!request.EnableSoftDelete)
+        {
+            return;
+        }
+
+        sb.AppendLine("    public Task<bool> RestoreAsync(TKey id, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"RestoreById\", id, async () =>");
+        AppendOpenBrace(sb, Indent8);
+        AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+        sb.AppendLine("            var entity = await activeSession.LoadAsync<TEntity>(id!, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            if (entity is null) return false;");
+        sb.AppendLine($"            entity.{request.SoftDeleteProperty} = false;");
+        AppendIndentedLine(sb, Indent12, LineStoreEntity);
+        sb.AppendLine("            await InvalidateCacheAsync(id, tenantId, cancellationToken).ConfigureAwait(false);");
+        sb.AppendLine("            return true;");
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<bool> RestoreRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"RestoreRange\", entities, () =>");
+        AppendOpenBrace(sb, Indent8);
+        AppendIndentedLine(sb, Indent12, LineArrayInit);
+        sb.AppendLine("            foreach (var entity in array)");
+        AppendOpenBrace(sb, Indent12);
+        sb.AppendLine($"                entity.{request.SoftDeleteProperty} = false;");
+        AppendCloseBrace(sb, Indent12);
+        AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+        AppendIndentedLine(sb, Indent12, LineStoreArray);
+        AppendIndentedLine(sb, Indent12, LineInvalidateArray);
+        AppendIndentedLine(sb, Indent12, LineReturnTrue);
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        sb.AppendLine();
+        sb.AppendLine("    public Task<int> RestoreWhereAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)");
+        sb.AppendLine("        => ExecAsync(\"RestoreWhere\", filter, () =>");
+        AppendOpenBrace(sb, Indent8);
+        AppendIndentedLine(sb, Indent12, LineResolveSessionTenant);
+        sb.AppendLine("            activeSession.Patch<TEntity>(filter).Set(SoftDeletePropertyName, false);");
+        AppendIndentedLine(sb, Indent12, LineReturnZero);
+        AppendIndentedLine(sb, Indent8, LineExecEnd);
+        sb.AppendLine();
+    }
+
+    private static void AppendSoftDeleteQueryFilter(StringBuilder sb, RepositoryRequest request)
+    {
+        if (!request.EnableSoftDelete)
+        {
+            return;
+        }
+
+        sb.AppendLine("        if (ShouldFilter(options)) query = (IMartenQueryable<TEntity>)query.Where(SoftDeleteFilter);");
+    }
+
+    private static void AppendTryGetEntityId(StringBuilder sb, KeyPropertyInfo? keyInfo, string keyType)
+    {
+        if (keyInfo is null)
+        {
+            return;
+        }
+
+        var idAccess = $"entity.{keyInfo.PropertyName}";
+        if (keyInfo.IsNullableValueTypeFlag)
+        {
+            sb.AppendLine($"    private static bool TryGetEntityId(TEntity entity, out {keyType} id)");
+            AppendOpenBrace(sb, Indent4);
+            sb.AppendLine($"        var value = {idAccess};");
+            sb.AppendLine("        if (!value.HasValue)");
+            AppendOpenBrace(sb, Indent8);
+            sb.AppendLine("            id = default!;");
+            sb.AppendLine("            return false;");
+            AppendCloseBrace(sb, Indent8);
+            sb.AppendLine("        id = value.Value;");
+            sb.AppendLine("        return true;");
+            AppendCloseBrace(sb, Indent4);
+        }
+        else if (keyInfo.IsNullableReference)
+        {
+            sb.AppendLine($"    private static bool TryGetEntityId(TEntity entity, out {keyType} id)");
+            AppendOpenBrace(sb, Indent4);
+            sb.AppendLine($"        if ({idAccess} is null)");
+            AppendOpenBrace(sb, Indent8);
+            sb.AppendLine("            id = default!;");
+            sb.AppendLine("            return false;");
+            AppendCloseBrace(sb, Indent8);
+            sb.AppendLine($"        id = {idAccess};");
+            sb.AppendLine("        return true;");
+            AppendCloseBrace(sb, Indent4);
+        }
+        else
+        {
+            sb.AppendLine($"    private static bool TryGetEntityId(TEntity entity, out {keyType} id)");
+            AppendOpenBrace(sb, Indent4);
+            sb.AppendLine($"        id = {idAccess};");
+            sb.AppendLine("        return true;");
+            AppendCloseBrace(sb, Indent4);
+        }
+
+        sb.AppendLine();
+    }
+
+    private static bool TryParseAttributeRequest(ClassInfo classInfo, out RepositoryRequest request, out string errorMessage)
+    {
+        var attributeData = classInfo.AttributeData;
+        request = default!;
+
+        if (!TryGetRequestTypes(classInfo, out var sessionType, out var entityType, out var keyType, out errorMessage))
+        {
+            return false;
+        }
+
+        var repoName = GetNamedArgument(attributeData, "RepositoryName") ?? $"{entityType.Name}Repository";
+        var ns = GetNamedArgument(attributeData, "Namespace") ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(ns))
+        {
+            ns = entityType.ContainingNamespace is null || entityType.ContainingNamespace.IsGlobalNamespace
+                ? GeneratedNamespace
+                : entityType.ContainingNamespace.ToDisplayString();
+        }
+
+        var defaultIncludes = GetStringValues(attributeData, "IncludeProperties");
+        var enableSoftDelete = GetNamedArgumentBool(attributeData, "EnableSoftDelete") ?? false;
+        var softDeleteProperty = GetNamedArgument(attributeData, "SoftDeleteProperty") ?? "IsDeleted";
+        var filterDeletedByDefault = GetNamedArgumentBool(attributeData, "FilterDeletedByDefault") ?? true;
+        var enableCaching = GetNamedArgumentBool(attributeData, "EnableCaching") ?? false;
+        var cacheTtlSeconds = GetNamedArgumentInt(attributeData, "CacheTtlSeconds") ?? 60;
+
+        var options = new RepositoryOptions(
+            enableSoftDelete,
+            softDeleteProperty,
+            filterDeletedByDefault,
+            enableCaching,
+            cacheTtlSeconds);
+
+        request = new RepositoryRequest(
+            sessionType,
+            entityType,
+            keyType,
+            repoName,
+            ns,
+            defaultIncludes,
+            options);
+
+        return true;
+    }
+
+    private static bool TryGetRequestTypes(ClassInfo classInfo, out INamedTypeSymbol sessionType, out INamedTypeSymbol entityType, out INamedTypeSymbol keyType, out string errorMessage)
+    {
+        var attributeData = classInfo.AttributeData;
+        sessionType = default!;
+        entityType = default!;
+        keyType = default!;
+
+        if (attributeData.ConstructorArguments.Length is not (2 or 3))
+        {
+            errorMessage = "KyrolusMartenRepositoryAttribute requires 2 or 3 constructor arguments (sessionType, keyType) or (sessionType, entityType, keyType).";
+            return false;
+        }
+
+        if (!TryGetTypeArgument(attributeData.ConstructorArguments[0], out sessionType))
+        {
+            errorMessage = "SessionType must be a type argument.";
+            return false;
+        }
+
+        if (attributeData.ConstructorArguments.Length == 3)
+        {
+            if (!TryGetTypeArgument(attributeData.ConstructorArguments[1], out entityType))
+            {
+                errorMessage = "EntityType must be a type argument.";
+                return false;
+            }
+
+            if (!TryGetTypeArgument(attributeData.ConstructorArguments[2], out keyType))
+            {
+                errorMessage = "KeyType must be a type argument.";
+                return false;
+            }
+        }
+        else
+        {
+            if (!TryGetTypeArgument(attributeData.ConstructorArguments[1], out keyType))
+            {
+                errorMessage = "KeyType must be a type argument.";
+                return false;
+            }
+
+            if (!TryGetNamedTypeArgument(attributeData, "EntityType", out entityType))
+            {
+                entityType = classInfo.Symbol;
+            }
+        }
+
+        errorMessage = string.Empty;
+        return true;
+    }
+
+    private static bool TryGetTypeArgument(TypedConstant constant, out INamedTypeSymbol type)
+    {
+        if (constant.Kind == TypedConstantKind.Type && constant.Value is INamedTypeSymbol named)
+        {
+            type = named;
+            return true;
+        }
+
+        type = default!;
+        return false;
+    }
+
+    private static bool TryGetNamedTypeArgument(AttributeData data, string name, out INamedTypeSymbol type)
+    {
+        var match = data.NamedArguments.FirstOrDefault(arg => string.Equals(arg.Key, name, StringComparison.Ordinal));
+        if (match.Key is not null)
+        {
+            return TryGetTypeArgument(match.Value, out type);
+        }
+
+        type = default!;
+        return false;
+    }
+
+    private static string? GetNamedArgument(AttributeData data, string name)
+    {
+        var match = data.NamedArguments.FirstOrDefault(arg => string.Equals(arg.Key, name, StringComparison.Ordinal));
+        return match.Key is null ? null : match.Value.Value?.ToString();
+    }
+
+    private static bool? GetNamedArgumentBool(AttributeData data, string name)
+    {
+        var match = data.NamedArguments.FirstOrDefault(arg => string.Equals(arg.Key, name, StringComparison.Ordinal));
+        return match.Key is null ? null : match.Value.Value as bool?;
+    }
+
+    private static int? GetNamedArgumentInt(AttributeData data, string name)
+    {
+        var match = data.NamedArguments.FirstOrDefault(arg => string.Equals(arg.Key, name, StringComparison.Ordinal));
+        return match.Key is null ? null : match.Value.Value as int?;
+    }
+
+    private static string[] GetStringValues(AttributeData data, string name)
+    {
+        var match = data.NamedArguments.FirstOrDefault(arg => string.Equals(arg.Key, name, StringComparison.Ordinal));
+        if (match.Key is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        var value = match.Value;
+        if (value.Kind != TypedConstantKind.Array)
+        {
+            return Array.Empty<string>();
+        }
+
+        return value.Values
+            .Select(v => v.Value?.ToString())
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v!)
+            .ToArray();
+    }
+
+    private static IEnumerable<IPropertySymbol> GetAllProperties(INamedTypeSymbol type)
+    {
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            foreach (var prop in current.GetMembers().OfType<IPropertySymbol>())
+            {
+                yield return prop;
+            }
+        }
+    }
+
+    private static IReadOnlyList<IPropertySymbol> GetMutableProperties(RepositoryRequest request)
+    {
+        var keyProp = FindKeyProperty(request);
+        return GetAllProperties(request.EntityType)
+            .Where(prop => prop.SetMethod is not null)
+            .Where(prop => prop.SetMethod!.DeclaredAccessibility == Accessibility.Public)
+            .Where(prop => !prop.IsStatic)
+            .Where(prop => !prop.IsIndexer)
+            .Where(prop => keyProp is null || !string.Equals(prop.Name, keyProp.PropertyName, StringComparison.Ordinal))
+            .ToArray();
+    }
+
+    private static IPropertySymbol? FindProperty(IEnumerable<IPropertySymbol> properties, string name)
+    {
+        return properties.FirstOrDefault(prop => string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static List<IncludeMapping> BuildIncludeMappings(RepositoryRequest request)
+    {
+        var props = GetAllProperties(request.EntityType).Where(p => p.DeclaredAccessibility == Accessibility.Public).ToArray();
+        var mappings = new List<IncludeMapping>();
+
+        foreach (var prop in props)
+        {
+            if (ShouldSkipIncludeProperty(prop)) continue;
+
+            var mapping = TryBuildCollectionMapping(prop, props) ?? TryBuildReferenceMapping(prop, props);
+            if (mapping is not null)
+            {
+                mappings.Add(mapping);
+            }
+        }
+
+        return mappings;
+    }
+
+    private static bool ShouldSkipIncludeProperty(IPropertySymbol prop)
+    {
+        return prop.IsStatic || prop.SetMethod is null || prop.Type.SpecialType == SpecialType.System_String;
+    }
+
+    private static IncludeMapping? TryBuildCollectionMapping(IPropertySymbol prop, IReadOnlyList<IPropertySymbol> props)
+    {
+        if (!TryGetCollectionElementType(prop.Type, out var elementType, out var collectionKind))
+        {
+            return null;
+        }
+
+        if (!IsIncludeType(elementType))
+        {
+            return null;
+        }
+
+        var idsProp = ResolveIdProperty(props, prop.Name, "Ids");
+        if (idsProp is null)
+        {
+            return null;
+        }
+
+        if (!TryGetCollectionElementType(idsProp.Type, out var idElementType, out _))
+        {
+            return null;
+        }
+
+        if (!IsSupportedIdType(idElementType, out var idValueType, out var idIsNullableValueType, out var idIsNullableReference))
+        {
+            return null;
+        }
+
+        var idInfo = new IncludeIdInfo(
+            idsProp.Name,
+            idsProp.Type.ToDisplayString(),
+            idValueType.ToDisplayString(),
+            idIsNullableValueType,
+            idIsNullableReference);
+
+        return new IncludeMapping(
+            prop.Name,
+            prop.Name,
+            elementType.ToDisplayString(),
+            idInfo,
+            IncludeKind.Collection,
+            collectionKind);
+    }
+
+    private static IncludeMapping? TryBuildReferenceMapping(IPropertySymbol prop, IReadOnlyList<IPropertySymbol> props)
+    {
+        if (!IsIncludeType(prop.Type))
+        {
+            return null;
+        }
+
+        var idProp = ResolveIdProperty(props, prop.Name, "Id");
+        if (idProp is null)
+        {
+            return null;
+        }
+
+        var refIdIsNullableValueType = IsNullableValueType(idProp.Type, out var refIdValueType);
+        var refIdIsNullableReference = idProp.NullableAnnotation == NullableAnnotation.Annotated && !idProp.Type.IsValueType;
+
+        var idInfo = new IncludeIdInfo(
+            idProp.Name,
+            idProp.Type.ToDisplayString(),
+            refIdValueType.ToDisplayString(),
+            refIdIsNullableValueType,
+            refIdIsNullableReference);
+
+        return new IncludeMapping(
+            prop.Name,
+            prop.Name,
+            prop.Type.ToDisplayString(),
+            idInfo,
+            IncludeKind.Reference,
+            CollectionKind.None);
+    }
+
+    private static bool IsIncludeType(ITypeSymbol type)
+    {
+        if (type.SpecialType == SpecialType.System_String) return false;
+        return type.TypeKind is TypeKind.Class or TypeKind.Interface;
+    }
+
+    private static IPropertySymbol? ResolveIdProperty(IEnumerable<IPropertySymbol> properties, string includeName, string suffix)
+    {
+        var candidates = new List<string> { $"{includeName}{suffix}" };
+        if (includeName.EndsWith("s", StringComparison.OrdinalIgnoreCase) && includeName.Length > 1)
+        {
+            candidates.Add($"{includeName.Substring(0, includeName.Length - 1)}{suffix}");
+        }
+
+        foreach (var candidate in candidates)
+        {
+            var prop = FindProperty(properties, candidate);
+            if (prop is not null) return prop;
+        }
+
+        return null;
+    }
+
+    private static bool TryGetCollectionElementType(ITypeSymbol type, out ITypeSymbol elementType, out CollectionKind kind)
+    {
+        if (type is IArrayTypeSymbol arrayType)
+        {
+            elementType = arrayType.ElementType;
+            kind = CollectionKind.Array;
+            return true;
+        }
+
+        if (type is INamedTypeSymbol named)
+        {
+            if (named.IsGenericType && named.TypeArguments.Length == 1)
+            {
+                if (named.Name == "List" && named.ContainingNamespace.ToDisplayString() == "System.Collections.Generic")
+                {
+                    elementType = named.TypeArguments[0];
+                    kind = CollectionKind.List;
+                    return true;
+                }
+
+                if (named.Name == "HashSet" && named.ContainingNamespace.ToDisplayString() == "System.Collections.Generic")
+                {
+                    elementType = named.TypeArguments[0];
+                    kind = CollectionKind.HashSet;
+                    return true;
+                }
+            }
+
+            var enumerable = named.AllInterfaces.FirstOrDefault(i => i.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.IEnumerable<T>");
+            if (enumerable is not null)
+            {
+                elementType = enumerable.TypeArguments[0];
+                kind = CollectionKind.Enumerable;
+                return true;
+            }
+        }
+
+        elementType = type;
+        kind = CollectionKind.None;
+        return false;
+    }
+
+    private static bool IsNullableValueType(ITypeSymbol type, out ITypeSymbol underlying)
+    {
+        if (type is INamedTypeSymbol named && named.IsGenericType && named.ConstructedFrom.ToDisplayString() == "System.Nullable<T>")
+        {
+            underlying = named.TypeArguments[0];
+            return true;
+        }
+
+        underlying = type;
+        return false;
+    }
+
+    private static bool IsSupportedIdType(ITypeSymbol type, out ITypeSymbol valueType, out bool isNullableValueType, out bool isNullableReference)
+    {
+        isNullableValueType = IsNullableValueType(type, out valueType);
+        isNullableReference = type.NullableAnnotation == NullableAnnotation.Annotated && !type.IsValueType;
+
+        if (valueType.SpecialType == SpecialType.System_String) return true;
+        if (valueType.SpecialType == SpecialType.System_Int32) return true;
+        if (valueType.SpecialType == SpecialType.System_Int64) return true;
+        return valueType.ToDisplayString() == "System.Guid";
+    }
+
+    private static KeyPropertyInfo? FindKeyProperty(RepositoryRequest request)
+    {
+        var props = GetAllProperties(request.EntityType).ToArray();
+        var candidates = new[] { "Id", $"{request.EntityType.Name}Id" };
+        foreach (var candidate in candidates)
+        {
+            var prop = FindProperty(props, candidate);
+            if (prop is null) continue;
+            if (IsKeyMatch(prop.Type, request.KeyType)) return ToKeyPropertyInfo(prop);
+        }
+
+        return null;
+    }
+
+    private static bool IsKeyMatch(ITypeSymbol propertyType, INamedTypeSymbol keyType)
+    {
+        if (SymbolEqualityComparer.Default.Equals(propertyType, keyType)) return true;
+        if (IsNullableValueType(propertyType, out var underlying) && SymbolEqualityComparer.Default.Equals(underlying, keyType)) return true;
+        return false;
+    }
+
+    private static KeyPropertyInfo ToKeyPropertyInfo(IPropertySymbol prop)
+    {
+        var isNullableValueType = IsNullableValueType(prop.Type, out var underlying);
+        var isNullableReference = prop.NullableAnnotation == NullableAnnotation.Annotated && !prop.Type.IsValueType;
+        return new KeyPropertyInfo(prop.Name, prop.Type.ToDisplayString(), underlying.ToDisplayString(), isNullableValueType, isNullableReference);
+    }
+
+    private static string EscapeString(string value)
+    {
+        return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+    }
+
+    private sealed class ClassInfo(INamedTypeSymbol symbol, AttributeData attributeData)
+    {
+        public INamedTypeSymbol Symbol { get; } = symbol;
+        public AttributeData AttributeData { get; } = attributeData;
+    }
+
+    private sealed class RepositoryRequest(
+        INamedTypeSymbol sessionType,
+        INamedTypeSymbol entityType,
+        INamedTypeSymbol keyType,
+        string repositoryName,
+        string @namespace,
+        string[] defaultIncludes,
+MartenRepositoryGenerator.RepositoryOptions options)
+    {
+        public INamedTypeSymbol SessionType { get; } = sessionType;
+        public INamedTypeSymbol EntityType { get; } = entityType;
+        public INamedTypeSymbol KeyType { get; } = keyType;
+        public string RepositoryName { get; } = repositoryName;
+        public string Namespace { get; } = @namespace;
+        public string[] DefaultIncludes { get; } = defaultIncludes;
+        public bool EnableSoftDelete { get; } = options.EnableSoftDelete;
+        public string SoftDeleteProperty { get; } = options.SoftDeleteProperty;
+        public bool FilterDeletedByDefault { get; } = options.FilterDeletedByDefault;
+        public bool EnableCaching { get; } = options.EnableCaching;
+        public int CacheTtlSeconds { get; } = options.CacheTtlSeconds;
+    }
+
+    private sealed class RepositoryOptions(
+        bool enableSoftDelete,
+        string softDeleteProperty,
+        bool filterDeletedByDefault,
+        bool enableCaching,
+        int cacheTtlSeconds)
+    {
+        public bool EnableSoftDelete { get; } = enableSoftDelete;
+        public string SoftDeleteProperty { get; } = softDeleteProperty;
+        public bool FilterDeletedByDefault { get; } = filterDeletedByDefault;
+        public bool EnableCaching { get; } = enableCaching;
+        public int CacheTtlSeconds { get; } = cacheTtlSeconds;
+    }
+
+    private sealed class IncludeMapping(
+        string includeName,
+        string includePropertyName,
+        string includeTypeName,
+MartenRepositoryGenerator.IncludeIdInfo idInfo,
+MartenRepositoryGenerator.IncludeKind includeKind,
+MartenRepositoryGenerator.CollectionKind collectionKind)
+    {
+        public string IncludeName { get; } = includeName;
+        public string IncludePropertyName { get; } = includePropertyName;
+        public string IncludeTypeName { get; } = includeTypeName;
+        public string IdPropertyName { get; } = idInfo.PropertyName;
+        public string IdPropertyTypeName { get; } = idInfo.PropertyTypeName;
+        public string IdValueTypeName { get; } = idInfo.ValueTypeName;
+        public bool IdIsNullableValueType { get; } = idInfo.IsNullableValueTypeFlag;
+        public bool IdIsNullableReference { get; } = idInfo.IsNullableReference;
+        public IncludeKind IncludeKind { get; } = includeKind;
+        public CollectionKind CollectionKind { get; } = collectionKind;
+    }
+
+    private sealed class IncludeIdInfo(
+        string propertyName,
+        string propertyTypeName,
+        string valueTypeName,
+        bool isNullableValueType,
+        bool isNullableReference)
+    {
+        public string PropertyName { get; } = propertyName;
+        public string PropertyTypeName { get; } = propertyTypeName;
+        public string ValueTypeName { get; } = valueTypeName;
+        public bool IsNullableValueTypeFlag { get; } = isNullableValueType;
+        public bool IsNullableReference { get; } = isNullableReference;
+    }
+
+    private sealed class KeyPropertyInfo(
+        string propertyName,
+        string typeName,
+        string underlyingTypeName,
+        bool isNullableValueType,
+        bool isNullableReference)
+    {
+        public string PropertyName { get; } = propertyName;
+        public string TypeName { get; } = typeName;
+        public string UnderlyingTypeName { get; } = underlyingTypeName;
+        public bool IsNullableValueTypeFlag { get; } = isNullableValueType;
+        public bool IsNullableReference { get; } = isNullableReference;
+    }
+
+    private enum IncludeKind
+    {
+        Reference,
+        Collection
+    }
+
+    private enum CollectionKind
+    {
+        None,
+        Array,
+        List,
+        HashSet,
+        Enumerable
+    }
+
+    private const string GeneratorAttribute = """
+// <auto-generated />
+#nullable enable
+using System;
+
+namespace KyrolusSous.Repositories.Marten.Generator;
+
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+public sealed class KyrolusMartenRepositoryAttribute : Attribute
+{
+    public KyrolusMartenRepositoryAttribute(Type sessionType, Type keyType)
+    {
+        SessionType = sessionType;
+        KeyType = keyType;
+    }
+
+    public KyrolusMartenRepositoryAttribute(Type sessionType, Type entityType, Type keyType)
+    {
+        SessionType = sessionType;
+        EntityType = entityType;
+        KeyType = keyType;
+    }
+
+    public Type SessionType { get; }
+    public Type KeyType { get; }
+    public Type? EntityType { get; set; }
+
+    public string? RepositoryName { get; set; }
+    public string? Namespace { get; set; }
+    public string[]? IncludeProperties { get; set; }
+    public bool EnableSoftDelete { get; set; }
+    public bool FilterDeletedByDefault { get; set; } = true;
+    public string SoftDeleteProperty { get; set; } = "IsDeleted";
+    public bool EnableCaching { get; set; }
+    public int CacheTtlSeconds { get; set; } = 60;
+}
+""";
+}
+

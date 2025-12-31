@@ -29,14 +29,17 @@ public static class EntityApi
                 CancellationToken ct) =>
             {
                 var parts = helper.Build(request ?? new QueryRequest());
+                var includeProperties = request?.Includes is { Length: > 0 }
+                    ? new List<string>(request.Includes)
+                    : null;
                 var items = await uow.Get<TRepo>().GetAllAsync(
                     parts.Filter,
                     parts.OrderBy,
+                    includeProperties,
+                    parts.IncludeGraph,
                     asNoTracking: parts.AsNoTracking,
                     useSplitQuery: parts.UseSplitQuery,
-                    includeExpressions: parts.Includes,
                     cancellationToken: ct);
-
                 return Results.Ok(items);
             });
 #pragma warning disable S1192 // RequiresUnreferencedCode
@@ -52,13 +55,16 @@ public static class EntityApi
                     return Results.BadRequest("Single-key endpoint requires single-key repo.");
 
                 var parts = helper.Build(request ?? new QueryRequest());
+                var includeProperties = request?.Includes is { Length: > 0 }
+                    ? new List<string>(request.Includes)
+                    : null;
                 var entity = await single.GetByIdAsync(
                     id,
+                    includeProperties,
+                    parts.IncludeGraph,
                     asNoTracking: parts.AsNoTracking,
                     useSplitQuery: parts.UseSplitQuery,
-                    cancellationToken: ct,
-                    includeExpressions: parts.Includes);
-
+                    cancellationToken: ct);
                 return entity is not null ? Results.Ok(entity) : Results.NotFound();
             });
 
@@ -73,29 +79,35 @@ public static class EntityApi
                 if (!isComposite && keys.Length == 1)
                 {
                     // allow single-key usage if user prefers query param style
-                    var repoSingle = uow.Get<TRepo>() as IKyrolusSingleKeyRepositoryAsync<ApplicationDbContext, TEntity, TKey>;
-                    if (repoSingle is null) return Results.BadRequest("Single-key endpoint requires single-key repo.");
+                    if (uow.Get<TRepo>() is not IKyrolusSingleKeyRepositoryAsync<ApplicationDbContext, TEntity, TKey> repoSingle) return Results.BadRequest("Single-key endpoint requires single-key repo.");
                     var partsSingle = helper.Build(request ?? new QueryRequest());
+                    var includePropertiesSingle = request?.Includes is { Length: > 0 }
+                        ? new List<string>(request.Includes)
+                        : null;
                     var single = await repoSingle.GetByIdAsync(
                         CastKey(ParseObject(keys[0])),
+                        includePropertiesSingle,
+                        partsSingle.IncludeGraph,
                         asNoTracking: partsSingle.AsNoTracking,
                         useSplitQuery: partsSingle.UseSplitQuery,
-                        cancellationToken: ct,
-                        includeExpressions: partsSingle.Includes);
+                        cancellationToken: ct);
                     return single is not null ? Results.Ok(single) : Results.NotFound();
                 }
 
-                var repoComposite = uow.Get<TRepo>() as IKyrolusCompositeKeyRepositoryAsync<ApplicationDbContext, TEntity, TKey>;
-                if (repoComposite is null) return Results.BadRequest("Composite-key endpoint requires composite-key repo.");
+                if (uow.Get<TRepo>() is not IKyrolusCompositeKeyRepositoryAsync<ApplicationDbContext, TEntity, TKey> repoComposite) return Results.BadRequest("Composite-key endpoint requires composite-key repo.");
 
                 var parts = helper.Build(request ?? new QueryRequest());
+                var includeProperties = request?.Includes is { Length: > 0 }
+                    ? new List<string>(request.Includes)
+                    : null;
                 var keyValues = ResolveCompositeKeys(keys);
                 var entity = await repoComposite.GetByIdAsync(
                     keyValues,
+                    includeProperties,
+                    parts.IncludeGraph,
                     asNoTracking: parts.AsNoTracking,
                     useSplitQuery: parts.UseSplitQuery,
-                    cancellationToken: ct,
-                    includeExpressions: parts.Includes);
+                    cancellationToken: ct);
 
                 return entity is not null ? Results.Ok(entity) : Results.NotFound();
             });

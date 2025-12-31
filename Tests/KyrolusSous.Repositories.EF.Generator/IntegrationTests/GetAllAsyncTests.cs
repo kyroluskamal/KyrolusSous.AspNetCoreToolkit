@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Linq;
 
 namespace KyrolusSous.Repositories.EF.Generator.IntegrationTests;
 
@@ -92,5 +93,88 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
         products[1].OrderLines.ShouldNotBeNull();
         products[0].Reviews.ShouldNotBeNull();
         products[1].Reviews.ShouldNotBeNull();
+    }
+
+    [Fact(DisplayName = "GetAllAsync returns entities with Filter that results in no entities")]
+    public async Task GetAllAsync_Filtering_ReturnsNoEntities()
+    {
+
+        // Arrange
+        var queyrequest = new QueryRequest(
+            Filters: [new FilterClause("StockQuantity", "gt", 1000.ToString())]
+            );
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/product?request={JsonSerializer.Serialize(queyrequest, JsonOptions)}");
+        // Act
+        var response = await _client.SendAsync(request);
+        // Assert
+        response.EnsureSuccessStatusCode();
+        var content = await response.Content.ReadAsStringAsync();
+        var products = JsonSerializer.Deserialize<List<Product>>(content, JsonOptions);
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(0);
+    }
+    [Fact(DisplayName = "GetAllAsync returns entities with multiple Filters")]
+    public async Task GetAllAsync_MultipleFilters_ReturnsEntitiesWithMultipleFilters()
+    {
+
+        // Arrange
+        var queyrequest = new QueryRequest(
+            Filters: [
+                new FilterClause("StockQuantity", "gt", 25.ToString()),
+                new FilterClause("Price", "lt", 50.ToString())
+            ],
+            OrderBy: [new OrderClause("StockQuantity")]
+            );
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/product?request={JsonSerializer.Serialize(queyrequest, JsonOptions)}");
+        // Act
+        var response = await _client.SendAsync(request);
+        // Assert
+        response.EnsureSuccessStatusCode();
+        var content = await response.Content.ReadAsStringAsync();
+        var products = JsonSerializer.Deserialize<List<Product>>(content, JsonOptions);
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(1);
+        products[0].StockQuantity.ShouldBeGreaterThan(25);
+        products[0].Price.ShouldBeLessThan(50);
+    }
+
+    [Fact(DisplayName = "GetAllAsync returns entities with Descending Ordering")]
+    public async Task GetAllAsync_DescendingOrdering_ReturnsEntitiesWithDescendingOrdering()
+    {
+
+        // Arrange
+        var queyrequest = new QueryRequest(OrderBy: [new OrderClause("StockQuantity", true)]);
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/product?request={JsonSerializer.Serialize(queyrequest, JsonOptions)}");
+
+        // Act
+        var response = await _client.SendAsync(request);
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        var content = await response.Content.ReadAsStringAsync();
+        var orders = JsonSerializer.Deserialize<List<Product>>(content, JsonOptions);
+        orders.ShouldNotBeNull();
+        orders.Select(p => p.StockQuantity).ShouldBeInOrder(SortDirection.Descending);
+    }
+
+    [Fact(DisplayName = "GetAllAsync returns entities with multiple Include Graphs")]
+    public async Task GetAllAsync_MultipleIncludeGraphs_ReturnsEntitiesWithMultipleIncludeGraphs()
+    {
+
+        // Arrange
+        var queyrequest = new QueryRequest(Includes: ["ProductCategories.Category", "OrderLines.Order"]);
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/product?request={JsonSerializer.Serialize(queyrequest, JsonOptions)}");
+
+        // Act
+        var response = await _client.SendAsync(request);    
+        // Assert
+        response.EnsureSuccessStatusCode();
+        var content = await response.Content.ReadAsStringAsync();
+        var products = JsonSerializer.Deserialize<List<Product>>(content, JsonOptions);
+        products.ShouldNotBeNull();
+        products[0].ProductCategories.ShouldNotBeNull();
+        products[0].ProductCategories.First().Category.ShouldNotBeNull();
+        products[0].OrderLines.ShouldNotBeNull();
+        products[0].OrderLines.First().Order.ShouldNotBeNull();
     }
 }

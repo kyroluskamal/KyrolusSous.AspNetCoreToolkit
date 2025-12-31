@@ -1,6 +1,6 @@
 using KyrolusSous.Repositories.Marten.Abstractions.Interfaces;
 
-namespace KyrolusSous.Repositories.Marten.Runtime.Repository;
+namespace KyrolusSous.Repositories.Marten.Abstractions;
 
 public sealed record KyrolusMartenRepositoryDependencies(
     IKyrolusMartenObserver? Observer = null,

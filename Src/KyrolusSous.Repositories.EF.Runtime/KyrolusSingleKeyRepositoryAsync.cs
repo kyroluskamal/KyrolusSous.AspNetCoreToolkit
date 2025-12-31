@@ -37,8 +37,13 @@ public class KyrolusSingleKeyRepositoryAsync<TDbContext, TEntity, TKey> :
     public Task<TEntity?> GetByIdAsync(TKey id,
         List<string>? includeProperties = null, IncludeGraph<TEntity>? includeGraph = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default)
     {
-        var includes = BuildIncludes(includeProperties, includeGraph);
-        return GetByIdInternalAsync([id], asNoTracking, useSplitQuery, cancellationToken, includes);
+        var hasIncludeProps = includeProperties is { Count: > 0 } && includeProperties.Any(p => !string.IsNullOrWhiteSpace(p));
+        if (!hasIncludeProps)
+        {
+            var includes = includeGraph?.Includes?.ToArray() ?? Array.Empty<Expression<Func<TEntity, object?>>>();
+            return GetByIdInternalAsync([id], asNoTracking, useSplitQuery, cancellationToken, includes);
+        }
+        return GetByIdInternalWithStringIncludesAsync([id], includeProperties!, includeGraph, asNoTracking, useSplitQuery, cancellationToken);
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]

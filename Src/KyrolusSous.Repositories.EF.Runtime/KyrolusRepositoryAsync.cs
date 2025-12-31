@@ -43,7 +43,8 @@ public class KyrolusRepositoryAsync<
     protected readonly bool asNoTrackingDefault;
     protected readonly string[] keyPropertyNames;
     protected static readonly ConcurrentDictionary<Type, Func<TDbContext, TKey, IAsyncEnumerable<TEntity>>> CompiledById = new();
-    private static readonly ConcurrentDictionary<(Type Type, bool AsNoTracking, bool UseSplit), Func<TDbContext, IAsyncEnumerable<TEntity>>> CompiledGetAll = new();
+    private static readonly ConcurrentDictionary<(Type Type, bool AsNoTracking, bool UseSplit, bool SoftDelete, string SoftDeleteProperty, string DefaultIncludesKey), Func<TDbContext, IAsyncEnumerable<TEntity>>> CompiledGetAll = new();
+    protected virtual Expression<Func<TEntity, object?>>[] DefaultIncludes => Array.Empty<Expression<Func<TEntity, object?>>>();
 
     public KyrolusRepositoryAsync(
         TDbContext db,
@@ -65,8 +66,10 @@ public class KyrolusRepositoryAsync<
         cacheAllKey = $"{typeof(TEntity).Name}:all:compiled";
         globalQueryFilter = this.policy.GlobalQueryFilter as Func<IQueryable<TEntity>, IQueryable<TEntity>>;
         softDeleteEnabled = this.policy.EnableSoftDeleteDefault ?? false;
-        softDeleteProperty = "IsDeleted";
-        rowVersionProperty = null;
+        softDeleteProperty = string.IsNullOrWhiteSpace(this.policy.SoftDeleteProperty)
+            ? "IsDeleted"
+            : this.policy.SoftDeleteProperty!;
+        rowVersionProperty = this.policy.RowVersionProperty;
         splitQueryDefault = this.policy.UseSplitQueryDefault ?? false;
         asNoTrackingDefault = this.policy.AsNoTrackingDefault ?? true;
         keyPropertyNames = GetPrimaryKeyNames();
@@ -120,6 +123,66 @@ public class KyrolusRepositoryAsync<
     }
     #endregion
 
+    private static Func<TDbContext, IAsyncEnumerable<TEntity>> BuildCompiledGetAll(bool asNoTracking, bool useSplit, bool useSoftDelete, string softDeleteProperty, Expression<Func<TEntity, object?>>[] defaultIncludes)
+    {
+        var ctxParam = Expression.Parameter(typeof(TDbContext), "ctx");
+        var setMethod = typeof(DbContext).GetMethods();
+        var setGeneric = setMethod.Single(m => m.Name == nameof(DbContext.Set) && m.IsGenericMethod && m.GetParameters().Length == 0)
+            .MakeGenericMethod(typeof(TEntity));
+        Expression query = Expression.Call(ctxParam, setGeneric);
+
+        if (useSoftDelete)
+        {
+            var entityParam = Expression.Parameter(typeof(TEntity), "e");
+            var efPropertyMethod = typeof(Microsoft.EntityFrameworkCore.EF).GetMethod(nameof(Microsoft.EntityFrameworkCore.EF.Property))!
+                .MakeGenericMethod(typeof(bool));
+            var propAccess = Expression.Call(efPropertyMethod, entityParam, Expression.Constant(softDeleteProperty));
+            var predicate = Expression.Lambda<Func<TEntity, bool>>(Expression.Not(propAccess), entityParam);
+            var whereMethod = typeof(Queryable).GetMethods()
+                .Single(m => m.Name == nameof(Queryable.Where) && m.GetParameters().Length == 2)
+                .MakeGenericMethod(typeof(TEntity));
+            query = Expression.Call(whereMethod, query, predicate);
+        }
+
+        if (defaultIncludes.Length > 0)
+        {
+            var includeMethod = typeof(EntityFrameworkQueryableExtensions).GetMethods()
+                .Single(m => m.Name == nameof(EntityFrameworkQueryableExtensions.Include) && m.GetParameters().Length == 2)
+                .MakeGenericMethod(typeof(TEntity), typeof(object));
+            foreach (var include in defaultIncludes)
+            {
+                var includeConst = Expression.Constant(include, typeof(Expression<Func<TEntity, object?>>));
+                query = Expression.Call(includeMethod, query, includeConst);
+            }
+        }
+
+        if (asNoTracking)
+        {
+            var asNoTrackingMethod = typeof(EntityFrameworkQueryableExtensions).GetMethods()
+                .Single(m => m.Name == nameof(EntityFrameworkQueryableExtensions.AsNoTracking) && m.GetParameters().Length == 1)
+                .MakeGenericMethod(typeof(TEntity));
+            query = Expression.Call(asNoTrackingMethod, query);
+        }
+
+        if (useSplit)
+        {
+            var asSplitMethod = typeof(RelationalQueryableExtensions).GetMethods()
+                .Single(m => m.Name == nameof(RelationalQueryableExtensions.AsSplitQuery) && m.GetParameters().Length == 1)
+                .MakeGenericMethod(typeof(TEntity));
+            query = Expression.Call(asSplitMethod, query);
+        }
+
+        var lambda = Expression.Lambda<Func<TDbContext, IQueryable<TEntity>>>(query, ctxParam);
+        return Microsoft.EntityFrameworkCore.EF.CompileAsyncQuery(lambda);
+    }
+
+    private string GetDefaultIncludesKey()
+    {
+        var includes = DefaultIncludes;
+        if (includes.Length == 0) return string.Empty;
+        return string.Join("|", includes.Select(i => i.ToString()));
+    }
+
     #region Protected key helpers
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     protected async Task<TEntity?> GetByIdInternalAsync(object?[] keyValues, bool? asNoTracking = null,
@@ -165,12 +228,60 @@ public class KyrolusRepositoryAsync<
         return [.. includes];
     }
 
+    protected async Task<TEntity?> GetByIdInternalWithStringIncludesAsync(object?[] keyValues, List<string> includeProperties,
+        IncludeGraph<TEntity>? includeGraph, bool? asNoTracking, bool? useSplitQuery, CancellationToken cancellationToken)
+    {
+        var sw = Stopwatch.StartNew();
+        Exception? exception = null;
+        await NotifyBeforeAsync("GetByIdAsync", keyValues, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var query = ApplyGlobalFilter(set.AsQueryable());
+            if (softDeleteEnabled) query = ApplySoftDelete(query);
+            if (asNoTracking ?? asNoTrackingDefault) query = query.AsNoTracking();
+            if (useSplitQuery ?? splitQueryDefault) query = query.AsSplitQuery();
+            var defaultIncludes = DefaultIncludes;
+            if (defaultIncludes.Length > 0)
+            {
+                query = ApplyIncludes(query, defaultIncludes);
+            }
+
+            foreach (var includeProperty in includeProperties)
+            {
+                if (string.IsNullOrWhiteSpace(includeProperty)) continue;
+                query = query.Include(includeProperty);
+            }
+            if (includeGraph?.Includes is not null && includeGraph.Includes.Count > 0)
+            {
+                query = ApplyIncludes(query, includeGraph.Includes);
+            }
+
+            var predicate = BuildKeyPredicate(keyValues, keyPropertyNames);
+            return await query.FirstOrDefaultAsync(predicate, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            exception = ex;
+            throw;
+        }
+        finally
+        {
+            sw.Stop();
+            await NotifyAfterAsync("GetByIdAsync", keyValues, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     protected async Task<TEntity?> MaterializeByIdAsync(object?[] keyValues, bool? asNoTracking, bool? useSplitQuery, Expression<Func<TEntity, object?>>[] includeExpressions, CancellationToken ct)
     {
         var query = ApplyGlobalFilter(set.AsQueryable());
         if (softDeleteEnabled) query = ApplySoftDelete(query);
         if (asNoTracking ?? asNoTrackingDefault) query = query.AsNoTracking();
         if (useSplitQuery ?? splitQueryDefault) query = query.AsSplitQuery();
+        var defaultIncludes = DefaultIncludes;
+        if (defaultIncludes.Length > 0)
+        {
+            query = ApplyIncludes(query, defaultIncludes);
+        }
         if (includeExpressions is not null && includeExpressions.Length > 0)
             query = ApplyIncludes(query, includeExpressions);
 
@@ -184,11 +295,48 @@ public class KyrolusRepositoryAsync<
     public async Task<IEnumerable<TEntity>> GetAllAsync(Expression<Func<TEntity, bool>>? filter = null, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
         List<string>? includeProperties = null, IncludeGraph<TEntity>? includeGraph = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default)
     {
-        var includes = new List<Expression<Func<TEntity, object?>>>();
-        var converted = KyrolusEFRepositoryBase<TEntity>.ConvertIncludePropertiesToExpressions(includeProperties);
-        if (converted is not null) includes.AddRange(converted);
-        if (includeGraph?.Includes is not null) includes.AddRange(includeGraph.Includes);
-        return await GetAllAsync(filter, orderBy, asNoTracking, useSplitQuery, cancellationToken, [.. includes]).ConfigureAwait(false);
+        var sw = Stopwatch.StartNew();
+        Exception? exception = null;
+        await NotifyBeforeAsync("GetAllAsync", filter, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var query = ApplyGlobalFilter(set.AsQueryable());
+            if (softDeleteEnabled) query = ApplySoftDelete(query);
+            if (asNoTracking ?? asNoTrackingDefault) query = query.AsNoTracking();
+            if (useSplitQuery ?? splitQueryDefault) query = query.AsSplitQuery();
+            if (filter is not null) query = query.Where(filter);
+            var defaultIncludes = DefaultIncludes;
+            if (defaultIncludes.Length > 0)
+            {
+                query = ApplyIncludes(query, defaultIncludes);
+            }
+            if (includeProperties is not null)
+            {
+                foreach (var includeProperty in includeProperties)
+                {
+                    if (string.IsNullOrWhiteSpace(includeProperty)) continue;
+                    query = query.Include(includeProperty);
+                }
+            }
+            if (includeGraph?.Includes is not null && includeGraph.Includes.Count > 0)
+            {
+                query = ApplyIncludes(query, includeGraph.Includes);
+            }
+            if (orderBy is not null) query = orderBy(query);
+
+            var items = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+            return items;
+        }
+        catch (Exception ex)
+        {
+            exception = ex;
+            throw;
+        }
+        finally
+        {
+            sw.Stop();
+            await NotifyAfterAsync("GetAllAsync", filter, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
@@ -207,6 +355,11 @@ public class KyrolusRepositoryAsync<
             if (asNoTracking ?? asNoTrackingDefault) query = query.AsNoTracking();
             if (useSplitQuery ?? splitQueryDefault) query = query.AsSplitQuery();
             if (filter is not null) query = query.Where(filter);
+            var defaultIncludes = DefaultIncludes;
+            if (defaultIncludes.Length > 0)
+            {
+                query = ApplyIncludes(query, defaultIncludes);
+            }
             if (includeExpressions is not null && includeExpressions.Length > 0) query = ApplyIncludes(query, includeExpressions);
             if (orderBy is not null) query = orderBy(query);
 
@@ -241,6 +394,9 @@ public class KyrolusRepositoryAsync<
     {
         var requestedNoTracking = asNoTracking ?? asNoTrackingDefault;
         var requestedSplit = useSplitQuery ?? splitQueryDefault;
+        var useSoftDelete = softDeleteEnabled && !string.IsNullOrWhiteSpace(softDeleteProperty);
+        var defaultIncludes = DefaultIncludes;
+        var defaultIncludesKey = GetDefaultIncludesKey();
 
         // Fallback to regular path when global filter or non-trivial filter
         var isTrivialFilter = filter is null
@@ -251,13 +407,9 @@ public class KyrolusRepositoryAsync<
             return [.. items];
         }
 
-        var key = (typeof(TEntity), requestedNoTracking, requestedSplit);
-        var del = CompiledGetAll.GetOrAdd(key, static tuple =>
-        {
-            var (_, track, split) = tuple;
-            return Microsoft.EntityFrameworkCore.EF.CompileAsyncQuery(
-                (TDbContext ctx) => ApplyCompiledQueryInternal(ctx, track, split));
-        });
+        var key = (typeof(TEntity), requestedNoTracking, requestedSplit, useSoftDelete, softDeleteProperty, defaultIncludesKey);
+        var del = CompiledGetAll.GetOrAdd(key, _ =>
+            BuildCompiledGetAll(requestedNoTracking, requestedSplit, useSoftDelete, softDeleteProperty, defaultIncludes));
 
         Exception? exception = null;
         var sw = Stopwatch.StartNew();
@@ -500,6 +652,11 @@ public class KyrolusRepositoryAsync<
         if (asNoTracking) query = query.AsNoTracking();
         if (useSplitQuery) query = query.AsSplitQuery();
         if (filter is not null) query = query.Where(filter);
+        var defaultIncludes = DefaultIncludes;
+        if (defaultIncludes.Length > 0)
+        {
+            query = ApplyIncludes(query, defaultIncludes);
+        }
         if (includeExpressions is not null && includeExpressions.Length > 0) query = ApplyIncludes(query, includeExpressions);
         if (orderBy is not null) query = orderBy(query);
 
@@ -542,6 +699,11 @@ public class KyrolusRepositoryAsync<
             if (softDeleteEnabled) query = ApplySoftDelete(query);
             if (specification.AsNoTracking) query = query.AsNoTracking();
             if (specification.Filter is not null) query = query.Where(specification.Filter);
+            var defaultIncludes = DefaultIncludes;
+            if (defaultIncludes.Length > 0)
+            {
+                query = ApplyIncludes(query, defaultIncludes);
+            }
             if (specification.Includes is not null) query = ApplyIncludes(query, specification.Includes);
             if (specification is IKyrolusHasSplitQuery split && split.UseSplitQuery) query = query.AsSplitQuery();
             if (specification.OrderBy is not null) query = specification.OrderBy(query);
@@ -578,6 +740,11 @@ public class KyrolusRepositoryAsync<
             if (softDeleteEnabled) query = ApplySoftDelete(query);
             if (specification.AsNoTracking) query = query.AsNoTracking();
             if (specification.Filter is not null) query = query.Where(specification.Filter);
+            var defaultIncludes = DefaultIncludes;
+            if (defaultIncludes.Length > 0)
+            {
+                query = ApplyIncludes(query, defaultIncludes);
+            }
             if (specification.Includes is not null) query = ApplyIncludes(query, specification.Includes);
             if (specification is IKyrolusHasSplitQuery split && split.UseSplitQuery) query = query.AsSplitQuery();
 
@@ -628,6 +795,11 @@ public class KyrolusRepositoryAsync<
             if (useSplitQuery ?? splitQueryDefault) query = query.AsSplitQuery();
             if (filter is not null) query = query.Where(filter);
             if (specification.Filter is not null) query = query.Where(specification.Filter);
+            var defaultIncludes = DefaultIncludes;
+            if (defaultIncludes.Length > 0)
+            {
+                query = ApplyIncludes(query, defaultIncludes);
+            }
             if (includeExpressions is not null && includeExpressions.Length > 0) query = ApplyIncludes(query, includeExpressions);
             if (specification.Includes is not null) query = ApplyIncludes(query, specification.Includes);
 

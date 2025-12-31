@@ -1,6 +1,4 @@
 using KyrolusSous.Repositories.EF.Abstractions;
-using System.Text.Json.Serialization;
-
 namespace KyrolusSous.Repositories.EF.Generator.TestApp.Models;
 
 [KyrolusEfRepository(
@@ -25,10 +23,7 @@ public class Product : AuditableSoftDeletableEntity
     public int StockQuantity { get; set; }
     public bool IsActive { get; set; } = true;
     public byte[]? RowVersion { get; set; }
-    [JsonIgnore]
     public virtual ICollection<ProductCategory> ProductCategories { get; set; } = [];
-    [JsonIgnore]
     public virtual ICollection<Review> Reviews { get; set; } = [];
-    [JsonIgnore]
     public virtual ICollection<OrderLine> OrderLines { get; set; } = [];
 }

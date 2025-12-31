@@ -41,6 +41,7 @@ public static class KyrolusMartenRuntimeServiceCollectionExtensions
         services.AddScoped<IKyrolusMartenEventStore, KyrolusMartenEventStore>();
         services.AddScoped<IKyrolusMartenSagaCoordinator, KyrolusMartenSagaCoordinator>();
         services.AddScoped<IKyrolusMartenProjectionOrchestrator, KyrolusMartenProjectionOrchestrator>();
+        services.AddScoped<IKyrolusMartenProjectionManager, KyrolusMartenProjectionManager>();
         return services;
     }
 

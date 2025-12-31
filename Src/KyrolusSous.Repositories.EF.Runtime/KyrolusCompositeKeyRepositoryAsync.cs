@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Diagnostics.CodeAnalysis;
 using KyrolusSous.Repositories.EF.Abstractions;
@@ -30,8 +31,13 @@ public class KyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity>(
     public Task<TEntity?> GetByIdAsync(object?[] keyValues,
         List<string>? includeProperties = null, IncludeGraph<TEntity>? includeGraph = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default)
     {
-        var includes = BuildIncludes(includeProperties, includeGraph);
-        return GetByIdInternalAsync(keyValues ?? [], asNoTracking, useSplitQuery, cancellationToken, includes);
+        var hasIncludeProps = includeProperties is { Count: > 0 } && includeProperties.Any(p => !string.IsNullOrWhiteSpace(p));
+        if (!hasIncludeProps)
+        {
+            var includes = includeGraph?.Includes?.ToArray() ?? Array.Empty<Expression<Func<TEntity, object?>>>();
+            return GetByIdInternalAsync(keyValues ?? [], asNoTracking, useSplitQuery, cancellationToken, includes);
+        }
+        return GetByIdInternalWithStringIncludesAsync(keyValues ?? [], includeProperties!, includeGraph, asNoTracking, useSplitQuery, cancellationToken);
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]

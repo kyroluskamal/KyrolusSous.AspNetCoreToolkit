@@ -5,12 +5,17 @@ using Microsoft.EntityFrameworkCore;
 using KyrolusSous.Repositories.EF.Generator.TestApp.API;
 using KyrolusSous.Repositories.EF.Generator.TestApp.Models;
 using KyrolusSous.Repositories.EF.Generator.TestApp.Repositories;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+});
 
 // Keep a single opened in-memory SQLite connection for the app lifetime
 builder.Services.AddSingleton(_ =>

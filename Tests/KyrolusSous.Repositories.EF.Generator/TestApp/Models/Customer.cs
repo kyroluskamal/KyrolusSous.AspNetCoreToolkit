@@ -1,6 +1,4 @@
 using KyrolusSous.Repositories.EF.Abstractions;
-using System.Text.Json.Serialization;
-
 namespace KyrolusSous.Repositories.EF.Generator.TestApp.Models;
 
 [KyrolusEfRepository(
@@ -23,6 +21,5 @@ public class Customer : AuditableSoftDeletableEntity, IHasTenant
     public Guid TenantId { get; set; }
     public virtual Tenant? Tenant { get; set; }
     public virtual ICollection<Order> Orders { get; set; } = [];
-    [JsonIgnore]
     public virtual ICollection<Review> Reviews { get; set; } = [];
 }

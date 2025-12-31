@@ -1,5 +1,3 @@
-using System;
-
 namespace KyrolusSous.Repositories.EF.Abstractions.Interfaces;
 
 public enum KyrolusRepositoryOperationStatus
