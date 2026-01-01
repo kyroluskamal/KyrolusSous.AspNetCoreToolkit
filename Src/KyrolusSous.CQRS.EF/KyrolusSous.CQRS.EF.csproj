@@ -11,14 +11,9 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\KyrolusSous.CQRS.Abstractions\KyrolusSous.CQRS.Abstractions.csproj" />
-    <ProjectReference Include="..\KyrolusSous.ExceptionHandling\KyrolusSous.ExceptionHandling.csproj" />
     <ProjectReference Include="..\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj" />
-    <ProjectReference Include="..\KyrolusSous.RedisCaching\KyrolusSous.RedisCaching.csproj" />
     <ProjectReference Include="..\KyrolusSous.Repositories.EF.Abstractions\KyrolusSous.Repositories.EF.Abstractions.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
-    <PackageReference Include="Mapster" Version="7.4.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.1" />
   </ItemGroup>
 </Project>

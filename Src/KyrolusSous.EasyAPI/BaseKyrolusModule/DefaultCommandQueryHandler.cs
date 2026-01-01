@@ -45,7 +45,14 @@ public class DefaultCommandQueryHandler<TResponse, TModel, TKey>(IKyrolusMapper 
             getByIdQuery.IncludeProperties?.AddRange(EndpointConfig.IncludeProps);
         if (cacheable.HasValue)
             getByIdQuery.Cacheable = cacheable.Value;
-        dynamic result = await mediator.SendAsync(getByIdQuery);
+        var result = await mediator.SendAsync((IKyrolusQuery<TResponse?>)getByIdQuery);
+        if (result is null)
+        {
+            return Results.NotFound(config.UseEnrichedCustomResponse
+                ? new Response((int)HttpStatusCode.NotFound, $"{typeof(TModel).Name} with id {id} not found", false)
+                : null);
+        }
+
         return Results.Ok(kyrolusMapper.MapResponseToViewModel(result, GetTheViewModelType(EndpointNames.GetById),
                          (int)HttpStatusCode.OK, $"Successfully retrieved {typeof(TModel).Name} with id {id}"));
     }

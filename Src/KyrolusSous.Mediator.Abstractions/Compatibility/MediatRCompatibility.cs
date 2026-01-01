@@ -10,8 +10,7 @@ public interface IRequest<out TResponse> : IKyrolusRequest<TResponse> { }
 public interface IRequest : IKyrolusRequest<Unit> { }
 
 public interface IRequestHandler<in TRequest, TResponse> : IKyrolusRequestHandler<TRequest, TResponse>
-    where TRequest : IRequest<TResponse>
-    where TResponse : notnull { }
+    where TRequest : IRequest<TResponse> { }
 
 public interface IStreamRequest<out TResponse> : IKyrolusStreamRequest<TResponse> { }
 

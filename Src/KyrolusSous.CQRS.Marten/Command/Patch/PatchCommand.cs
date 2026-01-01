@@ -6,7 +6,7 @@ public class PatchCommand<TResponse, TKey>(
     Dictionary<string, object> updates,
     string? tenantId = null,
     bool cacheable = false)
-    : CacheableRequest(cacheable), IKyrolusCommand<MartenEntityResult<TResponse>>
+    : CacheableRequest(cacheable), IKyrolusCommand<MartenEntityResult<TResponse>?>
     where TResponse : class
     where TKey : IEquatable<TKey>
 {

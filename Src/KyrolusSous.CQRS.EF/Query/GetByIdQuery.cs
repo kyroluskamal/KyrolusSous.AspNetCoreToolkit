@@ -1,6 +1,6 @@
 namespace KyrolusSous.CQRS.EF.Query;
 
-public class GetByIdQuery<TResponse, TKey>(TKey id, bool cacheable = false) : CacheableRequest(cacheable), IKyrolusQuery<TResponse>
+public class GetByIdQuery<TResponse, TKey>(TKey id, bool cacheable = false) : CacheableRequest(cacheable), IKyrolusQuery<TResponse?>
     where TResponse : class
     where TKey : IEquatable<TKey>
 {

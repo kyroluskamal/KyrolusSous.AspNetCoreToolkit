@@ -18,7 +18,7 @@ where TResponse : class
     public string ApiName { get; set; }
     public string Prefix { get; set; }
     public string Route { get; set; }
-    public IKyrolusQuery<TResponse> QueryById { get; set; }
+    public IKyrolusQuery<TResponse?> QueryById { get; set; }
     public IKyrolusQuery<IEnumerable<TResponse>> QueryAll { get; set; }
     public IKyrolusQuery<IEnumerable<TResponse>> QueryByProperty { get; set; }
     public IKyrolusCommand<TResponse> AddCommand { get; set; }

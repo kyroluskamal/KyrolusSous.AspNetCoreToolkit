@@ -11,7 +11,7 @@ public class ApiKyrolusApiConfig<TResponse> : IKyrolusApiConfig<TResponse>
     public string ApiName { get; set; } = default!;
     public string Prefix { get; set; } = "api";
     public string Route { get; set; } = default!;
-    public IKyrolusQuery<TResponse> QueryById { get; set; } = default!;
+    public IKyrolusQuery<TResponse?> QueryById { get; set; } = default!;
     public IKyrolusQuery<IEnumerable<TResponse>> QueryAll { get; set; } = default!;
     public IKyrolusQuery<IEnumerable<TResponse>> QueryByProperty { get; set; } = default!;
     public IKyrolusCommand<TResponse> AddCommand { get; set; } = default!;
