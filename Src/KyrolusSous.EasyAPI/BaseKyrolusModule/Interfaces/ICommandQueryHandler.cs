@@ -1,4 +1,4 @@
-using KyrolusSous.CQRS.Base.Command.Remove;
+using KyrolusSous.CQRS.EF.Command.Remove;
 
 namespace KyrolusSous.EasyAPI.BaseKyrolusModule.Interfaces;
 

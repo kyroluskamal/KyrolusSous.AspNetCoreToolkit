@@ -1,4 +1,4 @@
-﻿namespace KyrolusSous.Repositories.EF.Generator.TestApp.Models;
+namespace KyrolusSous.Repositories.EF.Generator.TestApp.Models;
 
 public class AuditableSoftDeletableEntity : AuditableEntity
 {

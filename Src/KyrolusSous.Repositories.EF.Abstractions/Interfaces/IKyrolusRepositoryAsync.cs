@@ -2,7 +2,7 @@ namespace KyrolusSous.Repositories.EF.Abstractions.Interfaces;
 
 public interface IKyrolusRepositoryAsync<TDbcontext, TEntity, TKey>
     where TEntity : class
-    where TDbcontext : class
+    where TDbcontext : DbContext
 {
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     Task<IEnumerable<TEntity>> GetAllAsync(Expression<Func<TEntity, bool>>? filter = null, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,

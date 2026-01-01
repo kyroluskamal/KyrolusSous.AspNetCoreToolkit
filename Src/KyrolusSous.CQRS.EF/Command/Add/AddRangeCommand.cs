@@ -1,0 +1,8 @@
+namespace KyrolusSous.CQRS.EF.Command.Add;
+
+public class AddRangeCommand<TResponse>(IEnumerable<TResponse> entities, bool cacheable = false)
+: CacheableRequest(cacheable), IKyrolusCommand<IEnumerable<TResponse>>
+        where TResponse : class
+{
+    public IEnumerable<TResponse> Entities { get; set; } = entities;
+}

@@ -1,4 +1,4 @@
-﻿global using Microsoft.Extensions.Hosting;
+global using Microsoft.Extensions.Hosting;
 global using Moq;
 global using Serilog;
 global using Shouldly;

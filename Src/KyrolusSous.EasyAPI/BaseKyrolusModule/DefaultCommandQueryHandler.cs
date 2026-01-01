@@ -1,8 +1,8 @@
-using KyrolusSous.CQRS.Base.Command.Add;
-using KyrolusSous.CQRS.Base.Command.Patch;
-using KyrolusSous.CQRS.Base.Command.Remove;
-using KyrolusSous.CQRS.Base.Command.Update;
-using KyrolusSous.CQRS.Base.Query;
+using KyrolusSous.CQRS.EF.Command.Add;
+using KyrolusSous.CQRS.EF.Command.Patch;
+using KyrolusSous.CQRS.EF.Command.Remove;
+using KyrolusSous.CQRS.EF.Command.Update;
+using KyrolusSous.CQRS.EF.Query;
 using KyrolusSous.EasyAPI.BaseKyrolusModule.Enum;
 using KyrolusSous.EasyAPI.BaseKyrolusModule.Interfaces;
 using KyrolusSous.ExceptionHandling.ClasesAndHelpers;
@@ -11,12 +11,12 @@ using Newtonsoft.Json;
 namespace KyrolusSous.EasyAPI.BaseKyrolusModule;
 
 public class DefaultCommandQueryHandler<TResponse, TModel, TKey>(IKyrolusMapper kyrolusMapper,
- ISourceSender mediator, IKyrolusApiConfig<TResponse> config) : ICommandQueryHandler<TResponse, TModel, TKey>
+ IKyrolusMediatorSender mediator, IKyrolusApiConfig<TResponse> config) : ICommandQueryHandler<TResponse, TModel, TKey>
     where TResponse : class
     where TModel : class
     where TKey : notnull, IEquatable<TKey>
 {
-    protected ISourceSender mediator = mediator;
+    protected IKyrolusMediatorSender mediator = mediator;
     public async Task<IResult> HandleGetAllAsync([FromQuery] string? filter = null, [FromQuery] string? includedProps = null,
     [FromQuery] bool? cacheable = null)
     {

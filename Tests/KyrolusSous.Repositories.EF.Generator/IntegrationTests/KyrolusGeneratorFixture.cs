@@ -1,4 +1,4 @@
-﻿namespace KyrolusSous.Repositories.EF.Generator.IntegrationTests;
+namespace KyrolusSous.Repositories.EF.Generator.IntegrationTests;
 
 public class KyrolusGeneratorFixture(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>, IAsyncLifetime
 {

@@ -1,4 +1,4 @@
-﻿namespace KyrolusSous.StaticFunctions
+namespace KyrolusSous.StaticFunctions
 {
     public static class EntityAdministrationPropNames
     {

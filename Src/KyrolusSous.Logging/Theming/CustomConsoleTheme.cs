@@ -1,4 +1,4 @@
-﻿global using Serilog.Sinks.SystemConsole.Themes;
+global using Serilog.Sinks.SystemConsole.Themes;
 
 namespace KyrolusSous.Logging.Theming;
 

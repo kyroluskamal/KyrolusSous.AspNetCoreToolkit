@@ -1,4 +1,4 @@
-﻿namespace KyrolusSous.IRabbitMQUtilsInterfaces.Interfaces;
+namespace KyrolusSous.IRabbitMQUtilsInterfaces.Interfaces;
 
 public  interface IQueueSetup
 {

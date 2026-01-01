@@ -1,4 +1,4 @@
-﻿// Src/KyrolusSous.Swagger/SwaggerServiceOptions.cs
+// Src/KyrolusSous.Swagger/SwaggerServiceOptions.cs
 using System.Reflection;
 
 namespace KyrolusSous.Swagger;

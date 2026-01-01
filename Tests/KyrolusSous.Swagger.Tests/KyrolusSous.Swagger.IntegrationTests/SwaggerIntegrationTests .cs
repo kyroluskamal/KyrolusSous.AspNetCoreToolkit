@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Mvc.Testing;
 using System.Net;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;

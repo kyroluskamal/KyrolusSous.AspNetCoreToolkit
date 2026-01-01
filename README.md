@@ -4,6 +4,7 @@ This toolkit bundles Serilog bootstrapping plus Entity Framework repositories (r
 
 ## Contents
 - KyrolusSous.Logging (Serilog bootstrapper)
+- KyrolusSous.Mediator (abstractions + runtime + generator)
 - KyrolusSous.Repositories.EF.Abstractions (contracts, helpers, policies, observer)
 - KyrolusSous.Repositories.EF.Runtime (repository + unit of work implementations)
 - KyrolusSous.Repositories.EF.Generator (source generator for EF repositories)
@@ -66,6 +67,136 @@ app.Run();
 ```
 
 **Tests**: `Tests/KyrolusSous.Logging.Tests` (unit + integration).
+
+---
+
+## KyrolusSous.Mediator (Abstractions + Runtime + Generator)
+Mediator pipeline with requests, commands, queries, notifications, streaming, processors, and exception handling.
+
+**Key concepts**
+- Requests: `IKyrolusRequest<TResponse>` (generic), plus `IKyrolusQuery<TResponse>` and `IKyrolusCommand`/`IKyrolusCommand<TResponse>`.
+- Notifications: `INotification` + `INotificationHandler<T>`.
+- Streaming: `IKyrolusStreamRequest<T>` + `IKyrolusStreamRequestHandler<TRequest,TResponse>`.
+- Pipeline behaviors: `IKyrolusPipelineBehavior<TRequest,TResponse>` (ordered via `PipelineOrderAttribute`).
+- Pre/Post processors: `IKyrolusRequestPreProcessor<TRequest>`, `IKyrolusRequestPostProcessor<TRequest,TResponse>`.
+- Exception pipeline: `IKyrolusRequestExceptionAction<TRequest,TException>` and `IKyrolusRequestExceptionHandler<TRequest,TException,TResponse>`.
+- Publish strategy: `IKyrolusNotificationPublishStrategy` (parallel/sequential) + per-call override.
+
+### Runtime usage (reflection-based scanning)
+Best for non-AOT apps. No generator required.
+```csharp
+using KyrolusSous.Mediator.Runtime.Config;
+using System.Reflection;
+
+builder.Services.AddKyrolusMediatorFromAssemblies(
+    Assembly.GetExecutingAssembly(),
+    typeof(SomeExternalHandler).Assembly);
+
+var mediator = app.Services.GetRequiredService<IKyrolusMediator>();
+```
+
+### Manual DI (AOT-friendly without generator)
+Register handlers explicitly and skip scanning.
+```csharp
+builder.Services.AddKyrolusMediator();
+builder.Services.AddTransient<IKyrolusQueryHandler<GetUserQuery, UserDto>, GetUserHandler>();
+builder.Services.AddTransient<IKyrolusCommandHandler<CreateUserCommand>, CreateUserHandler>();
+builder.Services.AddTransient<INotificationHandler<UserCreated>, UserCreatedHandler>();
+```
+
+### AOT usage (generator)
+Use the generator for static dispatch and AOT-friendly startup.
+```csharp
+builder.Services.AddKyrolusMediator();
+builder.Services.AddKyrolusMediatorGeneratedDispatcher();
+builder.Services.AddKyrolusMediatorHandlers();
+builder.Services.AddKyrolusMediatorNotificationHandlers();
+```
+
+**Choosing a mode**
+- Reflection scanning (`AddKyrolusMediatorFromAssemblies`) = easy, not AOT-friendly.
+- Manual DI = AOT-friendly, but you register handlers yourself.
+- Generator = AOT-friendly, auto-registration and static dispatcher.
+
+### Example handlers
+```csharp
+public sealed record GetUserQuery(Guid Id) : IKyrolusQuery<UserDto>;
+public sealed class GetUserHandler : IKyrolusQueryHandler<GetUserQuery, UserDto>
+{
+    public Task<UserDto> Handle(GetUserQuery request, CancellationToken ct) => /* ... */;
+}
+
+public sealed record CreateUserCommand(string Name) : IKyrolusCommand;
+public sealed class CreateUserHandler : IKyrolusCommandHandler<CreateUserCommand>
+{
+    public Task Handle(CreateUserCommand request, CancellationToken ct) => /* ... */;
+}
+
+public sealed record UserCreated(Guid Id) : INotification;
+public sealed class UserCreatedHandler : INotificationHandler<UserCreated>
+{
+    public Task Handle(UserCreated notification, CancellationToken ct) => /* ... */;
+}
+
+public sealed record ListUsersStream() : IKyrolusStreamRequest<UserDto>;
+public sealed class ListUsersStreamHandler : IKyrolusStreamRequestHandler<ListUsersStream, UserDto>
+{
+    public async IAsyncEnumerable<UserDto> Handle(ListUsersStream request, [EnumeratorCancellation] CancellationToken ct)
+    {
+        yield break;
+    }
+}
+```
+
+### Sending, publishing, and streaming
+```csharp
+var mediator = provider.GetRequiredService<IKyrolusMediator>();
+
+var user = await mediator.SendAsync(new GetUserQuery(id));
+await mediator.SendAsync(new CreateUserCommand("Ali"));
+await mediator.PublishAsync(new UserCreated(id));
+
+await foreach (var item in mediator.StreamAsync(new ListUsersStream(), ct))
+{
+    // process item
+}
+```
+
+### Pipeline behaviors (ordering)
+```csharp
+[PipelineOrder(-100)]
+public sealed class AuditBehavior<TRequest, TResponse> : IKyrolusPipelineBehavior<TRequest, TResponse>
+    where TRequest : IKyrolusRequest<TResponse>
+{
+    public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken ct)
+    {
+        // before
+        var result = await next();
+        // after
+        return result;
+    }
+}
+```
+
+### Publish strategy (parallel vs sequential)
+```csharp
+builder.Services.UseKyrolusMediatorSequentialNotifications(); // or Parallel
+
+var publisher = provider.GetRequiredService<IKyrolusMediatorPublisher>();
+await publisher.PublishAsync(new UserCreated(id), new KyrolusParallelNotificationPublishStrategy(), ct);
+```
+
+### MediatR compatibility (optional)
+Compatibility interfaces are available in:
+`KyrolusSous.Mediator.Abstractions.Compatibility`.
+```csharp
+public sealed record Ping() : KyrolusSous.Mediator.Abstractions.Compatibility.IRequest<Pong>;
+public sealed class PingHandler :
+    KyrolusSous.Mediator.Abstractions.Compatibility.IRequestHandler<Ping, Pong>
+{
+    public Task<Pong> Handle(Ping request, CancellationToken ct) => Task.FromResult(new Pong());
+}
+```
 
 ---
 

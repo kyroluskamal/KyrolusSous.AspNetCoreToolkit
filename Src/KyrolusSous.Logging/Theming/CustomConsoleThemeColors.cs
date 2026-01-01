@@ -1,4 +1,4 @@
-﻿using Serilog.Sinks.SystemConsole.Themes;
+using Serilog.Sinks.SystemConsole.Themes;
 
 namespace KyrolusSous.Logging.Theming;
 public static class CustomConsoleThemeColors

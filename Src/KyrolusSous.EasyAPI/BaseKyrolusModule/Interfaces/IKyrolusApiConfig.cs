@@ -18,17 +18,17 @@ where TResponse : class
     public string ApiName { get; set; }
     public string Prefix { get; set; }
     public string Route { get; set; }
-    public IQuery<TResponse> QueryById { get; set; }
-    public IQuery<IEnumerable<TResponse>> QueryAll { get; set; }
-    public IQuery<IEnumerable<TResponse>> QueryByProperty { get; set; }
-    public ICommand<TResponse> AddCommand { get; set; }
-    public ICommand<IEnumerable<TResponse>> AddRangeCommand { get; set; }
-    public ICommand<TResponse> UpdateCommand { get; set; }
-    public ICommand<TResponse> PatchCommand { get; set; }
-    public ICommand<IEnumerable<TResponse>> UpdateRangeCommand { get; set; }
-    public ICommand<Unit> RemoveCommand { get; set; }
-    public ICommand<IEnumerable<Unit>> RemoveRangeCommand { get; set; }
-    public ICommand<bool> UpdateActiviationStateCommand { get; set; }
+    public IKyrolusQuery<TResponse> QueryById { get; set; }
+    public IKyrolusQuery<IEnumerable<TResponse>> QueryAll { get; set; }
+    public IKyrolusQuery<IEnumerable<TResponse>> QueryByProperty { get; set; }
+    public IKyrolusCommand<TResponse> AddCommand { get; set; }
+    public IKyrolusCommand<IEnumerable<TResponse>> AddRangeCommand { get; set; }
+    public IKyrolusCommand<TResponse> UpdateCommand { get; set; }
+    public IKyrolusCommand<TResponse> PatchCommand { get; set; }
+    public IKyrolusCommand<IEnumerable<TResponse>> UpdateRangeCommand { get; set; }
+    public IKyrolusCommand<Unit> RemoveCommand { get; set; }
+    public IKyrolusCommand<IEnumerable<Unit>> RemoveRangeCommand { get; set; }
+    public IKyrolusCommand<bool> UpdateActiviationStateCommand { get; set; }
 
     public Type GetAllReturnType { get; set; }
     public Type GetByIdReturnType { get; set; }

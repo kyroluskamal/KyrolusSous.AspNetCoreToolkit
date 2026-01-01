@@ -1,4 +1,4 @@
-global using KyrolusSous.SourceMediator.Interfaces;
+global using KyrolusSous.Mediator.Abstractions.Interfaces;
 using KyrolusSous.EasyAPI.BaseKyrolusModule.Enum;
 using KyrolusSous.EasyAPI.BaseKyrolusModule.Interfaces;
 
@@ -11,16 +11,16 @@ public class ApiKyrolusApiConfig<TResponse> : IKyrolusApiConfig<TResponse>
     public string ApiName { get; set; } = default!;
     public string Prefix { get; set; } = "api";
     public string Route { get; set; } = default!;
-    public IQuery<TResponse> QueryById { get; set; } = default!;
-    public IQuery<IEnumerable<TResponse>> QueryAll { get; set; } = default!;
-    public IQuery<IEnumerable<TResponse>> QueryByProperty { get; set; } = default!;
-    public ICommand<TResponse> AddCommand { get; set; } = default!;
-    public ICommand<IEnumerable<TResponse>> AddRangeCommand { get; set; } = default!;
-    public ICommand<TResponse> UpdateCommand { get; set; } = default!;
-    public ICommand<IEnumerable<TResponse>> UpdateRangeCommand { get; set; } = default!;
-    public ICommand<Unit> RemoveCommand { get; set; } = default!;
-    public ICommand<bool> UpdateActiviationStateCommand { get; set; } = default!;
-    public ICommand<IEnumerable<Unit>> RemoveRangeCommand { get; set; } = default!;
+    public IKyrolusQuery<TResponse> QueryById { get; set; } = default!;
+    public IKyrolusQuery<IEnumerable<TResponse>> QueryAll { get; set; } = default!;
+    public IKyrolusQuery<IEnumerable<TResponse>> QueryByProperty { get; set; } = default!;
+    public IKyrolusCommand<TResponse> AddCommand { get; set; } = default!;
+    public IKyrolusCommand<IEnumerable<TResponse>> AddRangeCommand { get; set; } = default!;
+    public IKyrolusCommand<TResponse> UpdateCommand { get; set; } = default!;
+    public IKyrolusCommand<IEnumerable<TResponse>> UpdateRangeCommand { get; set; } = default!;
+    public IKyrolusCommand<Unit> RemoveCommand { get; set; } = default!;
+    public IKyrolusCommand<bool> UpdateActiviationStateCommand { get; set; } = default!;
+    public IKyrolusCommand<IEnumerable<Unit>> RemoveRangeCommand { get; set; } = default!;
     public Type GetAllReturnType { get; set; } = default!;
     public Type GetByIdReturnType { get; set; } = default!;
     public Type AddReturnType { get; set; } = default!;
@@ -36,5 +36,5 @@ public class ApiKyrolusApiConfig<TResponse> : IKyrolusApiConfig<TResponse>
     public IEnumerable<IEndpointConfig> EndpointConfig { get; set; } = [];
     public bool AuthorizeAllEndpoints { get; set; } = false;
     public dynamic? GeneralAuthorizationPolicy { get; set; }
-    public ICommand<TResponse> PatchCommand { get; set; } = default!;
+    public IKyrolusCommand<TResponse> PatchCommand { get; set; } = default!;
 }

@@ -1,4 +1,4 @@
-﻿namespace KyrolusSous.ValidationBase
+namespace KyrolusSous.ValidationBase
 {
     public static class ErrorMessages
     {
