@@ -1019,11 +1019,11 @@ public class KyrolusRepositoryAsync<
             ?? throw new InvalidOperationException($"Entity type '{typeof(TEntity).Name}' not found in the model.");
         var pk = entityType.FindPrimaryKey()
             ?? throw new InvalidOperationException($"Primary key not found for entity type '{typeof(TEntity).Name}'.");
-        return pk.Properties.Select(p => p.Name).ToArray();
+        return [.. pk.Properties.Select(p => p.Name)];
     }
 
     private object?[] GetPrimaryKeyValues(TEntity entity)
-        => keyPropertyNames.Select(k => entity.GetType().GetProperty(k)?.GetValue(entity)).ToArray();
+        => [.. keyPropertyNames.Select(k => entity.GetType().GetProperty(k)?.GetValue(entity))];
 
     private void UpdateEntityProperties(TEntity source, TEntity target)
     {

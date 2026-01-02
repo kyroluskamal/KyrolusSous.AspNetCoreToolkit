@@ -3,7 +3,7 @@ global using Moq;
 global using Serilog;
 global using Shouldly;
 using Serilog.Context;
-using static KyrolusSous.Logging.LoggingOptions;
+using static KyrolusSous.Logging.Serilog.LoggingOptions;
 namespace KyrolusSous.Logging.Tests;
 #pragma warning disable S2094
 public class NotAnEnricher { }
@@ -209,4 +209,5 @@ public class LoggerUnitTests
         act.ShouldThrow<Exception>();
     }
 }
+
 

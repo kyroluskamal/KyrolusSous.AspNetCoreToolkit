@@ -1,5 +1,5 @@
 using System.Text.Json;
-using KyrolusSous.ExceptionHandling.Handlers;
+using KyrolusSous.ExceptionHandling.Abstractions;
 using Marten;
 using static KyrolusSous.StaticFunctions.EntityAdministrationPropNames;
 namespace KyrolusSous.StaticFunctions;
@@ -106,7 +106,7 @@ public static class KyrolusRepoistoryHelpers<TEntity> where TEntity : class
     where TDocument : IDocumentSession
     {
         var id = keyValues == null ? GetPropertyValues(entity!, "Id") : ConvertJsonElementArray(keyValues)[0];
-        if (entity == null) throw new NotFoundException(typeof(TEntity).Name, id!.ToString()!);
+        if (entity == null) throw new KyrolusNotFoundException(typeof(TEntity).Name, id!.ToString()!);
         if (GetPropertyValues(entity, IsActive) as bool? == true)
             ThrowValidationError<TEntity>.ThrowValidationErrors([new(IsDeleted, $"{entity.GetType().Name} is active, you can't delete it")]);
         if (isPermanent)

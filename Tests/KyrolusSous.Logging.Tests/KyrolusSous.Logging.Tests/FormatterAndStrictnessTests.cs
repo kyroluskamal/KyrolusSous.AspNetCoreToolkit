@@ -1,7 +1,7 @@
 using System.Text;
 using Serilog.Parsing;
-using static KyrolusSous.Logging.LoggingOptions;
-using KyrolusSous.Logging.Theming;
+using static KyrolusSous.Logging.Serilog.LoggingOptions;
+using KyrolusSous.Logging.Serilog.Theming;
 
 namespace KyrolusSous.Logging.Tests;
 
@@ -118,3 +118,4 @@ public class FormatterAndStrictnessTests
         Should.NotThrow(() => LoggerConfigurationBuilder.Build(loggerConfig, options, env.Object));
     }
 }
+

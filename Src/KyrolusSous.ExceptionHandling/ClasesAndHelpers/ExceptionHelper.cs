@@ -1,5 +1,3 @@
-global using KyrolusSous.ExceptionHandling.ClasesAndHelpers;
-using System.Text.Json;
 
 namespace KyrolusSous.ExceptionHandling.ClasesAndHelpers;
 

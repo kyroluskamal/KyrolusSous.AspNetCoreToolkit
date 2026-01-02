@@ -2049,11 +2049,10 @@ public sealed class MartenRepositoryGenerator : IIncrementalGenerator
             return Array.Empty<string>();
         }
 
-        return value.Values
+        return [.. value.Values
             .Select(v => v.Value?.ToString())
             .Where(v => !string.IsNullOrWhiteSpace(v))
-            .Select(v => v!)
-            .ToArray();
+            .Select(v => v!)];
     }
 
     private static IEnumerable<IPropertySymbol> GetAllProperties(INamedTypeSymbol type)

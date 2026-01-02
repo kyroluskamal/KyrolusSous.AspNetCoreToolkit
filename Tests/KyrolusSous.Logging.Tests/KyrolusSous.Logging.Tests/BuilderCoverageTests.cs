@@ -1,5 +1,5 @@
 using System.Reflection;
-using static KyrolusSous.Logging.LoggingOptions;
+using static KyrolusSous.Logging.Serilog.LoggingOptions;
 using Serilog.Context;
 
 namespace KyrolusSous.Logging.Tests;
@@ -200,3 +200,4 @@ public class BuilderCoverageTests
         public long FileSizeLimitBytes { get; set; } = 0;
     }
 }
+

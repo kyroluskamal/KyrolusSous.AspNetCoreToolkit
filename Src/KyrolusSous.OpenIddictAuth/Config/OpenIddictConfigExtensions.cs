@@ -8,7 +8,8 @@ using static OpenIddict.Abstractions.OpenIddictConstants;
 using Microsoft.AspNetCore.Http;
 using OpenIddict.Server;
 using static OpenIddict.Server.OpenIddictServerEvents;
-using KyrolusSous.ExceptionHandling.Handlers;
+using KyrolusSous.ExceptionHandling.Abstractions.Exceptions;
+using KyrolusSous.ExceptionHandling.Abstractions.Models;
 using OpenIddict.Abstractions;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.IdentityModel.Tokens;
@@ -142,7 +143,11 @@ public class MyApplyTokenResponseHandler : IOpenIddictServerHandler<ApplyTokenRe
         if (string.Equals(response.Error, Errors.InvalidRequest, StringComparison.Ordinal) &&
             response.ErrorDescription != null && response.ErrorDescription.Contains("'username' and/or 'password' parameters are missing") && context.Request?.GrantType == GrantTypes.Password)
         {
-            throw new FluentValidation.ValidationException("The username and password fields are required.");
+            throw new KyrolusValidationException(new[]
+            {
+                new KyrolusErrorItem("username", KyrolusErrorCodes.Validation, "The username field is required."),
+                new KyrolusErrorItem("password", KyrolusErrorCodes.Validation, "The password field is required.")
+            }, "Validation failed");
         }
 
         return default;
@@ -157,7 +162,7 @@ public class AccessTokenCheckHandler : IOpenIddictServerHandler<ApplyIntrospecti
         if (response["active"] is OpenIddictParameter activeParameter &&
             (bool?)activeParameter is bool isActive && !isActive)
         {
-            throw new UnauthorizedException("The access token is no longer valid or expired.");
+            throw new KyrolusUnauthorizedException("The access token is no longer valid or expired.");
         }
         return default;
     }

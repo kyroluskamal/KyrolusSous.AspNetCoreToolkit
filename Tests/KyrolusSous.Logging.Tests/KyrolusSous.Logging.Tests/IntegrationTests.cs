@@ -2,7 +2,7 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 
-using static KyrolusSous.Logging.LoggingOptions;
+using static KyrolusSous.Logging.Serilog.LoggingOptions;
 
 namespace KyrolusSous.Logging.Tests;
 
@@ -297,3 +297,4 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
         Directory.Delete(customLogPath, true);
     }
 }
+

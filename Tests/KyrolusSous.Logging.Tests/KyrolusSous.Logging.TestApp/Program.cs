@@ -1,4 +1,4 @@
-using KyrolusSous.Logging;
+using KyrolusSous.Logging.Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddKyrolusLogging(builder.Configuration, options =>
@@ -19,3 +19,4 @@ app.MapGet("/", (ILogger<Program> logger) =>
 
 await app.RunAsync();
 public partial class Program { }
+

@@ -1,4 +1,4 @@
-using KyrolusSous.Logging.Theming;
+using KyrolusSous.Logging.Serilog.Theming;
 using Serilog.Sinks.SystemConsole.Themes;
 
 namespace KyrolusSous.Logging.Tests;
@@ -71,3 +71,4 @@ public class ThemeTests
         len.ShouldBe("\u001b[42;1m\u001b[37;1m".Length);
     }
 }
+

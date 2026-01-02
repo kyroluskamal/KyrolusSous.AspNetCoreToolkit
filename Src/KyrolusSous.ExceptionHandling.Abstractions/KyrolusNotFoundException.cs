@@ -1,14 +1,12 @@
 namespace KyrolusSous.ExceptionHandling.Abstractions;
 
-public sealed class KyrolusNotFoundException : Exception
+public sealed class KyrolusNotFoundException(string entityName, string key) : KyrolusException(
+        HttpStatusCode.NotFound,
+        KyrolusErrorCodes.NotFound,
+        $"{entityName} not found",
+        $"{entityName} with key '{key}' was not found.")
 {
-    public KyrolusNotFoundException(string entityName, string key)
-        : base($"{entityName} with key '{key}' was not found.")
-    {
-        EntityName = entityName;
-        Key = key;
-    }
 
-    public string EntityName { get; }
-    public string Key { get; }
+    public string EntityName { get; } = entityName;
+    public string Key { get; } = key;
 }

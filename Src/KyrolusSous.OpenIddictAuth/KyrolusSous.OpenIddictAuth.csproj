@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\KyrolusSous.ExceptionHandling\KyrolusSous.ExceptionHandling.csproj" />
+    <ProjectReference Include="..\KyrolusSous.ExceptionHandling.Abstractions\KyrolusSous.ExceptionHandling.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>

@@ -3,7 +3,9 @@
 This toolkit bundles Serilog bootstrapping plus Entity Framework repositories (runtime + source generator) to cut boilerplate and stay AOT-friendly.
 
 ## Contents
-- KyrolusSous.Logging (Serilog bootstrapper)
+- KyrolusSous.Logging.Abstractions (logging contracts)
+- KyrolusSous.Logging.Runtime (Microsoft.Extensions.Logging adapter)
+- KyrolusSous.Logging.Serilog (Serilog bootstrapper)
 - KyrolusSous.Mediator (abstractions + runtime + generator)
 - KyrolusSous.Repositories.EF.Abstractions (contracts, helpers, policies, observer)
 - KyrolusSous.Repositories.EF.Runtime (repository + unit of work implementations)
@@ -12,7 +14,7 @@ This toolkit bundles Serilog bootstrapping plus Entity Framework repositories (r
 
 ---
 
-## KyrolusSous.Logging
+## KyrolusSous.Logging.Serilog
 Opinionated Serilog setup with sane defaults, flexible options, and a customizable console formatter.
 
 **What you get**
@@ -67,6 +69,131 @@ app.Run();
 ```
 
 **Tests**: `Tests/KyrolusSous.Logging.Tests` (unit + integration).
+
+---
+
+## KyrolusSous.ExceptionHandling (Abstractions + Runtime + Optional packages)
+Consistent, AOT-friendly error handling with clean contracts, pluggable mappers, and optional integrations.
+
+**What you get**
+- **Abstractions**: `KyrolusErrorEnvelope`, `KyrolusErrorItem`, `KyrolusErrorContext`, `KyrolusExceptionMapping`, base `KyrolusException`.
+- **Runtime**: middleware + MVC filter, default mappers, JSON writer, and a background-safe translator.
+- **Optional**: FluentValidation mapping + ProblemDetails writer.
+- **Security**: stack traces hidden in production by default.
+- **Localization**: optional message localizer (`IKyrolusErrorLocalizer`).
+
+### Default JSON response
+```json
+{
+  "code": "not_found",
+  "title": "Not found",
+  "detail": "Order 123 was not found",
+  "traceId": "00-acde..."
+}
+```
+
+### Register (Minimal APIs)
+```csharp
+builder.Services.AddKyrolusExceptionHandling(options =>
+{
+    options.IncludeExceptionDetailsInResponse = false;
+    options.IncludeExceptionDetailsInDevelopment = true;
+    options.CorrelationIdHeaderName = "X-Correlation-ID";
+});
+
+var app = builder.Build();
+app.UseKyrolusExceptionHandling();
+```
+
+### MVC filter
+```csharp
+builder.Services.AddControllers(o =>
+{
+    o.Filters.Add<KyrolusExceptionFilter>();
+});
+```
+
+### ProblemDetails writer (optional)
+```csharp
+builder.Services.AddKyrolusProblemDetailsWriter();
+```
+
+### FluentValidation mapping (optional)
+```csharp
+builder.Services.AddKyrolusFluentValidationExceptionHandling();
+```
+
+### Entity Framework & Redis mappings (optional)
+```csharp
+builder.Services.AddKyrolusEntityFrameworkExceptionHandling();
+builder.Services.AddKyrolusRedisExceptionHandling();
+```
+
+### Custom domain exception + mapper
+```csharp
+public sealed class OrderLockedException(Guid id)
+    : KyrolusException(HttpStatusCode.Conflict, "order_locked", "Order locked", $"Order {id} is locked");
+
+public sealed class OrderLockedMapper : IKyrolusExceptionMapper
+{
+    public int Order => -100; // higher priority
+    public bool TryMap(Exception ex, KyrolusErrorContext ctx, out KyrolusExceptionMapping mapping)
+    {
+        if (ex is not OrderLockedException domain)
+        {
+            mapping = null!;
+            return false;
+        }
+
+        mapping = new KyrolusExceptionMapping(
+            new KyrolusErrorEnvelope(domain.Code, domain.Title, domain.Detail, ctx.TraceId),
+            domain.StatusCode);
+        return true;
+    }
+}
+
+services.AddSingleton<IKyrolusExceptionMapper, OrderLockedMapper>();
+```
+
+### Background/worker translation (no HTTP)
+```csharp
+try
+{
+    // work
+}
+catch (Exception ex)
+{
+    var translator = provider.GetRequiredService<KyrolusExceptionTranslator>();
+    var context = new KyrolusErrorContext(
+        TraceId: Activity.Current?.Id,
+        CorrelationId: null,
+        UserId: null,
+        TenantId: null,
+        Path: null,
+        Method: null,
+        Culture: null);
+
+    KyrolusErrorResult result = translator.Translate(ex, context);
+    // return result or log it
+}
+```
+
+### Localization
+```csharp
+public sealed class DictionaryErrorLocalizer : IKyrolusErrorLocalizer
+{
+    private readonly Dictionary<string, string> translations = new()
+    {
+        ["not_found"] = "Not found",
+        ["not_found.detail"] = "The requested item was not found"
+    };
+
+    public string? Localize(string code, string? defaultMessage, CultureInfo? culture)
+        => translations.TryGetValue(code, out var value) ? value : defaultMessage;
+}
+
+services.AddSingleton<IKyrolusErrorLocalizer, DictionaryErrorLocalizer>();
+```
 
 ---
 
