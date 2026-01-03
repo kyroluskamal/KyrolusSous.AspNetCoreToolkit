@@ -6,7 +6,7 @@ using KyrolusSous.CQRS.EF.Query;
 using KyrolusSous.EasyAPI.BaseKyrolusModule.Enum;
 using KyrolusSous.EasyAPI.BaseKyrolusModule.Interfaces;
 using KyrolusSous.ExceptionHandling.ClasesAndHelpers;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace KyrolusSous.EasyAPI.BaseKyrolusModule;
 
@@ -117,7 +117,7 @@ public class DefaultCommandQueryHandler<TResponse, TModel, TKey>(IKyrolusMapper 
         object[] keyArray = [];
         if (compositeKey != null)
         {
-            keyArray = JsonConvert.DeserializeObject<object[]>(compositeKey) ?? [];
+            keyArray = ParseCompositeKey(compositeKey);
         }
         if (keyArray.Length == 0)
         {
@@ -149,12 +149,69 @@ public class DefaultCommandQueryHandler<TResponse, TModel, TKey>(IKyrolusMapper 
         var command = (PatchCommand<TResponse, TKey>)config.PatchCommand ?? new PatchCommand<TResponse, TKey>([id], updates, cacheable ?? false);
         command.KeyValues ??= [id];
         if (compositeKey != null)
-            command.KeyValues = JsonConvert.DeserializeObject<object[]>(compositeKey) ?? [id];
+            command.KeyValues = ParseCompositeKey(compositeKey);
         if (cacheable.HasValue)
             command.Cacheable = cacheable.Value;
         command.Updates = updates;
         var result = await mediator.SendAsync(command);
         return Results.Ok(config.UseEnrichedCustomResponse ?
                          new Response((int)HttpStatusCode.OK, $"Successfully patched {typeof(TModel).Name}", true, result) : result);
+    }
+
+    private static object[] ParseCompositeKey(string compositeKey)
+    {
+        if (string.IsNullOrWhiteSpace(compositeKey))
+        {
+            return [];
+        }
+
+        try
+        {
+            var elements = JsonSerializer.Deserialize<JsonElement[]>(compositeKey);
+            if (elements is null || elements.Length == 0)
+            {
+                return [];
+            }
+
+            var values = new object?[elements.Length];
+            for (var i = 0; i < elements.Length; i++)
+            {
+                values[i] = ConvertJsonElement(elements[i]);
+            }
+
+            return values!;
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static object? ConvertJsonElement(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.String => ParseStringValue(element.GetString()),
+            JsonValueKind.Number => element.TryGetInt64(out var longValue)
+                ? longValue
+                : element.TryGetDouble(out var doubleValue)
+                    ? doubleValue
+                    : element.GetRawText(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null => null,
+            JsonValueKind.Undefined => null,
+            _ => element.GetRawText()
+        };
+    }
+
+    private static object? ParseStringValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return value;
+        }
+
+        return Guid.TryParse(value, out var guidValue) ? guidValue : value;
     }
 }

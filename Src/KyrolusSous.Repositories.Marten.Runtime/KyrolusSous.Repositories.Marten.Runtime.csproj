@@ -10,7 +10,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\KyrolusSous.ExceptionHandling\KyrolusSous.ExceptionHandling.csproj" />
-    <ProjectReference Include="..\KyrolusSous.StaticFunctions\KyrolusSous.StaticFunctions.csproj" />
     <ProjectReference Include="..\KyrolusSous.Repositories.Marten.Abstractions\KyrolusSous.Repositories.Marten.Abstractions.csproj" />
   </ItemGroup>
   <PropertyGroup>

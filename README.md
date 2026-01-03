@@ -197,6 +197,579 @@ services.AddSingleton<IKyrolusErrorLocalizer, DictionaryErrorLocalizer>();
 
 ---
 
+## KyrolusSous.Caching (Abstractions + Redis)
+Two-layer cache with optional near-cache (L1 MemoryCache + L2 Redis), tags, regions, tenants, sliding TTL, and Pub/Sub invalidation.
+
+**Packages**
+- `KyrolusSous.Caching.Abstractions`
+- `KyrolusSous.Caching.Redis`
+
+**Core abstractions**
+- `ICacheProvider` (get/set/remove, bulk ops, tags, pattern remove, get-or-create)
+- `KyrolusCacheEntryOptions` (absolute/sliding/jitter, tags, region, tenant)
+
+### Redis only (L2)
+```csharp
+builder.Services.AddKyrolusRedisCacheProvider(
+    connectionString: "localhost:6379",
+    configure: opt =>
+    {
+        opt.KeyPrefix = "myapp:";
+        opt.DefaultTtl = TimeSpan.FromMinutes(5);
+        opt.LockTtl = TimeSpan.FromSeconds(10);
+    });
+```
+
+### Near-cache (L1 + L2)
+```csharp
+builder.Services.AddKyrolusRedisNearCache(
+    connectionString: "localhost:6379",
+    configure: opt =>
+    {
+        opt.KeyPrefix = "myapp:";
+        opt.DefaultTtl = TimeSpan.FromMinutes(5);
+    },
+    configureNearCache: opt =>
+    {
+        opt.DefaultL1Ttl = TimeSpan.FromSeconds(15);
+        opt.InvalidationChannel = "kyrolus.cache.invalidation";
+    });
+```
+
+### Compression + encryption (optional)
+```csharp
+builder.Services.AddKyrolusRedisCacheProvider(
+    connectionString: "localhost:6379",
+    configure: opt =>
+    {
+        opt.EnableCompression = true;
+        opt.CompressionThresholdBytes = 4 * 1024;
+        opt.EnableEncryption = true;
+        opt.EncryptionKeyBase64 = "<base64-key>";
+        // Optional: fixed IV (16 bytes). If omitted, a random IV is used per payload.
+        opt.EncryptionIvBase64 = "<base64-iv>";
+    });
+```
+
+**Notes**
+- Compression runs before encryption. Clear cache if you toggle compression/encryption.
+- If you register a custom `IKyrolusCacheSerializer`, wrap it with `KyrolusTransformingCacheSerializer` to keep compression/encryption.
+
+### Usage
+```csharp
+public sealed class ProductService(ICacheProvider cache)
+{
+    public Task<Product?> GetAsync(Guid id, CancellationToken ct)
+    {
+        return cache.GetOrCreateAsync(
+            $"product:{id}",
+            async _ => await LoadFromDbAsync(id, ct),
+            new KyrolusCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(2),
+                SlidingExpiration = TimeSpan.FromSeconds(30),
+                Tags = new[] { "products", $"product:{id}" },
+                Region = "catalog",
+                TenantId = "tenant-1"
+            },
+            ct);
+    }
+
+    private static Task<Product?> LoadFromDbAsync(Guid id, CancellationToken ct) => Task.FromResult<Product?>(null);
+}
+```
+
+### Observability (ActivitySource + metrics + logging hooks)
+```csharp
+// Tracing + metrics via OpenTelemetry
+builder.Services.AddOpenTelemetry()
+    .WithTracing(b => b.AddSource(KyrolusSous.Caching.Abstractions.KyrolusCacheInstrumentation.ActivitySourceName))
+    .WithMetrics(b => b.AddMeter(KyrolusSous.Caching.Abstractions.KyrolusCacheInstrumentation.MeterName));
+
+// Optional logging hook (implement IKyrolusCacheObserver)
+builder.Services.AddSingleton<IKyrolusCacheObserver, MyCacheLoggerObserver>();
+
+// Built-in structured logging observer
+builder.Services.AddKyrolusCacheLoggingObserver(opt =>
+{
+    opt.LogHits = true;
+    opt.LogMisses = true;
+    opt.LogLocks = true;
+});
+```
+
+### Cache policies (per-type/per-operation, sliding/absolute, jitter)
+```csharp
+builder.Services.AddSingleton(sp =>
+{
+    var registry = new KyrolusCachePolicyRegistry()
+        .SetDefault(new KyrolusCachePolicy(
+            AbsoluteExpirationRelativeToNow: TimeSpan.FromMinutes(5),
+            Jitter: TimeSpan.FromSeconds(5)))
+        .SetForOperation(KyrolusCacheOperation.Get, new KyrolusCachePolicy(
+            SlidingExpiration: TimeSpan.FromSeconds(30)))
+        .SetForType<ProductDto>(KyrolusCacheOperation.Get, new KyrolusCachePolicy(
+            AbsoluteExpirationRelativeToNow: TimeSpan.FromMinutes(1),
+            NegativeCacheTtl: TimeSpan.FromSeconds(10)));
+    return registry;
+});
+builder.Services.AddSingleton<IKyrolusCachePolicyProvider>(sp => sp.GetRequiredService<KyrolusCachePolicyRegistry>());
+builder.Services.AddKyrolusRedisCacheProvider("localhost:6379");
+```
+
+### Multi-tenant isolation (prefix + region + tenant)
+```csharp
+builder.Services.AddKyrolusRedisCacheProvider("localhost:6379", opt =>
+{
+    opt.KeyPrefix = "myapp";
+    opt.RequireRegion = true;
+    opt.RequireTenantId = true;
+});
+
+await cache.SetAsync(
+    "product:42",
+    product,
+    new KyrolusCacheEntryOptions
+    {
+        Region = "catalog",
+        TenantId = "tenant-1"
+    });
+```
+
+### Negative caching
+```csharp
+await cache.GetOrCreateAsync(
+    "user:404",
+    _ => Task.FromResult<User?>(null),
+    new KyrolusCacheEntryOptions
+    {
+        NegativeExpirationRelativeToNow = TimeSpan.FromSeconds(15)
+    });
+```
+
+### Health checks + graceful fallback
+```csharp
+builder.Services.AddKyrolusRedisCacheProvider("localhost:6379", opt =>
+{
+    opt.EnableGracefulFallback = true; // swallow Redis outages and return defaults
+});
+
+builder.Services.AddHealthChecks()
+    .AddKyrolusRedisCacheHealthChecks();
+```
+
+### Near-cache coherency (L1 + L2 + Pub/Sub invalidation)
+```csharp
+builder.Services.AddKyrolusRedisNearCache(
+    "localhost:6379",
+    configure: opt => opt.KeyPrefix = "myapp",
+    configureNearCache: opt =>
+    {
+        opt.DefaultL1Ttl = TimeSpan.FromSeconds(30);
+        opt.PublishInvalidations = true;
+        opt.SubscribeInvalidations = true;
+    });
+```
+
+### Production guidance (quick checklist)
+- Prefer `KyrolusRedisPatternRemovalStrategy.KeyIndex` (avoid server `KEYS`).
+- Use jitter to avoid thundering herds.
+- Tune `LockTtl`, `LockWait`, `LockRetryDelay` for hot keys.
+- Keep payloads small; enable compression for large objects only.
+- Use regions/tenants for isolation and safe bulk invalidations.
+
+### Distributed locking (GetOrCreate)
+`GetOrCreateAsync` supports a Lua-based distributed lock with configurable TTL + wait/retry windows.
+```csharp
+builder.Services.AddKyrolusRedisCacheProvider("localhost:6379", opt =>
+{
+    opt.LockStrategy = KyrolusRedisLockStrategy.Lua; // Lua-based lock (default)
+    opt.LockTtl = TimeSpan.FromSeconds(10);
+    opt.LockWait = TimeSpan.FromSeconds(2);
+    opt.LockRetryDelay = TimeSpan.FromMilliseconds(50);
+    opt.LockBackoffMode = KyrolusRedisLockBackoffMode.Exponential;
+    opt.LockBackoffMultiplier = 2;
+    opt.LockMaxRetryDelay = TimeSpan.FromMilliseconds(250);
+});
+```
+
+### Circuit breaker + backoff
+```csharp
+builder.Services.AddKyrolusRedisCacheProvider("localhost:6379", opt =>
+{
+    opt.EnableGracefulFallback = true;
+    opt.CircuitBreaker.Enabled = true;
+    opt.CircuitBreaker.FailureThreshold = 3;
+    opt.CircuitBreaker.OpenDuration = TimeSpan.FromSeconds(5);
+    opt.CircuitBreaker.MaxOpenDuration = TimeSpan.FromSeconds(30);
+    opt.CircuitBreaker.BackoffMultiplier = 2;
+    opt.CircuitBreaker.HalfOpenSuccesses = 2;
+    opt.CircuitBreaker.ThrowOnOpen = false;
+});
+```
+
+### Pattern removal strategy
+```csharp
+builder.Services.AddKyrolusRedisCacheProvider("localhost:6379", opt =>
+{
+    opt.PatternRemovalStrategy = KyrolusRedisPatternRemovalStrategy.KeyIndex; // default
+    // opt.PatternRemovalStrategy = KyrolusRedisPatternRemovalStrategy.ServerScan; // uses SCAN if supported
+    // opt.PatternRemovalStrategy = KyrolusRedisPatternRemovalStrategy.Disabled; // disable pattern removes
+});
+```
+
+### Replica/cluster routing (read/write + scan)
+```csharp
+builder.Services.AddKyrolusRedisCacheProvider("localhost:6379", opt =>
+{
+    opt.ReadCommandFlags = CommandFlags.PreferReplica;
+    opt.WriteCommandFlags = CommandFlags.DemandMaster;
+    opt.ScanServerRole = KyrolusRedisServerRole.Replica; // for SCAN-based removals
+});
+```
+
+### Stampede guard (lock + negative cache)
+Use `GetOrCreateAsync` + lock backoff and optional negative caching to avoid bursts:
+```csharp
+await cache.GetOrCreateAsync(
+    "order:42",
+    _ => LoadOrderAsync(42),
+    new KyrolusCacheEntryOptions
+    {
+        AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(2),
+        NegativeExpirationRelativeToNow = TimeSpan.FromSeconds(10)
+    });
+```
+
+### Serialization contracts (AOT)
+Use a `JsonSerializerContext` for AOT-safe serialization:
+```csharp
+[JsonSerializable(typeof(ProductDto))]
+public partial class CacheJsonContext : JsonSerializerContext { }
+
+builder.Services.AddSingleton<IKyrolusCacheSerializer>(
+    _ => new KyrolusJsonContextCacheSerializer(CacheJsonContext.Default));
+builder.Services.AddKyrolusRedisCacheProvider("localhost:6379");
+```
+
+### Keyspace notifications (optional)
+If you want Redis to publish keyspace events, enable them:
+```bash
+redis-cli CONFIG SET notify-keyspace-events Ex
+```
+If keyspace notifications are not available, stick to Pub/Sub invalidation (near-cache) or `KeyIndex`.
+
+### Security/Secrets
+Store encryption keys in a secret manager and inject at startup:
+- Azure Key Vault / AWS Secrets Manager / HashiCorp Vault
+- Environment variables (base64) as a fallback
+
+### Operational recipes (production)
+- Use `KeyIndex` removal; avoid server scan in production.
+- Set timeouts and retry windows (`LockTtl`, `LockWait`, `LockRetryDelay`).
+- Enable `CircuitBreaker` + graceful fallback.
+- Prefer `PreferReplica` for reads in clusters.
+- Keep payloads small; enable compression above a size threshold.
+
+### Benchmarks (example approach)
+Use BenchmarkDotNet to measure `GetAsync`, `GetManyAsync`, `GetOrCreateAsync`, and tag invalidation.
+Focus on payload size, hit ratio, and lock contention.
+
+### Benchmarks project
+Run the caching benchmarks with:
+```bash
+dotnet run -c Release --project Tests/KyrolusSous.Caching.Benchmarks/KyrolusSous.Caching.Benchmarks.csproj
+```
+
+### Tags and invalidation
+```csharp
+await cache.RemoveByTagAsync("products", ct);
+await cache.RemoveKeysByPatternAsync("product:*", ct);
+```
+
+**Notes**
+- Near-cache uses Pub/Sub invalidation (default channel: `kyrolus.cache.invalidation`).
+- L1 keeps hot keys close to the app; L2 is shared across instances.
+- For null/default results, the provider still caches the existence to avoid repeated misses.
+- You can register custom payload transformers via DI and control order with `IKyrolusOrderedCachePayloadTransformer`.
+- To warn on compression/encryption changes, set `WarningSink` and a `ConfigSignatureKey` (default enabled).
+
+### Custom payload transformers (DI + ordering)
+```csharp
+public sealed class CustomXorTransformer : IKyrolusOrderedCachePayloadTransformer
+{
+    public int Order => 50;
+
+    public byte[] Transform(byte[] payload) =>
+        payload.Select(b => (byte)(b ^ 0x5A)).ToArray();
+
+    public byte[] Restore(byte[] payload) =>
+        payload.Select(b => (byte)(b ^ 0x5A)).ToArray();
+}
+
+builder.Services.AddSingleton<IKyrolusCachePayloadTransformer, CustomXorTransformer>();
+```
+
+---
+
+## KyrolusSous.Validation (Abstractions + Runtime + Generator + Adapters)
+Unified validation contracts with rule sets, grouping, severity, localization, and optional scanning.
+
+**Packages**
+- `KyrolusSous.Validation.Abstractions`
+- `KyrolusSous.Validation.Runtime`
+- `KyrolusSous.Validation.Generator` (AOT)
+- `KyrolusSous.Validation.FluentValidation`
+- `KyrolusSous.Validation.FluentValidation.Scanning` (optional, non-AOT)
+- `KyrolusSous.Validation.DataAnnotations`
+- `KyrolusSous.CQRS.Validation` (pipeline behavior)
+
+### Runtime (AOT-friendly, no scanning)
+```csharp
+builder.Services.AddKyrolusValidationRuntime();
+builder.Services.AddKyrolusFluentValidation();       // or AddKyrolusDataAnnotationsValidation()
+```
+
+### Optional scanning (non-AOT)
+```csharp
+builder.Services.AddKyrolusValidationRuntimeScanning(Assembly.GetExecutingAssembly());
+builder.Services.AddKyrolusFluentValidationScanning(Assembly.GetExecutingAssembly());
+```
+
+### Generator (AOT-friendly auto-registration)
+```csharp
+builder.Services.AddKyrolusValidationRuntime();
+builder.Services.AddKyrolusGeneratedValidators();
+builder.Services.AddKyrolusGeneratedValidationProfiles();
+```
+
+### Rule sets, grouping, severity
+```csharp
+public sealed class CreateOrderValidator : AbstractValidator<CreateOrder>
+{
+    public CreateOrderValidator()
+    {
+        RuleSet("Create", () =>
+        {
+            RuleFor(x => x.Total).GreaterThan(0).WithSeverity(Severity.Error);
+            RuleFor(x => x.Description)
+                .NotEmpty()
+                .WithSeverity(Severity.Warning)
+                .WithState(_ => new KyrolusValidationGroup("UiHints"));
+        });
+    }
+}
+
+var context = new KyrolusValidationContext(
+    RuleSets: new[] { "Create" },
+    Groups: new[] { "UiHints" },
+    MinimumSeverity: KyrolusValidationSeverity.Warning);
+
+var engine = provider.GetRequiredService<IKyrolusValidationEngine>();
+var failures = await engine.ValidateAsync(request, context, ct);
+```
+
+### Validation profiles
+Profiles let you reuse rule sets/groups/severity presets across requests.
+```csharp
+builder.Services.AddKyrolusValidationProfile(new KyrolusValidationProfile(
+    "CreateFlow",
+    new KyrolusValidationContext(
+        RuleSets: new[] { "Create" },
+        Groups: new[] { "UiHints" },
+        MinimumSeverity: KyrolusValidationSeverity.Warning)));
+
+var context = new KyrolusValidationContext(Profiles: new[] { "CreateFlow" });
+var failures = await engine.ValidateAsync(request, context, ct);
+```
+
+Built-in profiles:
+`KyrolusValidationProfiles.Create`, `KyrolusValidationProfiles.Update`,
+`KyrolusValidationProfiles.UiHints`, `KyrolusValidationProfiles.BackgroundJobs`.
+
+Generator shortcut:
+```csharp
+builder.Services.AddKyrolusGeneratedValidationProfiles();
+```
+
+### Cross-entity / composite validation
+Use a composite request for cross-entity rules (AOT-friendly).
+```csharp
+public sealed class OrderCustomerValidator
+    : AbstractValidator<KyrolusValidationComposite<Order, Customer>>
+{
+    public OrderCustomerValidator()
+    {
+        RuleFor(x => x.First.Total).GreaterThan(0);
+        RuleFor(x => x.Second.IsActive).Equal(true);
+    }
+}
+
+var failures = await engine.ValidateCompositeAsync(order, customer, ct);
+```
+
+### Built-in validation caching
+Opt-in caching by implementing `IKyrolusValidationCacheable`.
+```csharp
+public sealed record ValidateOrderRequest(Guid OrderId)
+    : IKyrolusValidationCacheable
+{
+    public string? CacheKey => $"validation:order:{OrderId}";
+    public TimeSpan? CacheTtl => TimeSpan.FromMinutes(5);
+    public KyrolusValidationCacheMode CacheMode => KyrolusValidationCacheMode.All;
+}
+
+var failures = await engine.ValidateAsync(new ValidateOrderRequest(orderId), ct);
+```
+
+### Negative caching (short-lived miss caching)
+Cache short-lived "miss" results to reduce repeated work when a request has no failures.
+```csharp
+public sealed record ValidateOrderRequest(Guid OrderId)
+    : IKyrolusValidationCacheable, IKyrolusValidationNegativeCacheable
+{
+    public string? CacheKey => $"validation:order:{OrderId}";
+    public TimeSpan? CacheTtl => TimeSpan.FromMinutes(5);
+    public KyrolusValidationCacheMode CacheMode => KyrolusValidationCacheMode.All;
+
+    // Short TTL for "no failures" results
+    public TimeSpan? NegativeCacheTtl => TimeSpan.FromSeconds(30);
+}
+
+var failures = await engine.ValidateAsync(new ValidateOrderRequest(orderId), ct);
+```
+
+### Custom error codes + field-path mapping
+```csharp
+builder.Services.AddSingleton<IKyrolusValidationErrorCodeMapper>(
+    new KyrolusDictionaryValidationErrorCodeMapper(new Dictionary<string, string>
+    {
+        ["CustomerId"] = "customer_id_required",
+        ["E1001"] = "invalid_customer"
+    }));
+
+builder.Services.AddSingleton<IKyrolusValidationFieldPathMapper>(
+    new KyrolusDictionaryValidationFieldPathMapper(new Dictionary<string, string>
+    {
+        ["CustomerId"] = "customer.id",
+        ["Items[0].ProductId"] = "items[0].productId"
+    }));
+```
+
+### Async validation hooks (before/after)
+```csharp
+public sealed class AuditValidationHook : IKyrolusValidationHook<CreateOrder>
+{
+    public ValueTask OnBeforeAsync(CreateOrder request, KyrolusValidationContext context, CancellationToken ct)
+        => ValueTask.CompletedTask;
+
+    public ValueTask OnAfterAsync(CreateOrder request, KyrolusValidationContext context,
+        IReadOnlyList<KyrolusValidationFailure> failures, CancellationToken ct)
+        => ValueTask.CompletedTask;
+}
+
+builder.Services.AddScoped<IKyrolusValidationHook<CreateOrder>, AuditValidationHook>();
+```
+
+### Metrics & tracing hooks
+```csharp
+// Metrics (runtime)
+builder.Services.AddSingleton<IKyrolusValidationMetrics>(
+    new KyrolusDelegateValidationMetrics((ctx, ct) =>
+    {
+        Console.WriteLine($"Validated {ctx.RequestType?.Name} in {ctx.Duration.TotalMilliseconds}ms; failures={ctx.Failures.Count}");
+        return ValueTask.CompletedTask;
+    }));
+
+// Tracing (ActivitySource)
+builder.Services.AddSingleton<IKyrolusValidationTracer>(new KyrolusValidationActivityTracer("MyApp.Validation"));
+```
+
+**Prometheus (metrics) example**
+```csharp
+// Requires prometheus-net
+public sealed class PrometheusValidationMetrics : IKyrolusValidationMetrics
+{
+    private static readonly Histogram Duration = Metrics.CreateHistogram(
+        "kyrolus_validation_duration_ms",
+        "Validation duration",
+        new HistogramConfiguration { LabelNames = new[] { "request", "severity" } });
+
+    private static readonly Counter Failures = Metrics.CreateCounter(
+        "kyrolus_validation_failures_total",
+        "Validation failures",
+        new CounterConfiguration { LabelNames = new[] { "request" } });
+
+    public ValueTask RecordAsync(KyrolusValidationMetricsContext ctx, CancellationToken ct = default)
+    {
+        var request = ctx.RequestType?.Name ?? "Unknown";
+        var maxSeverity = ctx.Failures.Count == 0
+            ? KyrolusValidationSeverity.Info
+            : ctx.Failures.Max(f => f.Severity);
+
+        Duration.WithLabels(request, maxSeverity.ToString()).Observe(ctx.Duration.TotalMilliseconds);
+        if (ctx.Failures.Count > 0)
+        {
+            Failures.WithLabels(request).Inc(ctx.Failures.Count);
+        }
+
+        return ValueTask.CompletedTask;
+    }
+}
+
+builder.Services.AddSingleton<IKyrolusValidationMetrics, PrometheusValidationMetrics>();
+```
+
+**OpenTelemetry (tracing) example**
+```csharp
+// Requires OpenTelemetry.Extensions.Hosting
+builder.Services.AddSingleton<IKyrolusValidationTracer>(
+    new KyrolusValidationActivityTracer("MyApp.Validation"));
+
+builder.Services.AddOpenTelemetry()
+    .WithTracing(b => b.AddSource("MyApp.Validation"));
+```
+
+**Serilog (logging) example**
+```csharp
+// Uses Microsoft.Extensions.Logging or Serilog, both work.
+public sealed class SerilogValidationMetrics(ILogger<SerilogValidationMetrics> logger) : IKyrolusValidationMetrics
+{
+    public ValueTask RecordAsync(KyrolusValidationMetricsContext ctx, CancellationToken ct = default)
+    {
+        logger.LogInformation(
+            "Validation {Request} took {Ms}ms with {Count} failures",
+            ctx.RequestType?.Name,
+            ctx.Duration.TotalMilliseconds,
+            ctx.Failures.Count);
+        return ValueTask.CompletedTask;
+    }
+}
+```
+
+### Advanced Redis batching & Lua
+Bulk operations use MGET/MSET internally and are chunked by `BatchSize` to avoid oversized payloads.
+Tag invalidation is executed as a single Lua script (removes keys + tag sets in one round-trip).
+```csharp
+builder.Services.AddKyrolusRedisCacheProvider(
+    connectionString: "localhost:6379",
+    configure: opt =>
+    {
+        opt.BatchSize = 256; // chunk size for heavy ops (MGET/MSET/expiry/remove)
+    });
+```
+
+The runtime registers hooks automatically:
+- `KyrolusValidationMetricsHook` calls `IKyrolusValidationMetrics.RecordAsync(...)`.
+- `KyrolusValidationTracingHook` uses `IKyrolusValidationTracer` to start/stop traces.
+
+### CQRS pipeline behavior
+```csharp
+builder.Services.AddKyrolusCqrsValidation(); // registers KyrolusValidationBehavior
+```
+
+---
+
 ## KyrolusSous.Mediator (Abstractions + Runtime + Generator)
 Mediator pipeline with requests, commands, queries, notifications, streaming, processors, and exception handling.
 

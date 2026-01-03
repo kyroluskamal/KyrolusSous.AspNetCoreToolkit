@@ -57,6 +57,7 @@ public class ConcurrencyHelperTests
         result.Concurrency!.Value.RetryCount.ShouldBe(1);
         result.Concurrency!.Value.OriginalRowVersion.ShouldBe(info.OriginalRowVersion);
         result.Concurrency!.Value.CurrentRowVersion.ShouldBe(info.CurrentRowVersion);
-        result.Concurrency!.Value.DatabaseValues.ShouldContainKey("A");
+        var databaseValues = result.Concurrency!.Value.DatabaseValues ?? throw new InvalidOperationException("Expected database values.");
+        databaseValues.ShouldContainKey("A");
     }
 }

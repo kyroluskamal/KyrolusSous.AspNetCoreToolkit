@@ -8,7 +8,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\KyrolusSous.Repositories.EF.Abstractions\KyrolusSous.Repositories.EF.Abstractions.csproj" />
-    <ProjectReference Include="..\KyrolusSous.StaticFunctions\KyrolusSous.StaticFunctions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

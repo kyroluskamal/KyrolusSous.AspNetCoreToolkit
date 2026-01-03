@@ -108,7 +108,8 @@ public class AbstractionsAdditionalTests
     [Fact(DisplayName = "IncludeGraphBuilder returns empty graph on null paths")]
     public void IncludeGraphBuilder_ReturnsEmptyOnNull()
     {
-        var graph = KyrolusIncludeGraphBuilder.FromPaths<GraphDummy>(null);
+        string[]? paths = null;
+        var graph = KyrolusIncludeGraphBuilder.FromPaths<GraphDummy>(paths);
         graph.Includes.ShouldNotBeNull();
         graph.Includes.Count.ShouldBe(0);
     }

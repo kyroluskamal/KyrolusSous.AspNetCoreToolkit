@@ -36,7 +36,8 @@ public class KyrolusEfRepositoryBaseTests
     [Fact(DisplayName = "ConvertIncludePropertiesToExpressions returns empty on null or whitespace")]
     public void ConvertIncludePropertiesToExpressions_ReturnsEmptyOnNull()
     {
-        var resultNull = KyrolusEFRepositoryBase<Dummy>.ConvertIncludePropertiesToExpressions(null);
+        List<string>? includeProperties = null;
+        var resultNull = KyrolusEFRepositoryBase<Dummy>.ConvertIncludePropertiesToExpressions(includeProperties);
         resultNull.ShouldNotBeNull();
         resultNull.ShouldBeEmpty();
 
@@ -65,7 +66,7 @@ public class KyrolusEfRepositoryBaseTests
     private class Dummy
     {
         public int Id { get; set; }
-        public string Code { get; set; } = string.Empty;
+        public string? Code { get; set; }
         public Child? Child { get; set; }
     }
 

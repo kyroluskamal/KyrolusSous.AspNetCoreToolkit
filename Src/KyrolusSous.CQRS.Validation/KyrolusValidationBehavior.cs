@@ -1,7 +1,8 @@
 namespace KyrolusSous.CQRS.Validation;
 
 public sealed class KyrolusValidationBehavior<TRequest, TResponse>(
-    IEnumerable<IKyrolusRequestValidator<TRequest>> validators)
+    IEnumerable<IKyrolusRequestValidator<TRequest>> validators,
+    IKyrolusValidationEngine? engine = null)
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
     public async Task<TResponse> Handle(
@@ -9,19 +10,27 @@ public sealed class KyrolusValidationBehavior<TRequest, TResponse>(
         RequestHandlerDelegate<TResponse> next,
         CancellationToken cancellationToken)
     {
-        if (!validators.Any())
+        IReadOnlyList<KyrolusValidationFailure> failures;
+        if (engine is not null)
+        {
+            failures = await engine.ValidateAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        else if (!validators.Any())
         {
             return await next();
         }
-
-        List<KyrolusValidationFailure> failures = [];
-        foreach (var validator in validators)
+        else
         {
-            var result = await validator.ValidateAsync(request, cancellationToken).ConfigureAwait(false);
-            if (result.Count > 0)
+            List<KyrolusValidationFailure> collected = [];
+            foreach (var validator in validators)
             {
-                failures.AddRange(result);
+                var result = await validator.ValidateAsync(request, cancellationToken).ConfigureAwait(false);
+                if (result.Count > 0)
+                {
+                    collected.AddRange(result);
+                }
             }
+            failures = collected;
         }
 
         if (failures.Count > 0)
