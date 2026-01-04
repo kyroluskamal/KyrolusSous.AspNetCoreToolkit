@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KyrolusSous.DataProtection.Runtime\KyrolusSous.DataProtection.Runtime.csproj" />
+    <ProjectReference Include="..\KyrolusSous.DataProtection.FileSystem\KyrolusSous.DataProtection.FileSystem.csproj" />
+    <ProjectReference Include="..\KyrolusSous.DataProtection.Redis\KyrolusSous.DataProtection.Redis.csproj" />
+    <ProjectReference Include="..\KyrolusSous.DataProtection.AzureStorage\KyrolusSous.DataProtection.AzureStorage.csproj" />
+    <ProjectReference Include="..\KyrolusSous.DataProtection.AzureKeyVault\KyrolusSous.DataProtection.AzureKeyVault.csproj" />
+    <ProjectReference Include="..\KyrolusSous.DataProtection.AwsKms\KyrolusSous.DataProtection.AwsKms.csproj" />
+    <ProjectReference Include="..\KyrolusSous.DataProtection.GoogleKms\KyrolusSous.DataProtection.GoogleKms.csproj" />
+    <ProjectReference Include="..\KyrolusSous.DataProtection.EntityFramework\KyrolusSous.DataProtection.EntityFramework.csproj" />
+    <ProjectReference Include="..\KyrolusSous.DataProtection.Ephemeral\KyrolusSous.DataProtection.Ephemeral.csproj" />
+    <ProjectReference Include="..\KyrolusSous.DataProtection.CustomXml\KyrolusSous.DataProtection.CustomXml.csproj" />
+    <ProjectReference Include="..\KyrolusSous.DataProtection.Marten\KyrolusSous.DataProtection.Marten.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.1" />
+  </ItemGroup>
+
+</Project>

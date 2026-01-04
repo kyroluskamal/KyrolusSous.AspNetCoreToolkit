@@ -12,9 +12,9 @@ public class CacheSerializerBenchmarks
     private KyrolusTransformingCacheSerializer gzipAesSerializer = null!;
     private KyrolusCacheKeyFactory keyFactory = null!;
     private SamplePayload payload = null!;
-    private byte[] jsonBytes = Array.Empty<byte>();
-    private byte[] gzipBytes = Array.Empty<byte>();
-    private byte[] gzipAesBytes = Array.Empty<byte>();
+    private byte[] jsonBytes = [];
+    private byte[] gzipBytes = [];
+    private byte[] gzipAesBytes = [];
 
     [Params(128, 1024)]
     public int PayloadSize { get; set; }
@@ -78,9 +78,9 @@ public class CacheSerializerBenchmarks
         public string Name { get; init; } = string.Empty;
         public string Description { get; init; } = string.Empty;
         public int Version { get; init; }
-        public string[] Tags { get; init; } = Array.Empty<string>();
+        public string[] Tags { get; init; } = [];
         public Dictionary<string, string> Attributes { get; init; } = new(StringComparer.Ordinal);
-        public int[] Numbers { get; init; } = Array.Empty<int>();
+        public int[] Numbers { get; init; } = [];
 
         public static SamplePayload Create(int size)
         {

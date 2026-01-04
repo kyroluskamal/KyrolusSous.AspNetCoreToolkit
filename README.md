@@ -7,6 +7,7 @@ This toolkit bundles Serilog bootstrapping plus Entity Framework repositories (r
 - KyrolusSous.Logging.Runtime (Microsoft.Extensions.Logging adapter)
 - KyrolusSous.Logging.Serilog (Serilog bootstrapper)
 - KyrolusSous.Mediator (abstractions + runtime + generator)
+- KyrolusSous.DataProtection (abstractions + runtime + providers)
 - KyrolusSous.Repositories.EF.Abstractions (contracts, helpers, policies, observer)
 - KyrolusSous.Repositories.EF.Runtime (repository + unit of work implementations)
 - KyrolusSous.Repositories.EF.Generator (source generator for EF repositories)
@@ -509,6 +510,329 @@ public sealed class CustomXorTransformer : IKyrolusOrderedCachePayloadTransforme
 
 builder.Services.AddSingleton<IKyrolusCachePayloadTransformer, CustomXorTransformer>();
 ```
+
+---
+
+## KyrolusSous.DataProtection (Abstractions + Runtime + Providers)
+Modular ASP.NET Core Data Protection setup with clean options and provider-based key persistence.
+
+**Packages**
+- `KyrolusSous.DataProtection.Abstractions`
+- `KyrolusSous.DataProtection.Runtime`
+- `KyrolusSous.DataProtection.EntityFramework`
+- `KyrolusSous.DataProtection.Marten`
+- `KyrolusSous.DataProtection.FileSystem`
+- `KyrolusSous.DataProtection.Redis`
+- `KyrolusSous.DataProtection.AzureStorage`
+- `KyrolusSous.DataProtection.AzureKeyVault`
+- `KyrolusSous.DataProtection.AwsKms`
+- `KyrolusSous.DataProtection.GoogleKms`
+- `KyrolusSous.DataProtection.CustomXml`
+- `KyrolusSous.DataProtection.Ephemeral`
+- `KyrolusSous.DataProtection.Cli`
+
+### Quick start
+```csharp
+builder.Services.AddKyrolusDataProtection(opts =>
+{
+    opts.ApplicationName = "MyApp";
+    opts.DefaultKeyLifetime = TimeSpan.FromDays(90);
+    opts.AutoGenerateKeys = true;
+})
+.AddKyrolusDataProtectionEntityFramework(db =>
+{
+    db.UseSqlServer(builder.Configuration.GetConnectionString("Default"));
+});
+```
+
+### Marten keys
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .AddKyrolusDataProtectionMarten(
+        connectionString: "<conn>",
+        schemaName: "dataprotection");
+```
+
+### File system keys
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .AddKyrolusDataProtectionFileSystem(
+        directoryPath: Path.Combine(AppContext.BaseDirectory, "keys"));
+```
+
+### Redis keys
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .AddKyrolusDataProtectionRedis(
+        connectionString: "localhost:6379",
+        key: "myapp-dp-keys");
+```
+
+### Azure Blob Storage keys
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .AddKyrolusDataProtectionAzureBlobStorage(
+        connectionString: "<connection-string>",
+        containerName: "keys",
+        blobName: "dataprotection-keys.xml");
+```
+
+### Custom XML repository
+Use this when you want to plug any custom XML store (S3, GCS, bespoke DB, etc.).
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .AddKyrolusDataProtectionXmlRepository(new MyCustomXmlRepository());
+```
+
+### Ephemeral keys (dev/test)
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .AddKyrolusEphemeralDataProtection();
+```
+
+### Key protection
+```csharp
+builder.Services.AddKyrolusDataProtection(opts =>
+{
+    opts.KeyProtection = new KyrolusKeyProtectionOptions
+    {
+        Kind = KyrolusKeyProtectionKind.Certificate,
+        CertificateThumbprint = "ABCD1234...",
+        StoreLocation = StoreLocation.LocalMachine,
+        StoreName = StoreName.My
+    };
+});
+```
+
+### Azure Key Vault key protection
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .AddKyrolusDataProtectionAzureKeyVault(
+        keyIdentifier: "https://myvault.vault.azure.net/keys/my-dp-key/1234567890",
+        configureCredential: options => options.ExcludeVisualStudioCredential = true);
+```
+
+### AWS KMS key protection
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .AddKyrolusDataProtectionAwsKms(
+        keyId: "alias/my-dp-key",
+        encryptionContext: new Dictionary<string, string>
+        {
+            ["app"] = "my-app"
+        });
+```
+
+### Google Cloud KMS key protection
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .AddKyrolusDataProtectionGoogleKms(
+        cryptoKeyName: "projects/my-project/locations/global/keyRings/ring/cryptoKeys/key");
+```
+
+### Custom key DbContext
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .PersistKeysToDbContext<MyKeysContext>();
+```
+
+### Key management (rotate/revoke)
+```csharp
+var keyManager = app.Services.GetRequiredService<IKyrolusDataProtectionKeyManager>();
+await keyManager.RotateKeyAsync();
+await keyManager.RevokeAllKeysAsync();
+```
+
+### CLI/ops tooling (list/rotate/revoke/export/import)
+```bash
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- list --provider file --path ./keys --app MyApp
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- rotate --provider redis --redis localhost:6379 --key myapp-dp-keys
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- revoke --provider file --path ./keys --id 0e6b8c5b-2b08-4e1e-a79f-9a2b7ef24b03
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- export --provider file --path ./keys --out keys.json
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- import --provider redis --redis localhost:6379 --in keys.json
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- list --provider azure-blob --azure-conn "<conn>" --azure-container "keys"
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- rotate --provider azure-keyvault --keyvault "https://myvault.vault.azure.net/keys/dp-key/123"
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- list --provider aws-kms --aws-kms-key "arn:aws:kms:..." --aws-kms-context "tenant=app;env=prod"
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- list --provider gcp-kms --gcp-kms-key "projects/p/locations/l/keyRings/r/cryptoKeys/k"
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- list --provider ef --ef-provider sqlite --ef-connection "Data Source=dp.db"
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- list --provider ef --ef-provider sqlserver --ef-connection "<conn>"
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- list --provider ef --ef-provider postgres --ef-connection "<conn>"
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- list --provider ef --ef-provider mysql --ef-connection "<conn>" --ef-mysql-version 8.0.36
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- list --provider marten --marten-conn "<conn>" --marten-schema "dataprotection"
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- list --provider marten --marten-conn "<conn>" --marten-tenant "tenant-1" --marten-session identity
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- list --provider ephemeral
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- list --provider custom-xml --xml-repo-type "MyApp.MyXmlRepo" --xml-repo-assembly "./MyApp.dll"
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- rotate --provider azure-keyvault --keyvault "https://myvault.vault.azure.net/keys/dp-key/123" --keyvault-credential client-secret --keyvault-tenant-id "<tenant>" --keyvault-client-id "<client>" --keyvault-client-secret "<secret>"
+dotnet run --project Src/KyrolusSous.DataProtection.Cli -- rotate --provider azure-keyvault --keyvault "https://myvault.vault.azure.net/keys/dp-key/123" --keyvault-credential managed-identity --keyvault-managed-identity "<client-id>"
+```
+Note: EF providers `postgres` and `mysql` require adding `Npgsql.EntityFrameworkCore.PostgreSQL` or `Pomelo.EntityFrameworkCore.MySql` to the CLI project.
+
+### Key backup/restore
+```csharp
+var backup = app.Services.GetRequiredService<KyrolusDataProtectionKeyBackupService>();
+await backup.ExportToDirectoryAsync("keys-backup");
+await backup.ImportFromDirectoryAsync("keys-backup");
+```
+
+### Key escrow (file)
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .AddKyrolusDataProtectionFileKeyEscrow("keys-escrow");
+```
+
+### Key escrow (encrypted file)
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .AddKyrolusDataProtectionFileKeyEscrowEncrypted("keys-escrow", opts =>
+    {
+        opts.EncryptionKeyBase64 = "<base64-key>";
+        opts.PayloadPrefix = "kyrolus-escrow:v1:";
+    });
+```
+
+### Tenant isolation
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .AddKyrolusDataProtectionTenantIsolation(opts =>
+    {
+        opts.PurposePrefix = "tenant";
+    });
+
+var tenantProtector = app.Services.GetRequiredService<IKyrolusTenantDataProtectionProvider>();
+var protector = tenantProtector.CreateProtector("tenant-1", "orders");
+```
+
+### Health checks
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .AddKyrolusDataProtectionHealthChecks();
+```
+
+### Instrumentation (ActivitySource + metrics)
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .AddKyrolusDataProtectionInstrumentation(opts =>
+    {
+        opts.EnableActivities = true;
+        opts.EnableMetrics = true;
+    });
+
+var factory = app.Services.GetRequiredService<IKyrolusDataProtectorFactory>();
+var instrumented = factory.CreateProtector("payments");
+```
+
+### Key cleanup job (expired/revoked)
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .AddKyrolusDataProtectionKeyCleanup(opts =>
+    {
+        opts.Interval = TimeSpan.FromHours(12);
+        opts.ExpiredKeyGracePeriod = TimeSpan.FromDays(7);
+        opts.RevokedKeyGracePeriod = TimeSpan.FromDays(1);
+    });
+```
+
+### Key ring refresh hooks
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .AddKyrolusDataProtectionKeyRingRefreshHooks(opts =>
+    {
+        opts.IncludeKeyDetails = true;
+        opts.MinimumInterval = TimeSpan.FromMinutes(2);
+    });
+
+public sealed class KeyRingAuditHook : IKyrolusKeyRingRefreshHook
+{
+    public Task OnKeyRingRefreshedAsync(KyrolusKeyRingRefreshContext context, CancellationToken ct = default)
+    {
+        // record refresh + key ids
+        return Task.CompletedTask;
+    }
+}
+```
+
+### Cross-instance key ring refresh (Redis pub/sub)
+```csharp
+builder.Services.AddKyrolusDataProtection()
+    .AddKyrolusDataProtectionRedis("redis:6379", "DataProtection-Keys")
+    .AddKyrolusDataProtectionRedisKeyRingRefreshNotifications(opts =>
+    {
+        opts.Channel = "kyrolus:dataprotection:keyring";
+        opts.IncludeApplicationNameInChannel = true;
+    })
+    .AddKyrolusDataProtectionKeyRingRefreshHooks(opts =>
+    {
+        opts.EnableCrossInstanceNotifications = true;
+        opts.PublishLocalChanges = true;
+        opts.RefreshOnExternalSignal = true;
+        opts.MinimumInterval = TimeSpan.FromSeconds(30);
+    });
+```
+
+### Production recipes (provider defaults)
+**FileSystem**
+```csharp
+builder.Services.AddKyrolusDataProtection(opts =>
+{
+    opts.ApplicationName = "MyApp";
+    opts.DefaultKeyLifetime = TimeSpan.FromDays(90);
+    opts.AutoGenerateKeys = true;
+})
+.AddKyrolusDataProtectionFileSystem("/var/app/keys")
+.AddKyrolusDataProtectionKeyCleanup(o =>
+{
+    o.Interval = TimeSpan.FromHours(12);
+    o.ExpiredKeyGracePeriod = TimeSpan.FromDays(7);
+});
+```
+
+**Redis**
+```csharp
+builder.Services.AddKyrolusDataProtection(opts =>
+{
+    opts.ApplicationName = "MyApp";
+    opts.DefaultKeyLifetime = TimeSpan.FromDays(90);
+})
+.AddKyrolusDataProtectionRedis("redis:6379", "myapp-dp-keys")
+.AddKyrolusDataProtectionRedisKeyRingRefreshNotifications()
+.AddKyrolusDataProtectionKeyRingRefreshHooks(o =>
+{
+    o.EnableCrossInstanceNotifications = true;
+    o.MinimumInterval = TimeSpan.FromSeconds(30);
+});
+```
+
+**EntityFramework**
+```csharp
+builder.Services.AddKyrolusDataProtection(opts =>
+{
+    opts.ApplicationName = "MyApp";
+    opts.DefaultKeyLifetime = TimeSpan.FromDays(90);
+})
+.AddKyrolusDataProtectionEntityFramework(db =>
+{
+    db.UseSqlServer(builder.Configuration.GetConnectionString("Default"));
+});
+```
+
+**Azure Blob Storage**
+```csharp
+builder.Services.AddKyrolusDataProtection(opts =>
+{
+    opts.ApplicationName = "MyApp";
+    opts.DefaultKeyLifetime = TimeSpan.FromDays(90);
+})
+.AddKyrolusDataProtectionAzureBlobStorage(
+    connectionString: "<connection-string>",
+    containerName: "keys",
+    blobName: "dataprotection-keys.xml");
+```
+
+**Best practices**
+- Keep `DefaultKeyLifetime` between 60-120 days.
+- Enable key cleanup for long-running clusters.
+- Use Redis pub/sub refresh when running multiple instances.
+- Protect keys with KMS/Key Vault in production.
 
 ---
 
