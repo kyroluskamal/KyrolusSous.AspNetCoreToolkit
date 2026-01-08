@@ -1,7 +1,4 @@
-using KyrolusSous.EasyAPI.BaseKyrolusModule.Interfaces;
-using System.Net;
-
-namespace KyrolusSous.EasyAPI.BaseKyrolusModule;
+namespace KyrolusSous.EndpointKit.Core.BaseKyrolusModule;
 
 public class BaseKyrolusModule<TResponse, TModel, TKey>(IRouteMapper<TResponse, TModel, TKey> routeMapper,
 ICommandQueryHandler<TResponse, TModel, TKey> commandQueryHandler,

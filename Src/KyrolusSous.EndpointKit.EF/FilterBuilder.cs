@@ -2,7 +2,7 @@ global using System.Linq.Expressions;
 global using System.Reflection;
 using System.Text.RegularExpressions;
 
-namespace KyrolusSous.EasyAPI;
+namespace KyrolusSous.EndpointKit.EF;
 
 public static partial class FilterBuilder
 {

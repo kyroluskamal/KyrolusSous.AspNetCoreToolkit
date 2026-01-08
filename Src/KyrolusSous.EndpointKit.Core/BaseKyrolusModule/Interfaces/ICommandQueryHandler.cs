@@ -1,6 +1,4 @@
-using KyrolusSous.CQRS.EF.Command.Remove;
-
-namespace KyrolusSous.EasyAPI.BaseKyrolusModule.Interfaces;
+namespace KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Interfaces;
 
 public interface ICommandQueryHandler<TResponse, TModel, TKey>
     where TResponse : class
@@ -15,6 +13,6 @@ public interface ICommandQueryHandler<TResponse, TModel, TKey>
     public Task<IResult> HandleUpdateRangeAsync(IEnumerable<TModel> model, [FromQuery] bool? cacheable = null);
     // ActivationStateAsync
     public Task<IResult> HandleRemoveAsync([FromRoute] TKey id, [FromQuery] bool? cacheable = null, [FromQuery] string? compositeKey = null);
-    public Task<IResult> HandleRemoveRangeAsync([FromBody] RemoveRangeCommand<TResponse> command);
+    public Task<IResult> HandleRemoveRangeAsync([FromBody] IEnumerable<TModel> model, [FromQuery] bool? cacheable = null);
     public Task<IResult> HandlePatchAsync([FromRoute] TKey id, [FromBody] Dictionary<string, object> updates, [FromQuery] bool? cacheable = null, [FromQuery] string? compositeKey = null);
 }

@@ -1,4 +1,4 @@
-namespace KyrolusSous.EasyAPI;
+namespace KyrolusSous.EndpointKit.EF;
 public static class KyrolusSousRoutingHelpers
 {
     public static List<string>? GetIncludedProperties(string? includedProperties) =>

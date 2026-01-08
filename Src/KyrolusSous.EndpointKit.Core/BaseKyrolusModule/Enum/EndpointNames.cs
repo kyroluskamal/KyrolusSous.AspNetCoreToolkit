@@ -1,4 +1,4 @@
-namespace KyrolusSous.EasyAPI.BaseKyrolusModule.Enum;
+namespace KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Enum;
 
 public enum EndpointNames
 {

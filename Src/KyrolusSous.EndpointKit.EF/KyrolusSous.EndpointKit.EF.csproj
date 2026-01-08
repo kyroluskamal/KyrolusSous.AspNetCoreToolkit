@@ -1,21 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <ProjectReference Include="..\KyrolusSous.EndpointKit.Core\KyrolusSous.EndpointKit.Core.csproj" />
     <ProjectReference Include="..\KyrolusSous.CQRS.EF\KyrolusSous.CQRS.EF.csproj" />
     <ProjectReference Include="..\KyrolusSous.ExceptionHandling\KyrolusSous.ExceptionHandling.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Mapster" Version="7.4.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.1" />
-    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
-    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.1" />
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Config\" />
   </ItemGroup>
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AssemblyName>KyrolusSous.EndpointKit.EF</AssemblyName>
+    <RootNamespace>KyrolusSous.EndpointKit.EF</RootNamespace>
   </PropertyGroup>
 </Project>
-

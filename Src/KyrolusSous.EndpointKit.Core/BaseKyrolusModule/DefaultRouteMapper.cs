@@ -1,9 +1,4 @@
-using System.ComponentModel;
-using KyrolusSous.EasyAPI.BaseKyrolusModule.Enum;
-using KyrolusSous.EasyAPI.BaseKyrolusModule.Interfaces;
-using Serilog;
-
-namespace KyrolusSous.EasyAPI.BaseKyrolusModule;
+namespace KyrolusSous.EndpointKit.Core.BaseKyrolusModule;
 
 public class DefaultRouteMapper<TResponse, TModel, TKey> : IRouteMapper<TResponse, TModel, TKey>
     where TResponse : class
@@ -12,15 +7,15 @@ public class DefaultRouteMapper<TResponse, TModel, TKey> : IRouteMapper<TRespons
 {
     public RouteGroupBuilder MapEndpoints(IEndpointRouteBuilder app, IKyrolusApiConfig<TResponse> config, ICommandQueryHandler<TResponse, TModel, TKey> commandQueryHandler)
     {
-        var group = app.MapGroup(config.Prefix ?? "").WithTags(config.ApiName ?? typeof(TResponse).Name);
         config.Route ??= typeof(TResponse).Name;
         config.ApiName ??= typeof(TResponse).Name;
+        var group = app.MapGroup(config.Prefix ?? "").WithTags(config.ApiName);
         var endpointsToMap = GetEndpointsToMap(config);
         bool ShouldMap(EndpointNames currentEndpoint) => config.AllEndpointsExcept is not null ?
             !endpointsToMap.Contains(currentEndpoint) : endpointsToMap.Contains(currentEndpoint)
             || endpointsToMap.Contains(EndpointNames.All);
 
-        _ = ShouldMap(EndpointNames.GetAll) ? group.MapGet($"{config.Route}s", commandQueryHandler.HandleGetAllAsync).Authorize(Authorize(config, EndpointNames.GetById)) : null;
+        _ = ShouldMap(EndpointNames.GetAll) ? group.MapGet($"{config.Route}s", commandQueryHandler.HandleGetAllAsync).Authorize(Authorize(config, EndpointNames.GetAll)) : null;
         _ = ShouldMap(EndpointNames.GetById) ? group.MapGet($"/{config.Route}/{{id}}", commandQueryHandler.HandleGetByIdAsync).Authorize(Authorize(config, EndpointNames.GetById)) : null;
         _ = ShouldMap(EndpointNames.Add) ? group.MapPost(config.Route, commandQueryHandler.HandleCreateAsync).Authorize(Authorize(config, EndpointNames.Add)) : null;
         _ = ShouldMap(EndpointNames.AddRange) ? group.MapPost($"{config.Route}s", commandQueryHandler.HandleCreateRangeAsync).Authorize(Authorize(config, EndpointNames.AddRange)) : null;

@@ -1,14 +1,4 @@
-using KyrolusSous.CQRS.EF.Command.Add;
-using KyrolusSous.CQRS.EF.Command.Patch;
-using KyrolusSous.CQRS.EF.Command.Remove;
-using KyrolusSous.CQRS.EF.Command.Update;
-using KyrolusSous.CQRS.EF.Query;
-using KyrolusSous.EasyAPI.BaseKyrolusModule.Enum;
-using KyrolusSous.EasyAPI.BaseKyrolusModule.Interfaces;
-using KyrolusSous.ExceptionHandling.ClasesAndHelpers;
-using System.Text.Json;
-
-namespace KyrolusSous.EasyAPI.BaseKyrolusModule;
+namespace KyrolusSous.EndpointKit.EF.BaseKyrolusModule;
 
 public class DefaultCommandQueryHandler<TResponse, TModel, TKey>(IKyrolusMapper kyrolusMapper,
  IKyrolusMediatorSender mediator, IKyrolusApiConfig<TResponse> config) : ICommandQueryHandler<TResponse, TModel, TKey>
@@ -16,18 +6,18 @@ public class DefaultCommandQueryHandler<TResponse, TModel, TKey>(IKyrolusMapper 
     where TModel : class
     where TKey : notnull, IEquatable<TKey>
 {
-    protected IKyrolusMediatorSender mediator = mediator;
+    protected readonly IKyrolusMediatorSender mediator = mediator;
     public async Task<IResult> HandleGetAllAsync([FromQuery] string? filter = null, [FromQuery] string? includedProps = null,
     [FromQuery] bool? cacheable = null)
     {
-        var EndpointConfig = config.EndpointConfig.FirstOrDefault(x => x.Name == EndpointNames.GetAll);
+        var endpointConfig = config.EndpointConfig.FirstOrDefault(x => x.Name == EndpointNames.GetAll);
         var getAllQuery = (GetAllQuery<TResponse>)(config.QueryAll ?? new GetAllQuery<TResponse>());
         if (cacheable.HasValue)
             getAllQuery.Cacheable = cacheable.Value;
         getAllQuery.IncludeProperties = KyrolusSousRoutingHelpers.GetIncludedProperties(includedProps);
-        if (EndpointConfig != null)
+        if (endpointConfig != null)
         {
-            getAllQuery.IncludeProperties?.AddRange(EndpointConfig.IncludeProps);
+            getAllQuery.IncludeProperties?.AddRange(endpointConfig.IncludeProps);
         }
         if (filter != null)
             getAllQuery.Filter = FilterBuilder.BuildFilterExpression<TResponse>(filter);
@@ -38,11 +28,11 @@ public class DefaultCommandQueryHandler<TResponse, TModel, TKey>(IKyrolusMapper 
     }
     public async Task<IResult> HandleGetByIdAsync([FromRoute] TKey id, [FromQuery] string? includedProps = null, [FromQuery] bool? cacheable = null)
     {
-        var EndpointConfig = config.EndpointConfig.FirstOrDefault(x => x.Name == EndpointNames.GetById);
+        var endpointConfig = config.EndpointConfig.FirstOrDefault(x => x.Name == EndpointNames.GetById);
         var getByIdQuery = (GetByIdQuery<TResponse, TKey>)(config.QueryById ?? new GetByIdQuery<TResponse, TKey>(id, cacheable ?? false));
         getByIdQuery.IncludeProperties = KyrolusSousRoutingHelpers.GetIncludedProperties(includedProps);
-        if (EndpointConfig != null)
-            getByIdQuery.IncludeProperties?.AddRange(EndpointConfig.IncludeProps);
+        if (endpointConfig != null)
+            getByIdQuery.IncludeProperties?.AddRange(endpointConfig.IncludeProps);
         if (cacheable.HasValue)
             getByIdQuery.Cacheable = cacheable.Value;
         var result = await mediator.SendAsync((IKyrolusQuery<TResponse?>)getByIdQuery);
@@ -66,7 +56,11 @@ public class DefaultCommandQueryHandler<TResponse, TModel, TKey>(IKyrolusMapper 
             command.Cacheable = cacheable.Value;
         var result = await mediator.SendAsync(command);
 
-        return Results.Created($"/{config.Prefix}/{config.Route}/{result.GetType().GetProperty("id")}",
+        var createdId = config.GetEntityId?.Invoke(result);
+        var createdLocation = createdId is null
+            ? $"/{config.Prefix}/{config.Route}"
+            : $"/{config.Prefix}/{config.Route}/{createdId}";
+        return Results.Created(createdLocation,
         kyrolusMapper.MapResponseToViewModel(result,
             GetTheViewModelType(EndpointNames.Add), (int)HttpStatusCode.Created,
         $"Successfully created the {typeof(TModel).Name}"
@@ -92,10 +86,15 @@ public class DefaultCommandQueryHandler<TResponse, TModel, TKey>(IKyrolusMapper 
             command.Cacheable = cacheable.Value;
         command.Entity = entity;
         var result = await mediator.SendAsync(command);
-        return Results.Ok(kyrolusMapper.MapResponseToViewModel(result,
-        GetTheViewModelType(EndpointNames.Update), (int)HttpStatusCode.OK,
-                $"Successfully updated {typeof(TModel).Name} with id {result.GetType().GetProperty("id")}"
-                ));
+        var updatedId = GetEntityId(result);
+        return Results.Ok(kyrolusMapper.MapResponseToViewModel(
+            result,
+            GetTheViewModelType(EndpointNames.Update),
+            (int)HttpStatusCode.OK,
+            updatedId is null
+                ? $"Successfully updated {typeof(TModel).Name}"
+                : $"Successfully updated {typeof(TModel).Name} with id {updatedId}"
+            ));
     }
     public async Task<IResult> HandleUpdateRangeAsync([FromBody] IEnumerable<TModel> model, [FromQuery] bool? cacheable = null)
     {
@@ -131,11 +130,17 @@ public class DefaultCommandQueryHandler<TResponse, TModel, TKey>(IKyrolusMapper 
         return Results.Ok(config.UseEnrichedCustomResponse ? new Response((int)HttpStatusCode.OK,
          $"Successfully deleted {typeof(TModel).Name} with id {string.Join(",", keyArray)}", true, new { id }) : new { id });
     }
-    public async Task<IResult> HandleRemoveRangeAsync([FromBody] RemoveRangeCommand<TResponse> command)
+    public async Task<IResult> HandleRemoveRangeAsync([FromBody] IEnumerable<TModel> model, [FromQuery] bool? cacheable = null)
     {
+        var entities = kyrolusMapper.MapModelToEntity<TModel, TResponse>(model);
+        var command = config.RemoveRangeCommand as RemoveRangeCommand<TResponse> ?? new RemoveRangeCommand<TResponse>(entities);
+        command.Entities = entities;
+        if (cacheable.HasValue)
+            command.Cacheable = cacheable.Value;
+
         await mediator.SendAsync(command);
         return Results.Ok(config.UseEnrichedCustomResponse ?
-                         new Response((int)HttpStatusCode.OK, $"Successfully deleted {typeof(TModel).Name} records", true, command.Entities) : command.Entities);
+                         new Response((int)HttpStatusCode.OK, $"Successfully deleted {typeof(TModel).Name} records", true, entities) : entities);
     }
 
     private Type GetTheViewModelType(EndpointNames endpointName)
@@ -189,20 +194,26 @@ public class DefaultCommandQueryHandler<TResponse, TModel, TKey>(IKyrolusMapper 
 
     private static object? ConvertJsonElement(JsonElement element)
     {
-        return element.ValueKind switch
+        switch (element.ValueKind)
         {
-            JsonValueKind.String => ParseStringValue(element.GetString()),
-            JsonValueKind.Number => element.TryGetInt64(out var longValue)
-                ? longValue
-                : element.TryGetDouble(out var doubleValue)
-                    ? doubleValue
-                    : element.GetRawText(),
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
-            JsonValueKind.Null => null,
-            JsonValueKind.Undefined => null,
-            _ => element.GetRawText()
-        };
+            case JsonValueKind.String:
+                return ParseStringValue(element.GetString());
+            case JsonValueKind.Number:
+                if (element.TryGetInt64(out var longValue))
+                    return longValue;
+                if (element.TryGetDouble(out var doubleValue))
+                    return doubleValue;
+                return element.GetRawText();
+            case JsonValueKind.True:
+                return true;
+            case JsonValueKind.False:
+                return false;
+            case JsonValueKind.Null:
+            case JsonValueKind.Undefined:
+                return null;
+            default:
+                return element.GetRawText();
+        }
     }
 
     private static object? ParseStringValue(string? value)
@@ -214,4 +225,5 @@ public class DefaultCommandQueryHandler<TResponse, TModel, TKey>(IKyrolusMapper 
 
         return Guid.TryParse(value, out var guidValue) ? guidValue : value;
     }
+
 }

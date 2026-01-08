@@ -1998,7 +1998,7 @@ Reusable contracts live in `Src/KyrolusSous.Repositories.EF.Abstractions/Query/Q
 - `IQueryHelper<TEntity>`
 - `QueryRequest`, `OrderClause`, `FilterClause`, `QueryParts<TEntity>`
 
-The generator emits a typed helper per entity (e.g., `TenantQueryHelper : IQueryHelper<Tenant>`) and registers it in DI via `AddGeneratedKyrolusRepositories()`. Use the abstraction directly in any project (including EasyAPI) without referencing the generator assembly.
+The generator emits a typed helper per entity (e.g., `TenantQueryHelper : IQueryHelper<Tenant>`) and registers it in DI via `AddGeneratedKyrolusRepositories()`. Use the abstraction directly in any project (including EndpointKit.Core) without referencing the generator assembly.
 
 **Supported operators**
 - `string`: `contains`, `startswith`, `endswith`, `eq`

@@ -1,6 +1,4 @@
-using KyrolusSous.EasyAPI.BaseKyrolusModule.Interfaces;
-
-namespace KyrolusSous.EasyAPI.BaseKyrolusModule;
+namespace KyrolusSous.EndpointKit.Core.BaseKyrolusModule;
 public static class KyrolusExtensions
 {
 
@@ -9,7 +7,7 @@ public static class KyrolusExtensions
 
     public static IServiceCollection AddKyrolus(this IServiceCollection services, Action<KyrolusModuleBuilder> configure)
     {
-        var builder = new KyrolusModuleBuilder(services.BuildServiceProvider());
+        var builder = new KyrolusModuleBuilder();
         configure(builder);
 
         _modules.AddRange(builder.Modules);

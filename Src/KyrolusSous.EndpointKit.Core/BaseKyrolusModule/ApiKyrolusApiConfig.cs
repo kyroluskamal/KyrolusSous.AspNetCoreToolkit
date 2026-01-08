@@ -1,9 +1,4 @@
-global using KyrolusSous.Mediator.Abstractions.Interfaces;
-using KyrolusSous.EasyAPI.BaseKyrolusModule.Enum;
-using KyrolusSous.EasyAPI.BaseKyrolusModule.Interfaces;
-
-
-namespace KyrolusSous.EasyAPI.BaseKyrolusModule;
+namespace KyrolusSous.EndpointKit.Core.BaseKyrolusModule;
 
 public class ApiKyrolusApiConfig<TResponse> : IKyrolusApiConfig<TResponse>
     where TResponse : class
@@ -18,9 +13,10 @@ public class ApiKyrolusApiConfig<TResponse> : IKyrolusApiConfig<TResponse>
     public IKyrolusCommand<IEnumerable<TResponse>> AddRangeCommand { get; set; } = default!;
     public IKyrolusCommand<TResponse> UpdateCommand { get; set; } = default!;
     public IKyrolusCommand<IEnumerable<TResponse>> UpdateRangeCommand { get; set; } = default!;
-    public IKyrolusCommand<Unit> RemoveCommand { get; set; } = default!;
+    public IKyrolusCommand RemoveCommand { get; set; } = default!;
     public IKyrolusCommand<bool> UpdateActiviationStateCommand { get; set; } = default!;
-    public IKyrolusCommand<IEnumerable<Unit>> RemoveRangeCommand { get; set; } = default!;
+    public IKyrolusCommand RemoveRangeCommand { get; set; } = default!;
+    public Func<TResponse, object?>? GetEntityId { get; set; }
     public Type GetAllReturnType { get; set; } = default!;
     public Type GetByIdReturnType { get; set; } = default!;
     public Type AddReturnType { get; set; } = default!;

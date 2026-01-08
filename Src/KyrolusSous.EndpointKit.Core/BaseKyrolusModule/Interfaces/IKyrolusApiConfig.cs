@@ -1,6 +1,4 @@
-using KyrolusSous.EasyAPI.BaseKyrolusModule.Enum;
-
-namespace KyrolusSous.EasyAPI.BaseKyrolusModule.Interfaces;
+namespace KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Interfaces;
 
 public interface IEndpointConfig
 {
@@ -26,9 +24,10 @@ where TResponse : class
     public IKyrolusCommand<TResponse> UpdateCommand { get; set; }
     public IKyrolusCommand<TResponse> PatchCommand { get; set; }
     public IKyrolusCommand<IEnumerable<TResponse>> UpdateRangeCommand { get; set; }
-    public IKyrolusCommand<Unit> RemoveCommand { get; set; }
-    public IKyrolusCommand<IEnumerable<Unit>> RemoveRangeCommand { get; set; }
+    public IKyrolusCommand RemoveCommand { get; set; }
+    public IKyrolusCommand RemoveRangeCommand { get; set; }
     public IKyrolusCommand<bool> UpdateActiviationStateCommand { get; set; }
+    public Func<TResponse, object?>? GetEntityId { get; set; }
 
     public Type GetAllReturnType { get; set; }
     public Type GetByIdReturnType { get; set; }

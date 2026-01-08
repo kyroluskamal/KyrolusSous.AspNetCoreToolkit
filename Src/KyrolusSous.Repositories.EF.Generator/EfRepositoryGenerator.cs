@@ -2050,7 +2050,7 @@ private async Task InvalidateCachesAsync(IEnumerable<{{{request.EntityType.ToDis
                 $"                    ? e => e.{n} != null && global::Microsoft.EntityFrameworkCore.EF.Functions.Like(e.{n}!, value + \"%\")\n" +
                 $"                    : op.Equals(\"endswith\", StringComparison.OrdinalIgnoreCase)\n" +
                 $"                        ? e => e.{n} != null && global::Microsoft.EntityFrameworkCore.EF.Functions.Like(e.{n}!, \"%\" + value)\n" +
-                $"                        : e => e.{n} == value,"));
+                $"                        : null,"));
             var numericCases = string.Join("\n", buckets.NumericProps.Select(p =>
                 $"            \"{p.Name}\" => NumericPredicate_{p.Name}(op, value),"));
             var dateCases = string.Join("\n", buckets.DateProps.Select(p =>
@@ -2111,7 +2111,9 @@ namespace KyrolusSous.Repositories.EF.Generated
                     if (string.IsNullOrWhiteSpace(f.Property)) continue;
                     if (f.Value is null) continue;
                     var predicate = BuildPredicate(f.Property, f.Operator, f.Value);
-                    if (predicate is null) continue;
+                    if (predicate is null) 
+                        throw new ArgumentException(
+                            $"Invalid filter: property='{f.Property}', operator='{f.Operator}', value='{f.Value}'");
                     filter = filter is null ? predicate : And(filter, predicate);
                 }
             }
@@ -2183,7 +2185,7 @@ namespace KyrolusSous.Repositories.EF.Generated
         private static Expression<Func<{{request.EntityType.ToDisplayString()}}, bool>>? BuildStringPredicate(string name, string op, string value) => name switch
         {
 {{stringFilterCases}}
-            _ => null
+            _ => throw new ArgumentException($"Invalid property for Type {{request.EntityType.ToDisplayString()}}")
         };
 
         private static Expression<Func<T, bool>> And<T>(Expression<Func<T, bool>> left, Expression<Func<T, bool>> right)
@@ -2318,7 +2320,7 @@ namespace KyrolusSous.Repositories.EF.Generated
                 "gte" => e => {{guard}}{{valueAccess}} >= parsed,
                 "lt" => e => {{guard}}{{valueAccess}} < parsed,
                 "lte" => e => {{guard}}{{valueAccess}} <= parsed,
-                _ => null
+                _ => throw new ArgumentException($"Unsupported operator '{op}' for '{{p.Name}}'")
             };
         }
 """;
@@ -2340,7 +2342,7 @@ namespace KyrolusSous.Repositories.EF.Generated
                 "gte" => e => {{guard}}{{valueAccess}} >= parsed,
                 "lt" => e => {{guard}}{{valueAccess}} < parsed,
                 "lte" => e => {{guard}}{{valueAccess}} <= parsed,
-                _ => null
+                _ => throw new ArgumentException($"Unsupported operator '{op}' for '{{p.Name}}'")
             };
         }
 """;
@@ -2356,7 +2358,7 @@ namespace KyrolusSous.Repositories.EF.Generated
             if (!bool.TryParse(value, out var parsed)) return null;
             return op.Equals("eq", StringComparison.OrdinalIgnoreCase)
                 ? e => {{guard}}{{valueAccess}} == parsed
-                : null;
+                : throw new ArgumentException($"Unsupported operator '{op}' for '{{p.Name}}'");
         }
 """;
         }
@@ -2371,7 +2373,7 @@ namespace KyrolusSous.Repositories.EF.Generated
             if (!Guid.TryParse(value, out var parsed)) return null;
             return op.Equals("eq", StringComparison.OrdinalIgnoreCase)
                 ? e => {{guard}}{{valueAccess}} == parsed
-                : null;
+                : throw new ArgumentException($"Unsupported operator '{op}' for '{{p.Name}}'");
         }
 """;
         }
@@ -2387,7 +2389,7 @@ namespace KyrolusSous.Repositories.EF.Generated
             if (!Enum.TryParse<{{tName}}>(value, true, out var parsed)) return null;
             return op.Equals("eq", StringComparison.OrdinalIgnoreCase)
                 ? e => {{guard}}{{valueAccess}} == parsed
-                : null;
+                : throw new ArgumentException($"Unsupported operator '{op}' for '{{p.Name}}'");
         }
 """;
         }

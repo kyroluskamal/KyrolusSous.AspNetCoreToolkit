@@ -5,7 +5,7 @@ public static class ConcurrencyHelper
     public static async Task<ConcurrencyInfo?> BuildConcurrencyInfoAsync(DbUpdateConcurrencyException ex, string? rowVersionPropertyName = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ex);
-        var entry = ex.Entries.FirstOrDefault();
+        var entry = ex.Entries.Count > 0 ? ex.Entries[0] : null;
         if (entry is null) return null;
 
         byte[]? original = null;
@@ -84,8 +84,8 @@ public static class ConcurrencyHelper
     private static async Task<ConcurrencyInfo> ResolveConcurrencyInfoAsync(
         Func<DbUpdateConcurrencyException, Task<ConcurrencyInfo?>>? concurrencyInfoFactory,
         DbUpdateConcurrencyException ex,
-        
-        int attempt,CancellationToken cancellationToken)
+
+        int attempt, CancellationToken cancellationToken)
     {
         var info = concurrencyInfoFactory != null
             ? await concurrencyInfoFactory(ex).ConfigureAwait(false)

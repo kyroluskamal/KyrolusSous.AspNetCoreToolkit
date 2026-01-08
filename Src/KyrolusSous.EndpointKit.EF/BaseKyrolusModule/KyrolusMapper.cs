@@ -1,30 +1,22 @@
-using KyrolusSous.EasyAPI.BaseKyrolusModule.Interfaces;
-
-namespace KyrolusSous.EasyAPI.BaseKyrolusModule;
+namespace KyrolusSous.EndpointKit.EF.BaseKyrolusModule;
 
 public class KyrolusMapper : IKyrolusMapper
 {
     public dynamic MapModelToEntity<TModel, TResponse>(TModel model) where TModel : class
     {
-        if (model == null)
-        {
-            throw new ArgumentNullException(nameof(model));
-        }
+        ArgumentNullException.ThrowIfNull(model);
         var response = model.Adapt<TResponse>() ?? throw new InvalidOperationException("Mapping resulted in a null response.");
         return response;
     }
 
-    public dynamic MapModelToEntity<TModel, TResponse>(IEnumerable<TModel> model) where TModel : class
+    public static dynamic MapModelToEntity<TModel, TResponse>(IEnumerable<TModel> model) where TModel : class
     {
-        if (model == null)
-        {
-            throw new ArgumentNullException(nameof(model));
-        }
+        ArgumentNullException.ThrowIfNull(model);
         var response = model.Adapt<IEnumerable<TResponse>>() ?? throw new InvalidOperationException("Mapping resulted in a null response.");
         return response;
     }
 
-    public dynamic MapResponseToViewModel<TResponse>(TResponse model, Type viewModelType, int statusCode, string message = "Success") where TResponse : class
+    public static dynamic MapResponseToViewModel<TResponse>(TResponse model, Type viewModelType, int statusCode, string message = "Success") where TResponse : class
     {
         Type targetType;
         if (typeof(TResponse).IsGenericType && typeof(TResponse).GetInterfaces().Contains(typeof(IEnumerable<>)))

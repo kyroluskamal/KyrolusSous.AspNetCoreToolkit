@@ -1,0 +1,8 @@
+global using KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Enum;
+global using KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Interfaces;
+global using KyrolusSous.Mediator.Abstractions.Interfaces;
+global using Microsoft.AspNetCore.Builder;
+global using Microsoft.AspNetCore.Http;
+global using Microsoft.AspNetCore.Mvc;
+global using Microsoft.AspNetCore.Routing;
+global using Microsoft.Extensions.DependencyInjection;

@@ -4,3 +4,16 @@ global using System.Text.Json;
 global using KyrolusSous.Repositories.EF.Abstractions.Query;
 global using KyrolusSous.Repositories.EF.Generator.TestApp.Models;
 global using Shouldly;
+global using KyrolusSous.Repositories.EF.Generator.TestApp;
+global using Microsoft.Data.Sqlite;
+global using Microsoft.EntityFrameworkCore;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.DependencyInjection.Extensions;
+global using System.Numerics;
+global using System.Linq;
+
+global using System.Net;
+global using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
+global using KyrolusSous.Repositories.EF.Abstractions.Policy;
+global using KyrolusSous.Repositories.EF.Generated;
+global using KyrolusSous.Repositories.EF.Generator.TestApp.Repositories;
