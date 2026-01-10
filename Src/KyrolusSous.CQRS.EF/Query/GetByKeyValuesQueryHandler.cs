@@ -2,35 +2,32 @@ using Microsoft.EntityFrameworkCore;
 
 namespace KyrolusSous.CQRS.EF.Query;
 
-public class GetAllQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUnitOfWork unitOfWork)
-: IKyrolusQueryHandler<GetAllQuery<TResponse>, IEnumerable<TResponse>>
+public class GetByKeyValuesQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUnitOfWork unitOfWork)
+    : IKyrolusQueryHandler<GetByKeyValuesQuery<TResponse, TKey>, TResponse?>
     where TDbcontext : DbContext
     where TResponse : class
     where TKey : IEquatable<TKey>
 {
-    public async Task<IEnumerable<TResponse>> Handle(GetAllQuery<TResponse> query, CancellationToken cancellationToken)
+    public async Task<TResponse?> Handle(GetByKeyValuesQuery<TResponse, TKey> query, CancellationToken cancellationToken)
     {
-        var repo = unitOfWork.GetRepository<IKyrolusRepositoryAsync<TDbcontext, TResponse, TKey>>();
+        var repo = unitOfWork.GetRepository<IKyrolusCompositeKeyRepositoryAsync<TDbcontext, TResponse, TKey>>();
         var includeExpressions = query.IncludeExpressions;
         if (includeExpressions is not null && includeExpressions.Length > 0)
         {
-            return await repo.GetAllAsync(
-                query.Filter,
-                query.OrderBy,
+            return await repo.GetByIdAsync(
+                query.KeyValues,
                 query.AsNoTracking,
                 query.UseSplitQuery,
                 cancellationToken,
                 includeExpressions);
         }
 
-        return await repo.GetAllAsync(
-            query.Filter,
-            query.OrderBy,
+        return await repo.GetByIdAsync(
+            query.KeyValues,
             query.IncludeProperties,
             includeGraph: null,
             asNoTracking: query.AsNoTracking,
             useSplitQuery: query.UseSplitQuery,
             cancellationToken);
     }
-
 }

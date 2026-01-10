@@ -7,7 +7,7 @@ public sealed class KyrolusRepositoryPolicy
     public bool? EnableSoftDeleteDefault { get; init; }
     public string? SoftDeleteProperty { get; init; } = "IsDeleted";
     public string? RowVersionProperty { get; init; }
-    public Delegate? GlobalQueryFilter { get; init; }
+    public Dictionary<Type, List<Delegate>> GlobalQueryFilters { get; init; } = [];
     public int ConcurrencyRetryCount { get; init; } = 0;
     public TimeSpan? ConcurrencyRetryDelay { get; init; }
     public int? DefaultPageSize { get; init; }

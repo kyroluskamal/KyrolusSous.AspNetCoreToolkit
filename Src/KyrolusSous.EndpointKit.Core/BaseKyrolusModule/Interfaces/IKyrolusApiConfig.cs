@@ -1,3 +1,5 @@
+using KyrolusSous.EndpointKit.Core.BaseKyrolusModule;
+
 namespace KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Interfaces;
 
 public interface IEndpointConfig
@@ -7,6 +9,9 @@ public interface IEndpointConfig
     public Type? ViewModelType { get; set; }
     public bool Authorize { get; set; }
     public dynamic? AuthorizationPolicy { get; set; }
+    public string? RateLimitPolicy { get; set; }
+    public bool? Idempotent { get; set; }
+    public IReadOnlyCollection<KyrolusOpenApiResponse>? Responses { get; set; }
 
 }
 
@@ -16,6 +21,14 @@ where TResponse : class
     public string ApiName { get; set; }
     public string Prefix { get; set; }
     public string Route { get; set; }
+    public string? ApiVersion { get; set; }
+    public string VersionPrefix { get; set; }
+    public bool AppendVersionToPrefix { get; set; }
+    public string? RateLimitPolicy { get; set; }
+    public bool EnableIdempotency { get; set; }
+    public bool IdempotencyIncludeGet { get; set; }
+    public string IdempotencyHeaderName { get; set; }
+    public TimeSpan? IdempotencyTtl { get; set; }
     public IKyrolusQuery<TResponse?> QueryById { get; set; }
     public IKyrolusQuery<IEnumerable<TResponse>> QueryAll { get; set; }
     public IKyrolusQuery<IEnumerable<TResponse>> QueryByProperty { get; set; }
@@ -28,6 +41,7 @@ where TResponse : class
     public IKyrolusCommand RemoveRangeCommand { get; set; }
     public IKyrolusCommand<bool> UpdateActiviationStateCommand { get; set; }
     public Func<TResponse, object?>? GetEntityId { get; set; }
+    public Action<TResponse, object?>? SetEntityId { get; set; }
 
     public Type GetAllReturnType { get; set; }
     public Type GetByIdReturnType { get; set; }
@@ -38,6 +52,7 @@ where TResponse : class
     public Type RemoveReturnType { get; set; }
     public Type RemoveRangeReturnType { get; set; }
     public IEnumerable<IEndpointConfig> EndpointConfig { get; set; }
+    public IReadOnlyCollection<KyrolusOpenApiResponse>? DefaultResponses { get; set; }
     public IEnumerable<EndpointNames> Endpoints { get; set; }
     public IEnumerable<EndpointNames> AllEndpointsExcept { get; set; }
     public Type ViewModelType { get; set; }

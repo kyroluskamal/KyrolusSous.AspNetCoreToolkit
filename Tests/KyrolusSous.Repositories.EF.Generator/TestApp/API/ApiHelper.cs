@@ -7,7 +7,7 @@ public static class ApiHelper
 {
     public static object ShapeForResponse<TEntity>(IEnumerable<TEntity> items, string[]? includes)
     {
-        var inc = includes ?? Array.Empty<string>();
+        var inc = includes ?? [];
 
         return items.Select(e =>
         {

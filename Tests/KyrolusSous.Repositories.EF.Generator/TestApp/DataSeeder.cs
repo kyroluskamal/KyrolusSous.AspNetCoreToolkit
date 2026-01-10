@@ -1,5 +1,6 @@
 using KyrolusSous.Repositories.EF.Generator.TestApp.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 
 namespace KyrolusSous.Repositories.EF.Generator.TestApp;
 
@@ -49,7 +50,7 @@ public static class DataSeeder
             TenantId = tenantId,
             Name = "Contoso US",
             Locale = "en-US",
-            CreatedAt = now,
+            CreatedAt = DateTimeOffset.Parse("2024-01-01T00:00:00Z", CultureInfo.InvariantCulture),
             UpdatedAt = now
         };
 
@@ -59,7 +60,7 @@ public static class DataSeeder
             TenantId = tenantId,
             Name = "Contoso EU",
             Locale = "en-GB",
-            CreatedAt = now,
+            CreatedAt = DateTimeOffset.Parse("2024-05-01T00:00:00Z", CultureInfo.InvariantCulture),
             UpdatedAt = now
         };
 
@@ -81,7 +82,7 @@ public static class DataSeeder
             StoreId = storeId,
             Name = "Electronics",
             Slug = "electronics",
-            CreatedAt = now,
+            CreatedAt = DateTimeOffset.Parse("2025-01-01T00:00:00Z", CultureInfo.InvariantCulture),
             UpdatedAt = now
         };
 
@@ -105,7 +106,7 @@ public static class DataSeeder
             StockQuantity = 25,
             IsActive = true,
             RowVersion = [0],
-            CreatedAt = now,
+            CreatedAt = DateTimeOffset.Parse("2024-06-01T00:00:00Z", CultureInfo.InvariantCulture),
             UpdatedAt = now
         };
 
@@ -119,7 +120,7 @@ public static class DataSeeder
             StockQuantity = 80,
             IsActive = true,
             RowVersion = [0],
-            CreatedAt = now,
+            CreatedAt = DateTimeOffset.Parse("2024-08-01T00:00:00Z", CultureInfo.InvariantCulture),
             UpdatedAt = now
         };
 
@@ -133,7 +134,7 @@ public static class DataSeeder
             StockQuantity = 50,
             IsActive = true,
             RowVersion = [0],
-            CreatedAt = now,
+            CreatedAt = DateTimeOffset.Parse("2025-01-01T00:00:00Z", CultureInfo.InvariantCulture),
             UpdatedAt = now
         };
 

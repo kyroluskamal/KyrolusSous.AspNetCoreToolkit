@@ -1,6 +1,6 @@
 namespace KyrolusSous.CQRS.EF.Query;
 
-public class GetByIdQuery<TResponse, TKey>(TKey id, bool cacheable = false) : CacheableRequest(cacheable), IKyrolusQuery<TResponse?>
+public class GetByKeyValuesQuery<TResponse, TKey>(object?[] keyValues, bool cacheable = false) : CacheableRequest(cacheable), IKyrolusQuery<TResponse?>
     where TResponse : class
     where TKey : IEquatable<TKey>
 {
@@ -8,6 +8,5 @@ public class GetByIdQuery<TResponse, TKey>(TKey id, bool cacheable = false) : Ca
     public Expression<Func<TResponse, object?>>[]? IncludeExpressions { get; set; }
     public bool? AsNoTracking { get; set; }
     public bool? UseSplitQuery { get; set; }
-    public TKey Id { get; set; } = id;
-
+    public object?[] KeyValues { get; set; } = keyValues;
 }

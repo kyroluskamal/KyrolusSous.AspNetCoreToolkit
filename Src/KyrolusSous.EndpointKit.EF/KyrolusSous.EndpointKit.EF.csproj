@@ -3,6 +3,10 @@
     <ProjectReference Include="..\KyrolusSous.EndpointKit.Core\KyrolusSous.EndpointKit.Core.csproj" />
     <ProjectReference Include="..\KyrolusSous.CQRS.EF\KyrolusSous.CQRS.EF.csproj" />
     <ProjectReference Include="..\KyrolusSous.ExceptionHandling\KyrolusSous.ExceptionHandling.csproj" />
+    <ProjectReference Include="..\KyrolusSous.Repositories.EF.Abstractions\KyrolusSous.Repositories.EF.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Mapster" Version="7.4.0" />

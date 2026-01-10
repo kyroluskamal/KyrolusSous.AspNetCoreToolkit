@@ -146,7 +146,10 @@ public static class SwaggerServiceExtension
             }
 
             // Fallback to assemblies if no absolute paths are provided or if specified
-            var assembliesToProcess = options.XmlCommentAssemblies.Count != 0 ? options.XmlCommentAssemblies : [Assembly.GetEntryAssembly()!];
+            IEnumerable<Assembly> assembliesToProcess = options.XmlCommentAssemblies.Count != 0
+                ? options.XmlCommentAssemblies
+                : (Assembly.GetEntryAssembly() is { } entry ? new[] { entry } : Array.Empty<Assembly>());
+
             foreach (var assembly in assembliesToProcess)
             {
                 var xmlFile = $"{assembly.GetName().Name}.xml";

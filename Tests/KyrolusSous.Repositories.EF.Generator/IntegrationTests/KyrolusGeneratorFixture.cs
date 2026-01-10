@@ -52,4 +52,31 @@ public class KyrolusGeneratorFixture(WebApplicationFactory<Program> factory) : I
                     services.AddSingleton(policy ?? KyrolusRepositoryPolicy.Default);
             });
         });
+
+    public async Task<(HttpResponseMessage response, List<TEntity>? items, string? content)> ArrangeAndActUseingHttpForListAsync<TEntity>(QueryRequest? queyrequest = null)
+    {
+        var withRequest = queyrequest is not null ? $"?request={JsonSerializer.Serialize(queyrequest, JsonOptions)}" : string.Empty;
+        // Arrange
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/{typeof(TEntity).Name.ToLower()}{withRequest}");
+        // Act
+        var response = await _client.SendAsync(request);
+        var content = await response.Content.ReadAsStringAsync();
+        List<TEntity>? items = null;
+        if (response.IsSuccessStatusCode)
+            items = JsonSerializer.Deserialize<List<TEntity>>(content, JsonOptions);
+        return (response, items, content);
+    }
+    public async Task<(HttpResponseMessage response, TEntity? item, string? content)> ArrangeAndActUseingHttpForGetByIdAsync<TEntity>(Guid id, QueryRequest? queyrequest = null)
+    {
+        var withRequest = queyrequest is not null ? $"?request={JsonSerializer.Serialize(queyrequest, JsonOptions)}" : string.Empty;
+        // Arrange
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/{typeof(TEntity).Name.ToLower()}/{id}{withRequest}");
+        // Act
+        var response = await _client.SendAsync(request);
+        var content = await response.Content.ReadAsStringAsync();
+        TEntity? item = default;
+        if (response.IsSuccessStatusCode)
+            item = JsonSerializer.Deserialize<TEntity>(content, JsonOptions);
+        return (response, item, content);
+    }
 }

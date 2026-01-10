@@ -253,7 +253,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                     {{{cacheAssign}}}
                         cacheTtl = {{{(request.CacheTtlSeconds.HasValue ? $"TimeSpan.FromSeconds({request.CacheTtlSeconds.Value})" : "null")}}};
                         cacheAllKey = {{{(request.EnableCaching ? $"\"{request.RepositoryName}:all:compiled\"" : "null")}}};
-                        globalQueryFilter = policy?.GlobalQueryFilter as Func<IQueryable<{{{request.EntityType.ToDisplayString()}}}>, IQueryable<{{{request.EntityType.ToDisplayString()}}}>>;
+                        globalQueryFilter = policy?.GetGlobalQueryFilter<{{{request.EntityType.ToDisplayString()}}}>();
                     }
                     """;
             sb.AppendLine(prefix);
@@ -2050,7 +2050,12 @@ private async Task InvalidateCachesAsync(IEnumerable<{{{request.EntityType.ToDis
                 $"                    ? e => e.{n} != null && global::Microsoft.EntityFrameworkCore.EF.Functions.Like(e.{n}!, value + \"%\")\n" +
                 $"                    : op.Equals(\"endswith\", StringComparison.OrdinalIgnoreCase)\n" +
                 $"                        ? e => e.{n} != null && global::Microsoft.EntityFrameworkCore.EF.Functions.Like(e.{n}!, \"%\" + value)\n" +
-                $"                        : null,"));
+                $"                        : op.Equals(\"eq\", StringComparison.OrdinalIgnoreCase)\n" +
+                $"                            ? e => e.{n} == value\n" +
+                $"                            : op.Equals(\"neq\", StringComparison.OrdinalIgnoreCase)\n" +
+                $"                                ? e => e.{n} != value\n" +
+                $"                                : null,"
+                ));
             var numericCases = string.Join("\n", buckets.NumericProps.Select(p =>
                 $"            \"{p.Name}\" => NumericPredicate_{p.Name}(op, value),"));
             var dateCases = string.Join("\n", buckets.DateProps.Select(p =>
@@ -2108,12 +2113,20 @@ namespace KyrolusSous.Repositories.EF.Generated
             {
                 foreach (var f in request.Filters)
                 {
-                    if (string.IsNullOrWhiteSpace(f.Property)) continue;
-                    if (f.Value is null) continue;
+                    if (string.IsNullOrWhiteSpace(f.Property))
+                        throw new ArgumentException("Invalid filter: 'Property' is required.", nameof(request));
+
+                    if (string.IsNullOrWhiteSpace(f.Operator))
+                        throw new ArgumentException($"Invalid filter for property '{f.Property}': 'Operator' is required.", nameof(request));
+
+                    if (f.Value is null)
+                        throw new ArgumentException($"Invalid filter: property='{f.Property}', operator='{f.Operator}', value is null.", nameof(request));
+
                     var predicate = BuildPredicate(f.Property, f.Operator, f.Value);
-                    if (predicate is null) 
-                        throw new ArgumentException(
-                            $"Invalid filter: property='{f.Property}', operator='{f.Operator}', value='{f.Value}'");
+
+                    if (predicate is null)
+                        throw new ArgumentException($"Invalid filter: property='{f.Property}', operator='{f.Operator}', value='{f.Value}'.", nameof(request));
+
                     filter = filter is null ? predicate : And(filter, predicate);
                 }
             }
@@ -2122,20 +2135,39 @@ namespace KyrolusSous.Repositories.EF.Generated
 
         public Func<IQueryable<{{request.EntityType.ToDisplayString()}}>, IOrderedQueryable<{{request.EntityType.ToDisplayString()}}>>? BuildOrderBy(QueryRequest? request)
         {
-            if (request?.OrderBy is { Length: > 0 })
+            if (request?.OrderBy is not { Length: > 0 })
+                return null;
+
+            var clauses = new List<(bool Desc, Expression<Func<{{request.EntityType.ToDisplayString()}}, object>> Selector)>();
+            foreach (var clause in request.OrderBy)
             {
-                foreach (var clause in request.OrderBy)
-                {
-                    if (string.IsNullOrWhiteSpace(clause.Property)) continue;
-                    if (!OrderProps.Contains(clause.Property)) continue;
-                    var sel = BuildSelector(clause.Property);
-                    if (sel is null) continue;
-                    return clause.Desc
-                        ? q => q.OrderByDescending(sel)
-                        : q => q.OrderBy(sel);
-                }
+                if (string.IsNullOrWhiteSpace(clause.Property))
+                    throw new ArgumentException("Invalid orderBy: 'Property' is required.", nameof(request));
+
+                if (!OrderProps.Contains(clause.Property))
+                    throw new ArgumentException($"Invalid orderBy: property='{clause.Property}' not found on entity '{typeof({{request.EntityType.ToDisplayString()}}).Name}'.", nameof(request));
+
+                var sel = BuildSelector(clause.Property);
+                if (sel is null)
+                    throw new ArgumentException($"Invalid orderBy: cannot build selector for '{clause.Property}'.", nameof(request));
+
+                clauses.Add((clause.Desc, sel));
             }
-            return null;
+
+            if (clauses.Count == 0)
+                return null;
+
+            return q =>
+            {
+                IOrderedQueryable<{{request.EntityType.ToDisplayString()}}>? ordered = null;
+                foreach (var clause in clauses)
+                {
+                    ordered = ordered is null
+                        ? (clause.Desc ? q.OrderByDescending(clause.Selector) : q.OrderBy(clause.Selector))
+                        : (clause.Desc ? ordered.ThenByDescending(clause.Selector) : ordered.ThenBy(clause.Selector));
+                }
+                return ordered!;
+            };
         }
 
         public Expression<Func<{{request.EntityType.ToDisplayString()}}, object?>>[] BuildIncludes(QueryRequest? request)
@@ -2334,7 +2366,14 @@ namespace KyrolusSous.Repositories.EF.Generated
             return $$"""
         private static Expression<Func<{{request.EntityType.ToDisplayString()}}, bool>>? DatePredicate_{{p.Name}}(string op, string value)
         {
-            if (!{{tName}}.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)) return null;
+            var cleaned = value;
+            if (!string.IsNullOrWhiteSpace(cleaned))
+            {
+                cleaned = Uri.UnescapeDataString(cleaned).Trim();
+                if (cleaned.Length >= 2 && cleaned[0] == '"' && cleaned[^1] == '"')
+                    cleaned = cleaned[1..^1];
+            }
+            if (!{{tName}}.TryParse(cleaned, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)) return null;
             return op.ToLowerInvariant() switch
             {
                 "eq" => e => {{guard}}{{valueAccess}} == parsed,

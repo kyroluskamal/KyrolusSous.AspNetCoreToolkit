@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Net;
 using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
 
 namespace KyrolusSous.Repositories.EF.Abstractions.Query
@@ -20,6 +21,7 @@ namespace KyrolusSous.Repositories.EF.Abstractions.Query
     public sealed record FilterClause(string Property, string Operator, string? Value);
     public sealed partial record QueryRequest(
         string[]? Includes = null,
+        string[]? Fields = null,
         OrderClause[]? OrderBy = null,
         FilterClause[]? Filters = null,
         bool? AsNoTracking = null,
@@ -41,7 +43,8 @@ namespace KyrolusSous.Repositories.EF.Abstractions.Query
 
             try
             {
-                result = System.Text.Json.JsonSerializer.Deserialize<QueryRequest>(s, new System.Text.Json.JsonSerializerOptions
+                var decoded = WebUtility.UrlDecode(s);
+                result = System.Text.Json.JsonSerializer.Deserialize<QueryRequest>(decoded, new System.Text.Json.JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 }) ?? new QueryRequest();

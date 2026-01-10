@@ -1,6 +1,7 @@
 using System;
 using KyrolusSous.Repositories.EF.Generator.TestApp.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace KyrolusSous.Repositories.EF.Generator.TestApp;
 
@@ -23,6 +24,37 @@ public class ApplicationDbContext(DbContextOptions options) : DbContext(options)
     protected override void OnModelCreating(ModelBuilder mb)
     {
         base.OnModelCreating(mb);
+
+        if (Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite")
+        {
+            var dateTimeOffsetConverter = new ValueConverter<DateTimeOffset, long>(
+                v => v.ToUnixTimeMilliseconds(),
+                v => DateTimeOffset.FromUnixTimeMilliseconds(v));
+            var nullableDateTimeOffsetConverter = new ValueConverter<DateTimeOffset?, long?>(
+                v => v.HasValue ? v.Value.ToUnixTimeMilliseconds() : null,
+                v => v.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(v.Value) : null);
+
+            foreach (var entityType in mb.Model.GetEntityTypes())
+            {
+                var clrType = entityType.ClrType;
+                if (clrType is null)
+                {
+                    continue;
+                }
+
+                foreach (var property in entityType.GetProperties())
+                {
+                    if (property.ClrType == typeof(DateTimeOffset))
+                    {
+                        mb.Entity(clrType).Property(property.Name).HasConversion(dateTimeOffsetConverter);
+                    }
+                    else if (property.ClrType == typeof(DateTimeOffset?))
+                    {
+                        mb.Entity(clrType).Property(property.Name).HasConversion(nullableDateTimeOffsetConverter);
+                    }
+                }
+            }
+        }
 
         // Keys
         mb.Entity<ProductCategory>().HasKey(x => new { x.ProductId, x.CategoryId });

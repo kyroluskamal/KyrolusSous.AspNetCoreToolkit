@@ -1,3 +1,4 @@
+global using System;
 global using KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Enum;
 global using KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Interfaces;
 global using KyrolusSous.Mediator.Abstractions.Interfaces;

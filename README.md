@@ -2057,6 +2057,263 @@ group.MapGet("/", async (
 
 ---
 
+## KyrolusSous.EndpointKit (Core + EF)
+Mediator-first endpoint scaffolding for Minimal APIs. Core is framework-agnostic (Mediator abstractions only), while EF adds query/paging/filter/include support via CQRS.EF and EF query primitives.
+
+**Packages**
+- `KyrolusSous.EndpointKit.Core`
+- `KyrolusSous.EndpointKit.EF` (provider package)
+
+  **What you get**
+    - CRUD endpoints out of the box (GET/POST/PUT/PATCH/DELETE).
+    - Per-endpoint configuration (authorization, default includes, view models).
+    - Query endpoints (string filter or `QueryRequest`).
+    - Paged endpoints (GET /paged, POST /query/paged).
+    - Includes with dot paths (`Orders.Items`) and expression includes for simple paths.
+    - Field projection via `fields` (comma list) or `QueryRequest.Fields`.
+    - Composite key endpoints (`/by-keys`) for GET/PATCH/DELETE when enabled.
+    - Bulk endpoints (update/delete) for large operations.
+    - Allowlists + strict validation for filters/order/includes.
+    - Cacheable flag propagated to CQRS (`ICacheableRequest`).
+    - Per-endpoint rate limiting + idempotency (optional).
+    - Versioned route prefix (e.g., `/api/v1`).
+
+  **OpenAPI responses (from config)**
+  - Default response codes are applied automatically (200/201 + 400, plus 401/403 if auth is required, and 404 for GetById).
+  - Override globally with `DefaultResponses`, or per endpoint with `EndpointConfig[].Responses`.
+
+  ```csharp
+  config.DefaultResponses = new[]
+  {
+      new KyrolusOpenApiResponse(StatusCodes.Status200OK, typeof(ProductDto)),
+      new KyrolusOpenApiResponse(StatusCodes.Status400BadRequest)
+  };
+
+  config.EndpointConfig =
+  [
+      new KyrolusEndpointConfig
+      {
+          Name = EndpointNames.GetById,
+          Responses = new[]
+          {
+              new KyrolusOpenApiResponse(StatusCodes.Status200OK, typeof(ProductDto)),
+              new KyrolusOpenApiResponse(StatusCodes.Status404NotFound)
+          }
+      }
+  ];
+  ```
+
+### Quick start
+```csharp
+builder.Services.AddKyrolusDefaults(); // registers EF route mapper + default handlers
+
+builder.Services.AddKyrolus(modules =>
+{
+    var config = new KyrolusEfApiConfig<Product>
+    {
+        ApiName = "Products",
+        Route = "product",
+        ViewModelType = typeof(ProductDto),
+        ApiVersion = "1",
+        VersionPrefix = "v",
+        AppendVersionToPrefix = true,
+        RateLimitPolicy = "fixed",
+        EnableIdempotency = true,
+        IdempotencyHeaderName = "Idempotency-Key",
+        IdempotencyTtl = TimeSpan.FromMinutes(10),
+        QueryAll = new GetAllQuery<Product>(),
+        QueryById = new GetByIdQuery<Product, Guid>(Guid.Empty),
+        QueryByProperty = new GetAllQuery<Product>(),
+        AddCommand = new AddCommand<Product>(default!),
+        AddRangeCommand = new AddRangeCommand<Product>([]),
+        UpdateCommand = new UpdateCommand<Product>(default!),
+        UpdateRangeCommand = new UpdateRangeCommand<Product>([]),
+        PatchCommand = new PatchCommand<Product, Guid>(null, new Dictionary<string, object>()),
+        RemoveCommand = new RemoveByIdCommand<Product, Guid>(null),
+        RemoveRangeCommand = new RemoveRangeCommand<Product>([]),
+        ExecuteUpdateCommand = new ExecuteUpdateCommand<Product, Guid>(p => true, new Dictionary<string, object>(), false, null),
+        ExecuteDeleteCommand = new ExecuteDeleteCommand<Product, Guid>(p => true, false, null),
+          AllowedFilterProperties = new[] { "Name", "Price", "CategoryId" },
+          AllowedOrderProperties = new[] { "Name", "Price", "CreatedAt" },
+          AllowedIncludeProperties = new[] { "Category", "OrderLines", "OrderLines.Order" },
+          AllowedSelectProperties = new[] { "Id", "Name", "Price", "Category.Name" },
+          StrictFilterValidation = true,
+          StrictIncludeValidation = true,
+          StrictSelectValidation = true,
+          DefaultPageSize = 50,
+          MaxPageSize = 200,
+          EnableCompositeKeyEndpoints = true,
+          CompositeKeyOnly = true,
+          CompositeKeyParser = parts => new object?[]
+          {
+              Guid.Parse(parts[0], CultureInfo.InvariantCulture),
+              int.Parse(parts[1], CultureInfo.InvariantCulture)
+          },
+          CompositeKeyTypes = new[] { typeof(Guid), typeof(int) },
+          EnableBulkEndpoints = true
+      };
+
+    modules.AddModule<BaseKyrolusModule<Product, ProductCreateDto, Guid>, Product, ProductCreateDto, Guid>(config);
+});
+
+app.MapKyrolus();
+```
+
+### Endpoints generated (Core + EF)
+- `GET /{route}s`  
+  Query params: `filter`, `includedProps`, `fields`, `cacheable`
+- `GET /{route}/{id}`  
+  Query params: `includedProps`, `fields`, `cacheable`
+- `POST /{route}` (Create)
+- `POST /{route}s` (CreateRange)
+- `PUT /{route}/{id}` (Update)
+- `PATCH /{route}/{id}` (Patch)
+- `PUT /{route}s` (UpdateRange)
+- `DELETE /{route}/{id}` (Delete)
+- `DELETE /{route}s` (DeleteRange)
+- `GET /{route}/by-keys`  
+  Query params: `keys`, `includedProps`, `fields`, `cacheable`
+- `PATCH /{route}/by-keys`  
+  Query params: `keys`, `cacheable`
+- `DELETE /{route}/by-keys`  
+  Query params: `keys`, `cacheable`
+- `POST /{route}s/query`  
+  Body: `QueryRequest`
+- `GET /{route}s/paged`  
+  Query params: `filter`, `orderBy`, `includes`, `fields`, `pageNumber`, `pageSize`, `cacheable`, `asNoTracking`, `useSplitQuery`
+- `POST /{route}s/query/paged`  
+  Body: `KyrolusEfPagedQueryRequest`
+- `POST /{route}s/bulk/update`  
+  Body: `KyrolusEfBulkUpdateRequest`
+- `POST /{route}s/bulk/delete`  
+  Body: `KyrolusEfBulkDeleteRequest`
+
+### Bulk update/delete
+```http
+POST /api/product/bulk/update
+```
+```json
+{
+  "request": {
+    "filters": [
+      { "property": "Price", "operator": "lt", "value": "50" }
+    ],
+    "useSplitQuery": false
+  },
+  "updates": {
+    "Price": 55.5,
+    "IsActive": true
+  },
+  "cacheable": false
+}
+```
+
+```http
+POST /api/product/bulk/delete
+```
+```json
+{
+  "request": {
+    "filters": [
+      { "property": "IsDeleted", "operator": "eq", "value": "true" }
+    ]
+  },
+  "cacheable": false
+}
+```
+
+### String filter syntax (GET /{route}s)
+- AND: comma `,`  
+- OR: pipe `|`
+- Example: `Name==John,Price>=100|CategoryId==1`
+
+### QueryRequest (POST /{route}s/query)
+```json
+{
+  "includes": ["Category", "OrderLines.Order"],
+  "fields": ["Id", "Name", "Category.Name"],
+  "orderBy": [{ "property": "CreatedAt", "desc": true }],
+  "filters": [
+    { "property": "Name", "operator": "contains", "value": "soft" },
+    { "property": "Price", "operator": "gte", "value": "100" }
+  ],
+  "asNoTracking": true,
+  "useSplitQuery": true
+}
+```
+
+### Field selection (projection)
+```http
+GET /api/product?fields=Id,Name,Category.Name
+```
+
+### Composite key endpoints
+`keys` accepts repeated values (`keys=...&keys=...`) or a single comma list (`keys=a,b`).
+You can enable typed conversion via `CompositeKeyTypes` or a custom `CompositeKeyParser`.
+Set `CompositeKeyOnly = true` to disable `/id` endpoints and expose only `/by-keys` for GET/PATCH/DELETE.
+
+```http
+GET    /api/orderline/by-keys?keys=8d5f1b5b-0baf-4b5c-8a8b-0a59b4d6d7a1&keys=12
+PATCH  /api/orderline/by-keys?keys=8d5f1b5b-0baf-4b5c-8a8b-0a59b4d6d7a1,12
+DELETE /api/orderline/by-keys?keys=8d5f1b5b-0baf-4b5c-8a8b-0a59b4d6d7a1&keys=12
+```
+
+### Rate limiting + idempotency
+```csharp
+config.RateLimitPolicy = "fixed"; // registered ASP.NET RateLimiter policy
+config.EnableIdempotency = true;
+config.IdempotencyHeaderName = "Idempotency-Key";
+config.IdempotencyTtl = TimeSpan.FromMinutes(10);
+```
+
+Example request:
+```http
+POST /api/product
+Idempotency-Key: 0f9f7b2b-7d36-4f4b-9d4f-0b6d9fd1ab4c
+```
+
+### Versioned routes
+```csharp
+config.ApiVersion = "1";
+config.VersionPrefix = "v";
+config.AppendVersionToPrefix = true;
+// Result: /api/v1/{route}s
+```
+
+### Includes
+- Simple includes are converted to expression includes for performance.
+- Dot paths (`Orders.Items`) are kept as string includes.
+
+### View models
+You can return different view models per endpoint:
+```csharp
+public sealed class EndpointConfig : IEndpointConfig
+{
+    public EndpointNames Name { get; set; }
+    public string[] IncludeProps { get; set; } = [];
+    public Type? ViewModelType { get; set; }
+    public bool Authorize { get; set; }
+    public dynamic? AuthorizationPolicy { get; set; }
+}
+
+config.EndpointConfig = new[]
+{
+    new EndpointConfig
+    {
+        Name = EndpointNames.GetAll,
+        ViewModelType = typeof(ProductListDto),
+        IncludeProps = ["Category"],
+        Authorize = true,
+        AuthorizationPolicy = "Products.Read"
+    }
+};
+```
+
+### Replace mapping
+Default mapper uses Mapster. Replace by registering your own `IKyrolusMapper`.
+
+---
+
 ## Tests
 - Runtime EF: `Tests/KyrolusSous.BaseRepositoryEF.Tests/KyrolusSous.BaseRepositoryEF.UnitTests` and `...IntegrationTests`.
 - Generator: `GeneratorTests` ensures source generation succeeds.

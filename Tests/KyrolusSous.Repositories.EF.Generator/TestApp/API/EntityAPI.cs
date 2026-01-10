@@ -162,8 +162,7 @@ public static class EntityApi
             {
                 if (isComposite) return Results.BadRequest("Composite-key entities must use /by-id with keys.");
 
-                var repo = uow.Get<TRepo>() as IKyrolusSingleKeyRepositoryAsync<ApplicationDbContext, TEntity, TKey>;
-                if (repo is null) return Results.BadRequest("Single-key endpoint requires single-key repo.");
+                if (uow.Get<TRepo>() is not IKyrolusSingleKeyRepositoryAsync<ApplicationDbContext, TEntity, TKey> repo) return Results.BadRequest("Single-key endpoint requires single-key repo.");
 
                 var result = await repo.TryRemoveAsync(CastKey(ParseObject(id)), softDelete, ct);
                 if (result.Status == KyrolusRepositoryOperationStatus.NotFound)

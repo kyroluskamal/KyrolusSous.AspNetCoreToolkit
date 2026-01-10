@@ -9,23 +9,101 @@ public class DefaultRouteMapper<TResponse, TModel, TKey> : IRouteMapper<TRespons
     {
         config.Route ??= typeof(TResponse).Name;
         config.ApiName ??= typeof(TResponse).Name;
-        var group = app.MapGroup(config.Prefix ?? "").WithTags(config.ApiName);
+        var groupPrefix = BuildGroupPrefix(config);
+        var group = app.MapGroup(groupPrefix).WithTags(config.ApiName);
         var endpointsToMap = GetEndpointsToMap(config);
         bool ShouldMap(EndpointNames currentEndpoint) => config.AllEndpointsExcept is not null ?
             !endpointsToMap.Contains(currentEndpoint) : endpointsToMap.Contains(currentEndpoint)
             || endpointsToMap.Contains(EndpointNames.All);
 
-        _ = ShouldMap(EndpointNames.GetAll) ? group.MapGet($"{config.Route}s", commandQueryHandler.HandleGetAllAsync).Authorize(Authorize(config, EndpointNames.GetAll)) : null;
-        _ = ShouldMap(EndpointNames.GetById) ? group.MapGet($"/{config.Route}/{{id}}", commandQueryHandler.HandleGetByIdAsync).Authorize(Authorize(config, EndpointNames.GetById)) : null;
-        _ = ShouldMap(EndpointNames.Add) ? group.MapPost(config.Route, commandQueryHandler.HandleCreateAsync).Authorize(Authorize(config, EndpointNames.Add)) : null;
-        _ = ShouldMap(EndpointNames.AddRange) ? group.MapPost($"{config.Route}s", commandQueryHandler.HandleCreateRangeAsync).Authorize(Authorize(config, EndpointNames.AddRange)) : null;
-        _ = ShouldMap(EndpointNames.Update) ? group.MapPut($"/{config.Route}/{{id}}", commandQueryHandler.HandleUpdateAsync).Authorize(Authorize(config, EndpointNames.Update)) : null;
-        _ = ShouldMap(EndpointNames.Patch) ? group.MapPatch($"/{config.Route}/{{id}}", commandQueryHandler.HandlePatchAsync).Authorize(Authorize(config, EndpointNames.Patch)) : null;
-        _ = ShouldMap(EndpointNames.UpdateRange) ? group.MapPut($"/{config.Route}s", commandQueryHandler.HandleUpdateRangeAsync).Authorize(Authorize(config, EndpointNames.UpdateRange)) : null;
-        _ = ShouldMap(EndpointNames.Delete) ? group.MapDelete($"/{config.Route}/{{id}}", commandQueryHandler.HandleRemoveAsync).Authorize(Authorize(config, EndpointNames.Delete)) : null;
-        _ = ShouldMap(EndpointNames.DeleteRange) ? group.MapDelete($"{config.Route}s", commandQueryHandler.HandleRemoveRangeAsync).Authorize(Authorize(config, EndpointNames.DeleteRange)) : null;
+        if (ShouldMap(EndpointNames.GetAll))
+        {
+            group.MapGet($"{config.Route}s", commandQueryHandler.HandleGetAllAsync)
+                .Authorize(Authorize(config, EndpointNames.GetAll))
+                .ApplyOpenApi(config, EndpointNames.GetAll)
+                .ApplyEndpointPolicies(config, EndpointNames.GetAll);
+        }
+
+        if (ShouldMap(EndpointNames.GetById))
+        {
+            group.MapGet($"/{config.Route}/{{id}}", commandQueryHandler.HandleGetByIdAsync)
+                .Authorize(Authorize(config, EndpointNames.GetById))
+                .ApplyOpenApi(config, EndpointNames.GetById)
+                .ApplyEndpointPolicies(config, EndpointNames.GetById);
+        }
+
+        if (ShouldMap(EndpointNames.Add))
+        {
+            group.MapPost(config.Route, commandQueryHandler.HandleCreateAsync)
+                .Authorize(Authorize(config, EndpointNames.Add))
+                .ApplyOpenApi(config, EndpointNames.Add)
+                .ApplyEndpointPolicies(config, EndpointNames.Add);
+        }
+
+        if (ShouldMap(EndpointNames.AddRange))
+        {
+            group.MapPost($"{config.Route}s", commandQueryHandler.HandleCreateRangeAsync)
+                .Authorize(Authorize(config, EndpointNames.AddRange))
+                .ApplyOpenApi(config, EndpointNames.AddRange)
+                .ApplyEndpointPolicies(config, EndpointNames.AddRange);
+        }
+
+        if (ShouldMap(EndpointNames.Update))
+        {
+            group.MapPut($"/{config.Route}/{{id}}", commandQueryHandler.HandleUpdateAsync)
+                .Authorize(Authorize(config, EndpointNames.Update))
+                .ApplyOpenApi(config, EndpointNames.Update)
+                .ApplyEndpointPolicies(config, EndpointNames.Update);
+        }
+
+        if (ShouldMap(EndpointNames.Patch))
+        {
+            group.MapPatch($"/{config.Route}/{{id}}", commandQueryHandler.HandlePatchAsync)
+                .Authorize(Authorize(config, EndpointNames.Patch))
+                .ApplyOpenApi(config, EndpointNames.Patch)
+                .ApplyEndpointPolicies(config, EndpointNames.Patch);
+        }
+
+        if (ShouldMap(EndpointNames.UpdateRange))
+        {
+            group.MapPut($"/{config.Route}s", commandQueryHandler.HandleUpdateRangeAsync)
+                .Authorize(Authorize(config, EndpointNames.UpdateRange))
+                .ApplyOpenApi(config, EndpointNames.UpdateRange)
+                .ApplyEndpointPolicies(config, EndpointNames.UpdateRange);
+        }
+
+        if (ShouldMap(EndpointNames.Delete))
+        {
+            group.MapDelete($"/{config.Route}/{{id}}", commandQueryHandler.HandleRemoveAsync)
+                .Authorize(Authorize(config, EndpointNames.Delete))
+                .ApplyOpenApi(config, EndpointNames.Delete)
+                .ApplyEndpointPolicies(config, EndpointNames.Delete);
+        }
+
+        if (ShouldMap(EndpointNames.DeleteRange))
+        {
+            group.MapDelete($"{config.Route}s", commandQueryHandler.HandleRemoveRangeAsync)
+                .Authorize(Authorize(config, EndpointNames.DeleteRange))
+                .ApplyOpenApi(config, EndpointNames.DeleteRange)
+                .ApplyEndpointPolicies(config, EndpointNames.DeleteRange);
+        }
 
         return group;
+    }
+
+    private static string BuildGroupPrefix(IKyrolusApiConfig<TResponse> config)
+    {
+        var prefix = (config.Prefix ?? string.Empty).Trim('/');
+        var versionSegment = string.Empty;
+        if (config.AppendVersionToPrefix && !string.IsNullOrWhiteSpace(config.ApiVersion))
+        {
+            var versionPrefix = string.IsNullOrWhiteSpace(config.VersionPrefix) ? "v" : config.VersionPrefix;
+            versionSegment = $"{versionPrefix}{config.ApiVersion}".Trim('/');
+        }
+
+        if (string.IsNullOrEmpty(prefix)) return versionSegment;
+        if (string.IsNullOrEmpty(versionSegment)) return prefix;
+        return $"{prefix}/{versionSegment}";
     }
 
     private static IEnumerable<EndpointNames> GetEndpointsToMap(IKyrolusApiConfig<TResponse> config)
@@ -61,7 +139,7 @@ public class DefaultRouteMapper<TResponse, TModel, TKey> : IRouteMapper<TRespons
     }
 }
 
-static class MinimalApiAuthroizeExtensions
+public static class MinimalApiAuthroizeExtensions
 {
     public static RouteHandlerBuilder Authorize(this RouteHandlerBuilder builder, (bool requireAuthorization, string? policy) authorize)
     {

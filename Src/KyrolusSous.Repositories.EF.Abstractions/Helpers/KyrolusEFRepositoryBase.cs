@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace KyrolusSous.Repositories.EF.Abstractions.Helpers;
 
 public class KyrolusEFRepositoryBase<TEntity>
@@ -35,7 +37,7 @@ public class KyrolusEFRepositoryBase<TEntity>
             var value = keyValues[i];
             var convertedValue = value == null
                 ? Expression.Constant(null, left.Type)
-                : Expression.Constant(Convert.ChangeType(value, left.Type), left.Type);
+                : Expression.Constant(ConvertToType(value, left.Type), left.Type);
 
             var equal = Expression.Equal(left, convertedValue);
             body = body == null ? equal : Expression.AndAlso(body, equal);
@@ -55,12 +57,65 @@ public class KyrolusEFRepositoryBase<TEntity>
             var sourceValue = typeof(TEntity).GetProperty(prop)!.GetValue(source);
             var right = sourceValue == null
                 ? Expression.Constant(null, left.Type)
-                : Expression.Constant(Convert.ChangeType(sourceValue, left.Type), left.Type);
+                : Expression.Constant(ConvertToType(sourceValue, left.Type), left.Type);
 
             var equal = Expression.Equal(left, right);
             body = body == null ? equal : Expression.AndAlso(body, equal);
         }
 
         return Expression.Lambda<Func<TEntity, bool>>(body!, parameter);
+    }
+
+    private static object? ConvertToType(object? value, Type targetType)
+    {
+        if (value is null) return null;
+        var underlying = Nullable.GetUnderlyingType(targetType) ?? targetType;
+
+        if (underlying.IsInstanceOfType(value)) return value;
+
+        if (underlying == typeof(string)) return value.ToString();
+
+        if (underlying == typeof(Guid))
+        {
+            if (value is Guid guid) return guid;
+            if (value is string guidText && Guid.TryParse(guidText, out var parsed)) return parsed;
+        }
+
+        if (underlying == typeof(DateTimeOffset))
+        {
+            if (value is DateTimeOffset dto) return dto;
+            if (value is string text && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
+            {
+                return parsed;
+            }
+        }
+
+        if (underlying == typeof(DateTime))
+        {
+            if (value is DateTime dt) return dt;
+            if (value is string text && DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
+            {
+                return parsed;
+            }
+        }
+
+        if (underlying == typeof(TimeSpan))
+        {
+            if (value is TimeSpan ts) return ts;
+            if (value is string text && TimeSpan.TryParse(text, CultureInfo.InvariantCulture, out var parsed)) return parsed;
+        }
+
+        if (underlying.IsEnum)
+        {
+            if (value is string enumText) return Enum.Parse(underlying, enumText, true);
+            return Enum.ToObject(underlying, value);
+        }
+
+        if (value is IConvertible)
+        {
+            return Convert.ChangeType(value, underlying, CultureInfo.InvariantCulture);
+        }
+
+        return value;
     }
 }

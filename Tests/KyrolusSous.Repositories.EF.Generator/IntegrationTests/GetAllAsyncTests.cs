@@ -2,76 +2,41 @@ namespace KyrolusSous.Repositories.EF.Generator.IntegrationTests;
 
 public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusGeneratorFixture(factory)
 {
-
     [Fact(DisplayName = "GetAllAsync returns all entities without Include Properties or filters or ordering options")]
     public async Task GetAllAsync_NoIncludeNoFilterNoOrder_ReturnsAllEntities()
     {
-        // Arrange
-        var request = new HttpRequestMessage(HttpMethod.Get, "/api/review");
-
-        // Act
-        var response = await _client.SendAsync(request);
-
+        var (response, reviews, _) = await ArrangeAndActUseingHttpForListAsync<Review>();
         // Assert
         response.EnsureSuccessStatusCode();
-        var content = await response.Content.ReadAsStringAsync();
-        var reviews = JsonSerializer.Deserialize<List<Review>>(content, JsonOptions);
-
         reviews.ShouldNotBeNull();
         reviews.ShouldHaveSingleItem();
     }
-
     #region Filter and Ordering Tests
     [Fact(DisplayName = "GetAllAsync returns entities with Assencding Ordering")]
     public async Task GetAllAsync_Ordering_ReturnsEntitiesWithOrdering()
     {
-        // Arrange
-        var queyrequest = new QueryRequest(OrderBy: [new OrderClause("StockQuantity")]);
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/product?request={JsonSerializer.Serialize(queyrequest, JsonOptions)}");
-        // Act
-        var response = await _client.SendAsync(request);
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(OrderBy: [new OrderClause("StockQuantity")]));
         // Assert
         response.EnsureSuccessStatusCode();
-        var content = await response.Content.ReadAsStringAsync();
-        var orders = JsonSerializer.Deserialize<List<Product>>(content, JsonOptions);
-        orders.ShouldNotBeNull();
-        orders.Select(p => p.StockQuantity).ShouldBeInOrder();
+        products.ShouldNotBeNull();
+        products.Select(p => p.StockQuantity).ShouldBeInOrder();
     }
     [Fact(DisplayName = "GetAllAsync returns entities with Descending Ordering")]
     public async Task GetAllAsync_DescendingOrdering_ReturnsEntitiesWithDescendingOrdering()
     {
-
-        // Arrange
-        var queyrequest = new QueryRequest(OrderBy: [new OrderClause("StockQuantity", true)]);
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/product?request={JsonSerializer.Serialize(queyrequest, JsonOptions)}");
-
-        // Act
-        var response = await _client.SendAsync(request);
-
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(OrderBy: [new OrderClause("StockQuantity", true)]));
         // Assert
         response.EnsureSuccessStatusCode();
-        var content = await response.Content.ReadAsStringAsync();
-        var orders = JsonSerializer.Deserialize<List<Product>>(content, JsonOptions);
-        orders.ShouldNotBeNull();
-        orders.Select(p => p.StockQuantity).ShouldBeInOrder(SortDirection.Descending);
+        products.ShouldNotBeNull();
+        products.Select(p => p.StockQuantity).ShouldBeInOrder(SortDirection.Descending);
     }
     [Fact(DisplayName = "GetAllAsync uses more that one OrderBy clause")]
     public async Task GetAllAsync_MultipleOrderBy_ReturnsEntitiesWithMultipleOrderBy()
     {
-        // Arrange
-        var queyrequest = new QueryRequest(OrderBy: [
+        var (_, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(OrderBy: [
             new OrderClause("Price"),
             new OrderClause("StockQuantity", true)
-        ]);
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/product?request={JsonSerializer.Serialize(queyrequest, JsonOptions)}");
-
-        // Act
-        var response = await _client.SendAsync(request);
-
-        // Assert
-        response.EnsureSuccessStatusCode();
-        var content = await response.Content.ReadAsStringAsync();
-        var products = JsonSerializer.Deserialize<List<Product>>(content, JsonOptions);
+        ]));
         products.ShouldNotBeNull();
         var sortedProducts = products
             .OrderBy(p => p.Price)
@@ -82,23 +47,15 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
     [Fact(DisplayName = "GetAllAsync returns entities with gt Filter, ordering and default and custom Include Properties")]
     public async Task GetAllAsync_FilteringOrderingDefaultIncludeProperties_ReturnsEntitiesWithFilteringOrderingAndDefaultIncludeProperties()
     {
-        // Arrange
-        var queyrequest = new QueryRequest(
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
             Filters: [new FilterClause("StockQuantity", "gt", 25.ToString())],
             OrderBy: [new OrderClause("StockQuantity")],
             Includes: ["Reviews"],
             UseSplitQuery: true,
             AsNoTracking: true
-            );
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/product?request={JsonSerializer.Serialize(queyrequest, JsonOptions)}");
-
-        // Act
-        var response = await _client.SendAsync(request);
-
+            ));
         // Assert
         response.EnsureSuccessStatusCode();
-        var content = await response.Content.ReadAsStringAsync();
-        var products = JsonSerializer.Deserialize<List<Product>>(content, JsonOptions);
         products.ShouldNotBeNull();
         products.Count.ShouldBe(2);
         products.Select(p => p.StockQuantity).ShouldBeInOrder();
@@ -109,94 +66,220 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
         products[0].Reviews.ShouldNotBeNull();
         products[1].Reviews.ShouldNotBeNull();
     }
-    [Fact(DisplayName = "GetAllAsync returns entities with Filter that results in no entities")]
+    [Fact(DisplayName = "GetAllAsync returns entities with gt Filter that results in no entities")]
     public async Task GetAllAsync_Filtering_ReturnsNoEntities()
     {
-
-        // Arrange
-        var queyrequest = new QueryRequest(
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
             Filters: [new FilterClause("StockQuantity", "gt", 1000.ToString())]
-            );
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/product?request={JsonSerializer.Serialize(queyrequest, JsonOptions)}");
-        // Act
-        var response = await _client.SendAsync(request);
-        // Assert
+            ));
         response.EnsureSuccessStatusCode();
-        var content = await response.Content.ReadAsStringAsync();
-        var products = JsonSerializer.Deserialize<List<Product>>(content, JsonOptions);
         products.ShouldNotBeNull();
         products.Count.ShouldBe(0);
     }
     [Fact(DisplayName = "GetAllAsync returns entities with multiple Filters (gt and lt)")]
     public async Task GetAllAsync_MultipleFilters_ReturnsEntitiesWithMultipleFilters()
     {
-
-        // Arrange
-        var queyrequest = new QueryRequest(
-            Filters: [
-                new FilterClause("StockQuantity", "gt", 25.ToString()),
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+                    Filters: [
+                        new FilterClause("StockQuantity", "gt", 25.ToString()),
                 new FilterClause("Price", "lt", 50.ToString())
-            ],
-            OrderBy: [new OrderClause("StockQuantity")]
-            );
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/product?request={JsonSerializer.Serialize(queyrequest, JsonOptions)}");
-        // Act
-        var response = await _client.SendAsync(request);
+                    ]
+                    ));
         // Assert
         response.EnsureSuccessStatusCode();
-        var content = await response.Content.ReadAsStringAsync();
-        var products = JsonSerializer.Deserialize<List<Product>>(content, JsonOptions);
         products.ShouldNotBeNull();
         products.Count.ShouldBe(1);
         products[0].StockQuantity.ShouldBeGreaterThan(25);
         products[0].Price.ShouldBeLessThan(50);
     }
-    [Fact(DisplayName = "GetAllAsync returns entities with unsupported Numeric Filter operator throws")]
-    public async Task GetAllAsync_Unsupported_Numeric_FilterOperator_Throws()
+
+    [Fact(DisplayName = "GetAllAsync should use eq operator for Numeric properties")]
+    public async Task GetAllAsync_NumericProperty_Eq_Operator_Works()
     {
-        // Given
-        var queyrequest = new QueryRequest(
-            Filters: [new FilterClause("StockQuantity", "has", 25.ToString())]
-            );
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/product?request={JsonSerializer.Serialize(queyrequest, JsonOptions)}");
-        // When
-        var response = await _client.SendAsync(request);
-        // Then
-        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-        var content = await response.Content.ReadAsStringAsync();
-        content.ShouldContain("Unsupported operator 'has'");
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("StockQuantity", "eq", 25.ToString())]
+            ));
+        // Assert
+        response.EnsureSuccessStatusCode();
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(1);
+        products[0].StockQuantity.ShouldBe(25);
     }
-    [Fact(DisplayName = "GetAllAsync returns entities with unsupported String Filter property throws")]
-    public async Task GetAllAsync_Unsupported_String_FilterProperty_Throws()
+    [Fact(DisplayName = "GetAllAsync should use gte operator for numeric properties")]
+    public async Task GetAllAsync_NumericProperty_Gte_Operator_Works()
+    {
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("StockQuantity", "gte", 50.ToString())]
+            ));
+        response.EnsureSuccessStatusCode();
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(2);
+        products[0].StockQuantity.ShouldBeGreaterThanOrEqualTo(80);
+        products[1].StockQuantity.ShouldBeGreaterThanOrEqualTo(50);
+    }
+    [Fact(DisplayName = "GetAllAsync should use lte operator for numeric properties")]
+    public async Task GetAllAsync_NumericProperty_Lte_Operator_Works()
+    {
+        var (_, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("StockQuantity", "lte", 50.ToString())]
+            ));
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(2);
+        products[0].StockQuantity.ShouldBeLessThanOrEqualTo(25);
+        products[1].StockQuantity.ShouldBeLessThanOrEqualTo(50);
+    }
+    [Fact(DisplayName = "GetAllAsync should use eq operator for Bool properties")]
+    public async Task GetAllAsync_BoolProperty_Eq_Operator_Works()
+    {
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("IsActive", "eq", "false")]
+            ));
+        // Assert
+        response.EnsureSuccessStatusCode();
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(0);
+    }
+
+    [Fact(DisplayName = "GetAllAsync should uses eq operator Filter for Guid properties")]
+    public async Task GetAllAsync_GuidProperty_Eq_Operator_Works()
+    {
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("Id", "eq", "66666666-6666-6666-6666-666666666661")]
+            ));
+        // Assert
+        response.EnsureSuccessStatusCode();
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(1);
+        products[0].Id.ShouldBe(Guid.Parse("66666666-6666-6666-6666-666666666661"));
+    }
+    [Fact(DisplayName = "GetAllAsync should uses eq operator Filter for DateTimeOffset properties")]
+    public async Task GetAllAsync_DateTimeOffsetProperty_Eq_Operator_Works()
+    {
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("CreatedAt", "eq", "2024-06-01T00:00:00Z")]
+            ));
+        response.EnsureSuccessStatusCode();
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(1);
+        products[0].CreatedAt.ShouldBe(DateTimeOffset.Parse("2024-06-01T00:00:00Z", CultureInfo.InvariantCulture));
+    }
+    [Fact(DisplayName = "GetAllAsync should uses gt operator Filter for DateTimeOffset properties")]
+    public async Task GetAllAsync_DateTimeOffsetProperty_Gt_Operator_Works()
+    {
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("CreatedAt", "gt", "2024-06-01T00:00:00Z")]
+            ));
+        // Then
+        response.EnsureSuccessStatusCode();
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(2);
+        products[0].CreatedAt.ShouldBeGreaterThan(DateTimeOffset.Parse("2024-06-01T00:00:00Z", CultureInfo.InvariantCulture));
+        products[1].CreatedAt.ShouldBeGreaterThan(DateTimeOffset.Parse("2024-06-01T00:00:00Z", CultureInfo.InvariantCulture));
+    }
+    [Fact(DisplayName = "GetAllAsync should uses lt operator Filter for DateTimeOffset properties")]
+    public async Task GetAllAsync_DateTimeOffsetProperty_Lt_Operator_Works()
+    {
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("CreatedAt", "lt", "2024-08-01T00:00:00Z")]
+            ));
+        // Then
+        response.EnsureSuccessStatusCode();
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(1);
+        products[0].CreatedAt.ShouldBeEquivalentTo(DateTimeOffset.Parse("2024-06-01T00:00:00Z", CultureInfo.InvariantCulture));
+    }
+    [Fact(DisplayName = "GetAllAsync should uses lte operator Filter for DateTimeOffset properties")]
+    public async Task GetAllAsync_DateTimeOffsetProperty_Lte_Operator_Works()
+    {
+        var (_, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("CreatedAt", "lte", "2024-08-01T00:00:00Z")]
+            ));
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(2);
+        products[0].CreatedAt.ShouldBeEquivalentTo(DateTimeOffset.Parse("2024-06-01T00:00:00Z", CultureInfo.InvariantCulture));
+        products[1].CreatedAt.ShouldBeEquivalentTo(DateTimeOffset.Parse("2024-08-01T00:00:00Z", CultureInfo.InvariantCulture));
+    }
+    [Fact(DisplayName = "GetAllAsync should uses gte operator Filter for DateTimeOffset properties")]
+    public async Task GetAllAsync_DateTimeOffsetProperty_Gte_Operator_Works()
     {
         // Given
-        var queyrequest = new QueryRequest(
-            Filters: [new FilterClause("Name", "has", "Test")]
-            );
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/product?request={JsonSerializer.Serialize(queyrequest, JsonOptions)}");
-        // When
-        var response = await _client.SendAsync(request);
-        // Then
-        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-        var content = await response.Content.ReadAsStringAsync();
-        content.ShouldContain("Invalid filter: property='Name', operator='has', value='Test'");
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("CreatedAt", "gte", "2024-08-01T00:00:00Z")]
+            ));
+        // Assert
+        response.EnsureSuccessStatusCode();
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(2);
+        products[0].CreatedAt.ShouldBeGreaterThanOrEqualTo(DateTimeOffset.Parse("2024-08-01T00:00:00Z", CultureInfo.InvariantCulture));
+        products[1].CreatedAt.ShouldBeGreaterThanOrEqualTo(DateTimeOffset.Parse("2025-01-01T00:00:00Z", CultureInfo.InvariantCulture));
+    }
+    [Fact(DisplayName = "GetAllAsync uses startswith operator Filter for string properties")]
+    public async Task GetAllAsync_StringProperty_StartsWith_Operator_Works()
+    {
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("Name", "startswith", "Laptop")]
+            ));
+        // Assert
+        response.EnsureSuccessStatusCode();
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(1);
+        products[0].Name.ShouldStartWith("Laptop");
+    }
+    [Fact(DisplayName = "GetAllAsync uses endswith operator Filter for string properties")]
+    public async Task GetAllAsync_StringProperty_EndsWith_Operator_Works()
+    {
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("Name", "endswith", "Headphones")]
+            ));
+        // Assert
+        response.EnsureSuccessStatusCode();
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(1);
+        products[0].Name.ShouldEndWith("Headphones");
+    }
+    [Fact(DisplayName = "GetAllAsync uses contains operator Filter for string properties")]
+    public async Task GetAllAsync_StringProperty_Contains_Operator_Works()
+    {
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("Name", "contains", "Code")]
+            ));
+        // Assert
+        response.EnsureSuccessStatusCode();
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(1);
+        products[0].Name.ShouldContain("Code");
+    }
+    [Fact(DisplayName = "GetAllAsync uses eq operator Filter for string properties")]
+    public async Task GetAllAsync_StringProperty_Eq_Operator_Works()
+    {
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("Name", "eq", "Clean Code")]
+            ));
+        // Assert
+        response.EnsureSuccessStatusCode();
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(1);
+        products[0].Name.ShouldBe("Clean Code");
+    }
+    [Fact(DisplayName = "GetAllAsync uses neq operator Filter for string properties")]
+    public async Task GetAllAsync_StringProperty_Neq_Operator_Works()
+    {
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("Name", "neq", "Clean Code")]
+            ));
+        // Assert
+        response.EnsureSuccessStatusCode();
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(2);
+        products.Any(p => p.Name == "Clean Code").ShouldBeFalse();
     }
     #endregion
-
     #region Include Tests
     [Fact(DisplayName = "GetAllAsync returns entities with Include Properties")]
     public async Task GetAllAsync_IncludeProperties_ReturnsEntitiesWithIncludeProperties()
     {
-        // Arrange
-        var queyrequest = new QueryRequest(Includes: ["Product", "Customer"]);
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/review?request={JsonSerializer.Serialize(queyrequest, JsonOptions)}");
-        // Act
-        var response = await _client.SendAsync(request);
-        // Assert
-        response.EnsureSuccessStatusCode();
-        var content = await response.Content.ReadAsStringAsync();
-        var reviews = JsonSerializer.Deserialize<List<Review>>(content, JsonOptions);
-
+        var (_, reviews, _) = await ArrangeAndActUseingHttpForListAsync<Review>(
+            new QueryRequest(Includes: ["Product", "Customer"]));
         reviews.ShouldNotBeNull();
         reviews.ShouldHaveSingleItem();
         reviews[0].Product.ShouldNotBeNull();
@@ -205,17 +288,9 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
     [Fact(DisplayName = "GetAllAsync returns entities with multiple Includes")]
     public async Task GetAllAsync_MultipleIncludeGraphs_ReturnsEntitiesWithMultipleIncludeGraphs()
     {
-
-        // Arrange
-        var queyrequest = new QueryRequest(Includes: ["ProductCategories.Category", "OrderLines.Order"]);
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/product?request={JsonSerializer.Serialize(queyrequest, JsonOptions)}");
-
-        // Act
-        var response = await _client.SendAsync(request);
+        var (_, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(
+            new QueryRequest(Includes: ["ProductCategories.Category", "OrderLines.Order"]));
         // Assert
-        response.EnsureSuccessStatusCode();
-        var content = await response.Content.ReadAsStringAsync();
-        var products = JsonSerializer.Deserialize<List<Product>>(content, JsonOptions);
         products.ShouldNotBeNull();
         products[0].ProductCategories.ShouldNotBeNull();
         products[0].ProductCategories.First().Category.ShouldNotBeNull();
@@ -269,26 +344,7 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
         counter.Count.ShouldBe(4, $"Expected 4 SQL commands with split query and 3 collections, got {counter.Count}");
         items.ShouldNotBeNull();
     }
-    [Fact(DisplayName = "GetAllAsync throws when include string is invalid navigation")]
-    public async Task GetAllAsync_InvalidIncludeString_Throws()
-    {
-        using var scope = Factory.Services.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
-
-        await Should.ThrowAsync<InvalidOperationException>(async () =>
-        {
-            await repo.GetAllAsync(
-                filter: null,
-                orderBy: null,
-                includeProperties: ["NotARealNavigation"],
-                includeGraph: null,
-                asNoTracking: true,
-                useSplitQuery: true,
-                cancellationToken: default);
-        });
-    }
     #endregion
-
     #region AsNoTracking Tests
     [Fact(DisplayName = "GetAllAsync returns entities with AsNoTracking = true")]
     public async Task GetAllAsync_AsNoTracking_ReturnsEntitiesWithAsNoTracking()
@@ -374,7 +430,6 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
         dbContext.ChangeTracker.Entries().ShouldNotBeEmpty();
     }
     #endregion
-
     #region UseSplitQuery Tests
     [Fact(DisplayName = "GetAllAsync returns entities with UseSplitQuery = null and Policy.AsNoTrackingDefault == null")]
     public async Task GetAllAsync_AsNoTracking_Null_UsesDefaultPolicy_AsNoTrackingDefault_Null()
@@ -553,7 +608,7 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
         items.ShouldNotBeNull();
     }
     #endregion
-    #region  SoftDelete Tests
+    #region SoftDelete Tests
     [Fact(DisplayName = "GetAllAsync does not return soft-deleted entities")]
     public async Task GetAllAsync_DoesNotReturnSoftDeletedEntities()
     {
@@ -593,6 +648,7 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
         }
     }
     #endregion
+    #region Cancellation Token Tests
     [Fact(DisplayName = "GetAllAsync respects cancellation token")]
     public async Task GetAllAsync_CanceledToken_ThrowsOperationCanceled()
     {
@@ -614,4 +670,259 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
                 cancellationToken: cts.Token);
         });
     }
+    #endregion
+    #region Unhappy Path Tests
+    [Fact(DisplayName = "GetAllAsync throws when include string is invalid navigation")]
+    public async Task GetAllAsync_InvalidIncludeString_Throws()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+
+        await Should.ThrowAsync<InvalidOperationException>(async () =>
+        {
+            await repo.GetAllAsync(
+                filter: null,
+                orderBy: null,
+                includeProperties: ["NotARealNavigation"],
+                includeGraph: null,
+                asNoTracking: true,
+                useSplitQuery: true,
+                cancellationToken: default);
+        });
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error for unsupported operator for String properties")]
+    public async Task GetAllAsync_Unsupported_String_FilterProperty_Throws()
+    {
+        var (_, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("Name", "has", "Test")]
+            ));
+        content?.ShouldContain("Invalid filter: property='Name', operator='has', value='Test'");
+    }
+    [Fact(DisplayName = "GetAllAsync returns entities with unsupported Numeric Filter operator throws")]
+    public async Task GetAllAsync_Unsupported_Numeric_FilterOperator_Throws()
+    {
+        var (_, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("StockQuantity", "has", 25.ToString())]
+            ));
+        content?.ShouldContain("Unsupported operator 'has'");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error for unsupported operator for Bool properties")]
+    public async Task GetAllAsync_BoolProperty_Unsupported_Operator_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("IsActive", "gt", "true")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Unsupported operator 'gt'");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error for unsupported operator for DateTimeOffset properties")]
+    public async Task GetAllAsync_DateTimeOffsetProperty_Unsupported_Operator_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("CreatedAt", "contains", "2024-06-01T00:00:00Z")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Unsupported operator 'contains'");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error for unsupported operator for Numeric properties")]
+    public async Task GetAllAsync_NumericProperty_Unsupported_Operator_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("StockQuantity", "contains", 25.ToString())]
+            ));
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Unsupported operator 'contains'");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error for unsupported operator for Guid properties")]
+    public async Task GetAllAsync_GuidProperty_Unsupported_Operator_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("Id", "gt", "66666666-6666-6666-6666-666666666661")]
+            ));
+        // Then
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Unsupported operator 'gt'");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error for filter with invalid property name")]
+    public async Task GetAllAsync_InvalidFilterPropertyName_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("NotARealProperty", "eq", "SomeValue")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: property='NotARealProperty', operator='eq', value='SomeValue'");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error for filter with empty property name")]
+    public async Task GetAllAsync_EmptyFilterPropertyName_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+             Filters: [new FilterClause("", "eq", "SomeValue")]
+             ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: 'Property' is required. (Parameter 'request')");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error for filter with null property name")]
+    public async Task GetAllAsync_NullFilterPropertyName_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause(null!, "eq", "SomeValue")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: 'Property' is required. (Parameter 'request')");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error for filter with empty operator")]
+    public async Task GetAllAsync_EmptyFilterOperator_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("Name", "", "SomeValue")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter for property 'Name': 'Operator' is required.");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error for filter with null operator")]
+    public async Task GetAllAsync_NullFilterOperator_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("Name", null!, "SomeValue")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter for property 'Name': 'Operator' is required.");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error for ordering with invalid property")]
+    public async Task GetAllAsync_InvalidOrderByProperty_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            OrderBy: [new OrderClause("NotARealProperty")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid orderBy: property='NotARealProperty' not found on entity 'Product'");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error for ordering with empty property")]
+    public async Task GetAllAsync_EmptyOrderByProperty_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            OrderBy: [new OrderClause("")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid orderBy: 'Property' is required. (Parameter 'request')");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error for ordering with null property")]
+    public async Task GetAllAsync_NullOrderByProperty_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            OrderBy: [new OrderClause(null!)]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid orderBy: 'Property' is required. (Parameter 'request')");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error invalid numeric filter value")]
+    public async Task GetAllAsync_Invalid_NumericFilterValue_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("StockQuantity", "eq", "NotANumber")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: property='StockQuantity', operator='eq', value='NotANumber'");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error invalid Guid filter value")]
+    public async Task GetAllAsync_Invalid_GuidFilterValue_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("Id", "eq", "NotAGuid")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: property='Id', operator='eq', value='NotAGuid'");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error invalid DateTimeOffset filter value")]
+    public async Task GetAllAsync_Invalid_DateTimeOffsetFilterValue_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("CreatedAt", "eq", "NotADateTimeOffset")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: property='CreatedAt', operator='eq', value='NotADateTimeOffset'");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error invalid bool filter value")]
+    public async Task GetAllAsync_Invalid_BoolFilterValue_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("IsActive", "eq", "NotABool")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: property='IsActive', operator='eq', value='NotABool'");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error when 2 filter are applied one is valid and one invalid")]
+    public async Task GetAllAsync_OneValidOneInvalidFilter_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [
+                new FilterClause("Name", "contains", "Code"),
+                new FilterClause("StockQuantity", "gt", "NotANumber")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: property='StockQuantity', operator='gt', value='NotANumber'");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error when 2 orderBy are applied one is valid and one invalid")]
+    public async Task GetAllAsync_OneValidOneInvalidOrderBy_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            OrderBy: [
+                new OrderClause("Name"),
+                new OrderClause("NotARealProperty")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid orderBy: property='NotARealProperty' not found on entity 'Product'");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error when both orderBy and filter have invalid properties")]
+    public async Task GetAllAsync_BothInvalidOrderByAndFilter_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("NotARealProperty", "eq", "SomeValue")],
+            OrderBy: [new OrderClause("AlsoNotARealProperty")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: property='NotARealProperty', operator='eq', value='SomeValue'");
+    }
+    [Fact(DisplayName = "GetAllAsync should throw error when Include string is Invalid navigation")]
+    public async Task GetAllAsync_InvalidIncludeString_Throws_InvalidNavigation()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Includes: ["Review", "NotARealNavigation"]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("InvalidInclude");
+    }
+    [Fact(DisplayName = "GetAllAsync should not throw error QueryRequest is null")]
+    public async Task GetAllAsync_NullQueryRequest_Not_Throws()
+    {
+        // Arrange
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/product?request=null");
+        // Act
+        var response = await _client.SendAsync(request);
+        var content = await response.Content.ReadAsStringAsync();
+        var items = JsonSerializer.Deserialize<List<Product>>(content, JsonOptions);
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        items.ShouldNotBeNull();
+        items.Count.ShouldBe(3);
+    }
+    #endregion
 }
