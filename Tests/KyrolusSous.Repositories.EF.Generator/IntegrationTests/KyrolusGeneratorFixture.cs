@@ -66,7 +66,7 @@ public class KyrolusGeneratorFixture(WebApplicationFactory<Program> factory) : I
             items = JsonSerializer.Deserialize<List<TEntity>>(content, JsonOptions);
         return (response, items, content);
     }
-    public async Task<(HttpResponseMessage response, TEntity? item, string? content)> ArrangeAndActUseingHttpForGetByIdAsync<TEntity>(Guid id, QueryRequest? queyrequest = null)
+    public async Task<(HttpResponseMessage response, TEntity? item, string? content)> ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<TEntity, TKey>(TKey id, QueryRequest? queyrequest = null)
     {
         var withRequest = queyrequest is not null ? $"?request={JsonSerializer.Serialize(queyrequest, JsonOptions)}" : string.Empty;
         // Arrange
@@ -79,4 +79,26 @@ public class KyrolusGeneratorFixture(WebApplicationFactory<Program> factory) : I
             item = JsonSerializer.Deserialize<TEntity>(content, JsonOptions);
         return (response, item, content);
     }
+    public async Task<(HttpResponseMessage response, TEntity? item, string? content)>
+    ArrangeAndActUseingHttpForGetByIdAsync_CompositeKey<TEntity>(
+        object?[] keyValues,
+        QueryRequest? queyrequest = null)
+    {
+        var basePath = $"/api/{typeof(TEntity).Name.ToLowerInvariant()}/by-id";
+        var keysQuery = string.Join("&", keyValues.Select(kv => $"keys={Uri.EscapeDataString(kv?.ToString() ?? "")}"));
+        var url = $"{basePath}?{keysQuery}";
+        if (queyrequest is not null)
+        {
+            var reqJson = Uri.EscapeDataString(JsonSerializer.Serialize(queyrequest, JsonOptions));
+            url = $"{basePath}?request={reqJson}&{keysQuery}";
+        }
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        var response = await _client.SendAsync(request);
+        var content = await response.Content.ReadAsStringAsync();
+        TEntity? item = default;
+        if (response.IsSuccessStatusCode)
+            item = JsonSerializer.Deserialize<TEntity>(content, JsonOptions);
+        return (response, item, content);
+    }
+
 }

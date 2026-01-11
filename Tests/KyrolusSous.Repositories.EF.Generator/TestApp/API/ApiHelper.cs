@@ -1,6 +1,3 @@
-using System.Collections;
-using System.Reflection;
-
 namespace KyrolusSous.Repositories.EF.Generator.TestApp.API;
 
 public static class ApiHelper

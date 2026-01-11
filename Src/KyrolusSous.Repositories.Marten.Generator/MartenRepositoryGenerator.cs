@@ -2053,13 +2053,13 @@ public sealed class MartenRepositoryGenerator : IIncrementalGenerator
         var match = data.NamedArguments.FirstOrDefault(arg => string.Equals(arg.Key, name, StringComparison.Ordinal));
         if (match.Key is null)
         {
-            return Array.Empty<string>();
+            return [];
         }
 
         var value = match.Value;
         if (value.Kind != TypedConstantKind.Array)
         {
-            return Array.Empty<string>();
+            return [];
         }
 
         return [.. value.Values

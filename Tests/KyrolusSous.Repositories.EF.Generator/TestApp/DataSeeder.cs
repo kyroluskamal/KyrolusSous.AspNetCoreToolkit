@@ -1,7 +1,3 @@
-using KyrolusSous.Repositories.EF.Generator.TestApp.Models;
-using Microsoft.EntityFrameworkCore;
-using System.Globalization;
-
 namespace KyrolusSous.Repositories.EF.Generator.TestApp;
 
 public static class DataSeeder

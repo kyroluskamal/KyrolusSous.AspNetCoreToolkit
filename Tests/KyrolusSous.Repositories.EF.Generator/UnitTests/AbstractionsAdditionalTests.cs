@@ -20,26 +20,24 @@ public class AbstractionsAdditionalTests
         public DbSet<NoRowVersionEntity> Items => Set<NoRowVersionEntity>();
     }
 
-    private sealed class FakeConcurrencyException : DbUpdateConcurrencyException
+    private sealed class FakeConcurrencyException(IReadOnlyList<EntityEntry> entries) : DbUpdateConcurrencyException("fake")
     {
-        private readonly IReadOnlyList<EntityEntry> entries;
-
-        public FakeConcurrencyException(IReadOnlyList<EntityEntry> entries) : base("fake") => this.entries = entries;
+        private readonly IReadOnlyList<EntityEntry> entries = entries;
 
         public override IReadOnlyList<EntityEntry> Entries => entries;
     }
-
+#pragma warning disable S1144
     private sealed class GraphDummy
     {
         public int Id { get; set; }
-        public GraphChild? Child { get; set; }
+        public GraphChild? Child { get; set; } = default!;
     }
 
     private sealed class GraphChild
     {
-        public string? Name { get; set; }
+        public string? Name { get; set; } = default!;
     }
-
+#pragma warning restore S1144
     [Fact(DisplayName = "BuildConcurrencyInfoAsync handles missing row-version property gracefully")]
     public async Task BuildConcurrencyInfoAsync_MissingRowVersion_ReturnsDatabaseValues()
     {
@@ -50,12 +48,12 @@ public class AbstractionsAdditionalTests
         using (var setup = new NoRowVersionContext(options))
         {
             setup.Items.Add(new NoRowVersionEntity { Id = 7, Name = "n1" });
-            setup.SaveChanges();
+            await setup.SaveChangesAsync();
         }
 
         using var ctx = new NoRowVersionContext(options);
-        var entry = ctx.Entry(ctx.Items.First());
-        var ex = new FakeConcurrencyException(new List<EntityEntry> { entry });
+        var entry = ctx.Entry(await ctx.Items.FirstAsync());
+        var ex = new FakeConcurrencyException([entry]);
 
         var info = await ConcurrencyHelper.BuildConcurrencyInfoAsync(ex, "DoesNotExist");
 
@@ -76,12 +74,12 @@ public class AbstractionsAdditionalTests
         using (var setup = new NoRowVersionContext(options))
         {
             setup.Items.Add(new NoRowVersionEntity { Id = 3, Name = "n3" });
-            setup.SaveChanges();
+            await setup.SaveChangesAsync();
         }
 
         using var ctx = new NoRowVersionContext(options);
-        var entry = ctx.Entry(ctx.Items.First());
-        var ex = new FakeConcurrencyException(new List<EntityEntry> { entry });
+        var entry = ctx.Entry(await ctx.Items.FirstAsync());
+        var ex = new FakeConcurrencyException([entry]);
 
         var info = await ConcurrencyHelper.BuildConcurrencyInfoAsync(ex, null);
 
@@ -97,9 +95,7 @@ public class AbstractionsAdditionalTests
     {
         Expression<Func<GraphDummy, object?>> first = e => e.Child;
         Expression<Func<GraphDummy, object?>> second = e => e.Child!.Name!;
-
         var graph = new IncludeGraph<GraphDummy>(first, second);
-
         graph.Includes.Count.ShouldBe(2);
         graph.Includes[0].ShouldBe(first);
         graph.Includes[1].ShouldBe(second);

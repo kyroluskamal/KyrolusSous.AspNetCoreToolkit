@@ -40,7 +40,7 @@ public class KyrolusSingleKeyRepositoryAsync<TDbContext, TEntity, TKey> :
         var hasIncludeProps = includeProperties is { Count: > 0 } && includeProperties.Any(p => !string.IsNullOrWhiteSpace(p));
         if (!hasIncludeProps)
         {
-            var includes = includeGraph?.Includes?.ToArray() ?? Array.Empty<Expression<Func<TEntity, object?>>>();
+            var includes = includeGraph?.Includes?.ToArray() ?? [];
             return GetByIdInternalAsync([id], asNoTracking, useSplitQuery, cancellationToken, includes);
         }
         return GetByIdInternalWithStringIncludesAsync([id], includeProperties!, includeGraph, asNoTracking, useSplitQuery, cancellationToken);
@@ -78,7 +78,7 @@ public class KyrolusSingleKeyRepositoryAsync<TDbContext, TEntity, TKey> :
         {
             if (enableCaching && cache is not null)
             {
-                var cacheKey = CacheKeyById(id);
+                var cacheKey = CacheKeyById([id]);
                 return await cache.GetOrSetAsync(
                     cacheKey,
                     async ct => await del(db, id).FirstOrDefaultAsync(ct).ConfigureAwait(false),

@@ -9,7 +9,7 @@ namespace KyrolusSous.Repositories.EF.Generator.TestApp.Models;
     "Id",
     EnableSoftDelete = true,
     SoftDeleteProperty = "IsDeleted",
-    IncludeProperties = new[] { "Products", "Orders", "StoreUserRoles", "Categories", "Customers" },
+    IncludeProperties = new[] { "StoreUserRoles", "Categories", "Customers" },
     Namespace = "KyrolusSous.Repositories.EF.Generator.TestApp.Repositories")]
 public class Store : AuditableSoftDeletableEntity
 {

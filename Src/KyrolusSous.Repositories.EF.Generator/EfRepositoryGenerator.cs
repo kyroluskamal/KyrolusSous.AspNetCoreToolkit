@@ -191,6 +191,7 @@ namespace KyrolusSous.Repositories.EF.Generator
             sb.AppendLine("using System;");
             sb.AppendLine("using System.Collections.Generic;");
             sb.AppendLine("using System.Linq;");
+            sb.AppendLine("using System.Globalization;");
             sb.AppendLine("using System.Linq.Expressions;");
             sb.AppendLine("using System.Threading;");
             sb.AppendLine("using System.Threading.Tasks;");
@@ -241,9 +242,12 @@ namespace KyrolusSous.Repositories.EF.Generator
                     private readonly IKyrolusBulkExecutor<{{{request.EntityType.ToDisplayString()}}}>? bulkExecutor;
                     {{{cacheField}}}
                     private readonly TimeSpan? cacheTtl;
-                    private readonly string? cacheAllKey;
+                    private readonly ICacheKeyContext? cacheKeyContext;
+                    private readonly bool cachingEnabled;
+                    private readonly string? cacheAllKeyBase;
                     private readonly Func<IQueryable<{{{request.EntityType.ToDisplayString()}}}>, IQueryable<{{{request.EntityType.ToDisplayString()}}}>>? globalQueryFilter;
-                    public {{{request.RepositoryName}}}({{{request.DbContextType.ToDisplayString()}}} db, KyrolusRepositoryPolicy? policy = null, IKyrolusRepositoryObserver? observer = null, IKyrolusBulkExecutor<{{{request.EntityType.ToDisplayString()}}}>? bulkExecutor = null{{{cacheParam}}})
+                    public {{{request.RepositoryName}}}({{{request.DbContextType.ToDisplayString()}}} db, KyrolusRepositoryPolicy? policy = null, IKyrolusRepositoryObserver? observer = null, IKyrolusBulkExecutor<{{{request.EntityType.ToDisplayString()}}}>? bulkExecutor = null{{{cacheParam}}},
+                                ICacheKeyContext? cacheKeyContext = null)
                     {
                         this.db = db ?? throw new ArgumentNullException(nameof(db));
                         set = this.db.Set<{{{request.EntityType.ToDisplayString()}}}>();
@@ -251,8 +255,10 @@ namespace KyrolusSous.Repositories.EF.Generator
                         this.observer = observer;
                         this.bulkExecutor = bulkExecutor;
                     {{{cacheAssign}}}
+                        this.cacheKeyContext = cacheKeyContext;
+                        cachingEnabled = {{{request.EnableCaching.ToString().ToLowerInvariant()}}};
                         cacheTtl = {{{(request.CacheTtlSeconds.HasValue ? $"TimeSpan.FromSeconds({request.CacheTtlSeconds.Value})" : "null")}}};
-                        cacheAllKey = {{{(request.EnableCaching ? $"\"{request.RepositoryName}:all:compiled\"" : "null")}}};
+                        cacheAllKeyBase = cachingEnabled ? "{{{request.RepositoryName}}}:all:compiled" : null;
                         globalQueryFilter = policy?.GetGlobalQueryFilter<{{{request.EntityType.ToDisplayString()}}}>();
                     }
                     """;
@@ -265,7 +271,6 @@ namespace KyrolusSous.Repositories.EF.Generator
         }
         private void GetAllAsync(StringBuilder sb, RepositoryRequest request)
         {
-            var asNoTrackingDefault = request.AsNoTrackingDefault ? ".AsNoTracking()" : "";
             var softDeleteExpr = CalculateSoftDelete(request);
             var GetAll = $$$"""
                             {{{RequiresUnreferencedCode}}}
@@ -279,7 +284,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 var effectiveAsNoTracking = asNoTracking ?? policy.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
                                 var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
                                 var defaultIncludes = new Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>[] { {{{string.Join(", ", request.DefaultIncludes.Select(ip => $"e => e.{ip}"))}}} };
-                                IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = ApplyGlobalFilter(set.AsQueryable()){{{asNoTrackingDefault}}};
+                                IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = ApplyGlobalFilter(set.AsQueryable());
                                 foreach (var inc in defaultIncludes) query = query.Include(inc);
                                 {{{(softDeleteExpr is null ? string.Empty : $"if ({softDeleteExpr}) query = query.Where(e => !e.{request.SoftDeleteProperty});")}}}
                                 if (effectiveAsNoTracking)
@@ -338,7 +343,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 var effectiveAsNoTracking = asNoTracking ?? policy.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
                                 var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
                                 var defaultIncludes = new Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>[] { {{{string.Join(", ", request.DefaultIncludes.Select(ip => $"e => e.{ip}"))}}} };
-                                IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = ApplyGlobalFilter(set.AsQueryable()){{{asNoTrackingDefault}}};
+                                IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = ApplyGlobalFilter(set.AsQueryable());
                                 foreach (var inc in defaultIncludes) query = query.Include(inc);
                                 {{{(softDeleteExpr is null ? string.Empty : $"if ({softDeleteExpr}) query = query.Where(e => !e.{request.SoftDeleteProperty});")}}}
                                 if (effectiveAsNoTracking)
@@ -675,14 +680,13 @@ namespace KyrolusSous.Repositories.EF.Generator
         }
         private void GetByIdAsync(StringBuilder sb, RepositoryRequest request, string keyNamesLiteral)
         {
-            var asNoTrackingDefault = request.AsNoTrackingDefault ? ".AsNoTracking()" : "";
             var softDeleteExpr = CalculateSoftDelete(request);
 
             var defaultIncludesLiteral = request.DefaultIncludes.Length > 0
                 ? $"new Expression<Func<{request.EntityType.ToDisplayString()}, object?>>[] {{ {string.Join(", ", request.DefaultIncludes.Select(ip => $"e => e.{ip}"))} }}"
                 : $"Array.Empty<Expression<Func<{request.EntityType.ToDisplayString()}, object?>>>()";
             var cacheBlock = request.EnableCaching ? $$$"""
-                                if (cache is not null && (includeExpressions == null || includeExpressions.Length == 0))
+                                if (cachingEnabled && cache is not null && cacheTtl.HasValue && (includeExpressions == null || includeExpressions.Length == 0))
                                 {
                                     var cacheKey = CacheKeyById(keyValues);
                                     return await cache.GetOrSetAsync(cacheKey,
@@ -723,9 +727,9 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 var effectiveAsNoTracking = asNoTracking ?? policy.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
                                 var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
                                 var defaultIncludes = {{{defaultIncludesLiteral}}};
-                                IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = ApplyGlobalFilter(set.AsQueryable()){{{asNoTrackingDefault}}};
+                                IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = ApplyGlobalFilter(set.AsQueryable());
                                 foreach (var inc in defaultIncludes) query = query.Include(inc);
-                                {{{(softDeleteExpr is null ? string.Empty : $"var softDeleteExpr = {softDeleteExpr};\n                                if (softDeleteExpr)\n                                    query = query.Where(e => !e.{request.SoftDeleteProperty});")}}}
+                                {{{(softDeleteExpr is null ? string.Empty : $"var softDeleteExpr = {softDeleteExpr};                                if (softDeleteExpr)\n                                    query = query.Where(e => !e.{request.SoftDeleteProperty});")}}}
                                 if (effectiveAsNoTracking)
                                     query = query.AsNoTracking();
                                 if (effectiveSplit)
@@ -768,7 +772,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 var effectiveAsNoTracking = asNoTracking ?? policy.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
                                 var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
                                 var defaultIncludes = {{{defaultIncludesLiteral}}};
-                                IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = ApplyGlobalFilter(set.AsQueryable()){{{asNoTrackingDefault}}};
+                                IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = ApplyGlobalFilter(set.AsQueryable());
                                 foreach (var inc in defaultIncludes) query = query.Include(inc);
                                 {{{(softDeleteExpr is null ? string.Empty : $"var softDeleteExpr = {softDeleteExpr};\n                                if (softDeleteExpr)\n                                    query = query.Where(e => !e.{request.SoftDeleteProperty});")}}}
                                 if (effectiveAsNoTracking)
@@ -832,7 +836,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 {
                                     return await GetByIdAsync(id, cancellationToken: cancellationToken);
                                 }
-                                if (cache is not null && cacheTtl.HasValue)
+                                if (cachingEnabled && cache is not null && cacheTtl.HasValue)
                                 {
                                     var cacheKey = CacheKeyById(new object?[] { id });
                                     return await cache.GetOrSetAsync(cacheKey,
@@ -875,9 +879,9 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     // Global filters can't be injected into compiled queries; fallback to standard path.
                                     return (await GetAllAsync(filter: null, orderBy: null, asNoTracking: null, useSplitQuery: null, cancellationToken: cancellationToken)).ToList();
                                 }
-                                if (cache is not null && cacheTtl.HasValue)
+                                if (cachingEnabled && cache is not null && cacheTtl.HasValue)
                                 {
-                                    var key = cacheAllKey ?? "{{{request.RepositoryName}}}:all:compiled";
+                                    var key = CacheKeyAll();
                                     return await cache.GetOrSetAsync(key,
                                         async ct => await _compiledGetAll(db).ToListAsync(ct).ConfigureAwait(false),
                                         cacheTtl,
@@ -1232,9 +1236,9 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     }
                                     if (cache is not null)
                                     {
-                                        if (cacheAllKey is not null)
+                                        if (cacheAllKeyBase  is not null)
                                         {
-                                            await cache.RemoveAsync(cacheAllKey, cancellationToken).ConfigureAwait(false);
+                                            await cache.RemoveAsync(CacheKeyAll(), cancellationToken).ConfigureAwait(false);
                                         }
                                         if (affectedKeys is not null)
                                         {
@@ -1275,9 +1279,9 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     }
                                     if (cache is not null)
                                     {
-                                        if (cacheAllKey is not null)
+                                        if (cacheAllKeyBase  is not null)
                                         {
-                                            await cache.RemoveAsync(cacheAllKey, cancellationToken).ConfigureAwait(false);
+                                            await cache.RemoveAsync(CacheKeyAll(), cancellationToken).ConfigureAwait(false);
                                         }
                                         if (affectedKeys is not null)
                                         {
@@ -1668,10 +1672,44 @@ private async Task<TResult> NotifyAndExecuteAsync<TResult>(string operation, Fun
     }
 }
 
+private string CacheKeyAll()
+{
+    var baseKey = cacheAllKeyBase ?? "{{{request.RepositoryName}}}:all:compiled";
+
+    var scope = cacheKeyContext?.ScopeKey;
+    if (string.IsNullOrWhiteSpace(scope))
+        return baseKey;
+
+    return $"{baseKey}:scope={Uri.EscapeDataString(scope)}";
+}
+
 private string CacheKeyById(object?[] keyValues)
 {
-    return "{{{request.RepositoryName}}}:id:" + string.Join("|", keyValues.Select(v => v?.ToString() ?? "null"));
+    var scope = cacheKeyContext?.ScopeKey;
+    var scopePart = string.IsNullOrWhiteSpace(scope)
+        ? ""
+        : $":scope={Uri.EscapeDataString(scope)}";
+
+    return "{{{request.RepositoryName}}}:id" + scopePart + ":" + BuildKeyValuesFingerprint(keyValues);
 }
+
+private static string BuildKeyValuesFingerprint(object?[] keyValues)
+{
+    return string.Join("|", keyValues.Select((v, i) => $"{i}={EscapeKeyPart(v)}"));
+}
+
+private static string EscapeKeyPart(object? value)
+{
+    var s = value switch
+    {
+        null => "null",
+        IFormattable f => f.ToString(null, CultureInfo.InvariantCulture) ?? "null",
+        _ => value.ToString() ?? "null"
+    };
+
+    return Uri.EscapeDataString(s);
+}
+
 
         private async Task InvalidateCachesAsync({{{request.EntityType.ToDisplayString()}}} entity, CancellationToken cancellationToken = default)
         {
@@ -1680,26 +1718,26 @@ private string CacheKeyById(object?[] keyValues)
             await InvalidateCachesAsync(keyValues, cancellationToken).ConfigureAwait(false);
         }
 
-private async Task InvalidateCachesAsync(IEnumerable<{{{request.EntityType.ToDisplayString()}}}> entities, CancellationToken cancellationToken = default)
-{
-    if (cache is null) return;
-    foreach (var entity in entities)
-    {
-        var keyValues = new object?[] { {{{string.Join(", ", request.KeyPropertyNames.Select(n => $"entity.{n}"))}}} };
-        await InvalidateCachesAsync(keyValues, cancellationToken).ConfigureAwait(false);
-    }
-}
+        private async Task InvalidateCachesAsync(IEnumerable<{{{request.EntityType.ToDisplayString()}}}> entities, CancellationToken cancellationToken = default)
+        {
+            if (cache is null) return;
+            foreach (var entity in entities)
+            {
+                var keyValues = new object?[] { {{{string.Join(", ", request.KeyPropertyNames.Select(n => $"entity.{n}"))}}} };
+                await InvalidateCachesAsync(keyValues, cancellationToken).ConfigureAwait(false);
+            }
+        }
 
         private async Task InvalidateCachesAsync(object?[] keyValues, CancellationToken cancellationToken = default)
         {
-            if (cache is null) return;
-            if (cacheAllKey is not null)
-            {
-                await cache.RemoveAsync(cacheAllKey, cancellationToken).ConfigureAwait(false);
-    }
-    var key = CacheKeyById(keyValues);
-    await cache.RemoveAsync(key, cancellationToken).ConfigureAwait(false);
-}
+            if (!cachingEnabled || cache is null) return;
+
+            if (cacheAllKeyBase is not null)
+                await cache.RemoveAsync(CacheKeyAll(), cancellationToken).ConfigureAwait(false);
+
+            var key = CacheKeyById(keyValues);
+            await cache.RemoveAsync(key, cancellationToken).ConfigureAwait(false);
+        }
 """;
             sb.AppendLine(method);
             sb.AppendLine();
@@ -2249,14 +2287,14 @@ namespace KyrolusSous.Repositories.EF.Generated
 
         private sealed class PropertyBuckets
         {
-            public string[] StringProps { get; set; } = Array.Empty<string>();
-            public string[] NavProps { get; set; } = Array.Empty<string>();
-            public string[] OrderProps { get; set; } = Array.Empty<string>();
-            public (string Name, ITypeSymbol Type, bool IsNullable)[] NumericProps { get; set; } = Array.Empty<(string, ITypeSymbol, bool)>();
-            public (string Name, ITypeSymbol Type, bool IsNullable)[] DateProps { get; set; } = Array.Empty<(string, ITypeSymbol, bool)>();
-            public (string Name, ITypeSymbol Type, bool IsNullable)[] BoolProps { get; set; } = Array.Empty<(string, ITypeSymbol, bool)>();
-            public (string Name, ITypeSymbol Type, bool IsNullable)[] GuidProps { get; set; } = Array.Empty<(string, ITypeSymbol, bool)>();
-            public (string Name, ITypeSymbol Type, bool IsNullable)[] EnumProps { get; set; } = Array.Empty<(string, ITypeSymbol, bool)>();
+            public string[] StringProps { get; set; } = [];
+            public string[] NavProps { get; set; } = [];
+            public string[] OrderProps { get; set; } = [];
+            public (string Name, ITypeSymbol Type, bool IsNullable)[] NumericProps { get; set; } = [];
+            public (string Name, ITypeSymbol Type, bool IsNullable)[] DateProps { get; set; } = [];
+            public (string Name, ITypeSymbol Type, bool IsNullable)[] BoolProps { get; set; } = [];
+            public (string Name, ITypeSymbol Type, bool IsNullable)[] GuidProps { get; set; } = [];
+            public (string Name, ITypeSymbol Type, bool IsNullable)[] EnumProps { get; set; } = [];
         }
 
         private PropertyBuckets CollectPropertyBuckets(RepositoryRequest request)

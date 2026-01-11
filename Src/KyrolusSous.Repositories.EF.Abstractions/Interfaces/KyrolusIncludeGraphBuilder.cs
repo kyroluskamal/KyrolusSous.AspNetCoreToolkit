@@ -6,9 +6,7 @@ public static class KyrolusIncludeGraphBuilder
     {
         var includes = new List<Expression<Func<TEntity, object?>>>();
         if (paths is null || paths.Length == 0)
-        {
-            return new IncludeGraph<TEntity>(Array.Empty<Expression<Func<TEntity, object?>>>());
-        }
+            return new IncludeGraph<TEntity>();
         foreach (var path in paths)
         {
             var expr = KyrolusEFRepositoryBase<TEntity>.BuildIncludeExpression(path);

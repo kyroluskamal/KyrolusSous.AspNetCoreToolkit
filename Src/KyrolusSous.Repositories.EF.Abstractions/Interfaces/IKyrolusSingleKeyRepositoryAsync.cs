@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Query;
 namespace KyrolusSous.Repositories.EF.Abstractions.Interfaces;
 
 /// <summary>
-/// Repository contract for entities ذات مفتاح واحد. يوفر تواقيع المفتاح المفرد فقط.
+/// Repository contract for entities with single.
 /// </summary>
 public interface IKyrolusSingleKeyRepositoryAsync<TDbContext, TEntity, TKey>
     where TEntity : class
@@ -12,7 +12,8 @@ public interface IKyrolusSingleKeyRepositoryAsync<TDbContext, TEntity, TKey>
 {
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     Task<TEntity?> GetByIdAsync(TKey id,
-        List<string>? includeProperties = null, IncludeGraph<TEntity>? includeGraph = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default);
+        List<string>? includeProperties = null, IncludeGraph<TEntity>? includeGraph = null, bool? asNoTracking = null,
+        bool? useSplitQuery = null, CancellationToken cancellationToken = default);
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     Task<TEntity?> GetByIdAsync(TKey id,

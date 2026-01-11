@@ -34,7 +34,7 @@ public class KyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity>(
         var hasIncludeProps = includeProperties is { Count: > 0 } && includeProperties.Any(p => !string.IsNullOrWhiteSpace(p));
         if (!hasIncludeProps)
         {
-            var includes = includeGraph?.Includes?.ToArray() ?? Array.Empty<Expression<Func<TEntity, object?>>>();
+            var includes = includeGraph?.Includes?.ToArray() ?? [];
             return GetByIdInternalAsync(keyValues ?? [], asNoTracking, useSplitQuery, cancellationToken, includes);
         }
         return GetByIdInternalWithStringIncludesAsync(keyValues ?? [], includeProperties!, includeGraph, asNoTracking, useSplitQuery, cancellationToken);

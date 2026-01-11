@@ -85,7 +85,7 @@ public sealed class KyrolusGzipCachePayloadTransformer(int minSizeBytes = 1024, 
     {
         if (offset >= payload.Length)
         {
-            return Array.Empty<byte>();
+            return [];
         }
 
         var result = new byte[payload.Length - offset];

@@ -1,10 +1,3 @@
-using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
-using KyrolusSous.Repositories.EF.Abstractions.Query;
-using KyrolusSous.Repositories.EF.Generated;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore.Query;
-using System.Linq.Expressions;
-
 namespace KyrolusSous.Repositories.EF.Generator.TestApp.API;
 
 public static class EntityApi
@@ -69,7 +62,7 @@ public static class EntityApi
             });
 
             // Alternate route without path id for composite keys via query only
-            group.MapGet("/by-id", async (
+            group.MapGet("by-id", async (
                 [FromQuery] string[] keys,
                 KyrolusUnitOfWork uow,
                 IQueryHelper<TEntity> helper,

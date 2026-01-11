@@ -1,12 +1,3 @@
-using KyrolusSous.Repositories.EF.Generator.TestApp;
-using KyrolusSous.Repositories.EF.Generated;
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
-using KyrolusSous.Repositories.EF.Generator.TestApp.API;
-using KyrolusSous.Repositories.EF.Generator.TestApp.Models;
-using KyrolusSous.Repositories.EF.Generator.TestApp.Repositories;
-using System.Text.Json.Serialization;
-
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -30,6 +21,17 @@ builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
 {
     var conn = sp.GetRequiredService<SqliteConnection>();
     options.UseSqlite(conn);
+});
+builder.Services.AddSingleton<ICacheProvider, InMemoryCacheProvider>();
+builder.Services.AddHttpContextAccessor();
+
+builder.Services.AddScoped<ICacheKeyContext>(sp =>
+{
+    var http = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
+    var tenant = http?.Request?.Headers["X-Tenant-Id"].ToString();
+    var branch = http?.Request?.Headers["X-Branch-Id"].ToString();
+
+    return new SimpleCacheKeyContext($"tenant={tenant};branch={branch}");
 });
 builder.Services.AddGeneratedKyrolusRepositories();
 

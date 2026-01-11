@@ -10,18 +10,17 @@ public class KyrolusEFRepositoryBase<TEntity>
         var parameter = Expression.Parameter(typeof(TEntity), "e");
         Expression current = parameter;
         foreach (var segment in propertyPath.Split('.'))
-        {
             current = Expression.PropertyOrField(current, segment);
-        }
+        
         var body = Expression.Convert(current, typeof(object));
         return Expression.Lambda<Func<TEntity, object?>>(body, parameter);
     }
     public static Expression<Func<TEntity, object?>>[]? ConvertIncludePropertiesToExpressions(List<string>? includeProperties)
     {
         return includeProperties?.Select(p => BuildIncludeExpression(p))
-             .Where(e => e != null)
-             .Select(e => e!)
-             .ToArray() ?? [];
+            .Where(e => e != null)
+            .Select(e => e!)
+            .ToArray() ?? [];
     }
     public static Expression<Func<TEntity, bool>> GetPrimaryKeyFromKeyValues(object?[] keyValues, string[] KeyPropertyNames)
     {
@@ -69,53 +68,156 @@ public class KyrolusEFRepositoryBase<TEntity>
     private static object? ConvertToType(object? value, Type targetType)
     {
         if (value is null) return null;
+
         var underlying = Nullable.GetUnderlyingType(targetType) ?? targetType;
 
-        if (underlying.IsInstanceOfType(value)) return value;
+        if (underlying.IsInstanceOfType(value))
+            return value;
 
-        if (underlying == typeof(string)) return value.ToString();
+        if (TryConvertKnownTypes(value, underlying, out var converted))
+            return converted;
 
-        if (underlying == typeof(Guid))
-        {
-            if (value is Guid guid) return guid;
-            if (value is string guidText && Guid.TryParse(guidText, out var parsed)) return parsed;
-        }
+        if (TryConvertEnum(value, underlying, out converted))
+            return converted;
 
-        if (underlying == typeof(DateTimeOffset))
-        {
-            if (value is DateTimeOffset dto) return dto;
-            if (value is string text && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
-            {
-                return parsed;
-            }
-        }
-
-        if (underlying == typeof(DateTime))
-        {
-            if (value is DateTime dt) return dt;
-            if (value is string text && DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
-            {
-                return parsed;
-            }
-        }
-
-        if (underlying == typeof(TimeSpan))
-        {
-            if (value is TimeSpan ts) return ts;
-            if (value is string text && TimeSpan.TryParse(text, CultureInfo.InvariantCulture, out var parsed)) return parsed;
-        }
-
-        if (underlying.IsEnum)
-        {
-            if (value is string enumText) return Enum.Parse(underlying, enumText, true);
-            return Enum.ToObject(underlying, value);
-        }
-
-        if (value is IConvertible)
-        {
-            return Convert.ChangeType(value, underlying, CultureInfo.InvariantCulture);
-        }
+        if (TryConvertConvertible(value, underlying, out converted))
+            return converted;
 
         return value;
+    }
+
+    private static bool TryConvertKnownTypes(object value, Type underlying, out object? result)
+    {
+        if (underlying == typeof(string))
+        {
+            result = value.ToString();
+            return true;
+        }
+
+        if (underlying == typeof(Guid))
+            return TryConvertGuid(value, out result);
+
+        if (underlying == typeof(DateTimeOffset))
+            return TryConvertDateTimeOffset(value, out result);
+
+        if (underlying == typeof(DateTime))
+            return TryConvertDateTime(value, out result);
+
+        if (underlying == typeof(TimeSpan))
+            return TryConvertTimeSpan(value, out result);
+
+        result = null;
+        return false;
+    }
+
+    private static bool TryConvertGuid(object value, out object? result)
+    {
+        if (value is Guid g)
+        {
+            result = g;
+            return true;
+        }
+
+        if (value is string s && Guid.TryParse(s, out var parsed))
+        {
+            result = parsed;
+            return true;
+        }
+
+        result = null;
+        return false;
+    }
+
+    private static bool TryConvertDateTimeOffset(object value, out object? result)
+    {
+        if (value is DateTimeOffset dto)
+        {
+            result = dto;
+            return true;
+        }
+
+        if (value is string s && DateTimeOffset.TryParse(
+                s,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind,
+                out var parsed))
+        {
+            result = parsed;
+            return true;
+        }
+
+        result = null;
+        return false;
+    }
+
+    private static bool TryConvertDateTime(object value, out object? result)
+    {
+        if (value is DateTime dt)
+        {
+            result = dt;
+            return true;
+        }
+
+        if (value is string s && DateTime.TryParse(
+                s,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind,
+                out var parsed))
+        {
+            result = parsed;
+            return true;
+        }
+
+        result = null;
+        return false;
+    }
+
+    private static bool TryConvertTimeSpan(object value, out object? result)
+    {
+        if (value is TimeSpan ts)
+        {
+            result = ts;
+            return true;
+        }
+
+        if (value is string s && TimeSpan.TryParse(s, CultureInfo.InvariantCulture, out var parsed))
+        {
+            result = parsed;
+            return true;
+        }
+
+        result = null;
+        return false;
+    }
+
+    private static bool TryConvertEnum(object value, Type underlying, out object? result)
+    {
+        if (!underlying.IsEnum)
+        {
+            result = null;
+            return false;
+        }
+
+        // نفس سلوك كودك: Enum.Parse ممكن يرمي exception لو النص غلط
+        if (value is string s)
+        {
+            result = Enum.Parse(underlying, s, ignoreCase: true);
+            return true;
+        }
+
+        result = Enum.ToObject(underlying, value);
+        return true;
+    }
+
+    private static bool TryConvertConvertible(object value, Type underlying, out object? result)
+    {
+        if (value is not IConvertible)
+        {
+            result = null;
+            return false;
+        }
+
+        result = Convert.ChangeType(value, underlying, CultureInfo.InvariantCulture);
+        return true;
     }
 }

@@ -28,13 +28,15 @@ public class KyrolusRepositoryAsync<
 {
     protected readonly TDbContext db;
     protected readonly DbSet<TEntity> set;
-    protected readonly KyrolusRepositoryPolicy policy;
+    protected readonly KyrolusRepositoryPolicy policy = KyrolusRepositoryPolicy.Default;
     protected readonly IKyrolusRepositoryObserver? observer;
     protected readonly IKyrolusBulkExecutor<TEntity>? bulkExecutor;
     protected readonly ICacheProvider? cache;
     protected readonly bool enableCaching;
     protected readonly TimeSpan? cacheTtl;
     protected readonly string cacheAllKey;
+    protected readonly ICacheKeyContext? cacheKeyContext;
+    protected readonly string? cacheAllKeyBase;
     protected readonly Func<IQueryable<TEntity>, IQueryable<TEntity>>? globalQueryFilter;
     protected readonly bool softDeleteEnabled;
     protected readonly string softDeleteProperty;
@@ -44,8 +46,10 @@ public class KyrolusRepositoryAsync<
     protected readonly string[] keyPropertyNames;
     protected static readonly ConcurrentDictionary<Type, Func<TDbContext, TKey, IAsyncEnumerable<TEntity>>> CompiledById = new();
     private static readonly ConcurrentDictionary<(Type Type, bool AsNoTracking, bool UseSplit, bool SoftDelete, string SoftDeleteProperty, string DefaultIncludesKey), Func<TDbContext, IAsyncEnumerable<TEntity>>> CompiledGetAll = new();
-    protected virtual Expression<Func<TEntity, object?>>[] DefaultIncludes => Array.Empty<Expression<Func<TEntity, object?>>>();
-
+    protected virtual Expression<Func<TEntity, object?>>[] DefaultIncludes => [];
+    private const string GetByIdAsync = "GetByIdAsync";
+    private const string _GetAllAsync = "GetAllAsync";
+#pragma warning disable S107
     public KyrolusRepositoryAsync(
         TDbContext db,
         KyrolusRepositoryPolicy? policy = null,
@@ -53,7 +57,8 @@ public class KyrolusRepositoryAsync<
         IKyrolusBulkExecutor<TEntity>? bulkExecutor = null,
         ICacheProvider? cache = null,
         bool enableCaching = false,
-        int? cacheTtlSeconds = null)
+        int? cacheTtlSeconds = null, ICacheKeyContext? cacheKeyContext = null
+)
     {
         this.db = db ?? throw new ArgumentNullException(nameof(db));
         set = db.Set<TEntity>();
@@ -64,16 +69,19 @@ public class KyrolusRepositoryAsync<
         this.enableCaching = enableCaching && cache is not null;
         cacheTtl = cacheTtlSeconds is > 0 ? TimeSpan.FromSeconds(cacheTtlSeconds.Value) : null;
         cacheAllKey = $"{typeof(TEntity).Name}:all:compiled";
-        globalQueryFilter = this.policy.GlobalQueryFilter as Func<IQueryable<TEntity>, IQueryable<TEntity>>;
-        softDeleteEnabled = this.policy.EnableSoftDeleteDefault ?? false;
-        softDeleteProperty = string.IsNullOrWhiteSpace(this.policy.SoftDeleteProperty)
+        globalQueryFilter = this.policy?.GetGlobalQueryFilter<TEntity>();
+        softDeleteEnabled = this.policy?.EnableSoftDeleteDefault ?? false;
+        softDeleteProperty = string.IsNullOrWhiteSpace(this.policy?.SoftDeleteProperty)
             ? "IsDeleted"
             : this.policy.SoftDeleteProperty!;
-        rowVersionProperty = this.policy.RowVersionProperty;
-        splitQueryDefault = this.policy.UseSplitQueryDefault ?? false;
-        asNoTrackingDefault = this.policy.AsNoTrackingDefault ?? true;
+        rowVersionProperty = this.policy?.RowVersionProperty;
+        splitQueryDefault = this.policy?.UseSplitQueryDefault ?? false;
+        asNoTrackingDefault = this.policy?.AsNoTrackingDefault ?? true;
         keyPropertyNames = GetPrimaryKeyNames();
+        this.cacheKeyContext = cacheKeyContext;
+        cacheAllKeyBase = enableCaching ? $"{typeof(TEntity).Name}:all:compiled" : null;
     }
+#pragma warning restore S107
 
     #region Query helpers
     private IQueryable<TEntity> ApplyGlobalFilter(IQueryable<TEntity> query)
@@ -112,8 +120,34 @@ public class KyrolusRepositoryAsync<
     protected static Expression<Func<TEntity, bool>> BuildKeyPredicate(object?[] keyValues, string[] keyNames)
         => KyrolusEFRepositoryBase<TEntity>.GetPrimaryKeyFromKeyValues(keyValues, keyNames);
 
-    protected string CacheKeyById(object id) => $"{typeof(TEntity).Name}:id:{id}";
+    protected string CacheKeyById(object?[] keyValues)
+    {
+        var scope = cacheKeyContext?.ScopeKey;
+        var scopePart = string.IsNullOrWhiteSpace(scope) ? "" : $":scope={Uri.EscapeDataString(scope)}";
+        return $"{typeof(TEntity).Name}:id{scopePart}:{BuildKeyValuesFingerprint(keyValues)}";
+    }
 
+    protected string CacheKeyAll()
+    {
+        var baseKey = cacheAllKeyBase ?? $"{typeof(TEntity).Name}:all:compiled";
+        var scope = cacheKeyContext?.ScopeKey;
+        if (string.IsNullOrWhiteSpace(scope)) return baseKey;
+        return $"{baseKey}:scope={Uri.EscapeDataString(scope)}";
+    }
+
+    private static string BuildKeyValuesFingerprint(object?[] keyValues)
+        => string.Join("|", keyValues.Select((v, i) => $"{i}={EscapeKeyPart(v)}"));
+
+    private static string EscapeKeyPart(object? value)
+    {
+        var s = value switch
+        {
+            null => "null",
+            IFormattable f => f.ToString(null, System.Globalization.CultureInfo.InvariantCulture) ?? "null",
+            _ => value.ToString() ?? "null"
+        };
+        return Uri.EscapeDataString(s);
+    }
     protected static IQueryable<TEntity> ApplyCompiledQueryInternal(TDbContext ctx, bool track, bool split)
     {
         IQueryable<TEntity> query = ctx.Set<TEntity>();
@@ -192,13 +226,14 @@ public class KyrolusRepositoryAsync<
     {
         var sw = Stopwatch.StartNew();
         Exception? exception = null;
-        await NotifyBeforeAsync("GetByIdAsync", keyValues, cancellationToken).ConfigureAwait(false);
+        await NotifyBeforeAsync(GetByIdAsync, keyValues, cancellationToken).ConfigureAwait(false);
         try
         {
-            if (enableCaching && cache is not null && (includeExpressions == null || includeExpressions.Length == 0))
+            if (enableCaching && cache is not null && cacheTtl.HasValue && (includeExpressions == null || includeExpressions.Length == 0))
             {
-                var cacheKey = CacheKeyById(string.Join('|', keyValues.Select(v => v ?? "null")));
-                return await cache.GetOrSetAsync(cacheKey,
+                var cacheKey = CacheKeyById(keyValues);
+                return await cache.GetOrSetAsync(
+                    cacheKey,
                     async ct => await MaterializeByIdAsync(keyValues, asNoTracking, useSplitQuery, [], ct).ConfigureAwait(false),
                     cacheTtl,
                     cancellationToken).ConfigureAwait(false);
@@ -214,7 +249,7 @@ public class KyrolusRepositoryAsync<
         finally
         {
             sw.Stop();
-            await NotifyAfterAsync("GetByIdAsync", keyValues, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
+            await NotifyAfterAsync(GetByIdAsync, keyValues, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -233,7 +268,7 @@ public class KyrolusRepositoryAsync<
     {
         var sw = Stopwatch.StartNew();
         Exception? exception = null;
-        await NotifyBeforeAsync("GetByIdAsync", keyValues, cancellationToken).ConfigureAwait(false);
+        await NotifyBeforeAsync(GetByIdAsync, keyValues, cancellationToken).ConfigureAwait(false);
         try
         {
             var query = ApplyGlobalFilter(set.AsQueryable());
@@ -267,7 +302,7 @@ public class KyrolusRepositoryAsync<
         finally
         {
             sw.Stop();
-            await NotifyAfterAsync("GetByIdAsync", keyValues, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
+            await NotifyAfterAsync(GetByIdAsync, keyValues, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -297,7 +332,7 @@ public class KyrolusRepositoryAsync<
     {
         var sw = Stopwatch.StartNew();
         Exception? exception = null;
-        await NotifyBeforeAsync("GetAllAsync", filter, cancellationToken).ConfigureAwait(false);
+        await NotifyBeforeAsync(_GetAllAsync, filter, cancellationToken).ConfigureAwait(false);
         try
         {
             var query = ApplyGlobalFilter(set.AsQueryable());
@@ -335,7 +370,7 @@ public class KyrolusRepositoryAsync<
         finally
         {
             sw.Stop();
-            await NotifyAfterAsync("GetAllAsync", filter, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
+            await NotifyAfterAsync(_GetAllAsync, filter, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -347,7 +382,7 @@ public class KyrolusRepositoryAsync<
     {
         var sw = Stopwatch.StartNew();
         Exception? exception = null;
-        await NotifyBeforeAsync("GetAllAsync", filter, cancellationToken).ConfigureAwait(false);
+        await NotifyBeforeAsync(_GetAllAsync, filter, cancellationToken).ConfigureAwait(false);
         try
         {
             var query = ApplyGlobalFilter(set.AsQueryable());
@@ -374,7 +409,7 @@ public class KyrolusRepositoryAsync<
         finally
         {
             sw.Stop();
-            await NotifyAfterAsync("GetAllAsync", filter, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
+            await NotifyAfterAsync(_GetAllAsync, filter, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
         }
     }
     #endregion
@@ -418,9 +453,10 @@ public class KyrolusRepositoryAsync<
         {
             var asyncQuery = del(db);
             var list = await asyncQuery.ToListAsync(cancellationToken).ConfigureAwait(false);
-            if (enableCaching)
+            if (enableCaching && cache is not null && cacheTtl.HasValue)
             {
-                return await cache!.GetOrSetAsync(cacheAllKey,
+                return await cache.GetOrSetAsync(
+                    CacheKeyAll(),
                     async ct => list,
                     cacheTtl,
                     cancellationToken).ConfigureAwait(false) ?? [];
@@ -1042,11 +1078,12 @@ public class KyrolusRepositoryAsync<
     private async Task InvalidateCacheAsync(object?[]? keyValues, CancellationToken cancellationToken)
     {
         if (!enableCaching || cache is null) return;
-        await cache.RemoveAsync(cacheAllKey, cancellationToken).ConfigureAwait(false);
+
+        if (cacheAllKeyBase is not null)
+            await cache.RemoveAsync(CacheKeyAll(), cancellationToken).ConfigureAwait(false);
+
         if (keyValues is { Length: > 0 })
-        {
-            await cache.RemoveAsync(CacheKeyById(string.Join('|', keyValues.Select(v => v ?? "null"))), cancellationToken).ConfigureAwait(false);
-        }
+            await cache.RemoveAsync(CacheKeyById(keyValues), cancellationToken).ConfigureAwait(false);
     }
     #endregion
 }

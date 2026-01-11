@@ -19,9 +19,7 @@ public static class ConcurrencyHelper
             {
                 databaseValues = dbValues.Properties.ToDictionary(p => p.Name, p => dbValues[p]);
                 if (!string.IsNullOrWhiteSpace(rowVersionPropertyName) && dbValues.TryGetValue<object>(rowVersionPropertyName!, out var rvObj) && rvObj is byte[] dbRv)
-                {
                     current = dbRv;
-                }
             }
         }
         catch
@@ -99,9 +97,7 @@ public static class ConcurrencyHelper
     private static Task DelayIfNeededAsync(TimeSpan? delay, CancellationToken cancellationToken)
     {
         if (delay.HasValue && delay.Value > TimeSpan.Zero)
-        {
             return Task.Delay(delay.Value, cancellationToken);
-        }
         return Task.CompletedTask;
     }
 }

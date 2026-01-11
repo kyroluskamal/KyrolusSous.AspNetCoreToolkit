@@ -1,8 +1,3 @@
-using System;
-using KyrolusSous.Repositories.EF.Generator.TestApp.Models;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-
 namespace KyrolusSous.Repositories.EF.Generator.TestApp;
 
 public class ApplicationDbContext(DbContextOptions options) : DbContext(options)
@@ -20,7 +15,7 @@ public class ApplicationDbContext(DbContextOptions options) : DbContext(options)
     public DbSet<OrderLine> OrderLines { get; set; }
     public DbSet<Payment> Payments { get; set; }
     public DbSet<Review> Reviews { get; set; }
-
+#pragma warning disable S3776
     protected override void OnModelCreating(ModelBuilder mb)
     {
         base.OnModelCreating(mb);
@@ -55,7 +50,8 @@ public class ApplicationDbContext(DbContextOptions options) : DbContext(options)
                 }
             }
         }
-
+#pragma warning restore S3776
+        // Primary keys
         // Keys
         mb.Entity<ProductCategory>().HasKey(x => new { x.ProductId, x.CategoryId });
         mb.Entity<StoreUserRole>().HasKey(x => new { x.StoreId, x.UserId, x.RoleId });
