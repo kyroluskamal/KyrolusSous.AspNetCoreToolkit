@@ -4,8 +4,11 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
 {
     private static readonly string productLaptopId = "66666666-6666-6666-6666-666666666661";
     private static readonly string productHeadphonesId = "66666666-6666-6666-6666-666666666662";
+    private static readonly string categoryElectronicsId = "55555555-5555-5555-5555-555555555551";
+
     private static readonly string[] CompositeKey_ProductReview = [productLaptopId, "77777777-7777-7777-7777-777777777772"];
-    
+    private static readonly string[] CompositeKey_ProductCategory = [productLaptopId, categoryElectronicsId];
+
     [Fact(DisplayName = "GetByIdAsync should return entity without Include Properties and with single key")]
     public async Task GetByIdAsync_Returng_Entity_NoIncludeProperties_SingleKey()
     {
@@ -296,184 +299,295 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
         dbContext.ChangeTracker.Entries().ShouldNotBeEmpty();
     }
     #endregion
-    // #region UseSplitQuery Tests
-    // [Fact(DisplayName = "GetByIdAsync returns entity with UseSplitQuery = null and Policy.AsNoTrackingDefault == null")]
-    // public async Task GetByIdAsync_AsNoTracking_Null_UsesDefaultPolicy_AsNoTrackingDefault_Null()
-    // {
-    //     // Arrange
-    //     var customFactory = WithPolicy(new KyrolusRepositoryPolicy { AsNoTrackingDefault = null });
-    //     using var scope = customFactory.Services.CreateScope();
-    //     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    //     var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
-    //     // Act
-    //     dbContext.ChangeTracker.Clear();
+    #region UseSplitQuery Tests
+    [Fact(DisplayName = "GetByIdAsync returns entity and Policy.AsNoTrackingDefault == null - Single key and AsNoTracking in attribute = false")]
+    public async Task GetByIdAsync_AsNoTracking_Null_UsesDefaultPolicy_AsNoTrackingDefault_Null_AsNoTrackingAttribute_True_SingleKey()
+    {
+        // Arrange
+        var customFactory = WithPolicy(new KyrolusRepositoryPolicy { AsNoTrackingDefault = null });
+        using var scope = customFactory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+        // Act
+        dbContext.ChangeTracker.Clear();
 
-    //     await repo.GetByIdAsync(
-    //                 filter: null,
-    //                 orderBy: null,
-    //                 includeProperties: null,
-    //                 includeGraph: null,
-    //                 asNoTracking: null,
-    //                 useSplitQuery: null,
-    //                 cancellationToken: default);
-    //     dbContext.ChangeTracker.Entries().ShouldNotBeEmpty();
-    // }
+        await repo.GetByIdAsync(
+                    Guid.Parse(productLaptopId),
+                    asNoTracking: null,
+                    cancellationToken: default);
+        dbContext.ChangeTracker.Entries().ShouldNotBeEmpty();
+    }
+    [Fact(DisplayName = "GetByIdAsync returns entity and Policy.AsNoTrackingDefault == null and AsNoTracking in attribute = true - Composite key")]
+    public async Task GetByIdAsync_AsNoTracking_Null_UsesDefaultPolicy_AsNoTrackingDefault_Null_AsNoTrackingAttribute_True_CompositeKey()
+    {
+        // Arrange
+        var customFactory = WithPolicy(new KyrolusRepositoryPolicy { AsNoTrackingDefault = null });
+        using var scope = customFactory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var repo = scope.ServiceProvider.GetRequiredService<ReviewRepository>();
+        // Act
+        dbContext.ChangeTracker.Clear();
 
-    // [Fact(DisplayName = "GetByIdAsync returns entity with UseSplitQuery option")]
-    // public async Task GetByIdAsync_UseSplitQuery_ReturnsEntitiesWithUseSplitQuery()
-    // {
-    //     // Arrange
-    //     using var scope = Factory.Services.CreateScope();
-    //     var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
-    //     var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
-    //     // Act
-    //     counter.Reset();
-    //     var items = await repo.GetByIdAsync(
-    //         filter: null,
-    //         orderBy: null,
-    //         includeProperties: ["Reviews"],
-    //         includeGraph: null,
-    //         asNoTracking: true,
-    //         useSplitQuery: true,
-    //         cancellationToken: default);
-    //     // Assert
-    //     counter.Count.ShouldBe(4, $"Expected 4 SQL command, got {counter.Count}");
-    //     items.ShouldNotBeNull();
-    // }
-    // [Fact(DisplayName = "GetByIdAsync uses a single SQL command when UseSplitQuery is false (even with collection includes)")]
-    // public async Task GetByIdAsync_UseSplitQuery_False_UsesSingleSqlCommand()
-    // {
-    //     using var scope = Factory.Services.CreateScope();
-    //     var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
-    //     var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
+        await repo.GetByIdAsync(
+                    CompositeKey_ProductReview,
+                    asNoTracking: null,
+                    cancellationToken: default);
+        dbContext.ChangeTracker.Entries().ShouldBeEmpty();
+    }
 
-    //     counter.Reset();
+    [Fact(DisplayName = "GetByIdAsync returns entity with UseSplitQuery option = true, policy.UseSplitQueryDefault = null and UseSplitQuery in Attribute = true- Single key")]
+    public async Task GetByIdAsync_UseSplitQuery_True_InPolicy_Null_InAttribute_True_SingleKey()
+    {
+        // Arrange
+        using var scope = Factory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
+        // Act
+        counter.Reset();
+        var items = await repo.GetByIdAsync(
+            Guid.Parse(productLaptopId),
+            includeProperties: ["Reviews"],
+            useSplitQuery: true,
+            cancellationToken: default);
+        // Assert
+        counter.Count.ShouldBe(4, $"Expected 4 SQL command, got {counter.Count}");
+        items.ShouldNotBeNull();
+    }
+    [Fact(DisplayName = "GetByIdAsync returns entity with UseSplitQuery option = true, policy.UseSplitQueryDefault = null and UseSplitQuery in Attribute = true- Composite key")]
+    public async Task GetByIdAsync_UseSplitQuery_True_InPolicy_Null_InAttribute_False_ComppositeKey()
+    {
+        // Arrange
+        using var scope = Factory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ReviewRepository>();
+        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
+        // Act
+        counter.Reset();
+        var items = await repo.GetByIdAsync(
+            CompositeKey_ProductReview,
+            includeProperties: ["Customer"],
+            includeGraph: null,
+            asNoTracking: true,
+            useSplitQuery: true,
+            cancellationToken: default);
+        // Assert
+        counter.Count.ShouldBe(1, $"Expected 1 SQL command, got {counter.Count}");
+        items.ShouldNotBeNull();
+    }
+    [Fact(DisplayName = "GetByIdAsync uses a single SQL command when UseSplitQuery is false (even with collection includes) - single key")]
+    public async Task GetByIdAsync_UseSplitQuery_False_UsesSingleSqlCommand_SingleKey()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
 
-    //     var items = await repo.GetByIdAsync(
-    //         filter: null,
-    //         orderBy: null,
-    //         includeProperties: ["Reviews"],
-    //         includeGraph: null,
-    //         asNoTracking: true,
-    //         useSplitQuery: false,
-    //         cancellationToken: default);
+        counter.Reset();
 
-    //     counter.Count.ShouldBe(1, $"Expected 1 SQL command when UseSplitQuery=false, got {counter.Count}");
-    //     items.ShouldNotBeNull();
-    // }
-    // [Fact(DisplayName = "GetByIdAsync uses useSplitQuery = null and policy with UseSplitQueryDefault = true, policy wins")]
-    // public async Task GetByIdAsync_UseSplitQuery_Null_UsesPolicy_UseSplitQueryDefault_True()
-    // {
-    //     var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = true });
-    //     using var scope = Customfactory.Services.CreateScope();
-    //     var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
-    //     var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
+        var items = await repo.GetByIdAsync(
+            Guid.Parse(productLaptopId),
+            includeProperties: ["Reviews"],
+            useSplitQuery: false,
+            cancellationToken: default);
 
-    //     counter.Reset();
+        counter.Count.ShouldBe(1, $"Expected 1 SQL command when UseSplitQuery=false, got {counter.Count}");
+        items.ShouldNotBeNull();
+    }
+    [Fact(DisplayName = "GetByIdAsync uses a single SQL command when UseSplitQuery is false (even with collection includes) - Composite key")]
+    public async Task GetByIdAsync_UseSplitQuery_False_UsesSingleSqlCommand_CompositeKey()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductCategoryRepository>();
+        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
 
-    //     var items = await repo.GetByIdAsync(
-    //         filter: null,
-    //         orderBy: null,
-    //         includeProperties: null,
-    //         includeGraph: null,
-    //         asNoTracking: true,
-    //         useSplitQuery: null,
-    //         cancellationToken: default);
+        counter.Reset();
 
-    //     counter.Count.ShouldBe(3, $"Expected {3} SQL commands when UseSplitQuery=null (policy default), got {counter.Count}");
-    //     items.ShouldNotBeNull();
-    // }
-    // [Fact(DisplayName = "GetByIdAsync uses useSplitQuery = null and policy with UseSplitQueryDefault == false, policy wins")]
-    // public async Task GetByIdAsync_UseSplitQuery_Null_UsesPolicy_UseSplitQueryDefault_False()
-    // {
-    //     var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = false });
-    //     using var scope = Customfactory.Services.CreateScope();
-    //     var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
-    //     var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
+        var items = await repo.GetByIdAsync(
+           CompositeKey_ProductCategory,
+            useSplitQuery: false,
+            cancellationToken: default);
 
-    //     counter.Reset();
+        counter.Count.ShouldBe(1, $"Expected 1 SQL command when UseSplitQuery=false, got {counter.Count}");
+        items.ShouldNotBeNull();
+    }
+    [Fact(DisplayName = "GetByIdAsync uses useSplitQuery = null and policy with UseSplitQueryDefault = true, policy wins - single Key")]
+    public async Task GetByIdAsync_UseSplitQuery_Null_UsesPolicy_UseSplitQueryDefault_True_SingleKey()
+    {
+        var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = true });
+        using var scope = Customfactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
 
-    //     var items = await repo.GetByIdAsync(
-    //         filter: null,
-    //         orderBy: null,
-    //         includeProperties: ["Reviews"],
-    //         includeGraph: null,
-    //         asNoTracking: true,
-    //         useSplitQuery: null,
-    //         cancellationToken: default);
+        counter.Reset();
 
-    //     counter.Count.ShouldBe(1, $"Expected {1} SQL command when UseSplitQuery=null (policy default), got {counter.Count}");
-    //     items.ShouldNotBeNull();
-    // }
-    // [Fact(DisplayName = "GetByIdAsync uses useSplitQuery = null and policy.UseSplitQueryDefault = null, default true wins")]
-    // public async Task GetByIdAsync_UseSplitQuery_Null_UsesPolicy_UseSplitQueryDefault_Null()
-    // {
-    //     var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = null });
-    //     using var scope = Customfactory.Services.CreateScope();
-    //     var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
-    //     var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
+        var items = await repo.GetByIdAsync(
+            Guid.Parse(productLaptopId),
+            useSplitQuery: null,
+            cancellationToken: default);
 
-    //     counter.Reset();
+        counter.Count.ShouldBe(3, $"Expected {3} SQL commands when UseSplitQuery=null (policy default), got {counter.Count}");
+        items.ShouldNotBeNull();
+    }
+    [Fact(DisplayName = "GetByIdAsync uses useSplitQuery = null and policy with UseSplitQueryDefault = true, policy wins - Composite Key")]
+    public async Task GetByIdAsync_UseSplitQuery_Null_UsesPolicy_UseSplitQueryDefault_Composite()
+    {
+        var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = true });
+        using var scope = Customfactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductCategoryRepository>();
+        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
 
-    //     var items = await repo.GetByIdAsync(
-    //         filter: null,
-    //         orderBy: null,
-    //         includeProperties: ["Reviews"],
-    //         includeGraph: null,
-    //         asNoTracking: true,
-    //         useSplitQuery: null,
-    //         cancellationToken: default);
+        counter.Reset();
 
-    //     counter.Count.ShouldBe(4, $"Expected {4} SQL command when UseSplitQuery=null (policy default), got {counter.Count}");
-    //     items.ShouldNotBeNull();
-    // }
+        var items = await repo.GetByIdAsync(
+            CompositeKey_ProductCategory,
+            useSplitQuery: null,
+            cancellationToken: default);
+
+        counter.Count.ShouldBe(1, $"Expected {1} SQL commands when UseSplitQuery=null (policy default), got {counter.Count}");
+        items.ShouldNotBeNull();
+    }
+    [Fact(DisplayName = "GetByIdAsync uses useSplitQuery = null and policy with UseSplitQueryDefault == false, policy wins - single key")]
+    public async Task GetByIdAsync_UseSplitQuery_Null_UsesPolicy_UseSplitQueryDefault_False_SingleKey()
+    {
+        var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = false });
+        using var scope = Customfactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
+
+        counter.Reset();
+
+        var items = await repo.GetByIdAsync(
+            Guid.Parse(productLaptopId),
+            includeProperties: ["Reviews"],
+            useSplitQuery: null);
+
+        counter.Count.ShouldBe(1, $"Expected {1} SQL command when UseSplitQuery=null (policy default), got {counter.Count}");
+        items.ShouldNotBeNull();
+    }
+    [Fact(DisplayName = "GetByIdAsync uses useSplitQuery = null and policy with UseSplitQueryDefault == false, policy wins - Composite key")]
+    public async Task GetByIdAsync_UseSplitQuery_Null_UsesPolicy_UseSplitQueryDefault_False_CompositeKey()
+    {
+        var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = false });
+        using var scope = Customfactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ReviewRepository>();
+        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
+
+        counter.Reset();
+
+        var items = await repo.GetByIdAsync(CompositeKey_ProductReview, useSplitQuery: null);
+
+        counter.Count.ShouldBe(1, $"Expected {1} SQL command when UseSplitQuery=null (policy default), got {counter.Count}");
+        items.ShouldNotBeNull();
+    }
+    [Fact(DisplayName = "GetByIdAsync uses useSplitQuery = null and policy.UseSplitQueryDefault = null, Attribute wins - single key")]
+    public async Task GetByIdAsync_UseSplitQuery_Null_UsesPolicy_UseSplitQueryDefault_Null_SingleKey()
+    {
+        var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = null });
+        using var scope = Customfactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
+
+        counter.Reset();
+
+        var items = await repo.GetByIdAsync(
+            Guid.Parse(productLaptopId),
+            includeProperties: ["Reviews"],
+            useSplitQuery: null);
+
+        counter.Count.ShouldBe(4, $"Expected {4} SQL command when UseSplitQuery=null (policy default), got {counter.Count}");
+        items.ShouldNotBeNull();
+    }
     // [Fact(DisplayName = "GetByIdAsync uses useSplitQuery = true and policy.UseSplitQueryDefault = true, useSplitQuery wins ")]
-    // public async Task GetByIdAsync_UseSplitQuery_True_UsesPolicy_UseSplitQueryDefault_True()
-    // {
-    //     // Given
-    //     var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = true });
-    //     using var scope = Customfactory.Services.CreateScope();
-    //     var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
-    //     var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
+    [Fact(DisplayName = "GetByIdAsync uses useSplitQuery = null and policy.UseSplitQueryDefault = null, Attribute wins - Composite key")]
+    public async Task GetByIdAsync_UseSplitQuery_Null_UsesPolicy_UseSplitQueryDefault_Null_CompositeKey()
+    {
+        var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = null });
+        using var scope = Customfactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ReviewRepository>();
+        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
 
-    //     counter.Reset();
-    //     // When
-    //     var items = await repo.GetByIdAsync(
-    //         filter: null,
-    //         orderBy: null,
-    //         includeProperties: ["Reviews"],
-    //         includeGraph: null,
-    //         asNoTracking: true,
-    //         useSplitQuery: true,
-    //         cancellationToken: default);
-    //     // Then
-    //     counter.Count.ShouldBe(4, $"Expected {4} SQL commands when UseSplitQuery=true, got {counter.Count}");
-    //     items.ShouldNotBeNull();
-    // }
-    // [Fact(DisplayName = "GetByIdAsync uses useSplitQuery = false and policy.UseSplitQueryDefault = true, useSplitQuery wins ")]
-    // public async Task GetByIdAsync_UseSplitQuery_True_UsesPolicy_UseSplitQueryDefault_False()
-    // {
-    //     // Given
-    //     var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = true });
-    //     using var scope = Customfactory.Services.CreateScope();
-    //     var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
-    //     var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
+        counter.Reset();
 
-    //     counter.Reset();
-    //     // When
-    //     var items = await repo.GetByIdAsync(
-    //         filter: null,
-    //         orderBy: null,
-    //         includeProperties: ["Reviews"],
-    //         includeGraph: null,
-    //         asNoTracking: true,
-    //         useSplitQuery: false,
-    //         cancellationToken: default);
-    //     // Then
-    //     counter.Count.ShouldBe(1, $"Expected {1} SQL commands when UseSplitQuery=true, got {counter.Count}");
-    //     items.ShouldNotBeNull();
-    // }
-    // #endregion
+        var items = await repo.GetByIdAsync(
+            CompositeKey_ProductReview,
+            useSplitQuery: null);
+
+        counter.Count.ShouldBe(1, $"Expected {1} SQL command when UseSplitQuery=null (policy default), got {counter.Count}");
+        items.ShouldNotBeNull();
+    }
+    [Fact(DisplayName = "GetByIdAsync uses useSplitQuery = true and policy.UseSplitQueryDefault = true, useSplitQuery wins - Single key")]
+    public async Task GetByIdAsync_UseSplitQuery_True_UsesPolicy_UseSplitQueryDefault_True()
+    {
+        // Given
+        var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = true });
+        using var scope = Customfactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
+
+        counter.Reset();
+        // When
+        var items = await repo.GetByIdAsync(
+            Guid.Parse(productLaptopId),
+            includeProperties: ["Reviews"],
+            useSplitQuery: true);
+        // Then
+        counter.Count.ShouldBe(4, $"Expected {4} SQL commands when UseSplitQuery=true, got {counter.Count}");
+        items.ShouldNotBeNull();
+    }
+    [Fact(DisplayName = "GetByIdAsync uses useSplitQuery = true and policy.UseSplitQueryDefault = true, useSplitQuery wins - Single key")]
+    public async Task GetByIdAsync_UseSplitQuery_True_UsesPolicy_UseSplitQueryDefault_True_CompositeKey()
+    {
+        // Given
+        var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = true });
+        using var scope = Customfactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ReviewRepository>();
+        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
+
+        counter.Reset();
+        // When
+        var items = await repo.GetByIdAsync(
+            CompositeKey_ProductReview,
+            useSplitQuery: true);
+        // Then
+        counter.Count.ShouldBe(1, $"Expected {1} SQL commands when UseSplitQuery=true, got {counter.Count}");
+        items.ShouldNotBeNull();
+    }
+    [Fact(DisplayName = "GetByIdAsync uses useSplitQuery = false and policy.UseSplitQueryDefault = true, useSplitQuery wins - Single key")]
+    public async Task GetByIdAsync_UseSplitQuery_True_UsesPolicy_UseSplitQueryDefault_False_SingleKey()
+    {
+        // Given
+        var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = true });
+        using var scope = Customfactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
+
+        counter.Reset();
+        // When
+        var items = await repo.GetByIdAsync(
+            Guid.Parse(productLaptopId),
+            includeProperties: ["Reviews"],
+            useSplitQuery: false);
+        // Then
+        counter.Count.ShouldBe(1, $"Expected {1} SQL commands when UseSplitQuery=true, got {counter.Count}");
+        items.ShouldNotBeNull();
+    }
+    [Fact(DisplayName = "GetByIdAsync uses useSplitQuery = false and policy.UseSplitQueryDefault = true, useSplitQuery wins - Composite key")]
+    public async Task GetByIdAsync_UseSplitQuery_True_UsesPolicy_UseSplitQueryDefault_False_CompositeKey()
+    {
+        // Given
+        var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = true });
+        using var scope = Customfactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ReviewRepository>();
+        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
+
+        counter.Reset();
+        // When
+        var items = await repo.GetByIdAsync(
+            CompositeKey_ProductReview,
+            useSplitQuery: false);
+        // Then
+        counter.Count.ShouldBe(1, $"Expected {1} SQL commands when UseSplitQuery=true, got {counter.Count}");
+        items.ShouldNotBeNull();
+    }
+    #endregion
     // #region SoftDelete Tests
     // [Fact(DisplayName = "GetByIdAsync does not return soft-deleted entity")]
     // public async Task GetByIdAsync_DoesNotReturnSoftDeletedEntities()

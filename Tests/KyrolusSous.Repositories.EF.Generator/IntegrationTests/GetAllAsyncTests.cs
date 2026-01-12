@@ -387,8 +387,8 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
                     cancellationToken: default);
         dbContext.ChangeTracker.Entries().ShouldNotBeEmpty();
     }
-    [Fact(DisplayName = "GetAllAsync returns entities with AsNoTracking = null and Policy.AsNoTrackingDefault == true")]
-    public async Task GetAllAsync_UseSplitQueryDefaultFromPolicy_ReturnsEntitiesWithDefaultUseSplitQueryOption()
+    [Fact(DisplayName = "GetAllAsync returns entities with AsNoTracking = null and Policy.AsNoTrackingDefault == true and AsNoTracking in Attribute = false")]
+    public async Task GetAllAsync_AsNoTracking_Null_AsNoTrackingDefaultFromPolicy_true_AsNoTrackingOptionFromPAttribute_False()
     {
         // Arrange
         var customFactory = WithPolicy(new KyrolusRepositoryPolicy { AsNoTrackingDefault = true });
@@ -408,8 +408,8 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
                     cancellationToken: default);
         dbContext.ChangeTracker.Entries().ShouldBeEmpty();
     }
-    [Fact(DisplayName = "GetAllAsync returns entities with AsNoTracking = null and Policy.AsNoTrackingDefault == false")]
-    public async Task GetAllAsync_UseAsNoTrackingDefaultFromPolicy_ReturnsEntitiesWithAsNoTrackingOptionFromPolicy()
+    [Fact(DisplayName = "GetAllAsync returns entities with AsNoTracking = null and Policy.AsNoTrackingDefault == false and AsNoTracking in Attribute = false")]
+    public async Task GetAllAsync_AsNoTracking_Null_AsNoTrackingDefaultFromPolicy_false_AsNoTrackingOptionFromPAttribute_False()
     {
         // Arrange
         var customFactory = WithPolicy(new KyrolusRepositoryPolicy { AsNoTrackingDefault = false });
@@ -539,7 +539,7 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
         counter.Count.ShouldBe(1, $"Expected {1} SQL command when UseSplitQuery=null (policy default), got {counter.Count}");
         items.ShouldNotBeNull();
     }
-    [Fact(DisplayName = "GetAllAsync uses useSplitQuery = null and policy.UseSplitQueryDefault = null, default true wins")]
+    [Fact(DisplayName = "GetAllAsync uses useSplitQuery = null and policy.UseSplitQueryDefault = null, Attribute wins")]
     public async Task GetAllAsync_UseSplitQuery_Null_UsesPolicy_UseSplitQueryDefault_Null()
     {
         var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = null });
