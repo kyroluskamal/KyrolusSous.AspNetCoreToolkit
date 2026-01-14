@@ -1723,7 +1723,7 @@ public async Task<IEnumerable<{{{request.EntityType.ToDisplayString()}}}>> Updat
                                 if (entry.State == EntityState.Detached)
                                     entry = db.Attach(entityInDb);
 
-                                entry.Property("{{{request.SoftDeleteProperty}}}").CurrentValue = false;
+                                entry.Property("{{{request.SoftDeleteProperty}}}").CurrentValue = true;
                                 entry.Property("{{{request.SoftDeleteProperty}}}").IsModified = true;
 
                                 await InvalidateCachesAsync(keyValues, cancellationToken).ConfigureAwait(false);

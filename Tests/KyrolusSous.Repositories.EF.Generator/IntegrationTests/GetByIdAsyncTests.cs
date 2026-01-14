@@ -588,321 +588,310 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
         items.ShouldNotBeNull();
     }
     #endregion
-    // #region SoftDelete Tests
-    // [Fact(DisplayName = "GetByIdAsync does not return soft-deleted entity")]
-    // public async Task GetByIdAsync_DoesNotReturnSoftDeletedEntities()
-    // {
-    //     // Arrange
-    //     using var scope = Factory.Services.CreateScope();
-    //     var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
-    //     var UoW = scope.ServiceProvider.GetRequiredService<KyrolusUnitOfWork>();
-    //     var product = await repo.GetByIdAsync(Guid.Parse("66666666-6666-6666-6666-666666666662"), asNoTracking: false);
+    #region SoftDelete Tests
+    [Fact(DisplayName = "GetByIdAsync does not return soft-deleted entity")]
+    public async Task GetByIdAsync_DoesNotReturnSoftDeletedEntities()
+    {
+        // Arrange
+        using var scope = Factory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+        var UoW = scope.ServiceProvider.GetRequiredService<KyrolusUnitOfWork>();
+        var product = await repo.GetByIdAsync(Guid.Parse(productLaptopId), asNoTracking: false);
 
-    //     product.ShouldNotBeNull();
-    //     try
-    //     {
-    //         await repo.RemoveAsync(product, isSoftDelete: true);
-    //         await UoW.SaveChangesAsync();
-    //         // Act
-    //         var items = await repo.GetByIdAsync(
-    //             filter: null,
-    //             orderBy: null,
-    //             includeProperties: null,
-    //             includeGraph: null,
-    //             asNoTracking: true,
-    //             useSplitQuery: null,
-    //             cancellationToken: default);
+        product.ShouldNotBeNull();
+        try
+        {
+            await repo.SoftDeleteAsync(product.Id);
+            await UoW.SaveChangesAsync();
+            // Act
+            var item = await repo.GetByIdAsync(product.Id, asNoTracking: false);
 
-    //         // Assert
-    //         items.First().Id.ShouldNotBe(product.Id);
-    //         items.Count().ShouldBe(2);
-    //         items.Any(p => p.IsDeleted).ShouldBeFalse();
-    //     }
-    //     finally
-    //     {
-    //         if (product != null)
-    //         {
-    //             await repo.RestoreAsync(product.Id);
-    //             await UoW.SaveChangesAsync();
-    //         }
-    //     }
-    // }
-    // #endregion
-    // #region Cancellation Token Tests
-    // [Fact(DisplayName = "GetByIdAsync respects cancellation token")]
-    // public async Task GetByIdAsync_CanceledToken_ThrowsOperationCanceled()
-    // {
-    //     using var scope = Factory.Services.CreateScope();
-    //     var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+            // Assert
+            item.ShouldBeNull();
+        }
+        finally
+        {
+            if (product != null)
+            {
+                await repo.RestoreAsync(product.Id);
+                await UoW.SaveChangesAsync();
+            }
+        }
+    }
+    #endregion
+    #region Cancellation Token Tests
+    [Fact(DisplayName = "GetByIdAsync respects cancellation token")]
+    public async Task GetByIdAsync_CanceledToken_ThrowsOperationCanceled()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
 
-    //     using var cts = new CancellationTokenSource();
-    //     await cts.CancelAsync();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
 
-    //     await Should.ThrowAsync<OperationCanceledException>(async () =>
-    //     {
-    //         await repo.GetByIdAsync(
-    //             filter: null,
-    //             orderBy: null,
-    //             includeProperties: ["Reviews"],
-    //             includeGraph: null,
-    //             asNoTracking: true,
-    //             useSplitQuery: true,
-    //             cancellationToken: cts.Token);
-    //     });
-    // }
-    // #endregion
-    // #region Unhappy Path Tests
-    // [Fact(DisplayName = "GetByIdAsync throws when include string is invalid navigation")]
-    // public async Task GetByIdAsync_InvalidIncludeString_Throws()
-    // {
-    //     using var scope = Factory.Services.CreateScope();
-    //     var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+        await Should.ThrowAsync<OperationCanceledException>(async () =>
+        {
+            await repo.GetByIdAsync(
+                Guid.Parse(productLaptopId),
+                includeProperties: ["Reviews"],
+                includeGraph: null,
+                asNoTracking: true,
+                useSplitQuery: true,
+                cancellationToken: cts.Token);
+        });
+    }
+    #endregion
+    #region Unhappy Path Tests
+    [Fact(DisplayName = "GetByIdAsync throws when include string is invalid navigation")]
+    public async Task GetByIdAsync_InvalidIncludeString_Throws()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
 
-    //     await Should.ThrowAsync<InvalidOperationException>(async () =>
-    //     {
-    //         await repo.GetByIdAsync(
-    //             filter: null,
-    //             orderBy: null,
-    //             includeProperties: ["NotARealNavigation"],
-    //             includeGraph: null,
-    //             asNoTracking: true,
-    //             useSplitQuery: true,
-    //             cancellationToken: default);
-    //     });
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error for unsupported operator for String properties")]
-    // public async Task GetByIdAsync_Unsupported_String_FilterProperty_Throws()
-    // {
-    //     var (_, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         Filters: [new FilterClause("Name", "has", "Test")]
-    //         ));
-    //     content?.ShouldContain("Invalid filter: property='Name', operator='has', value='Test'");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync returns entity with unsupported Numeric Filter operator throws")]
-    // public async Task GetByIdAsync_Unsupported_Numeric_FilterOperator_Throws()
-    // {
-    //     var (_, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         Filters: [new FilterClause("StockQuantity", "has", 25.ToString())]
-    //         ));
-    //     content?.ShouldContain("Unsupported operator 'has'");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error for unsupported operator for Bool properties")]
-    // public async Task GetByIdAsync_BoolProperty_Unsupported_Operator_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         Filters: [new FilterClause("IsActive", "gt", "true")]
-    //         ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Unsupported operator 'gt'");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error for unsupported operator for DateTimeOffset properties")]
-    // public async Task GetByIdAsync_DateTimeOffsetProperty_Unsupported_Operator_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         Filters: [new FilterClause("CreatedAt", "contains", "2024-06-01T00:00:00Z")]
-    //         ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Unsupported operator 'contains'");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error for unsupported operator for Numeric properties")]
-    // public async Task GetByIdAsync_NumericProperty_Unsupported_Operator_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         Filters: [new FilterClause("StockQuantity", "contains", 25.ToString())]
-    //         ));
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Unsupported operator 'contains'");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error for unsupported operator for Guid properties")]
-    // public async Task GetByIdAsync_GuidProperty_Unsupported_Operator_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         Filters: [new FilterClause("Id", "gt", "66666666-6666-6666-6666-666666666661")]
-    //         ));
-    //     // Then
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Unsupported operator 'gt'");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error for filter with invalid property name")]
-    // public async Task GetByIdAsync_InvalidFilterPropertyName_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         Filters: [new FilterClause("NotARealProperty", "eq", "SomeValue")]
-    //         ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Invalid filter: property='NotARealProperty', operator='eq', value='SomeValue'");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error for filter with empty property name")]
-    // public async Task GetByIdAsync_EmptyFilterPropertyName_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //          Filters: [new FilterClause("", "eq", "SomeValue")]
-    //          ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Invalid filter: 'Property' is required. (Parameter 'request')");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error for filter with null property name")]
-    // public async Task GetByIdAsync_NullFilterPropertyName_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         Filters: [new FilterClause(null!, "eq", "SomeValue")]
-    //         ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Invalid filter: 'Property' is required. (Parameter 'request')");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error for filter with empty operator")]
-    // public async Task GetByIdAsync_EmptyFilterOperator_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         Filters: [new FilterClause("Name", "", "SomeValue")]
-    //         ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Invalid filter for property 'Name': 'Operator' is required.");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error for filter with null operator")]
-    // public async Task GetByIdAsync_NullFilterOperator_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         Filters: [new FilterClause("Name", null!, "SomeValue")]
-    //         ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Invalid filter for property 'Name': 'Operator' is required.");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error for ordering with invalid property")]
-    // public async Task GetByIdAsync_InvalidOrderByProperty_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         OrderBy: [new OrderClause("NotARealProperty")]
-    //         ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Invalid orderBy: property='NotARealProperty' not found on entity 'Product'");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error for ordering with empty property")]
-    // public async Task GetByIdAsync_EmptyOrderByProperty_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         OrderBy: [new OrderClause("")]
-    //         ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Invalid orderBy: 'Property' is required. (Parameter 'request')");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error for ordering with null property")]
-    // public async Task GetByIdAsync_NullOrderByProperty_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         OrderBy: [new OrderClause(null!)]
-    //         ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Invalid orderBy: 'Property' is required. (Parameter 'request')");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error invalid numeric filter value")]
-    // public async Task GetByIdAsync_Invalid_NumericFilterValue_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         Filters: [new FilterClause("StockQuantity", "eq", "NotANumber")]
-    //         ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Invalid filter: property='StockQuantity', operator='eq', value='NotANumber'");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error invalid Guid filter value")]
-    // public async Task GetByIdAsync_Invalid_GuidFilterValue_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         Filters: [new FilterClause("Id", "eq", "NotAGuid")]
-    //         ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Invalid filter: property='Id', operator='eq', value='NotAGuid'");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error invalid DateTimeOffset filter value")]
-    // public async Task GetByIdAsync_Invalid_DateTimeOffsetFilterValue_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         Filters: [new FilterClause("CreatedAt", "eq", "NotADateTimeOffset")]
-    //         ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Invalid filter: property='CreatedAt', operator='eq', value='NotADateTimeOffset'");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error invalid bool filter value")]
-    // public async Task GetByIdAsync_Invalid_BoolFilterValue_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         Filters: [new FilterClause("IsActive", "eq", "NotABool")]
-    //         ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Invalid filter: property='IsActive', operator='eq', value='NotABool'");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error when 2 filter are applied one is valid and one invalid")]
-    // public async Task GetByIdAsync_OneValidOneInvalidFilter_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         Filters: [
-    //             new FilterClause("Name", "contains", "Code"),
-    //             new FilterClause("StockQuantity", "gt", "NotANumber")]
-    //         ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Invalid filter: property='StockQuantity', operator='gt', value='NotANumber'");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error when 2 orderBy are applied one is valid and one invalid")]
-    // public async Task GetByIdAsync_OneValidOneInvalidOrderBy_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         OrderBy: [
-    //             new OrderClause("Name"),
-    //             new OrderClause("NotARealProperty")]
-    //         ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Invalid orderBy: property='NotARealProperty' not found on entity 'Product'");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error when both orderBy and filter have invalid properties")]
-    // public async Task GetByIdAsync_BothInvalidOrderByAndFilter_Throws()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         Filters: [new FilterClause("NotARealProperty", "eq", "SomeValue")],
-    //         OrderBy: [new OrderClause("AlsoNotARealProperty")]
-    //         ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("Invalid filter: property='NotARealProperty', operator='eq', value='SomeValue'");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should throw error when Include string is Invalid navigation")]
-    // public async Task GetByIdAsync_InvalidIncludeString_Throws_InvalidNavigation()
-    // {
-    //     var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync<Product>(new QueryRequest(
-    //         Includes: ["Review", "NotARealNavigation"]
-    //         ));
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-    //     content?.ShouldContain("InvalidInclude");
-    // }
-    // [Fact(DisplayName = "GetByIdAsync should not throw error QueryRequest is null")]
-    // public async Task GetByIdAsync_NullQueryRequest_Not_Throws()
-    // {
-    //     // Arrange
-    //     var request = new HttpRequestMessage(HttpMethod.Get, $"/api/product?request=null");
-    //     // Act
-    //     var response = await _client.SendAsync(request);
-    //     var content = await response.Content.ReadAsStringAsync();
-    //     var items = JsonSerializer.Deserialize<List<Product>>(content, JsonOptions);
-    //     // Assert
-    //     response.StatusCode.ShouldBe(HttpStatusCode.OK);
-    //     items.ShouldNotBeNull();
-    //     items.Count.ShouldBe(3);
-    // }
-    // #endregion
+        await Should.ThrowAsync<InvalidOperationException>(async () =>
+        {
+            await repo.GetByIdAsync(
+                Guid.Parse(productLaptopId),
+                includeProperties: ["NotARealNavigation"],
+                includeGraph: null,
+                asNoTracking: true,
+                useSplitQuery: true,
+                cancellationToken: default);
+        });
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error for unsupported operator for String properties")]
+    public async Task GetByIdAsync_Unsupported_String_FilterProperty_Throws()
+    {
+        var (_, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
+            Filters: [new FilterClause("Name", "has", "Test")]
+            ));
+        content?.ShouldContain("Invalid filter: property='Name', operator='has', value='Test'");
+    }
+    [Fact(DisplayName = "GetByIdAsync returns entity with unsupported Numeric Filter operator throws")]
+    public async Task GetByIdAsync_Unsupported_Numeric_FilterOperator_Throws()
+    {
+        var (_, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            Filters: [new FilterClause("StockQuantity", "has", 25.ToString())]
+            ));
+        content?.ShouldContain("Unsupported operator 'has'");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error for unsupported operator for Bool properties")]
+    public async Task GetByIdAsync_BoolProperty_Unsupported_Operator_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            Filters: [new FilterClause("IsActive", "gt", "true")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Unsupported operator 'gt'");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error for unsupported operator for DateTimeOffset properties")]
+    public async Task GetByIdAsync_DateTimeOffsetProperty_Unsupported_Operator_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            Filters: [new FilterClause("CreatedAt", "contains", "2024-06-01T00:00:00Z")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Unsupported operator 'contains'");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error for unsupported operator for Numeric properties")]
+    public async Task GetByIdAsync_NumericProperty_Unsupported_Operator_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            Filters: [new FilterClause("StockQuantity", "contains", 25.ToString())]
+            ));
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Unsupported operator 'contains'");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error for unsupported operator for Guid properties")]
+    public async Task GetByIdAsync_GuidProperty_Unsupported_Operator_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            Filters: [new FilterClause("Id", "gt", "66666666-6666-6666-6666-666666666661")]
+            ));
+        // Then
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Unsupported operator 'gt'");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error for filter with invalid property name")]
+    public async Task GetByIdAsync_InvalidFilterPropertyName_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            Filters: [new FilterClause("NotARealProperty", "eq", "SomeValue")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: property='NotARealProperty', operator='eq', value='SomeValue'");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error for filter with empty property name")]
+    public async Task GetByIdAsync_EmptyFilterPropertyName_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+             Filters: [new FilterClause("", "eq", "SomeValue")]
+             ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: 'Property' is required. (Parameter 'request')");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error for filter with null property name")]
+    public async Task GetByIdAsync_NullFilterPropertyName_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            Filters: [new FilterClause(null!, "eq", "SomeValue")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: 'Property' is required. (Parameter 'request')");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error for filter with empty operator")]
+    public async Task GetByIdAsync_EmptyFilterOperator_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            Filters: [new FilterClause("Name", "", "SomeValue")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter for property 'Name': 'Operator' is required.");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error for filter with null operator")]
+    public async Task GetByIdAsync_NullFilterOperator_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            Filters: [new FilterClause("Name", null!, "SomeValue")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter for property 'Name': 'Operator' is required.");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error for ordering with invalid property")]
+    public async Task GetByIdAsync_InvalidOrderByProperty_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            OrderBy: [new OrderClause("NotARealProperty")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid orderBy: property='NotARealProperty' not found on entity 'Product'");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error for ordering with empty property")]
+    public async Task GetByIdAsync_EmptyOrderByProperty_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            OrderBy: [new OrderClause("")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid orderBy: 'Property' is required. (Parameter 'request')");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error for ordering with null property")]
+    public async Task GetByIdAsync_NullOrderByProperty_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            OrderBy: [new OrderClause(null!)]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid orderBy: 'Property' is required. (Parameter 'request')");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error invalid numeric filter value")]
+    public async Task GetByIdAsync_Invalid_NumericFilterValue_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            Filters: [new FilterClause("StockQuantity", "eq", "NotANumber")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: property='StockQuantity', operator='eq', value='NotANumber'");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error invalid Guid filter value")]
+    public async Task GetByIdAsync_Invalid_GuidFilterValue_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            Filters: [new FilterClause("Id", "eq", "NotAGuid")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: property='Id', operator='eq', value='NotAGuid'");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error invalid DateTimeOffset filter value")]
+    public async Task GetByIdAsync_Invalid_DateTimeOffsetFilterValue_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            Filters: [new FilterClause("CreatedAt", "eq", "NotADateTimeOffset")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: property='CreatedAt', operator='eq', value='NotADateTimeOffset'");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error invalid bool filter value")]
+    public async Task GetByIdAsync_Invalid_BoolFilterValue_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            Filters: [new FilterClause("IsActive", "eq", "NotABool")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: property='IsActive', operator='eq', value='NotABool'");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error when 2 filter are applied one is valid and one invalid")]
+    public async Task GetByIdAsync_OneValidOneInvalidFilter_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            Filters: [
+                new FilterClause("Name", "contains", "Code"),
+                new FilterClause("StockQuantity", "gt", "NotANumber")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: property='StockQuantity', operator='gt', value='NotANumber'");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error when 2 orderBy are applied one is valid and one invalid")]
+    public async Task GetByIdAsync_OneValidOneInvalidOrderBy_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            OrderBy: [
+                new OrderClause("Name"),
+                new OrderClause("NotARealProperty")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid orderBy: property='NotARealProperty' not found on entity 'Product'");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error when both orderBy and filter have invalid properties")]
+    public async Task GetByIdAsync_BothInvalidOrderByAndFilter_Throws()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            Filters: [new FilterClause("NotARealProperty", "eq", "SomeValue")],
+            OrderBy: [new OrderClause("AlsoNotARealProperty")]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("Invalid filter: property='NotARealProperty', operator='eq', value='SomeValue'");
+    }
+    [Fact(DisplayName = "GetByIdAsync should throw error when Include string is Invalid navigation")]
+    public async Task GetByIdAsync_InvalidIncludeString_Throws_InvalidNavigation()
+    {
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+            Includes: ["Review", "NotARealNavigation"]
+            ));
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        content?.ShouldContain("InvalidInclude");
+    }
+    [Fact(DisplayName = "GetByIdAsync should not throw error QueryRequest is null")]
+    public async Task GetByIdAsync_NullQueryRequest_Not_Throws()
+    {
+        // Arrange
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/product?request=null");
+        // Act
+        var response = await _client.SendAsync(request);
+        var content = await response.Content.ReadAsStringAsync();
+        var items = JsonSerializer.Deserialize<List<Product>>(content, JsonOptions);
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        items.ShouldNotBeNull();
+        items.Count.ShouldBe(3);
+    }
+    #endregion
 }
