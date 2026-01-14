@@ -27,10 +27,10 @@ public interface IKyrolusRepositoryAsync<TDbcontext, TEntity, TKey>
     Task<IEnumerable<TEntity>> UpdateRangeAsync(IEnumerable<TEntity> entities, CancellationToken cancellationToken = default);
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    Task<bool> RemoveAsync(TEntity entity, bool isSoftDelete = true, CancellationToken cancellationToken = default);
+    Task<bool> RemoveAsync(TEntity entity, CancellationToken cancellationToken = default);
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    Task<bool> RemoveRangeAsync(IEnumerable<TEntity> entities, bool isSoftDelete = true, CancellationToken cancellationToken = default);
+    Task<bool> RemoveRangeAsync(IEnumerable<TEntity> entities, CancellationToken cancellationToken = default);
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     Task<bool> ExistAsync(Expression<Func<TEntity, bool>> filter, CancellationToken cancellationToken = default);
@@ -74,7 +74,7 @@ public interface IKyrolusRepositoryAsync<TDbcontext, TEntity, TKey>
     Task<RepositoryOperationResult<TEntity>> TryUpdateAsync(TEntity entity, CancellationToken cancellationToken = default);
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    Task<RepositoryOperationResult<bool>> TryRemoveAsync(TEntity entity, bool isSoftDelete, CancellationToken cancellationToken = default);
+    Task<RepositoryOperationResult<bool>> TryRemoveAsync(TEntity entity, CancellationToken cancellationToken = default);
 
     // Optional compiled query for GetAll with default includes/soft-delete/AsNoTracking defaults (generated when applicable)
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]

@@ -1,16 +1,3 @@
-using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Linq.Expressions;
-using Microsoft.EntityFrameworkCore.Query;
-using System.Runtime.CompilerServices;
-using KyrolusSous.Repositories.EF.Abstractions;
-using KyrolusSous.Repositories.EF.Abstractions.Helpers;
-using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
-using KyrolusSous.Repositories.EF.Abstractions.Policy;
-using Microsoft.EntityFrameworkCore;
-
 namespace KyrolusSous.Repositories.EF.Runtime;
 
 /// <summary>
@@ -38,7 +25,7 @@ public class KyrolusRepositoryAsync<
     protected readonly ICacheKeyContext? cacheKeyContext;
     protected readonly string? cacheAllKeyBase;
     protected readonly Func<IQueryable<TEntity>, IQueryable<TEntity>>? globalQueryFilter;
-    protected readonly bool softDeleteEnabled;
+    protected bool softDeleteEnabled;
     protected readonly string softDeleteProperty;
     protected readonly string? rowVersionProperty;
     protected readonly bool splitQueryDefault;
@@ -70,7 +57,7 @@ public class KyrolusRepositoryAsync<
         cacheTtl = cacheTtlSeconds is > 0 ? TimeSpan.FromSeconds(cacheTtlSeconds.Value) : null;
         cacheAllKey = $"{typeof(TEntity).Name}:all:compiled";
         globalQueryFilter = this.policy?.GetGlobalQueryFilter<TEntity>();
-        softDeleteEnabled = this.policy?.EnableSoftDeleteDefault ?? false;
+        softDeleteEnabled = false;
         softDeleteProperty = string.IsNullOrWhiteSpace(this.policy?.SoftDeleteProperty)
             ? "IsDeleted"
             : this.policy.SoftDeleteProperty!;
@@ -84,6 +71,15 @@ public class KyrolusRepositoryAsync<
 #pragma warning restore S107
 
     #region Query helpers
+    protected IQueryable<TEntity> QueryIncludingDeleted()
+    => BuildBaseQuery(includeDeleted: true);
+    protected Expression<Func<TEntity, bool>> DeletedOnlyPredicate()
+    {
+        var param = Expression.Parameter(typeof(TEntity), "e");
+        var prop = Expression.PropertyOrField(param, softDeleteProperty);
+        var body = Expression.Equal(prop, Expression.Constant(true));
+        return Expression.Lambda<Func<TEntity, bool>>(body, param);
+    }
     private IQueryable<TEntity> ApplyGlobalFilter(IQueryable<TEntity> query)
         => globalQueryFilter is null ? query : globalQueryFilter(query);
 
@@ -96,7 +92,7 @@ public class KyrolusRepositoryAsync<
         return query.Where(lambda);
     }
 
-    private IQueryable<TEntity> ApplyIncludes(IQueryable<TEntity> query, IEnumerable<Expression<Func<TEntity, object?>>> includes)
+    private static IQueryable<TEntity> ApplyIncludes(IQueryable<TEntity> query, IEnumerable<Expression<Func<TEntity, object?>>> includes)
     {
         foreach (var include in includes)
         {
@@ -148,13 +144,67 @@ public class KyrolusRepositoryAsync<
         };
         return Uri.EscapeDataString(s);
     }
-    protected static IQueryable<TEntity> ApplyCompiledQueryInternal(TDbContext ctx, bool track, bool split)
+    protected static IQueryable<TEntity> ApplyCompiledQueryInternal(TDbContext ctx, bool noTrack, bool split)
     {
         IQueryable<TEntity> query = ctx.Set<TEntity>();
-        if (track) query = query.AsNoTracking();
+        if (noTrack) query = query.AsNoTracking();
         if (split) query = query.AsSplitQuery();
         return query;
     }
+    protected record GetAllCommand(bool IncludeDeleted,
+        bool DeletedOnly,
+        Expression<Func<TEntity, bool>>? Filter,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? OrderBy,
+        List<string>? IncludeProperties,
+        IncludeGraph<TEntity>? IncludeGraph,
+        bool? AsNoTracking,
+        bool? UseSplitQuery,
+        CancellationToken CancellationToken,
+        params Expression<Func<TEntity, object?>>[] IncludeExpressions);
+    protected async Task<IReadOnlyList<TEntity>> GetAllInternalAsync(GetAllCommand getAllCommand)
+    {
+        if ((getAllCommand.IncludeDeleted || getAllCommand.DeletedOnly) && !softDeleteEnabled)
+            throw new InvalidOperationException("Soft delete is not enabled for this repository.");
+
+        IQueryable<TEntity> query = ApplyGlobalFilter(set.AsQueryable());
+
+        if (softDeleteEnabled && !getAllCommand.IncludeDeleted)
+            query = ApplySoftDelete(query);
+
+        if (getAllCommand.DeletedOnly)
+            query = query.Where(e => Microsoft.EntityFrameworkCore.EF.Property<bool>(e, softDeleteProperty));
+
+        if (getAllCommand.AsNoTracking ?? asNoTrackingDefault) query = query.AsNoTracking();
+        if (getAllCommand.UseSplitQuery ?? splitQueryDefault) query = query.AsSplitQuery();
+
+        if (getAllCommand.Filter is not null) query = query.Where(getAllCommand.Filter);
+
+        var defaultIncludes = DefaultIncludes;
+        if (defaultIncludes.Length > 0)
+            query = ApplyIncludes(query, defaultIncludes);
+
+        query = ApplyIncludeProperties(query, getAllCommand.IncludeProperties);
+        if (getAllCommand.IncludeGraph?.Includes is not null && getAllCommand.IncludeGraph?.Includes.Count > 0)
+            query = ApplyIncludes(query, getAllCommand.IncludeGraph.Includes);
+
+        if (getAllCommand.IncludeExpressions is not null && getAllCommand.IncludeExpressions.Length > 0)
+            query = ApplyIncludes(query, getAllCommand.IncludeExpressions);
+        if (getAllCommand.OrderBy is not null) query = getAllCommand.OrderBy(query);
+
+        return await query.ToListAsync(getAllCommand.CancellationToken).ConfigureAwait(false);
+    }
+
+    private static IQueryable<TEntity> ApplyIncludeProperties(IQueryable<TEntity> query, List<string>? includeProperties)
+    {
+        if (includeProperties is null) return query;
+        foreach (var includeProperty in includeProperties)
+        {
+            if (string.IsNullOrWhiteSpace(includeProperty)) continue;
+            query = query.Include(includeProperty);
+        }
+        return query;
+    }
+
     #endregion
 
     private static Func<TDbContext, IAsyncEnumerable<TEntity>> BuildCompiledGetAll(bool asNoTracking, bool useSplit, bool useSoftDelete, string softDeleteProperty, Expression<Func<TEntity, object?>>[] defaultIncludes)
@@ -220,7 +270,7 @@ public class KyrolusRepositoryAsync<
     #region Protected key helpers
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     protected async Task<TEntity?> GetByIdInternalAsync(object?[] keyValues, bool? asNoTracking = null,
-        bool? useSplitQuery = null,
+        bool? useSplitQuery = null, bool includeDeleted = false,
         CancellationToken cancellationToken = default,
         params Expression<Func<TEntity, object?>>[] includeExpressions)
     {
@@ -234,12 +284,12 @@ public class KyrolusRepositoryAsync<
                 var cacheKey = CacheKeyById(keyValues);
                 return await cache.GetOrSetAsync(
                     cacheKey,
-                    async ct => await MaterializeByIdAsync(keyValues, asNoTracking, useSplitQuery, [], ct).ConfigureAwait(false),
+                    async ct => await MaterializeByIdAsync(keyValues, asNoTracking, useSplitQuery, [], ct, includeDeleted).ConfigureAwait(false),
                     cacheTtl,
                     cancellationToken).ConfigureAwait(false);
             }
 
-            return await MaterializeByIdAsync(keyValues, asNoTracking, useSplitQuery, includeExpressions, cancellationToken).ConfigureAwait(false);
+            return await MaterializeByIdAsync(keyValues, asNoTracking, useSplitQuery, includeExpressions, cancellationToken, includeDeleted).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -278,7 +328,7 @@ public class KyrolusRepositoryAsync<
             var defaultIncludes = DefaultIncludes;
             if (defaultIncludes.Length > 0)
             {
-                query = ApplyIncludes(query, defaultIncludes);
+                query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, defaultIncludes);
             }
 
             foreach (var includeProperty in includeProperties)
@@ -288,7 +338,7 @@ public class KyrolusRepositoryAsync<
             }
             if (includeGraph?.Includes is not null && includeGraph.Includes.Count > 0)
             {
-                query = ApplyIncludes(query, includeGraph.Includes);
+                query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, includeGraph.Includes);
             }
 
             var predicate = BuildKeyPredicate(keyValues, keyPropertyNames);
@@ -306,19 +356,18 @@ public class KyrolusRepositoryAsync<
         }
     }
 
-    protected async Task<TEntity?> MaterializeByIdAsync(object?[] keyValues, bool? asNoTracking, bool? useSplitQuery, Expression<Func<TEntity, object?>>[] includeExpressions, CancellationToken ct)
+    protected async Task<TEntity?> MaterializeByIdAsync(object?[] keyValues, bool? asNoTracking, bool? useSplitQuery, Expression<Func<TEntity, object?>>[] includeExpressions, CancellationToken ct, bool includeDeleted)
     {
-        var query = ApplyGlobalFilter(set.AsQueryable());
-        if (softDeleteEnabled) query = ApplySoftDelete(query);
+        var query = BuildBaseQuery(includeDeleted);
         if (asNoTracking ?? asNoTrackingDefault) query = query.AsNoTracking();
         if (useSplitQuery ?? splitQueryDefault) query = query.AsSplitQuery();
         var defaultIncludes = DefaultIncludes;
         if (defaultIncludes.Length > 0)
         {
-            query = ApplyIncludes(query, defaultIncludes);
+            query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, defaultIncludes);
         }
         if (includeExpressions is not null && includeExpressions.Length > 0)
-            query = ApplyIncludes(query, includeExpressions);
+            query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, includeExpressions);
 
         var predicate = BuildKeyPredicate(keyValues, keyPropertyNames);
         return await query.FirstOrDefaultAsync(predicate, ct).ConfigureAwait(false);
@@ -335,32 +384,7 @@ public class KyrolusRepositoryAsync<
         await NotifyBeforeAsync(_GetAllAsync, filter, cancellationToken).ConfigureAwait(false);
         try
         {
-            var query = ApplyGlobalFilter(set.AsQueryable());
-            if (softDeleteEnabled) query = ApplySoftDelete(query);
-            if (asNoTracking ?? asNoTrackingDefault) query = query.AsNoTracking();
-            if (useSplitQuery ?? splitQueryDefault) query = query.AsSplitQuery();
-            if (filter is not null) query = query.Where(filter);
-            var defaultIncludes = DefaultIncludes;
-            if (defaultIncludes.Length > 0)
-            {
-                query = ApplyIncludes(query, defaultIncludes);
-            }
-            if (includeProperties is not null)
-            {
-                foreach (var includeProperty in includeProperties)
-                {
-                    if (string.IsNullOrWhiteSpace(includeProperty)) continue;
-                    query = query.Include(includeProperty);
-                }
-            }
-            if (includeGraph?.Includes is not null && includeGraph.Includes.Count > 0)
-            {
-                query = ApplyIncludes(query, includeGraph.Includes);
-            }
-            if (orderBy is not null) query = orderBy(query);
-
-            var items = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
-            return items;
+            return await GetAllInternalAsync(new GetAllCommand(false, false, filter, orderBy, includeProperties, includeGraph, asNoTracking, useSplitQuery, cancellationToken));
         }
         catch (Exception ex)
         {
@@ -393,9 +417,9 @@ public class KyrolusRepositoryAsync<
             var defaultIncludes = DefaultIncludes;
             if (defaultIncludes.Length > 0)
             {
-                query = ApplyIncludes(query, defaultIncludes);
+                query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, defaultIncludes);
             }
-            if (includeExpressions is not null && includeExpressions.Length > 0) query = ApplyIncludes(query, includeExpressions);
+            if (includeExpressions is not null && includeExpressions.Length > 0) query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, includeExpressions);
             if (orderBy is not null) query = orderBy(query);
 
             var items = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -535,7 +559,7 @@ public class KyrolusRepositoryAsync<
         try
         {
             var keyValues = GetPrimaryKeyValues(entity);
-            var existing = await MaterializeByIdAsync(keyValues, false, false, [], cancellationToken).ConfigureAwait(false)
+            var existing = await MaterializeByIdAsync(keyValues, false, false, [], cancellationToken, false).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException($"{typeof(TEntity).Name} not found for keys {string.Join(',', keyValues)}");
             UpdateEntityProperties(entity, existing);
             await InvalidateCacheAsync(keyValues, cancellationToken).ConfigureAwait(false);
@@ -576,7 +600,7 @@ public class KyrolusRepositoryAsync<
         await NotifyBeforeAsync("PatchAsync", keyValues, cancellationToken).ConfigureAwait(false);
         try
         {
-            var entity = await MaterializeByIdAsync(keyValues, false, false, [], cancellationToken).ConfigureAwait(false)
+            var entity = await MaterializeByIdAsync(keyValues, false, false, [], cancellationToken, false).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException($"{typeof(TEntity).Name} not found for keys {string.Join(',', keyValues)}");
 
             var entityType = db.Model.FindEntityType(typeof(TEntity))
@@ -607,14 +631,14 @@ public class KyrolusRepositoryAsync<
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    public async Task<bool> RemoveAsync(TEntity entity, bool isSoftDelete = true, CancellationToken cancellationToken = default)
+    public async Task<bool> RemoveAsync(TEntity entity, CancellationToken cancellationToken = default)
     {
         var keyValues = GetPrimaryKeyValues(entity);
-        return await RemoveInternalAsync(keyValues, isSoftDelete, cancellationToken).ConfigureAwait(false);
+        return await RemoveInternalAsync(keyValues, false, cancellationToken).ConfigureAwait(false);
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    protected async Task<bool> RemoveInternalAsync(object?[]? keyValues, bool isSoftDelete = true, CancellationToken cancellationToken = default)
+    protected async Task<bool> RemoveInternalAsync(object?[]? keyValues, bool isSoftDelete = false, CancellationToken cancellationToken = default)
     {
         keyValues ??= [];
         var sw = Stopwatch.StartNew();
@@ -622,7 +646,7 @@ public class KyrolusRepositoryAsync<
         await NotifyBeforeAsync("RemoveAsync", keyValues, cancellationToken).ConfigureAwait(false);
         try
         {
-            var entity = await MaterializeByIdAsync(keyValues, false, false, [], cancellationToken).ConfigureAwait(false)
+            var entity = await MaterializeByIdAsync(keyValues, false, false, [], cancellationToken, !isSoftDelete).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException($"{typeof(TEntity).Name} not found for keys {string.Join(',', keyValues)}");
 
             if (isSoftDelete && softDeleteEnabled)
@@ -653,11 +677,11 @@ public class KyrolusRepositoryAsync<
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    public async Task<bool> RemoveRangeAsync(IEnumerable<TEntity> entities, bool isSoftDelete = true, CancellationToken cancellationToken = default)
+    public async Task<bool> RemoveRangeAsync(IEnumerable<TEntity> entities, CancellationToken cancellationToken = default)
     {
         foreach (var entity in entities)
         {
-            await RemoveAsync(entity, isSoftDelete, cancellationToken).ConfigureAwait(false);
+            await RemoveAsync(entity, cancellationToken).ConfigureAwait(false);
         }
         return true;
     }
@@ -691,9 +715,9 @@ public class KyrolusRepositoryAsync<
         var defaultIncludes = DefaultIncludes;
         if (defaultIncludes.Length > 0)
         {
-            query = ApplyIncludes(query, defaultIncludes);
+            query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, defaultIncludes);
         }
-        if (includeExpressions is not null && includeExpressions.Length > 0) query = ApplyIncludes(query, includeExpressions);
+        if (includeExpressions is not null && includeExpressions.Length > 0) query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, includeExpressions);
         if (orderBy is not null) query = orderBy(query);
 
         await using var enumerator = query.AsAsyncEnumerable().WithCancellation(cancellationToken).GetAsyncEnumerator();
@@ -738,9 +762,9 @@ public class KyrolusRepositoryAsync<
             var defaultIncludes = DefaultIncludes;
             if (defaultIncludes.Length > 0)
             {
-                query = ApplyIncludes(query, defaultIncludes);
+                query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, defaultIncludes);
             }
-            if (specification.Includes is not null) query = ApplyIncludes(query, specification.Includes);
+            if (specification.Includes is not null) query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, specification.Includes);
             if (specification is IKyrolusHasSplitQuery split && split.UseSplitQuery) query = query.AsSplitQuery();
             if (specification.OrderBy is not null) query = specification.OrderBy(query);
             var result = await query.Select(specification.Selector).ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -779,9 +803,9 @@ public class KyrolusRepositoryAsync<
             var defaultIncludes = DefaultIncludes;
             if (defaultIncludes.Length > 0)
             {
-                query = ApplyIncludes(query, defaultIncludes);
+                query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, defaultIncludes);
             }
-            if (specification.Includes is not null) query = ApplyIncludes(query, specification.Includes);
+            if (specification.Includes is not null) query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, specification.Includes);
             if (specification is IKyrolusHasSplitQuery split && split.UseSplitQuery) query = query.AsSplitQuery();
 
             var total = await query.CountAsync(cancellationToken).ConfigureAwait(false);
@@ -834,10 +858,10 @@ public class KyrolusRepositoryAsync<
             var defaultIncludes = DefaultIncludes;
             if (defaultIncludes.Length > 0)
             {
-                query = ApplyIncludes(query, defaultIncludes);
+                query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, defaultIncludes);
             }
-            if (includeExpressions is not null && includeExpressions.Length > 0) query = ApplyIncludes(query, includeExpressions);
-            if (specification.Includes is not null) query = ApplyIncludes(query, specification.Includes);
+            if (includeExpressions is not null && includeExpressions.Length > 0) query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, includeExpressions);
+            if (specification.Includes is not null) query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, specification.Includes);
 
             var total = await query.CountAsync(cancellationToken).ConfigureAwait(false);
             if (orderBy is not null) query = orderBy(query);
@@ -966,12 +990,12 @@ public class KyrolusRepositoryAsync<
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    public Task<RepositoryOperationResult<bool>> TryRemoveAsync(TEntity entity, bool isSoftDelete, CancellationToken cancellationToken = default)
+    public Task<RepositoryOperationResult<bool>> TryRemoveAsync(TEntity entity, CancellationToken cancellationToken = default)
     {
         return ConcurrencyHelper.ExecuteWithConcurrencyRetryAsync(
             async () =>
             {
-                await RemoveAsync(entity, isSoftDelete, cancellationToken).ConfigureAwait(false);
+                await RemoveAsync(entity, cancellationToken).ConfigureAwait(false);
                 return true;
             },
             policy,
@@ -996,6 +1020,14 @@ public class KyrolusRepositoryAsync<
 
     #region Soft delete helpers
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
+    protected IQueryable<TEntity> BuildBaseQuery(bool includeDeleted)
+    {
+        var query = ApplyGlobalFilter(set.AsQueryable());
+        if (softDeleteEnabled && !includeDeleted)
+            query = ApplySoftDelete(query);
+        return query;
+    }
+    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     protected async Task<bool> RestoreInternalAsync(object?[]? keyValues, CancellationToken cancellationToken)
     {
         keyValues ??= [];
@@ -1006,7 +1038,7 @@ public class KyrolusRepositoryAsync<
         {
             if (!softDeleteEnabled) throw new InvalidOperationException("Soft delete is not enabled for this repository.");
 
-            var entity = await MaterializeByIdAsync(keyValues, false, false, [], cancellationToken).ConfigureAwait(false)
+            var entity = await MaterializeByIdAsync(keyValues, false, false, [], cancellationToken, true).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException($"{typeof(TEntity).Name} not found for keys {string.Join(',', keyValues)}");
 
             var entry = db.Entry(entity);
@@ -1083,7 +1115,11 @@ public class KyrolusRepositoryAsync<
             await cache.RemoveAsync(CacheKeyAll(), cancellationToken).ConfigureAwait(false);
 
         if (keyValues is { Length: > 0 })
+        {
             await cache.RemoveAsync(CacheKeyById(keyValues), cancellationToken).ConfigureAwait(false);
+            if (softDeleteEnabled)
+                await cache.RemoveAsync(CacheKeyById(keyValues!) + ":incdel=1", cancellationToken).ConfigureAwait(false);
+        }
     }
     #endregion
 }

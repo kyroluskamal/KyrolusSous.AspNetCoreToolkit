@@ -621,7 +621,7 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
         product.ShouldNotBeNull();
         try
         {
-            await repo.RemoveAsync(product, isSoftDelete: true);
+            await repo.RemoveAsync(product);
             await UoW.SaveChangesAsync();
             // Act
             var items = await repo.GetAllAsync(

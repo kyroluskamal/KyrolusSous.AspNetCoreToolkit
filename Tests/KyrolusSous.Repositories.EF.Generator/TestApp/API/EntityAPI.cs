@@ -157,7 +157,7 @@ public static class EntityApi
 
                 if (uow.Get<TRepo>() is not IKyrolusSingleKeyRepositoryAsync<ApplicationDbContext, TEntity, TKey> repo) return Results.BadRequest("Single-key endpoint requires single-key repo.");
 
-                var result = await repo.TryRemoveAsync(CastKey(ParseObject(id)), softDelete, ct);
+                var result = await repo.TryRemoveAsync(CastKey(ParseObject(id)), ct);
                 if (result.Status == KyrolusRepositoryOperationStatus.NotFound)
                     return Results.NotFound();
                 if (result.Status == KyrolusRepositoryOperationStatus.Failed && result.Exception is not null)
@@ -176,7 +176,7 @@ public static class EntityApi
                 if (repo is null) return Results.BadRequest("Composite-key endpoint requires composite-key repo.");
                 var keyValues = ResolveCompositeKeys(keys);
 
-                var result = await repo.TryRemoveAsync(keyValues, softDelete, ct);
+                var result = await repo.TryRemoveAsync(keyValues,  ct);
                 if (result.Status == KyrolusRepositoryOperationStatus.NotFound)
                     return Results.NotFound();
                 if (result.Status == KyrolusRepositoryOperationStatus.Failed && result.Exception is not null)
@@ -191,7 +191,7 @@ public static class EntityApi
                 [FromQuery] bool softDelete,
                 CancellationToken ct) =>
             {
-                await uow.Get<TRepo>().RemoveRangeAsync(entities, softDelete, ct);
+                await uow.Get<TRepo>().RemoveRangeAsync(entities, ct);
                 await uow.SaveChangesAsync(ct);
                 return Results.NoContent();
             });
@@ -207,7 +207,7 @@ public static class EntityApi
                 var repo = uow.Get<TRepo>() as IKyrolusSingleKeyRepositoryAsync<ApplicationDbContext, TEntity, TKey>;
                 if (repo is null) return Results.BadRequest("Single-key endpoint requires single-key repo.");
 
-                var result = await repo.TryRemoveAsync(CastKey(ParseObject(id)), softDelete, ct);
+                var result = await repo.TryRemoveAsync(CastKey(ParseObject(id)), ct);
                 if (result.Status == KyrolusRepositoryOperationStatus.NotFound)
                     return Results.NotFound();
                 if (result.Status == KyrolusRepositoryOperationStatus.Failed && result.Exception is not null)
@@ -225,7 +225,7 @@ public static class EntityApi
                 var repo = uow.Get<TRepo>() as IKyrolusCompositeKeyRepositoryAsync<ApplicationDbContext, TEntity, TKey>;
                 if (repo is null) return Results.BadRequest("Composite-key endpoint requires composite-key repo.");
                 var keyValues = ResolveCompositeKeys(keys);
-                var result = await repo.TryRemoveAsync(keyValues, softDelete, ct);
+                var result = await repo.TryRemoveAsync(keyValues, ct);
                 if (result.Status == KyrolusRepositoryOperationStatus.NotFound)
                     return Results.NotFound();
                 if (result.Status == KyrolusRepositoryOperationStatus.Failed && result.Exception is not null)
@@ -336,7 +336,7 @@ public static class EntityApi
                     await uow.SaveChangesAsync(ct);
                     return Results.NoContent();
                 }
-                if (repo is IKyrolusSoftDeleteRepository<TEntity> softRepo)
+                if (repo is IKyrolusCompositeKeySoftDeleteRepository<TEntity> softRepo)
                 {
                     var restored = await softRepo.RestoreAsync([ParseObject(id)], ct);
                     if (!restored) return Results.NotFound();
@@ -362,7 +362,7 @@ public static class EntityApi
                         ? Results.NoContent()
                         : Results.NotFound();
                 }
-                if (repo is IKyrolusSoftDeleteRepository<TEntity> softRepo)
+                if (repo is IKyrolusCompositeKeySoftDeleteRepository<TEntity> softRepo)
                 {
                     var result = await softRepo.TryRestoreAsync([ParseObject(id)], ct);
                     return result.Status == KyrolusRepositoryOperationStatus.Success
@@ -386,7 +386,7 @@ public static class EntityApi
                     await uow.SaveChangesAsync(ct);
                     return Results.NoContent();
                 }
-                if (repo is IKyrolusSoftDeleteRepository<TEntity> softRepo)
+                if (repo is IKyrolusCompositeKeySoftDeleteRepository<TEntity> softRepo)
                 {
                     var restored = await softRepo.RestoreAsync(ResolveCompositeKeys(keys), ct);
                     if (!restored) return Results.NotFound();
@@ -410,7 +410,7 @@ public static class EntityApi
                         ? Results.NoContent()
                         : Results.NotFound();
                 }
-                if (repo is IKyrolusSoftDeleteRepository<TEntity> softRepo)
+                if (repo is IKyrolusCompositeKeySoftDeleteRepository<TEntity> softRepo)
                 {
                     var result = await softRepo.TryRestoreAsync(ResolveCompositeKeys(keys), ct);
                     return result.Status == KyrolusRepositoryOperationStatus.Success

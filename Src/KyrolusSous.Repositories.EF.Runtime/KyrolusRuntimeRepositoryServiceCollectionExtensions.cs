@@ -1,5 +1,3 @@
-using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace KyrolusSous.Repositories.EF.Runtime;
 

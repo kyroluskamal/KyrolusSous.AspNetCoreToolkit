@@ -1,0 +1,12 @@
+global using KyrolusSous.Repositories.EF.Abstractions;
+global using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
+global using KyrolusSous.Repositories.EF.Abstractions.Policy;
+global using Microsoft.EntityFrameworkCore;
+global using System.Linq.Expressions;
+global using System.Diagnostics.CodeAnalysis;
+global using System.Collections.Concurrent;
+global using System.Diagnostics;
+global using Microsoft.EntityFrameworkCore.Query;
+global using System.Runtime.CompilerServices;
+global using KyrolusSous.Repositories.EF.Abstractions.Helpers;
+global using Microsoft.Extensions.DependencyInjection;

@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore.Query;
-
 namespace KyrolusSous.Repositories.EF.Abstractions.Interfaces;
 
 /// <summary>
@@ -28,12 +26,6 @@ public interface IKyrolusSingleKeyRepositoryAsync<TDbContext, TEntity, TKey>
     Task<TEntity?> PatchAsync(TKey id, Dictionary<string, object> updates, CancellationToken cancellationToken = default);
     Task<RepositoryOperationResult<TEntity>> TryPatchAsync(TKey id, Dictionary<string, object> updates, CancellationToken cancellationToken = default);
 
-    Task<bool> RemoveAsync(TKey id, bool isSoftDelete = true, CancellationToken cancellationToken = default);
-    Task<RepositoryOperationResult<bool>> TryRemoveAsync(TKey id, bool isSoftDelete, CancellationToken cancellationToken = default);
-
-    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    Task<bool> RestoreAsync(TKey id, CancellationToken cancellationToken = default);
-
-    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    Task<RepositoryOperationResult<bool>> TryRestoreAsync(TKey id, CancellationToken cancellationToken = default);
+    Task<bool> RemoveAsync(TKey id, CancellationToken cancellationToken = default);
+    Task<RepositoryOperationResult<bool>> TryRemoveAsync(TKey id, CancellationToken cancellationToken = default);
 }

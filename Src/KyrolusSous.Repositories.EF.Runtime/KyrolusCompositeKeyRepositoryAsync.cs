@@ -1,11 +1,4 @@
-using System.Collections.Generic;
-using System.Linq;
-using System.Linq.Expressions;
-using System.Diagnostics.CodeAnalysis;
-using KyrolusSous.Repositories.EF.Abstractions;
-using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
-using KyrolusSous.Repositories.EF.Abstractions.Policy;
-using Microsoft.EntityFrameworkCore;
+
 
 namespace KyrolusSous.Repositories.EF.Runtime;
 
@@ -21,8 +14,7 @@ public class KyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity>(
     bool enableCaching = false,
     int? cacheTtlSeconds = null) :
     KyrolusRepositoryAsync<TDbContext, TEntity, object?>(db, policy, observer, bulkExecutor, cache, enableCaching, cacheTtlSeconds),
-    IKyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity, object?>,
-    IKyrolusCompositeKeySoftDeleteRepository<TEntity>
+    IKyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity, object?>
     where TDbContext : DbContext
     where TEntity : class
 {
@@ -35,7 +27,7 @@ public class KyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity>(
         if (!hasIncludeProps)
         {
             var includes = includeGraph?.Includes?.ToArray() ?? [];
-            return GetByIdInternalAsync(keyValues ?? [], asNoTracking, useSplitQuery, cancellationToken, includes);
+            return GetByIdInternalAsync(keyValues ?? [], asNoTracking, useSplitQuery,false, cancellationToken,  includes);
         }
         return GetByIdInternalWithStringIncludesAsync(keyValues ?? [], includeProperties!, includeGraph, asNoTracking, useSplitQuery, cancellationToken);
     }
@@ -47,7 +39,7 @@ public class KyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity>(
         CancellationToken cancellationToken = default,
         params Expression<Func<TEntity, object?>>[] includeExpressions)
     {
-        return GetByIdInternalAsync(keyValues ?? [], asNoTracking, useSplitQuery, cancellationToken, includeExpressions);
+        return GetByIdInternalAsync(keyValues ?? [], asNoTracking, useSplitQuery,false, cancellationToken,  includeExpressions);
     }
 
     public Task<TEntity?> PatchAsync(object?[]? keyValues, Dictionary<string, object> updates, CancellationToken cancellationToken = default)
@@ -56,15 +48,9 @@ public class KyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity>(
     public Task<RepositoryOperationResult<TEntity>> TryPatchAsync(object?[]? keyValues, Dictionary<string, object> updates, CancellationToken cancellationToken = default)
         => TryPatchInternalAsync(keyValues, updates, cancellationToken);
 
-    public Task<bool> RemoveAsync(object?[]? keyValues, bool isSoftDelete = true, CancellationToken cancellationToken = default)
-        => RemoveInternalAsync(keyValues, isSoftDelete, cancellationToken);
+    public Task<bool> RemoveAsync(object?[]? keyValues, CancellationToken cancellationToken = default)
+        => RemoveInternalAsync(keyValues, false, cancellationToken);
 
-    public Task<RepositoryOperationResult<bool>> TryRemoveAsync(object?[]? keyValues, bool isSoftDelete, CancellationToken cancellationToken = default)
-        => TryRemoveInternalAsync(keyValues, isSoftDelete, cancellationToken);
-
-    public Task<bool> RestoreAsync(object?[]? keyValues, CancellationToken cancellationToken = default)
-        => RestoreInternalAsync(keyValues, cancellationToken);
-
-    public Task<RepositoryOperationResult<bool>> TryRestoreAsync(object?[]? keyValues, CancellationToken cancellationToken = default)
-        => TryRestoreInternalAsync(keyValues, cancellationToken);
+    public Task<RepositoryOperationResult<bool>> TryRemoveAsync(object?[]? keyValues, CancellationToken cancellationToken = default)
+        => TryRemoveInternalAsync(keyValues, false, cancellationToken);
 }

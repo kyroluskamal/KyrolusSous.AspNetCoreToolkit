@@ -160,10 +160,12 @@ namespace KyrolusSous.Repositories.EF.Generator
             sb.AppendLine("{");
 
             ClassName(sb, request);
+            MaterializeHelpers(sb, request, keyNamesLiteral);
             GetAllAsync(sb, request);
             QueryAsync(sb, request);
             GetPagedDefaults(sb, request);
-            GetByIdAsync(sb, request, keyNamesLiteral);
+            GetByIdAsync(sb, request);
+            SoftDeleteAndDeletedQueries(sb, request);
             CompiledQueries(sb, request, keyProps);
             AddAsync(sb, request);
             AddRangeAsync(sb, request);
@@ -176,7 +178,6 @@ namespace KyrolusSous.Repositories.EF.Generator
             QueryAsyncSpec(sb, request);
             GetPagedAsyncSpec(sb, request);
             TryWithSaveAsync(sb, request);
-            RestoreAsync(sb, request, keyProps);
             ExecuteBulkOperations(sb, request);
             ClassEnd(sb);
             sb.AppendLine("}");
@@ -208,7 +209,7 @@ namespace KyrolusSous.Repositories.EF.Generator
         }
         private void ClassName(StringBuilder sb, RepositoryRequest request)
         {
-            var implementsSoftDelete = request.EnableSoftDelete ? $", IKyrolusSoftDeleteRepository<{request.EntityType.ToDisplayString()}>" : string.Empty;
+
             var implementsBulk = request.EnableBulk ? $", IKyrolusBulkRepository<{request.EntityType.ToDisplayString()}>" : string.Empty;
             var keyInterface = request.KeyPropertyNames.Length == 1
                 ? $", IKyrolusSingleKeyRepositoryAsync<{request.DbContextType.ToDisplayString()}, {request.EntityType.ToDisplayString()}, {request.KeyType.ToDisplayString()}>"
@@ -233,7 +234,7 @@ namespace KyrolusSous.Repositories.EF.Generator
             var cacheParam = ", ICacheProvider? cache = null";
             var cacheAssign = "                        this.cache = cache;\n";
             var prefix = $$$"""
-                    public class {{{request.RepositoryName}}} : IKyrolusRepositoryAsync<{{{request.DbContextType.ToDisplayString()}}}, {{{request.EntityType.ToDisplayString()}}}, {{{request.KeyType.ToDisplayString()}}}>{{{keyInterface}}}{{{softDeleteInterface}}}{{{implementsSoftDelete}}}{{{implementsBulk}}}
+                    public class {{{request.RepositoryName}}} : IKyrolusRepositoryAsync<{{{request.DbContextType.ToDisplayString()}}}, {{{request.EntityType.ToDisplayString()}}}, {{{request.KeyType.ToDisplayString()}}}>{{{keyInterface}}}{{{softDeleteInterface}}}{{{implementsBulk}}}
                     {
                     private readonly {{{request.DbContextType.ToDisplayString()}}} db;
                     private readonly DbSet<{{{request.EntityType.ToDisplayString()}}}> set;
@@ -265,6 +266,95 @@ namespace KyrolusSous.Repositories.EF.Generator
             sb.AppendLine(prefix);
             sb.AppendLine();
         }
+        private void MaterializeHelpers(StringBuilder sb, RepositoryRequest request, string keyNamesLiteral)
+        {
+            var softDeleteExpr = CalculateSoftDelete(request);
+
+            var defaultIncludesLiteral = request.DefaultIncludes.Length > 0
+                ? $"new Expression<Func<{request.EntityType.ToDisplayString()}, object?>>[] {{ {string.Join(", ", request.DefaultIncludes.Select(ip => $"e => e.{ip}"))} }}"
+                : $"Array.Empty<Expression<Func<{request.EntityType.ToDisplayString()}, object?>>>()";
+
+            var code = $$$"""
+                    private static readonly string[] KeyNames = {{{keyNamesLiteral}}};
+
+                    private static readonly Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>[] DefaultIncludes =
+                        {{{defaultIncludesLiteral}}};
+
+                    {{{RequiresUnreferencedCode}}}
+                    private IQueryable<{{{request.EntityType.ToDisplayString()}}}> BuildBaseQuery(bool includeDeleted)
+                    {
+                        IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = ApplyGlobalFilter(set.AsQueryable());
+
+                        {{{(softDeleteExpr is null ? string.Empty : $$$"""
+                        if (!includeDeleted)
+                        {
+                            var softDeleteExpr = {{{softDeleteExpr}}};
+                            if (softDeleteExpr)
+                                query = query.Where(e => !e.{{{request.SoftDeleteProperty}}});
+                        }
+                        """)}}}
+
+                        return query;
+                    }
+
+                    {{{RequiresUnreferencedCode}}}
+                    private async Task<{{{request.EntityType.ToDisplayString()}}}?> MaterializeByIdAsync(
+                        object?[] keyValues,
+                        bool includeDeleted,
+                        List<string>? includeProperties,
+                        IncludeGraph<{{{request.EntityType.ToDisplayString()}}}>? includeGraph,
+                        Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>[]? includeExpressions,
+                        bool? asNoTracking,
+                        bool? useSplitQuery,
+                        CancellationToken cancellationToken)
+                    {
+                        if (keyValues is null) throw new ArgumentNullException(nameof(keyValues));
+
+                        var effectiveAsNoTracking = asNoTracking ?? policy.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
+                        var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
+
+                        IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = BuildBaseQuery(includeDeleted);
+
+                        // Default includes
+                        foreach (var inc in DefaultIncludes)
+                            query = query.Include(inc);
+
+                        // String includes
+                        if (includeProperties is { Count: > 0 })
+                        {
+                            foreach (var includeProperty in includeProperties)
+                            {
+                                if (string.IsNullOrWhiteSpace(includeProperty)) continue;
+                                query = query.Include(includeProperty);
+                            }
+                        }
+
+                        // Graph includes
+                        if (includeGraph?.Includes is { Count: > 0 })
+                        {
+                            foreach (var includeExpression in includeGraph.Includes)
+                                query = query.Include(includeExpression);
+                        }
+
+                        // Expression includes
+                        if (includeExpressions is { Length: > 0 })
+                        {
+                            foreach (var includeExpression in includeExpressions)
+                                query = query.Include(includeExpression);
+                        }
+
+                        if (effectiveAsNoTracking) query = query.AsNoTracking();
+                        if (effectiveSplit) query = query.AsSplitQuery();
+
+                        var predicate = GetPrimaryKeyFromKeyValues(keyValues, KeyNames);
+                        return await query.FirstOrDefaultAsync(predicate, cancellationToken).ConfigureAwait(false);
+                    }
+                    """;
+
+            sb.AppendLine(code);
+            sb.AppendLine();
+        }
+
         private void ClassEnd(StringBuilder sb)
         {
             sb.AppendLine("}");
@@ -678,21 +768,26 @@ namespace KyrolusSous.Repositories.EF.Generator
             sb.AppendLine(method);
             sb.AppendLine();
         }
-        private void GetByIdAsync(StringBuilder sb, RepositoryRequest request, string keyNamesLiteral)
+        private void GetByIdAsync(StringBuilder sb, RepositoryRequest request)
         {
-            var softDeleteExpr = CalculateSoftDelete(request);
-
-            var defaultIncludesLiteral = request.DefaultIncludes.Length > 0
-                ? $"new Expression<Func<{request.EntityType.ToDisplayString()}, object?>>[] {{ {string.Join(", ", request.DefaultIncludes.Select(ip => $"e => e.{ip}"))} }}"
-                : $"Array.Empty<Expression<Func<{request.EntityType.ToDisplayString()}, object?>>>()";
             var cacheBlock = request.EnableCaching ? $$$"""
-                                if (cachingEnabled && cache is not null && cacheTtl.HasValue && (includeExpressions == null || includeExpressions.Length == 0))
+                                if (cachingEnabled && cache is not null && cacheTtl.HasValue
+                                    && (includeExpressions == null || includeExpressions.Length == 0))
                                 {
                                     var cacheKey = CacheKeyById(keyValues);
-                                    return await cache.GetOrSetAsync(cacheKey,
-                                        async ct => await query.FirstOrDefaultAsync(GetPrimaryKeyFromKeyValues(keyValues, {{{keyNamesLiteral}}}), ct),
+                                    return await cache.GetOrSetAsync(
+                                        cacheKey,
+                                        async ct => await MaterializeByIdAsync(
+                                            keyValues,
+                                            includeDeleted: false,
+                                            includeProperties: null,
+                                            includeGraph: null,
+                                            includeExpressions: includeExpressions,
+                                            asNoTracking: asNoTracking,
+                                            useSplitQuery: useSplitQuery,
+                                            cancellationToken: ct).ConfigureAwait(false),
                                         cacheTtl,
-                                        cancellationToken: cancellationToken);
+                                        cancellationToken: cancellationToken).ConfigureAwait(false);
                                 }
                 """ : string.Empty;
             var methods = $$$"""
@@ -715,44 +810,20 @@ namespace KyrolusSous.Repositories.EF.Generator
                             CancellationToken cancellationToken = default)
                             {
                                 if (keyValues is null) throw new ArgumentNullException(nameof(keyValues));
-                                var hasStringIncludes = includeProperties is { Count: > 0 };
-                                var hasGraphIncludes = includeGraph?.Includes is { Count: > 0 };
-                                if (!hasStringIncludes)
-                                {
-                                    var graphIncludes = hasGraphIncludes ? [.. includeGraph!.Includes] : Array.Empty<Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>>();
-                                    return await GetByIdAsync(keyValues, asNoTracking, useSplitQuery, cancellationToken, graphIncludes);
-                                }
+                                
                                 Exception? exception = null;
-                                await NotifyBeforeAsync("GetByIdAsync", keyValues, cancellationToken).ConfigureAwait(false);
-                                var effectiveAsNoTracking = asNoTracking ?? policy.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
-                                var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
-                                var defaultIncludes = {{{defaultIncludesLiteral}}};
-                                IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = ApplyGlobalFilter(set.AsQueryable());
-                                foreach (var inc in defaultIncludes) query = query.Include(inc);
-                                {{{(softDeleteExpr is null ? string.Empty : $"var softDeleteExpr = {softDeleteExpr};                                if (softDeleteExpr)\n                                    query = query.Where(e => !e.{request.SoftDeleteProperty});")}}}
-                                if (effectiveAsNoTracking)
-                                    query = query.AsNoTracking();
-                                if (effectiveSplit)
-                                    query = query.AsSplitQuery();
-                                query = query.Where(GetPrimaryKeyFromKeyValues(keyValues, {{{keyNamesLiteral}}}));
-                                if (includeProperties is not null)
-                                {
-                                    foreach (var includeProperty in includeProperties)
-                                    {
-                                        if (string.IsNullOrWhiteSpace(includeProperty)) continue;
-                                        query = query.Include(includeProperty);
-                                    }
-                                }
-                                if (includeGraph?.Includes is not null)
-                                {
-                                    foreach (var includeExpression in includeGraph.Includes)
-                                    {
-                                        query = query.Include(includeExpression);
-                                    }
-                                }
+                                
                                 try
                                 {
-                                    return await query.FirstOrDefaultAsync(cancellationToken);
+                                    return await MaterializeByIdAsync(
+                                        keyValues,
+                                        includeDeleted: false,
+                                        includeProperties: includeProperties,
+                                        includeGraph: includeGraph,
+                                        includeExpressions: null,
+                                        asNoTracking: asNoTracking,
+                                        useSplitQuery: useSplitQuery,
+                                        cancellationToken: cancellationToken).ConfigureAwait(false);
                                 }
                                 catch (Exception ex)
                                 {
@@ -769,32 +840,20 @@ namespace KyrolusSous.Repositories.EF.Generator
                             public async Task<{{{request.EntityType.ToDisplayString()}}}?> GetByIdAsync(object?[] keyValues, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default, params Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>[] includeExpressions)
                             {
                                 if (keyValues is null) throw new ArgumentNullException(nameof(keyValues));
-                                var effectiveAsNoTracking = asNoTracking ?? policy.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
-                                var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
-                                var defaultIncludes = {{{defaultIncludesLiteral}}};
-                                IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = ApplyGlobalFilter(set.AsQueryable());
-                                foreach (var inc in defaultIncludes) query = query.Include(inc);
-                                {{{(softDeleteExpr is null ? string.Empty : $"var softDeleteExpr = {softDeleteExpr};\n                                if (softDeleteExpr)\n                                    query = query.Where(e => !e.{request.SoftDeleteProperty});")}}}
-                                if (effectiveAsNoTracking)
-                                    query = query.AsNoTracking();
-                                if (effectiveSplit)
-                                    query = query.AsSplitQuery();
-                                query = query.Where(GetPrimaryKeyFromKeyValues(keyValues, {{{keyNamesLiteral}}}));
-                            
-                                if (includeExpressions != null)
-                                {
-                                    foreach (var includeExpression in includeExpressions)
-                                    {
-                                        query = query.Include(includeExpression);
-                                    }
-                                }
                                 {{{cacheBlock}}}
                                 Exception? exception = null;
                                 await NotifyBeforeAsync("GetByIdAsync", keyValues, cancellationToken).ConfigureAwait(false);
                                 try
                                 {
-                                    return await query.FirstOrDefaultAsync(GetPrimaryKeyFromKeyValues(keyValues, {{{keyNamesLiteral}}}), cancellationToken);
-                                }
+                                return await MaterializeByIdAsync(
+                                        keyValues,
+                                        includeDeleted: false,
+                                        includeProperties: null,
+                                        includeGraph: null,
+                                        includeExpressions: includeExpressions,
+                                        asNoTracking: asNoTracking,
+                                        useSplitQuery: useSplitQuery,
+                                        cancellationToken: cancellationToken).ConfigureAwait(false);                                }
                                 catch (Exception ex)
                                 {
                                     exception = ex;
@@ -838,7 +897,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 }
                                 if (cachingEnabled && cache is not null && cacheTtl.HasValue)
                                 {
-                                    var cacheKey = CacheKeyById(new object?[] { id });
+                                    var cacheKey = CacheKeyById([id]);
                                     return await cache.GetOrSetAsync(cacheKey,
                                         async ct => await _compiledGetById(db, id).FirstOrDefaultAsync(ct).ConfigureAwait(false),
                                         cacheTtl,
@@ -996,12 +1055,12 @@ namespace KyrolusSous.Repositories.EF.Generator
                             }
 
                             {{{RequiresUnreferencedCode}}}
-                            public async Task<RepositoryOperationResult<bool>> TryRemoveAsync({{{request.EntityType.ToDisplayString()}}} entity, bool isSoftDelete, CancellationToken cancellationToken = default)
+                            public async Task<RepositoryOperationResult<bool>> TryRemoveAsync({{{request.EntityType.ToDisplayString()}}} entity, CancellationToken cancellationToken = default)
                             {
                                 if (entity is null) throw new ArgumentNullException(nameof(entity));
                                 try
                                 {
-                                    var removed = await RemoveAsync(entity, isSoftDelete, cancellationToken);
+                                    var removed = await RemoveAsync(entity, cancellationToken);
                                     if (!removed) return RepositoryOperationResult<bool>.NotFound();
                                     return RepositoryOperationResult<bool>.Pending(true);
                                 }
@@ -1012,11 +1071,11 @@ namespace KyrolusSous.Repositories.EF.Generator
                             }
 
                             {{{RequiresUnreferencedCode}}}
-                            public async Task<RepositoryOperationResult<bool>> TryRemoveAsync(object?[]? keyValues, bool isSoftDelete, CancellationToken cancellationToken = default)
+                            public async Task<RepositoryOperationResult<bool>> TryRemoveAsync(object?[]? keyValues, CancellationToken cancellationToken = default)
                             {
                                 try
                                 {
-                                    var removed = await RemoveAsync(keyValues, isSoftDelete, cancellationToken);
+                                    var removed = await RemoveAsync(keyValues, cancellationToken);
                                     if (!removed) return RepositoryOperationResult<bool>.NotFound();
                                     return RepositoryOperationResult<bool>.Pending(true);
                                 }
@@ -1031,134 +1090,15 @@ namespace KyrolusSous.Repositories.EF.Generator
             {
                 var wrappers = $$"""
                             public Task<RepositoryOperationResult<{{request.EntityType.ToDisplayString()}}>> TryPatchAsync({{request.KeyType.ToDisplayString()}} id, Dictionary<string, object> updates, CancellationToken cancellationToken = default)
-                                => TryPatchAsync(new object?[] { id }, updates, cancellationToken);
+                                => TryPatchAsync([id], updates, cancellationToken);
 
-                            public Task<RepositoryOperationResult<bool>> TryRemoveAsync({{request.KeyType.ToDisplayString()}} id, bool isSoftDelete, CancellationToken cancellationToken = default)
-                                => TryRemoveAsync(new object?[] { id }, isSoftDelete, cancellationToken);
+                            public Task<RepositoryOperationResult<bool>> TryRemoveAsync({{request.KeyType.ToDisplayString()}} id, CancellationToken cancellationToken = default)
+                                => TryRemoveAsync([id], cancellationToken);
 
 """;
                 sb.AppendLine(wrappers);
             }
             sb.AppendLine();
-
-            if (!request.EnableSoftDelete)
-            {
-                var restoreDisabled = $$$"""
-                            {{{RequiresUnreferencedCode}}}
-                            public Task<RepositoryOperationResult<bool>> TryRestoreAsync(object?[]? keyValues, CancellationToken cancellationToken = default)
-                            {
-                                return Task.FromResult(RepositoryOperationResult<bool>.Failed(new InvalidOperationException("Soft delete is not enabled for this repository.")));
-                            }
-                            """;
-                sb.AppendLine(restoreDisabled);
-                sb.AppendLine();
-            }
-            else
-            {
-                var restore = $$$"""
-                            {{{RequiresUnreferencedCode}}}
-                            public async Task<RepositoryOperationResult<bool>> TryRestoreAsync(object?[]? keyValues, CancellationToken cancellationToken = default)
-                            {
-                                if (keyValues is null) throw new ArgumentNullException(nameof(keyValues));
-                                Exception? exception = null;
-                                await NotifyBeforeAsync("TryRestoreAsync", keyValues, cancellationToken).ConfigureAwait(false);
-                                var entity = await GetByIdAsync(keyValues, asNoTracking: false, useSplitQuery: {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}}, cancellationToken: cancellationToken);
-                                if (entity is null) return RepositoryOperationResult<bool>.NotFound();
-                                try
-                                {
-                                    var entry = db.Attach(entity);
-                                    entry.Property("{{{request.SoftDeleteProperty}}}").CurrentValue = false;
-                                    entry.Property("{{{request.SoftDeleteProperty}}}").IsModified = true;
-                                    await InvalidateCachesAsync(keyValues, cancellationToken).ConfigureAwait(false);
-                                    return RepositoryOperationResult<bool>.Success(true);
-                                }
-                                catch (Exception ex)
-                                {
-                                    exception = ex;
-                                    return RepositoryOperationResult<bool>.Failed(ex);
-                                }
-                                finally
-                                {
-                                    await NotifyAfterAsync("TryRestoreAsync", keyValues, exception, cancellationToken).ConfigureAwait(false);
-                                }
-                            }
-                            """;
-                sb.AppendLine(restore);
-                sb.AppendLine();
-            }
-        }
-
-        private void RestoreAsync(StringBuilder sb, RepositoryRequest request, KeyProp[] keyProps)
-        {
-            var singleKeyWrapper = string.Empty;
-            if (request.KeyPropertyNames.Length == 1)
-            {
-                singleKeyWrapper = $$"""
-                            public Task<RepositoryOperationResult<bool>> TryRestoreAsync({{request.KeyType.ToDisplayString()}} id, CancellationToken cancellationToken = default)
-                                => TryRestoreAsync(new object?[] { id }, cancellationToken);
-
-                            public Task<bool> RestoreAsync({{request.KeyType.ToDisplayString()}} id, CancellationToken cancellationToken = default)
-                                => RestoreAsync(new object?[] { id }, cancellationToken);
-
-""";
-            }
-
-            if (!request.EnableSoftDelete)
-            {
-                var methodDisabled = $$$"""
-                            {{{RequiresUnreferencedCode}}}
-                            public Task<bool> RestoreAsync(object?[]? keyValues, CancellationToken cancellationToken = default)
-                            {
-                                return Task.FromResult(false);
-                            }
-                            """;
-                sb.AppendLine(methodDisabled);
-                if (!string.IsNullOrEmpty(singleKeyWrapper))
-                {
-                    sb.AppendLine(singleKeyWrapper);
-                }
-                sb.AppendLine();
-            }
-            else
-            {
-                var method = $$$"""
-                            {{{RequiresUnreferencedCode}}}
-                            public async Task<bool> RestoreAsync(object?[]? keyValues, CancellationToken cancellationToken = default)
-                            {
-                                if (keyValues is null || keyValues.Length != {{{keyProps.Length}}})
-                                    throw new ArgumentException("Key values mismatch", nameof(keyValues));
-
-                                Exception? exception = null;
-                                await NotifyBeforeAsync("RestoreAsync", keyValues, cancellationToken).ConfigureAwait(false);
-                                try
-                                {
-                                    var entity = await GetByIdAsync(keyValues, asNoTracking: false, useSplitQuery: {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}}, cancellationToken: cancellationToken);
-                                    if (entity is null) return false;
-
-                                    var entry = db.Attach(entity);
-                                    entry.Property("{{{request.SoftDeleteProperty}}}").CurrentValue = false;
-                                    entry.Property("{{{request.SoftDeleteProperty}}}").IsModified = true;
-                                    await InvalidateCachesAsync(keyValues, cancellationToken).ConfigureAwait(false);
-                                    return true;
-                                }
-                                catch (Exception ex)
-                                {
-                                    exception = ex;
-                                    throw;
-                                }
-                                finally
-                                {
-                                    await NotifyAfterAsync("RestoreAsync", keyValues, exception, cancellationToken).ConfigureAwait(false);
-                                }
-                            }
-                            """;
-                sb.AppendLine(method);
-                if (!string.IsNullOrEmpty(singleKeyWrapper))
-                {
-                    sb.AppendLine(singleKeyWrapper);
-                }
-                sb.AppendLine();
-            }
         }
 
         private void ExecuteBulkOperations(StringBuilder sb, RepositoryRequest request)
@@ -1424,7 +1364,7 @@ namespace KyrolusSous.Repositories.EF.Generator
             {
                 var wrapper = $$"""
                 public Task<{{request.EntityType.ToDisplayString()}}?> PatchAsync({{request.KeyType.ToDisplayString()}} id, Dictionary<string, object> updates, CancellationToken cancellationToken = default)
-                    => PatchAsync(new object?[] { id }, updates, cancellationToken);
+                    => PatchAsync([id], updates, cancellationToken);
 """;
                 sb.AppendLine(wrapper);
             }
@@ -1433,18 +1373,16 @@ namespace KyrolusSous.Repositories.EF.Generator
 
         private void RemoveAsync(StringBuilder sb, RepositoryRequest request, KeyProp[] keyProps, string keyNamesLiteral)
         {
-            var softDeleteExpr = CalculateSoftDelete(request) ?? "false";
             var method = $$$"""
                             {{{RequiresUnreferencedCode}}}
-                            public async Task<bool> RemoveAsync({{{request.EntityType.ToDisplayString()}}} entity, bool isSoftDelete = false, CancellationToken cancellationToken = default)
+                            public async Task<bool> RemoveAsync({{{request.EntityType.ToDisplayString()}}} entity, CancellationToken cancellationToken = default)
                             {
-                                var effectiveSoftDelete = isSoftDelete || {{{softDeleteExpr}}};
                                 Exception? exception = null;
                                 await NotifyBeforeAsync("Remove", entity, cancellationToken).ConfigureAwait(false);
                                 try
                                 {
                                     var entityInDb = await set.FirstOrDefaultAsync(BuildKeyPredicateFromEntity(entity, {{{keyNamesLiteral}}}), cancellationToken);
-                                    var removed = RemoveInternal(entityInDb, effectiveSoftDelete);
+                                    var removed = RemoveInternal(entityInDb);
                                     if (removed) await InvalidateCachesAsync(entity, cancellationToken).ConfigureAwait(false);
                                     return removed;
                                 }
@@ -1459,18 +1397,17 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 }
                             }
                             {{{RequiresUnreferencedCode}}}
-                            public async Task<bool> RemoveAsync(object?[]? keyValues, bool isSoftDelete = false, CancellationToken cancellationToken = default)
+                            public async Task<bool> RemoveAsync(object?[]? keyValues, CancellationToken cancellationToken = default)
                             {
                                 if (keyValues is null || keyValues.Length != {{{keyProps.Length}}})
                                     throw new ArgumentException("Key values mishmatch", nameof(keyValues));
 
-                                var effectiveSoftDelete = isSoftDelete || {{{softDeleteExpr}}};
                                 Exception? exception = null;
                                 await NotifyBeforeAsync("Remove", keyValues, cancellationToken).ConfigureAwait(false);
                                 try
                                 {
                                     var entity = await GetByIdAsync(keyValues, cancellationToken: cancellationToken);
-                                    var removed = RemoveInternal(entity, effectiveSoftDelete);
+                                    var removed = RemoveInternal(entity);
                                     if (removed) await InvalidateCachesAsync(keyValues, cancellationToken).ConfigureAwait(false);
                                     return removed;
                                 }
@@ -1485,9 +1422,8 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 }
                             }
                             {{{RequiresUnreferencedCode}}}
-                            public async Task<bool> RemoveRangeAsync(IEnumerable<{{{request.EntityType.ToDisplayString()}}}> entities,bool isSoftDelete = false, CancellationToken cancellationToken = default)
+                            public async Task<bool> RemoveRangeAsync(IEnumerable<{{{request.EntityType.ToDisplayString()}}}> entities, CancellationToken cancellationToken = default)
                             {
-                                var effectiveSoftDelete = isSoftDelete || {{{softDeleteExpr}}};
                                 Exception? exception = null;
                                 await NotifyBeforeAsync("RemoveRangeAsync", entities, cancellationToken).ConfigureAwait(false);
                                 try
@@ -1495,7 +1431,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     List<bool> result = [];
                                     foreach (var entity in entities)
                                     {
-                                        result.Add(await RemoveAsync(entity, effectiveSoftDelete, cancellationToken));
+                                        result.Add(await RemoveAsync(entity, cancellationToken));
                                     }
                                     if (result.All(r => r))
                                     {
@@ -1527,8 +1463,8 @@ namespace KyrolusSous.Repositories.EF.Generator
             if (request.KeyPropertyNames.Length == 1)
             {
                 var wrapper = $$"""
-                            public Task<bool> RemoveAsync({{request.KeyType.ToDisplayString()}} id, bool isSoftDelete = false, CancellationToken cancellationToken = default)
-                                => RemoveAsync(new object?[] { id }, isSoftDelete, cancellationToken);
+                            public Task<bool> RemoveAsync({{request.KeyType.ToDisplayString()}} id, CancellationToken cancellationToken = default)
+                                => RemoveAsync([id], cancellationToken);
 """;
                 sb.AppendLine(wrapper);
             }
@@ -1601,6 +1537,284 @@ public async Task<IEnumerable<{{{request.EntityType.ToDisplayString()}}}>> Updat
             sb.AppendLine(method);
             sb.AppendLine();
         }
+
+        private void SoftDeleteAndDeletedQueries(StringBuilder sb, RepositoryRequest request)
+        {
+            if (!request.EnableSoftDelete)
+                return;
+
+            var entity = request.EntityType.ToDisplayString();
+            var keyType = request.KeyType.ToDisplayString();
+
+            var code = $$$"""
+                            // -----------------------------------
+                            // SoftDelete / Restore / Deleted queries
+                            // -----------------------------------
+
+                            {{{RequiresUnreferencedCode}}}
+                            public Task<{{{entity}}}?> GetByIdIncludingDeletedAsync({{{keyType}}} id,
+                                List<string>? includeProperties = null,
+                                IncludeGraph<{{{entity}}}>? includeGraph = null,
+                                bool? asNoTracking = null,
+                                bool? useSplitQuery = null,
+                                CancellationToken cancellationToken = default)
+                                => GetByIdIncludingDeletedAsync([id], includeProperties, includeGraph, asNoTracking, useSplitQuery, cancellationToken);
+
+                            {{{RequiresUnreferencedCode}}}
+                            public Task<{{{entity}}}?> GetByIdIncludingDeletedAsync({{{keyType}}} id,
+                                bool? asNoTracking,
+                                bool? useSplitQuery,
+                                CancellationToken cancellationToken,
+                                params Expression<Func<{{{entity}}}, object?>>[] includeExpressions)
+                                => GetByIdIncludingDeletedAsync([id], asNoTracking, useSplitQuery, cancellationToken, includeExpressions);
+
+                            {{{RequiresUnreferencedCode}}}
+                            public async Task<{{{entity}}}?> GetByIdIncludingDeletedAsync(object?[] keyValues,
+                                List<string>? includeProperties = null,
+                                IncludeGraph<{{{entity}}}>? includeGraph = null,
+                                bool? asNoTracking = null,
+                                bool? useSplitQuery = null,
+                                CancellationToken cancellationToken = default)
+                            {
+                                if (keyValues is null) throw new ArgumentNullException(nameof(keyValues));
+
+                                var hasStringIncludes = includeProperties is { Count: > 0 };
+                                var hasGraphIncludes = includeGraph?.Includes is { Count: > 0 };
+
+                                if (!hasStringIncludes)
+                                {
+                                    var graphIncludes = hasGraphIncludes
+                                        ? [.. includeGraph!.Includes]
+                                        : Array.Empty<Expression<Func<{{{entity}}}, object?>>>();
+
+                                    return await GetByIdIncludingDeletedAsync(keyValues, asNoTracking, useSplitQuery, cancellationToken, graphIncludes)
+                                        .ConfigureAwait(false);
+                                }
+                                return await MaterializeByIdAsync(
+                                        keyValues,
+                                        includeDeleted: true,
+                                        includeProperties: includeProperties,
+                                        includeGraph: includeGraph,
+                                        includeExpressions: null,
+                                        asNoTracking: asNoTracking,
+                                        useSplitQuery: useSplitQuery,
+                                        cancellationToken: cancellationToken)
+                                    .ConfigureAwait(false);
+                            }
+
+                            {{{RequiresUnreferencedCode}}}
+                            public async Task<{{{entity}}}?> GetByIdIncludingDeletedAsync(
+                                object?[] keyValues,
+                                bool? asNoTracking,
+                                bool? useSplitQuery,
+                                CancellationToken cancellationToken,
+                                params Expression<Func<{{{entity}}}, object?>>[]? includeExpressions)
+                            {
+                                if (keyValues is null) throw new ArgumentNullException(nameof(keyValues));
+
+                                return await MaterializeByIdAsync(
+                                        keyValues,
+                                        includeDeleted: true,
+                                        includeProperties: null,
+                                        includeGraph: null,
+                                        includeExpressions: includeExpressions,
+                                        asNoTracking: asNoTracking,
+                                        useSplitQuery: useSplitQuery,
+                                        cancellationToken: cancellationToken)
+                                    .ConfigureAwait(false);
+                            }
+
+                            {{{RequiresUnreferencedCode}}}
+                            public async Task<IReadOnlyList<{{{entity}}}>> GetAllIncludingDeletedAsync(
+                                Expression<Func<{{{entity}}}, bool>>? filter = null,
+                                Func<IQueryable<{{{entity}}}>, IOrderedQueryable<{{{entity}}}>>? orderBy = null,
+                                List<string>? includeProperties = null,
+                                IncludeGraph<{{{entity}}}>? includeGraph = null,
+                                bool? asNoTracking = null,
+                                bool? useSplitQuery = null,
+                                CancellationToken cancellationToken = default)
+                            {
+                                var effectiveAsNoTracking = asNoTracking ?? policy.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
+
+                                IQueryable<{{{entity}}}> query = BuildBaseQuery(includeDeleted: true);
+
+                                foreach (var inc in DefaultIncludes)
+                                    query = query.Include(inc);
+
+                                if (includeProperties is { Count: > 0 })
+                                    foreach (var p in includeProperties)
+                                        if (!string.IsNullOrWhiteSpace(p)) query = query.Include(p);
+
+                                if (includeGraph?.Includes is { Count: > 0 })
+                                    foreach (var inc in includeGraph.Includes)
+                                        query = query.Include(inc);
+
+                                if (effectiveAsNoTracking) query = query.AsNoTracking();
+                                if (effectiveSplit) query = query.AsSplitQuery();
+
+                                if (filter is not null) query = query.Where(filter);
+                                if (orderBy is not null) query = orderBy(query);
+
+                                return await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+                            }
+
+                            {{{RequiresUnreferencedCode}}}
+                            public async Task<IReadOnlyList<{{{entity}}}>> GetDeletedOnlyAsync(
+                                Expression<Func<{{{entity}}}, bool>>? filter = null,
+                                Func<IQueryable<{{{entity}}}>, IOrderedQueryable<{{{entity}}}>>? orderBy = null,
+                                List<string>? includeProperties = null,
+                                IncludeGraph<{{{entity}}}>? includeGraph = null,
+                                bool? asNoTracking = null,
+                                bool? useSplitQuery = null,
+                                CancellationToken cancellationToken = default)
+                            {
+                                var effectiveAsNoTracking = asNoTracking ?? policy.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
+
+                                IQueryable<{{{entity}}}> query = BuildBaseQuery(includeDeleted: true);
+
+                                foreach (var inc in DefaultIncludes)
+                                    query = query.Include(inc);
+
+                                // ✅ deleted only
+                                query = query.Where(e => e.{{{request.SoftDeleteProperty}}});
+
+                                if (includeProperties is { Count: > 0 })
+                                    foreach (var p in includeProperties)
+                                        if (!string.IsNullOrWhiteSpace(p)) query = query.Include(p);
+
+                                if (includeGraph?.Includes is { Count: > 0 })
+                                    foreach (var inc in includeGraph.Includes)
+                                        query = query.Include(inc);
+
+                                if (effectiveAsNoTracking) query = query.AsNoTracking();
+                                if (effectiveSplit) query = query.AsSplitQuery();
+
+                                if (filter is not null) query = query.Where(filter);
+                                if (orderBy is not null) query = orderBy(query);
+
+                                return await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+                            }
+
+                            {{{RequiresUnreferencedCode}}}
+                            public async Task<bool> SoftDeleteAsync(object?[] keyValues, CancellationToken cancellationToken = default)
+                            {
+                                if (keyValues is null) throw new ArgumentNullException(nameof(keyValues));
+
+                                var entityInDb = await MaterializeByIdAsync(
+                                        keyValues,
+                                        includeDeleted: true,  
+                                        includeProperties: null,
+                                        includeGraph: null,
+                                        includeExpressions: null,
+                                        asNoTracking: false,
+                                        useSplitQuery: null,
+                                        cancellationToken: cancellationToken)
+                                    .ConfigureAwait(false);
+
+                                if (entityInDb is null)
+                                    return false;
+
+                                if (entityInDb.{{{request.SoftDeleteProperty}}})
+                                    return true;
+
+                                var entry = db.Entry(entityInDb);
+                                if (entry.State == EntityState.Detached)
+                                    entry = db.Attach(entityInDb);
+
+                                entry.Property("{{{request.SoftDeleteProperty}}}").CurrentValue = false;
+                                entry.Property("{{{request.SoftDeleteProperty}}}").IsModified = true;
+
+                                await InvalidateCachesAsync(keyValues, cancellationToken).ConfigureAwait(false);
+                                return true;
+                            }
+
+                            {{{RequiresUnreferencedCode}}}
+                            public async Task<RepositoryOperationResult<bool>> TrySoftDeleteAsync(object?[] keyValues, CancellationToken cancellationToken = default)
+                            {
+                                try
+                                {
+                                    var ok = await SoftDeleteAsync(keyValues, cancellationToken).ConfigureAwait(false);
+                                    return ok ? RepositoryOperationResult<bool>.Pending(true) : RepositoryOperationResult<bool>.NotFound();
+                                }
+                                catch (Exception ex)
+                                {
+                                    return RepositoryOperationResult<bool>.Failed(ex);
+                                }
+                            }
+
+                            {{{RequiresUnreferencedCode}}}
+                            public async Task<bool> RestoreAsync(object?[] keyValues, CancellationToken cancellationToken = default)
+                            {
+                                if (keyValues is null) throw new ArgumentNullException(nameof(keyValues));
+
+                                var entityInDb = await MaterializeByIdAsync(
+                                        keyValues,
+                                        includeDeleted: true,
+                                        includeProperties: null,
+                                        includeGraph: null,
+                                        includeExpressions: null,
+                                        asNoTracking: false,
+                                        useSplitQuery: null,
+                                        cancellationToken: cancellationToken)
+                                    .ConfigureAwait(false);
+
+                                if (entityInDb is null)
+                                    return false;
+
+                                if (!entityInDb.{{{request.SoftDeleteProperty}}})
+                                    return true;
+
+                                var entry = db.Entry(entityInDb);
+                                if (entry.State == EntityState.Detached)
+                                    entry = db.Attach(entityInDb);
+
+                                entry.Property("{{{request.SoftDeleteProperty}}}").CurrentValue = false;
+                                entry.Property("{{{request.SoftDeleteProperty}}}").IsModified = true;
+
+                                await InvalidateCachesAsync(keyValues, cancellationToken).ConfigureAwait(false);
+                                return true;
+                            }
+
+                            {{{RequiresUnreferencedCode}}}
+                            public async Task<RepositoryOperationResult<bool>> TryRestoreAsync(object?[] keyValues, CancellationToken cancellationToken = default)
+                            {
+                                try
+                                {
+                                    var ok = await RestoreAsync(keyValues, cancellationToken).ConfigureAwait(false);
+                                    return ok ? RepositoryOperationResult<bool>.Pending(true) : RepositoryOperationResult<bool>.NotFound();
+                                }
+                                catch (Exception ex)
+                                {
+                                    return RepositoryOperationResult<bool>.Failed(ex);
+                                }
+                            }
+                            """;
+
+            sb.AppendLine(code);
+            if (request.KeyPropertyNames.Length == 1)
+            {
+                sb.AppendLine(
+                    $$$"""
+                    public Task<bool> SoftDeleteAsync({{{keyType}}} id, CancellationToken cancellationToken = default)
+                        => SoftDeleteAsync([id], cancellationToken);
+
+                    public Task<RepositoryOperationResult<bool>> TrySoftDeleteAsync({{{keyType}}} id, CancellationToken cancellationToken = default)
+                        => TrySoftDeleteAsync([id], cancellationToken);
+
+                    public Task<bool> RestoreAsync({{{keyType}}} id, CancellationToken cancellationToken = default)
+                        => RestoreAsync([id], cancellationToken);
+
+                    public Task<RepositoryOperationResult<bool>> TryRestoreAsync({{{keyType}}} id, CancellationToken cancellationToken = default)
+                        => TryRestoreAsync([id], cancellationToken);
+                    """
+                );
+                sb.AppendLine();
+            }
+            sb.AppendLine();
+        }
+
         private void HelperFunctions(StringBuilder sb, RepositoryRequest request, IPropertySymbol? rowVersionProp)
         {
             var rowVersionName = rowVersionProp?.Name;
@@ -1612,25 +1826,20 @@ public async Task<IEnumerable<{{{request.EntityType.ToDisplayString()}}}>> Updat
 
             var method = $$$"""
 {{{RequiresUnreferencedCode}}}
-private bool RemoveInternal({{{request.EntityType.ToDisplayString()}}}? entityInDb, bool isSoftDelete)
+private bool RemoveInternal({{{request.EntityType.ToDisplayString()}}}? entityInDb)
 {
     if (entityInDb is null)
         return false;
 
-    var entry = db.Attach(entityInDb);
-{{{rowVersionSetup}}}
+    var entry = db.Entry(entityInDb);
+    if (entry.State == EntityState.Detached)
+        entry = db.Attach(entityInDb);
 
-    if (isSoftDelete)
-    {
-        entry.Property("{{{request.SoftDeleteProperty}}}").CurrentValue = true;
-        entry.Property("{{{request.SoftDeleteProperty}}}").IsModified = true;
-    }
-    else
-    {
-        set.Remove(entityInDb);
-    }
+    {{{rowVersionSetup}}}
+    set.Remove(entityInDb);
     return true;
 }
+
 
 private IQueryable<{{{request.EntityType.ToDisplayString()}}}> ApplyGlobalFilter(IQueryable<{{{request.EntityType.ToDisplayString()}}}> query)
 {
@@ -2143,7 +2352,6 @@ namespace KyrolusSous.Repositories.EF.Generated
             var graph = request?.IncludeGraph as IncludeGraph<{{request.EntityType.ToDisplayString()}}>;
             return new QueryParts<{{request.EntityType.ToDisplayString()}}>(filter, orderBy, includes, request?.AsNoTracking, request?.UseSplitQuery, graph);
         }
-
         public Expression<Func<{{request.EntityType.ToDisplayString()}}, bool>>? BuildFilter(QueryRequest? request)
         {
             Expression<Func<{{request.EntityType.ToDisplayString()}}, bool>>? filter = null;
