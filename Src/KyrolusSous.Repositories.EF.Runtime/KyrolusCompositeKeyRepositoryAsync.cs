@@ -1,5 +1,7 @@
 
 
+using KyrolusSous.Caching.Abstractions;
+
 namespace KyrolusSous.Repositories.EF.Runtime;
 
 /// <summary>
@@ -12,8 +14,10 @@ public class KyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity>(
     IKyrolusBulkExecutor<TEntity>? bulkExecutor = null,
     ICacheProvider? cache = null,
     bool enableCaching = false,
-    int? cacheTtlSeconds = null) :
-    KyrolusRepositoryAsync<TDbContext, TEntity, object?>(db, policy, observer, bulkExecutor, cache, enableCaching, cacheTtlSeconds),
+    int? cacheTtlSeconds = null,
+    ICacheKeyContext? cacheKeyContext = null,
+    IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider = null) :
+    KyrolusRepositoryAsync<TDbContext, TEntity, object?>(db, policy, observer, bulkExecutor, cache, enableCaching, cacheTtlSeconds, cacheKeyContext, cachePolicyProvider),
     IKyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity, object?>
     where TDbContext : DbContext
     where TEntity : class

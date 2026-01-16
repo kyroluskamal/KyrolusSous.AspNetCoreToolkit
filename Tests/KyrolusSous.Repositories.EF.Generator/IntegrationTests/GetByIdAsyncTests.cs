@@ -1,3 +1,6 @@
+using KyrolusSous.Repositories.EF.Abstractions;
+using SQLitePCL;
+
 namespace KyrolusSous.Repositories.EF.Generator.IntegrationTests;
 
 public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : KyrolusGeneratorFixture(factory)
@@ -5,6 +8,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     private static readonly string productLaptopId = "66666666-6666-6666-6666-666666666661";
     private static readonly string productHeadphonesId = "66666666-6666-6666-6666-666666666662";
     private static readonly string categoryElectronicsId = "55555555-5555-5555-5555-555555555551";
+    private static readonly Guid storeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
     private static readonly string[] CompositeKey_ProductReview = [productLaptopId, "77777777-7777-7777-7777-777777777772"];
     private static readonly string[] CompositeKey_ProductCategory = [productLaptopId, categoryElectronicsId];
@@ -25,7 +29,20 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
         review.ShouldNotBeNull();
         review.Rating.ShouldBe(5);
     }
-
+    #region Global Filter Tests
+    [Fact(DisplayName = "GetByIdAsync uses global filter with multiple filters")]
+    public async Task GetAllAsync_GlobalFilter_MultipleFilters_Works()
+    {
+        // Given
+        var Customfactory = WithPolicy(new KyrolusRepositoryPolicy().AddGlobalWhereFilter<Product>(p => p.Price >= 1250m));
+        using var scope = Customfactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+        // When
+        var item = await repo.GetByIdAsync(Guid.Parse(productLaptopId), includeExpressions: e => e.Reviews);
+        // Then
+        item.ShouldBeNull();
+    }
+    #endregion
     #region Include Tests
     [Fact(DisplayName = "GetByIdAsync returns entity with Include Properties with single Key")]
     public async Task GetByIdAsync_ReturnsEntiy_IncludeProperties_SingleKey()
@@ -150,6 +167,44 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
 
         counter.Count.ShouldBe(1, $"Expected 1 SQL commands and no collections with split query, got {counter.Count}");
         review.ShouldNotBeNull();
+    }
+
+    [Fact(DisplayName = "GetByIdAsync returns entity with Include Expressions with single key")]
+    public async Task GetByIdAsync_With_IncludeExpressions_SingleKey()
+    {
+        // Arrange
+        using var scope = Factory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+        // Act
+        var product = await repo.GetByIdAsync(
+                    Guid.Parse(productLaptopId),
+                    asNoTracking: true,
+                    useSplitQuery: null,
+                    cancellationToken: default, e => e.Reviews, e => e.Store);
+        // Assert
+        product.ShouldNotBeNull();
+        product.Store.ShouldNotBeNull();
+        product.Reviews.ShouldNotBeNull();
+        product.Reviews.Count.ShouldBe(1);
+    }
+
+    [Fact(DisplayName = "GetByIdAsync returns entity with Include Expressions with Composite key")]
+    public async Task GetByIdAsync_With_IncludeExpressions_CompositeKey()
+    {
+        // Arrange
+        using var scope = Factory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ReviewRepository>();
+        // Act
+        var Review = await repo.GetByIdAsync(
+                    CompositeKey_ProductReview,
+                    cancellationToken: default,
+                    includeExpressions: [e => e.Product, e => e.Customer!.Store]);
+        // Assert
+        Review.ShouldNotBeNull();
+        Review.Product.ShouldNotBeNull();
+        Review.Product.Reviews.ShouldNotBeNull();
+        Review.Customer.ShouldNotBeNull();
+        Review.Customer.Store.ShouldNotBeNull();
     }
     #endregion
     #region AsNoTracking Tests
@@ -641,6 +696,77 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
         });
     }
     #endregion
+    #region NotifyBefore/NotifyAfter Tests
+    [Fact(DisplayName = "GetByIdAsync Should record Event before and After execution")]
+    public async Task GetByIdAsync_ShouldRecordEventBeforeAndAfterExecution()
+    {
+        // Given
+        using var scope = Factory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+        var observer = scope.ServiceProvider.GetRequiredService<TestRepositoryObserver>();
+        observer.Reset();
+        // When
+        await repo.GetByIdAsync(Guid.Parse(productLaptopId), asNoTracking: false);
+        // Then
+        var beforeEvent = observer.Events.Count(e => e.Stage == ObserverState.Before && e.Operation == "GetByIdAsync");
+        beforeEvent.ShouldBe(1);
+        var afterEvent = observer.Events.Count(e => e.Stage == ObserverState.After && e.Operation == "GetByIdAsync");
+        afterEvent.ShouldBe(1);
+    }
+    [Fact(DisplayName = "GetByIdAsync Should notify after finishing with exception if there was an error")]
+    public async Task GetByIdAsync_ShouldNotifyAfterFinishingWithException()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+        var observer = scope.ServiceProvider.GetRequiredService<TestRepositoryObserver>();
+        observer.Reset();
+        await Should.ThrowAsync<InvalidOperationException>(async () =>
+            await repo.GetByIdAsync(Guid.Parse(productLaptopId), includeProperties: ["NotARealNavigation"])
+        );
+        observer.Events.Count(e => e.Stage == ObserverState.After && e.Operation == "GetByIdAsync" && e.Exception is not null).ShouldBe(1);
+    }
+    #endregion
+    #region Caching Test
+    [Fact(DisplayName = "GetByIdAsync Should Uses Cache if it is available and enabled")]
+    public async Task GetByIdAsync_ShouldUsesCacheIfItIsAvailableAndEnabled()
+    {
+        // Given
+        using var scope = Factory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<StoreRepository>();
+        var cacheProvider = scope.ServiceProvider.GetRequiredService<InMemoryCacheProvider>();
+        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
+        counter.Reset();
+        cacheProvider.Clear();
+        try
+        {
+            // When
+            var store = await repo.GetByIdAsync(storeId);
+            // Then
+            counter.Count.ShouldBe(1);
+            store.ShouldNotBeNull();
+
+            //And When
+            counter.Reset();
+
+            var storeFromCache = await repo.GetByIdAsync(storeId);
+            // Then
+            counter.Count.ShouldBe(0);
+            storeFromCache.ShouldNotBeNull();
+            cacheProvider.Count.ShouldBe(1);
+
+            await Task.Delay(TimeSpan.FromSeconds(10));
+            counter.Reset();
+            cacheProvider.Clear();
+            await repo.GetByIdAsync(storeId);
+            counter.Count.ShouldBe(1);
+            cacheProvider.Count.ShouldBe(1);
+        }
+        finally
+        {
+            cacheProvider.Clear();
+        }
+    }
+    #endregion
     #region Unhappy Path Tests
     [Fact(DisplayName = "GetByIdAsync throws when include string is invalid navigation")]
     public async Task GetByIdAsync_InvalidIncludeString_Throws()
@@ -670,7 +796,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync returns entity with unsupported Numeric Filter operator throws")]
     public async Task GetByIdAsync_Unsupported_Numeric_FilterOperator_Throws()
     {
-        var (_, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (_, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             Filters: [new FilterClause("StockQuantity", "has", 25.ToString())]
             ));
         content?.ShouldContain("Unsupported operator 'has'");
@@ -678,7 +804,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error for unsupported operator for Bool properties")]
     public async Task GetByIdAsync_BoolProperty_Unsupported_Operator_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             Filters: [new FilterClause("IsActive", "gt", "true")]
             ));
         // Assert
@@ -688,7 +814,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error for unsupported operator for DateTimeOffset properties")]
     public async Task GetByIdAsync_DateTimeOffsetProperty_Unsupported_Operator_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             Filters: [new FilterClause("CreatedAt", "contains", "2024-06-01T00:00:00Z")]
             ));
         // Assert
@@ -698,7 +824,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error for unsupported operator for Numeric properties")]
     public async Task GetByIdAsync_NumericProperty_Unsupported_Operator_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             Filters: [new FilterClause("StockQuantity", "contains", 25.ToString())]
             ));
         response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
@@ -707,7 +833,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error for unsupported operator for Guid properties")]
     public async Task GetByIdAsync_GuidProperty_Unsupported_Operator_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             Filters: [new FilterClause("Id", "gt", "66666666-6666-6666-6666-666666666661")]
             ));
         // Then
@@ -717,7 +843,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error for filter with invalid property name")]
     public async Task GetByIdAsync_InvalidFilterPropertyName_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             Filters: [new FilterClause("NotARealProperty", "eq", "SomeValue")]
             ));
         // Assert
@@ -727,7 +853,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error for filter with empty property name")]
     public async Task GetByIdAsync_EmptyFilterPropertyName_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
              Filters: [new FilterClause("", "eq", "SomeValue")]
              ));
         // Assert
@@ -737,7 +863,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error for filter with null property name")]
     public async Task GetByIdAsync_NullFilterPropertyName_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             Filters: [new FilterClause(null!, "eq", "SomeValue")]
             ));
         // Assert
@@ -747,7 +873,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error for filter with empty operator")]
     public async Task GetByIdAsync_EmptyFilterOperator_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             Filters: [new FilterClause("Name", "", "SomeValue")]
             ));
         // Assert
@@ -757,7 +883,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error for filter with null operator")]
     public async Task GetByIdAsync_NullFilterOperator_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             Filters: [new FilterClause("Name", null!, "SomeValue")]
             ));
         // Assert
@@ -767,7 +893,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error for ordering with invalid property")]
     public async Task GetByIdAsync_InvalidOrderByProperty_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             OrderBy: [new OrderClause("NotARealProperty")]
             ));
         // Assert
@@ -777,7 +903,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error for ordering with empty property")]
     public async Task GetByIdAsync_EmptyOrderByProperty_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             OrderBy: [new OrderClause("")]
             ));
         // Assert
@@ -787,7 +913,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error for ordering with null property")]
     public async Task GetByIdAsync_NullOrderByProperty_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             OrderBy: [new OrderClause(null!)]
             ));
         // Assert
@@ -797,7 +923,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error invalid numeric filter value")]
     public async Task GetByIdAsync_Invalid_NumericFilterValue_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             Filters: [new FilterClause("StockQuantity", "eq", "NotANumber")]
             ));
         // Assert
@@ -807,7 +933,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error invalid Guid filter value")]
     public async Task GetByIdAsync_Invalid_GuidFilterValue_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             Filters: [new FilterClause("Id", "eq", "NotAGuid")]
             ));
         // Assert
@@ -817,7 +943,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error invalid DateTimeOffset filter value")]
     public async Task GetByIdAsync_Invalid_DateTimeOffsetFilterValue_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             Filters: [new FilterClause("CreatedAt", "eq", "NotADateTimeOffset")]
             ));
         // Assert
@@ -827,7 +953,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error invalid bool filter value")]
     public async Task GetByIdAsync_Invalid_BoolFilterValue_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             Filters: [new FilterClause("IsActive", "eq", "NotABool")]
             ));
         // Assert
@@ -837,7 +963,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error when 2 filter are applied one is valid and one invalid")]
     public async Task GetByIdAsync_OneValidOneInvalidFilter_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             Filters: [
                 new FilterClause("Name", "contains", "Code"),
                 new FilterClause("StockQuantity", "gt", "NotANumber")]
@@ -849,7 +975,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error when 2 orderBy are applied one is valid and one invalid")]
     public async Task GetByIdAsync_OneValidOneInvalidOrderBy_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             OrderBy: [
                 new OrderClause("Name"),
                 new OrderClause("NotARealProperty")]
@@ -861,7 +987,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error when both orderBy and filter have invalid properties")]
     public async Task GetByIdAsync_BothInvalidOrderByAndFilter_Throws()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             Filters: [new FilterClause("NotARealProperty", "eq", "SomeValue")],
             OrderBy: [new OrderClause("AlsoNotARealProperty")]
             ));
@@ -872,7 +998,7 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
     [Fact(DisplayName = "GetByIdAsync should throw error when Include string is Invalid navigation")]
     public async Task GetByIdAsync_InvalidIncludeString_Throws_InvalidNavigation()
     {
-        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId),new QueryRequest(
+        var (response, _, content) = await ArrangeAndActUseingHttpForGetByIdAsync_SingleKey<Product, Guid>(Guid.Parse(productLaptopId), new QueryRequest(
             Includes: ["Review", "NotARealNavigation"]
             ));
         // Assert

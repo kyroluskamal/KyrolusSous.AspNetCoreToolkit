@@ -2,6 +2,8 @@ namespace KyrolusSous.Caching.Abstractions;
 
 public sealed class NullCacheProvider : ICacheProvider
 {
+    public static NullCacheProvider Instance { get; } = new();
+
     public Task<T?> GetAsync<T>(string cacheKey, CancellationToken cancellationToken = default) => Task.FromResult<T?>(default);
     public Task SetAsync<T>(string cacheKey, T value, TimeSpan expirationTime = default, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task SetAsync<T>(string cacheKey, T value, KyrolusCacheEntryOptions? options, CancellationToken cancellationToken = default) => Task.CompletedTask;

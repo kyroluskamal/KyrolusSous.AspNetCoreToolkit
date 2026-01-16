@@ -1,3 +1,4 @@
+using KyrolusSous.Caching.Abstractions;
 
 namespace KyrolusSous.Repositories.Marten.Abstractions.Interfaces;
 
@@ -16,7 +17,7 @@ public interface IKyrolusMartenRepositoryAsync<TSession, TEntity, TKey>
     IKyrolusMartenAuthorization? Authorization { get; }
     IKyrolusMartenValidation? Validation { get; }
     IKyrolusMartenSoftDeletePolicy? SoftDeletePolicy { get; }
-    IKyrolusMartenCacheProvider? CacheProvider { get; }
+    ICacheProvider? CacheProvider { get; }
     IKyrolusMartenResiliencePolicy? ResiliencePolicy { get; }
     IKyrolusMartenTracing? Tracing { get; }
 

@@ -6,7 +6,9 @@ public sealed record KyrolusCachePolicy(
     TimeSpan? AbsoluteExpirationRelativeToNow = null,
     TimeSpan? SlidingExpiration = null,
     TimeSpan? Jitter = null,
-    TimeSpan? NegativeCacheTtl = null);
+    TimeSpan? NegativeCacheTtl = null,
+    bool? Enabled = null,
+    string? KeySuffix = null);
 
 public interface IKyrolusCachePolicyProvider
 {

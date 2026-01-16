@@ -46,7 +46,17 @@ public sealed class KyrolusMartenUnitOfWork<TSession>(
         {
             var args = type.GetGenericArguments();
             var innerType = typeof(KyrolusMartenSoftDeleteRepositoryAsync<,,>).MakeGenericType(args);
-            return ActivatorUtilities.CreateInstance(serviceProvider, innerType, session, new KyrolusMartenRepositoryDependencies());
+            var deps = new KyrolusMartenRepositoryDependencies(
+                Observer: serviceProvider.GetService<IKyrolusMartenObserver>(),
+                Authorization: serviceProvider.GetService<IKyrolusMartenAuthorization>(),
+                Validation: serviceProvider.GetService<IKyrolusMartenValidation>(),
+                SoftDeletePolicy: serviceProvider.GetService<IKyrolusMartenSoftDeletePolicy>(),
+                CacheProvider: serviceProvider.GetService<ICacheProvider>(),
+                CacheKeyContext: serviceProvider.GetService<ICacheKeyContext>(),
+                CachePolicyProvider: serviceProvider.GetService<IKyrolusRepositoryCachePolicyProvider>(),
+                ResiliencePolicy: serviceProvider.GetService<IKyrolusMartenResiliencePolicy>(),
+                Tracing: serviceProvider.GetService<IKyrolusMartenTracing>());
+            return ActivatorUtilities.CreateInstance(serviceProvider, innerType, session, deps);
         }
         return null;
     }

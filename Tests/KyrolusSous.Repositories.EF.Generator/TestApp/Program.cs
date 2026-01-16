@@ -15,16 +15,17 @@ builder.Services.AddSingleton(_ =>
     conn.Open();
     return conn;
 });
-// builder.Services.AddGeneratedKyrolusRepositories();
 
 builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
 {
     var conn = sp.GetRequiredService<SqliteConnection>();
     options.UseSqlite(conn);
 });
-builder.Services.AddSingleton<ICacheProvider, InMemoryCacheProvider>();
+builder.Services.AddSingleton<InMemoryCacheProvider>();
 builder.Services.AddHttpContextAccessor();
-
+builder.Services.AddSingleton<TestRepositoryObserver>();
+builder.Services.AddSingleton<IKyrolusRepositoryObserver>(sp => sp.GetRequiredService<TestRepositoryObserver>());
+builder.Services.AddSingleton<ICacheProvider>(sp => sp.GetRequiredService<InMemoryCacheProvider>());
 builder.Services.AddScoped<ICacheKeyContext>(sp =>
 {
     var http = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;

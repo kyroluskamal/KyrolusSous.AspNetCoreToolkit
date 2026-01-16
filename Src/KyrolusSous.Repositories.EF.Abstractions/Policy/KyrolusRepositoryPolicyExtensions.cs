@@ -1,3 +1,5 @@
+using KyrolusSous.Caching.Abstractions;
+
 namespace KyrolusSous.Repositories.EF.Abstractions.Policy;
 
 public static class KyrolusRepositoryPolicyExtensions
@@ -20,7 +22,17 @@ public static class KyrolusRepositoryPolicyExtensions
         list.Add(filter);
         return policy;
     }
-
+    /// <summary>
+    /// Convenience overload: register a predicate; internally becomes query => query.Where(predicate).
+    /// </summary>
+    public static KyrolusRepositoryPolicy AddGlobalWhereFilter<TEntity>(
+        this KyrolusRepositoryPolicy policy,
+        Expression<Func<TEntity, bool>> predicate)
+        where TEntity : class
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        return AddGlobalQueryFilter<TEntity>(policy, q => q.Where(predicate));
+    }
     /// <summary>
     /// Returns a single composed filter (pipeline) for the entity type, or null if none exist.
     /// </summary>
@@ -33,9 +45,43 @@ public static class KyrolusRepositoryPolicyExtensions
         var typed = list.Cast<Func<IQueryable<TEntity>, IQueryable<TEntity>>>().ToArray();
         return query =>
         {
-            foreach (var f in typed)
-                query = f(query);
-            return query;
+            IQueryable<TEntity> q = query;
+
+            foreach (var d in typed)
+            {
+                if (d is Func<IQueryable<TEntity>, IQueryable<TEntity>> f)
+                    q = f(q);
+                else
+                    throw new InvalidOperationException(
+                        $"GlobalQueryFilters for '{typeof(TEntity).Name}' contains an invalid delegate type: '{d.GetType().Name}'.");
+            }
+
+            return q;
         };
+    }
+
+    /// <summary>
+    /// Sets a cache policy for a specific entity type.
+    /// </summary>
+    public static KyrolusRepositoryPolicy SetCachePolicy<TEntity>(
+        this KyrolusRepositoryPolicy policy,
+        KyrolusCachePolicy cachePolicy)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        ArgumentNullException.ThrowIfNull(cachePolicy);
+        policy.CachePolicies[typeof(TEntity)] = cachePolicy;
+        return policy;
+    }
+
+    /// <summary>
+    /// Returns the cache policy for a specific entity type, or the default cache policy if configured.
+    /// </summary>
+    public static KyrolusCachePolicy? GetCachePolicy<TEntity>(
+        this KyrolusRepositoryPolicy policy)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        if (policy.CachePolicies.TryGetValue(typeof(TEntity), out var cachePolicy))
+            return cachePolicy;
+        return policy.DefaultCachePolicy;
     }
 }

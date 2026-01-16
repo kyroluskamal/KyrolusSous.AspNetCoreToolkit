@@ -15,3 +15,4 @@ global using Marten.Patching;
 global using Microsoft.Extensions.Options;
 global using Microsoft.Extensions.Logging;
 global using KyrolusSous.Repositories.Marten.Abstractions;
+global using KyrolusSous.Caching.Abstractions;

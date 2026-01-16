@@ -10,20 +10,20 @@ public class KyrolusMartenRepositoryDecorator<TSession, TEntity, TKey> : IKyrolu
     where TKey : IEquatable<TKey>
 {
     private readonly IKyrolusMartenRepositoryAsync<TSession, TEntity, TKey> inner;
-    private readonly IKyrolusMartenCacheProvider? cache;
+    private readonly ICacheProvider? cache;
     private readonly IKyrolusMartenResiliencePolicy? resilience;
     private readonly IKyrolusMartenTracing? tracing;
     public IKyrolusMartenObserver? Observer => inner.Observer;
     public IKyrolusMartenAuthorization? Authorization => inner.Authorization;
     public IKyrolusMartenValidation? Validation => inner.Validation;
     public IKyrolusMartenSoftDeletePolicy? SoftDeletePolicy => inner.SoftDeletePolicy;
-    public IKyrolusMartenCacheProvider? CacheProvider => cache;
+    public ICacheProvider? CacheProvider => cache;
     public IKyrolusMartenResiliencePolicy? ResiliencePolicy => resilience;
     public IKyrolusMartenTracing? Tracing => tracing;
 
     public KyrolusMartenRepositoryDecorator(
         IKyrolusMartenRepositoryAsync<TSession, TEntity, TKey> inner,
-        IKyrolusMartenCacheProvider? cache = null,
+        ICacheProvider? cache = null,
         IKyrolusMartenResiliencePolicy? resilience = null,
         IKyrolusMartenTracing? tracing = null)
     {
@@ -76,19 +76,7 @@ public class KyrolusMartenRepositoryDecorator<TSession, TEntity, TKey> : IKyrolu
         => ExecAsync("GetAll", () => inner.GetAllAsync(options, cancellationToken), options, cancellationToken);
 
     public Task<MartenEntityResult<TEntity>?> GetByIdAsync(TKey id, MartenQueryOptions<TEntity>? options = null, CancellationToken cancellationToken = default)
-    {
-        var key = $"marten:{typeof(TEntity).Name}:id:{id}";
-        var hasIncludes = (options?.IncludeProperties is { Count: > 0 }) || (options?.IncludeExpressions is { Length: > 0 });
-        if (cache is null || hasIncludes) return inner.GetByIdAsync(id, options, cancellationToken);
-        return TraceAsync("GetById", id, async () =>
-        {
-            var cached = await cache.GetAsync<MartenEntityResult<TEntity>>(key, cancellationToken).ConfigureAwait(false);
-            if (cached is not null) return cached;
-            var result = await inner.GetByIdAsync(id, options, cancellationToken).ConfigureAwait(false);
-            if (result is not null) await cache.SetAsync(key, result, TimeSpan.FromMinutes(5), cancellationToken).ConfigureAwait(false);
-            return result;
-        }, cancellationToken);
-    }
+        => ExecAsync("GetById", () => inner.GetByIdAsync(id, options, cancellationToken), id, cancellationToken);
 
     public Task<IEnumerable<TProjection>> QueryAsync<TProjection>(
         MartenQueryOptions<TEntity>? options,

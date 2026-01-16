@@ -1,3 +1,5 @@
+using KyrolusSous.Caching.Abstractions;
+
 namespace KyrolusSous.Repositories.EF.Runtime;
 
 /// <summary>
@@ -19,6 +21,7 @@ public class KyrolusRepositoryAsync<
     protected readonly IKyrolusRepositoryObserver? observer;
     protected readonly IKyrolusBulkExecutor<TEntity>? bulkExecutor;
     protected readonly ICacheProvider? cache;
+    protected readonly IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider;
     protected readonly bool enableCaching;
     protected readonly TimeSpan? cacheTtl;
     protected readonly string cacheAllKey;
@@ -33,6 +36,7 @@ public class KyrolusRepositoryAsync<
     protected readonly string[] keyPropertyNames;
     protected static readonly ConcurrentDictionary<Type, Func<TDbContext, TKey, IAsyncEnumerable<TEntity>>> CompiledById = new();
     private static readonly ConcurrentDictionary<(Type Type, bool AsNoTracking, bool UseSplit, bool SoftDelete, string SoftDeleteProperty, string DefaultIncludesKey), Func<TDbContext, IAsyncEnumerable<TEntity>>> CompiledGetAll = new();
+    private static readonly ConcurrentDictionary<(Type Type, bool SoftDelete, string SoftDeleteProperty, string DefaultIncludesKey), Func<TDbContext, Expression<Func<TEntity, bool>>, bool, bool, IAsyncEnumerable<TEntity>>> CompiledGetAllFiltered = new();
     protected virtual Expression<Func<TEntity, object?>>[] DefaultIncludes => [];
     private const string GetByIdAsync = "GetByIdAsync";
     private const string _GetAllAsync = "GetAllAsync";
@@ -44,7 +48,9 @@ public class KyrolusRepositoryAsync<
         IKyrolusBulkExecutor<TEntity>? bulkExecutor = null,
         ICacheProvider? cache = null,
         bool enableCaching = false,
-        int? cacheTtlSeconds = null, ICacheKeyContext? cacheKeyContext = null
+        int? cacheTtlSeconds = null,
+        ICacheKeyContext? cacheKeyContext = null,
+        IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider = null
 )
     {
         this.db = db ?? throw new ArgumentNullException(nameof(db));
@@ -53,9 +59,10 @@ public class KyrolusRepositoryAsync<
         this.observer = observer;
         this.bulkExecutor = bulkExecutor;
         this.cache = cache;
-        this.enableCaching = enableCaching && cache is not null;
+        this.cachePolicyProvider = cachePolicyProvider ?? this.policy.CachePolicyProvider;
+        this.enableCaching = enableCaching;
         cacheTtl = cacheTtlSeconds is > 0 ? TimeSpan.FromSeconds(cacheTtlSeconds.Value) : null;
-        cacheAllKey = $"{typeof(TEntity).Name}:all:compiled";
+        cacheAllKey = $"{typeof(TEntity).Name}:all";
         globalQueryFilter = this.policy?.GetGlobalQueryFilter<TEntity>();
         softDeleteEnabled = false;
         softDeleteProperty = string.IsNullOrWhiteSpace(this.policy?.SoftDeleteProperty)
@@ -66,7 +73,7 @@ public class KyrolusRepositoryAsync<
         asNoTrackingDefault = this.policy?.AsNoTrackingDefault ?? true;
         keyPropertyNames = GetPrimaryKeyNames();
         this.cacheKeyContext = cacheKeyContext;
-        cacheAllKeyBase = enableCaching ? $"{typeof(TEntity).Name}:all:compiled" : null;
+        cacheAllKeyBase = $"{typeof(TEntity).Name}:all";
     }
 #pragma warning restore S107
 
@@ -117,18 +124,35 @@ public class KyrolusRepositoryAsync<
         => KyrolusEFRepositoryBase<TEntity>.GetPrimaryKeyFromKeyValues(keyValues, keyNames);
 
     protected string CacheKeyById(object?[] keyValues)
+        => CacheKeyById(keyValues, null);
+
+    protected string CacheKeyById(object?[] keyValues, string? policySuffix)
     {
-        var scope = cacheKeyContext?.ScopeKey;
+        var scope = ResolveCacheScope();
         var scopePart = string.IsNullOrWhiteSpace(scope) ? "" : $":scope={Uri.EscapeDataString(scope)}";
-        return $"{typeof(TEntity).Name}:id{scopePart}:{BuildKeyValuesFingerprint(keyValues)}";
+        var policyPart = string.IsNullOrWhiteSpace(policySuffix) ? "" : $":policy={Uri.EscapeDataString(policySuffix)}";
+        return $"{typeof(TEntity).Name}:id{scopePart}{policyPart}:{BuildKeyValuesFingerprint(keyValues)}";
     }
 
     protected string CacheKeyAll()
+        => CacheKeyAll(null);
+
+    protected string CacheKeyAll(string? policySuffix)
     {
-        var baseKey = cacheAllKeyBase ?? $"{typeof(TEntity).Name}:all:compiled";
-        var scope = cacheKeyContext?.ScopeKey;
-        if (string.IsNullOrWhiteSpace(scope)) return baseKey;
-        return $"{baseKey}:scope={Uri.EscapeDataString(scope)}";
+        var baseKey = cacheAllKeyBase ?? $"{typeof(TEntity).Name}:all";
+        var scope = ResolveCacheScope();
+        var scopePart = string.IsNullOrWhiteSpace(scope) ? "" : $":scope={Uri.EscapeDataString(scope)}";
+        var policyPart = string.IsNullOrWhiteSpace(policySuffix) ? "" : $":policy={Uri.EscapeDataString(policySuffix)}";
+        return $"{baseKey}{scopePart}{policyPart}";
+    }
+
+    protected string CacheKeyCompiledFilter(Expression<Func<TEntity, bool>> filter, bool asNoTracking, bool useSplit, string? policySuffix)
+    {
+        var fingerprint = KyrolusExpressionFingerprint.Build(filter);
+        var filterPart = EscapeKeyPart(fingerprint);
+        var trackingPart = asNoTracking ? "1" : "0";
+        var splitPart = useSplit ? "1" : "0";
+        return $"{CacheKeyAll(policySuffix)}:filter={filterPart}:nt={trackingPart}:split={splitPart}";
     }
 
     private static string BuildKeyValuesFingerprint(object?[] keyValues)
@@ -143,6 +167,72 @@ public class KyrolusRepositoryAsync<
             _ => value.ToString() ?? "null"
         };
         return Uri.EscapeDataString(s);
+    }
+
+    private static KyrolusCachePolicy MergeCachePolicy(KyrolusCachePolicy basePolicy, KyrolusCachePolicy? overridePolicy)
+    {
+        if (overridePolicy is null) return basePolicy;
+        return new KyrolusCachePolicy(
+            AbsoluteExpirationRelativeToNow: overridePolicy.AbsoluteExpirationRelativeToNow ?? basePolicy.AbsoluteExpirationRelativeToNow,
+            SlidingExpiration: overridePolicy.SlidingExpiration ?? basePolicy.SlidingExpiration,
+            Jitter: overridePolicy.Jitter ?? basePolicy.Jitter,
+            NegativeCacheTtl: overridePolicy.NegativeCacheTtl ?? basePolicy.NegativeCacheTtl,
+            Enabled: overridePolicy.Enabled ?? basePolicy.Enabled,
+            KeySuffix: overridePolicy.KeySuffix ?? basePolicy.KeySuffix);
+    }
+
+    protected async ValueTask<KyrolusCachePolicy> ResolveCachePolicyAsync(string operation, CancellationToken ct)
+    {
+        var effective = new KyrolusCachePolicy(
+            AbsoluteExpirationRelativeToNow: cacheTtl,
+            Enabled: enableCaching);
+        var staticPolicy = policy?.GetCachePolicy<TEntity>();
+        effective = MergeCachePolicy(effective, staticPolicy);
+
+        if (cachePolicyProvider is not null)
+        {
+            var context = new KyrolusRepositoryCachePolicyContext(
+                typeof(TEntity),
+                typeof(TEntity).Name,
+                operation,
+                ResolveCacheScope(),
+                cacheKeyContext?.TenantId);
+            var dynamicPolicy = await cachePolicyProvider.GetPolicyAsync(context, ct).ConfigureAwait(false);
+            effective = MergeCachePolicy(effective, dynamicPolicy);
+        }
+
+        return effective;
+    }
+
+    protected static bool IsCacheEnabled(KyrolusCachePolicy policy)
+        => policy.Enabled.GetValueOrDefault();
+
+    private string? ResolveCacheScope()
+    {
+        if (cacheKeyContext is null) return null;
+        if (!string.IsNullOrWhiteSpace(cacheKeyContext.ScopeKey)) return cacheKeyContext.ScopeKey;
+        if (!string.IsNullOrWhiteSpace(cacheKeyContext.TenantId)) return $"tenant={cacheKeyContext.TenantId}";
+        return null;
+    }
+
+    private string? ResolveCacheRegion()
+    {
+        if (cacheKeyContext is null) return null;
+        if (!string.IsNullOrWhiteSpace(cacheKeyContext.Region)) return cacheKeyContext.Region;
+        return ResolveCacheScope();
+    }
+
+    protected KyrolusCacheEntryOptions BuildCacheEntryOptions(KyrolusCachePolicy policy)
+    {
+        return new KyrolusCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = policy.AbsoluteExpirationRelativeToNow,
+            SlidingExpiration = policy.SlidingExpiration,
+            Jitter = policy.Jitter,
+            NegativeExpirationRelativeToNow = policy.NegativeCacheTtl,
+            Region = ResolveCacheRegion(),
+            TenantId = cacheKeyContext?.TenantId
+        };
     }
     protected static IQueryable<TEntity> ApplyCompiledQueryInternal(TDbContext ctx, bool noTrack, bool split)
     {
@@ -260,6 +350,70 @@ public class KyrolusRepositoryAsync<
         return Microsoft.EntityFrameworkCore.EF.CompileAsyncQuery(lambda);
     }
 
+    private static Func<TDbContext, Expression<Func<TEntity, bool>>, bool, bool, IAsyncEnumerable<TEntity>> BuildCompiledGetAllFiltered(
+        bool useSoftDelete,
+        string softDeleteProperty,
+        Expression<Func<TEntity, object?>>[] defaultIncludes)
+    {
+        var ctxParam = Expression.Parameter(typeof(TDbContext), "ctx");
+        var filterParam = Expression.Parameter(typeof(Expression<Func<TEntity, bool>>), "filter");
+        var noTrackParam = Expression.Parameter(typeof(bool), "noTrack");
+        var splitParam = Expression.Parameter(typeof(bool), "split");
+
+        var setMethod = typeof(DbContext).GetMethods();
+        var setGeneric = setMethod.Single(m => m.Name == nameof(DbContext.Set) && m.IsGenericMethod && m.GetParameters().Length == 0)
+            .MakeGenericMethod(typeof(TEntity));
+        Expression query = Expression.Call(ctxParam, setGeneric);
+
+        if (useSoftDelete)
+        {
+            var entityParam = Expression.Parameter(typeof(TEntity), "e");
+            var efPropertyMethod = typeof(Microsoft.EntityFrameworkCore.EF).GetMethod(nameof(Microsoft.EntityFrameworkCore.EF.Property))!
+                .MakeGenericMethod(typeof(bool));
+            var propAccess = Expression.Call(efPropertyMethod, entityParam, Expression.Constant(softDeleteProperty));
+            var predicate = Expression.Lambda<Func<TEntity, bool>>(Expression.Not(propAccess), entityParam);
+            var whereMethod = typeof(Queryable).GetMethods()
+                .Single(m => m.Name == nameof(Queryable.Where) && m.GetParameters().Length == 2)
+                .MakeGenericMethod(typeof(TEntity));
+            query = Expression.Call(whereMethod, query, predicate);
+        }
+
+        if (defaultIncludes.Length > 0)
+        {
+            var includeMethod = typeof(EntityFrameworkQueryableExtensions).GetMethods()
+                .Single(m => m.Name == nameof(EntityFrameworkQueryableExtensions.Include) && m.GetParameters().Length == 2)
+                .MakeGenericMethod(typeof(TEntity), typeof(object));
+            foreach (var include in defaultIncludes)
+            {
+                var includeConst = Expression.Constant(include, typeof(Expression<Func<TEntity, object?>>));
+                query = Expression.Call(includeMethod, query, includeConst);
+            }
+        }
+
+        var filterWhere = typeof(Queryable).GetMethods()
+            .Single(m => m.Name == nameof(Queryable.Where) && m.GetParameters().Length == 2)
+            .MakeGenericMethod(typeof(TEntity));
+        query = Expression.Call(filterWhere, query, filterParam);
+
+        var asNoTrackingMethod = typeof(EntityFrameworkQueryableExtensions).GetMethods()
+            .Single(m => m.Name == nameof(EntityFrameworkQueryableExtensions.AsNoTracking) && m.GetParameters().Length == 1)
+            .MakeGenericMethod(typeof(TEntity));
+        var asSplitMethod = typeof(RelationalQueryableExtensions).GetMethods()
+            .Single(m => m.Name == nameof(RelationalQueryableExtensions.AsSplitQuery) && m.GetParameters().Length == 1)
+            .MakeGenericMethod(typeof(TEntity));
+
+        query = Expression.Condition(noTrackParam, Expression.Call(asNoTrackingMethod, query), query);
+        query = Expression.Condition(splitParam, Expression.Call(asSplitMethod, query), query);
+
+        var lambda = Expression.Lambda<Func<TDbContext, Expression<Func<TEntity, bool>>, bool, bool, IQueryable<TEntity>>>(
+            query,
+            ctxParam,
+            filterParam,
+            noTrackParam,
+            splitParam);
+        return Microsoft.EntityFrameworkCore.EF.CompileAsyncQuery(lambda);
+    }
+
     private string GetDefaultIncludesKey()
     {
         var includes = DefaultIncludes;
@@ -279,14 +433,19 @@ public class KyrolusRepositoryAsync<
         await NotifyBeforeAsync(GetByIdAsync, keyValues, cancellationToken).ConfigureAwait(false);
         try
         {
-            if (enableCaching && cache is not null && cacheTtl.HasValue && (includeExpressions == null || includeExpressions.Length == 0))
+            if (cache is not null && (includeExpressions == null || includeExpressions.Length == 0))
             {
-                var cacheKey = CacheKeyById(keyValues);
-                return await cache.GetOrSetAsync(
-                    cacheKey,
-                    async ct => await MaterializeByIdAsync(keyValues, asNoTracking, useSplitQuery, [], ct, includeDeleted).ConfigureAwait(false),
-                    cacheTtl,
-                    cancellationToken).ConfigureAwait(false);
+                var cachePolicy = await ResolveCachePolicyAsync(GetByIdAsync, cancellationToken).ConfigureAwait(false);
+                if (IsCacheEnabled(cachePolicy))
+                {
+                    var cacheKey = CacheKeyById(keyValues, cachePolicy.KeySuffix);
+                    var options = BuildCacheEntryOptions(cachePolicy);
+                    return await cache.GetOrCreateAsync(
+                        cacheKey,
+                        async ct => await MaterializeByIdAsync(keyValues, asNoTracking, useSplitQuery, [], ct, includeDeleted).ConfigureAwait(false),
+                        options,
+                        cancellationToken).ConfigureAwait(false);
+                }
             }
 
             return await MaterializeByIdAsync(keyValues, asNoTracking, useSplitQuery, includeExpressions, cancellationToken, includeDeleted).ConfigureAwait(false);
@@ -384,6 +543,29 @@ public class KyrolusRepositoryAsync<
         await NotifyBeforeAsync(_GetAllAsync, filter, cancellationToken).ConfigureAwait(false);
         try
         {
+            if (cache is not null)
+            {
+                var isCacheable = globalQueryFilter is null
+                    && filter is null
+                    && orderBy is null
+                    && (includeProperties is null || includeProperties.Count == 0)
+                    && (includeGraph?.Includes is null || includeGraph.Includes.Count == 0);
+                if (isCacheable)
+                {
+                    var cachePolicy = await ResolveCachePolicyAsync(_GetAllAsync, cancellationToken).ConfigureAwait(false);
+                    if (IsCacheEnabled(cachePolicy))
+                    {
+                        var cacheKey = CacheKeyAll(cachePolicy.KeySuffix);
+                        var options = BuildCacheEntryOptions(cachePolicy);
+                        return await cache.GetOrCreateAsync(
+                            cacheKey,
+                            async ct => await GetAllInternalAsync(new GetAllCommand(false, false, filter, orderBy, includeProperties, includeGraph, asNoTracking, useSplitQuery, ct)).ConfigureAwait(false),
+                            options,
+                            cancellationToken).ConfigureAwait(false);
+                    }
+                }
+            }
+
             return await GetAllInternalAsync(new GetAllCommand(false, false, filter, orderBy, includeProperties, includeGraph, asNoTracking, useSplitQuery, cancellationToken));
         }
         catch (Exception ex)
@@ -409,6 +591,28 @@ public class KyrolusRepositoryAsync<
         await NotifyBeforeAsync(_GetAllAsync, filter, cancellationToken).ConfigureAwait(false);
         try
         {
+            if (cache is not null)
+            {
+                var isCacheable = globalQueryFilter is null
+                    && filter is null
+                    && orderBy is null
+                    && (includeExpressions is null || includeExpressions.Length == 0);
+                if (isCacheable)
+                {
+                    var cachePolicy = await ResolveCachePolicyAsync(_GetAllAsync, cancellationToken).ConfigureAwait(false);
+                    if (IsCacheEnabled(cachePolicy))
+                    {
+                        var cacheKey = CacheKeyAll(cachePolicy.KeySuffix);
+                        var options = BuildCacheEntryOptions(cachePolicy);
+                        return await cache.GetOrCreateAsync(
+                            cacheKey,
+                            async ct => await GetAllInternalAsync(new GetAllCommand(false, false, filter, orderBy, null, null, asNoTracking, useSplitQuery, ct, includeExpressions)).ConfigureAwait(false),
+                            options,
+                            cancellationToken).ConfigureAwait(false);
+                    }
+                }
+            }
+
             var query = ApplyGlobalFilter(set.AsQueryable());
             if (softDeleteEnabled) query = ApplySoftDelete(query);
             if (asNoTracking ?? asNoTrackingDefault) query = query.AsNoTracking();
@@ -457,45 +661,99 @@ public class KyrolusRepositoryAsync<
         var defaultIncludes = DefaultIncludes;
         var defaultIncludesKey = GetDefaultIncludesKey();
 
-        // Fallback to regular path when global filter or non-trivial filter
         var isTrivialFilter = filter is null
             || (filter.Body is ConstantExpression c && c.Value is bool b && b);
-        if (globalQueryFilter is not null || !isTrivialFilter)
+        if (globalQueryFilter is not null)
         {
             var items = await GetAllAsync(filter, null, asNoTracking, useSplitQuery, cancellationToken).ConfigureAwait(false);
             return [.. items];
         }
 
-        var key = (typeof(TEntity), requestedNoTracking, requestedSplit, useSoftDelete, softDeleteProperty, defaultIncludesKey);
-        var del = CompiledGetAll.GetOrAdd(key, _ =>
-            BuildCompiledGetAll(requestedNoTracking, requestedSplit, useSoftDelete, softDeleteProperty, defaultIncludes));
+        if (isTrivialFilter)
+        {
+            var key = (typeof(TEntity), requestedNoTracking, requestedSplit, useSoftDelete, softDeleteProperty, defaultIncludesKey);
+            var del = CompiledGetAll.GetOrAdd(key, _ =>
+                BuildCompiledGetAll(requestedNoTracking, requestedSplit, useSoftDelete, softDeleteProperty, defaultIncludes));
 
-        Exception? exception = null;
-        var sw = Stopwatch.StartNew();
-        await NotifyBeforeAsync("GetAllCompiledAsync", null, cancellationToken).ConfigureAwait(false);
+            Exception? exception = null;
+            var sw = Stopwatch.StartNew();
+            await NotifyBeforeAsync("GetAllCompiledAsync", null, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (cache is not null)
+                {
+                    var cachePolicy = await ResolveCachePolicyAsync(_GetAllAsync, cancellationToken).ConfigureAwait(false);
+                    if (IsCacheEnabled(cachePolicy))
+                    {
+                        var cacheKey = CacheKeyAll(cachePolicy.KeySuffix);
+                        var options = BuildCacheEntryOptions(cachePolicy);
+                        return await cache.GetOrCreateAsync(
+                            cacheKey,
+                            async ct =>
+                            {
+                                var asyncQuery = del(db);
+                                return await asyncQuery.ToListAsync(ct).ConfigureAwait(false);
+                            },
+                            options,
+                            cancellationToken).ConfigureAwait(false) ?? [];
+                    }
+                }
+                var asyncQueryFallback = del(db);
+                return await asyncQueryFallback.ToListAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                exception = ex;
+                throw;
+            }
+            finally
+            {
+                sw.Stop();
+                await NotifyAfterAsync("GetAllCompiledAsync", null, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        ArgumentNullException.ThrowIfNull(filter);
+        var filteredKey = (typeof(TEntity), useSoftDelete, softDeleteProperty, defaultIncludesKey);
+        var filteredDel = CompiledGetAllFiltered.GetOrAdd(filteredKey, _ =>
+            BuildCompiledGetAllFiltered(useSoftDelete, softDeleteProperty, defaultIncludes));
+
+        Exception? filteredException = null;
+        var filteredSw = Stopwatch.StartNew();
+        await NotifyBeforeAsync("GetAllCompiledAsync.Filtered", filter, cancellationToken).ConfigureAwait(false);
         try
         {
-            var asyncQuery = del(db);
-            var list = await asyncQuery.ToListAsync(cancellationToken).ConfigureAwait(false);
-            if (enableCaching && cache is not null && cacheTtl.HasValue)
+            if (cache is not null)
             {
-                return await cache.GetOrSetAsync(
-                    CacheKeyAll(),
-                    async ct => list,
-                    cacheTtl,
-                    cancellationToken).ConfigureAwait(false) ?? [];
+                var cachePolicy = await ResolveCachePolicyAsync(_GetAllAsync, cancellationToken).ConfigureAwait(false);
+                if (IsCacheEnabled(cachePolicy))
+                {
+                    var cacheKey = CacheKeyCompiledFilter(filter, requestedNoTracking, requestedSplit, cachePolicy.KeySuffix);
+                    var options = BuildCacheEntryOptions(cachePolicy);
+                    return await cache.GetOrCreateAsync(
+                        cacheKey,
+                        async ct =>
+                        {
+                            var asyncQuery = filteredDel(db, filter, requestedNoTracking, requestedSplit);
+                            return await asyncQuery.ToListAsync(ct).ConfigureAwait(false);
+                        },
+                        options,
+                        cancellationToken).ConfigureAwait(false) ?? [];
+                }
             }
-            return list;
+
+            var asyncQueryFallback = filteredDel(db, filter, requestedNoTracking, requestedSplit);
+            return await asyncQueryFallback.ToListAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            exception = ex;
+            filteredException = ex;
             throw;
         }
         finally
         {
-            sw.Stop();
-            await NotifyAfterAsync("GetAllCompiledAsync", null, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
+            filteredSw.Stop();
+            await NotifyAfterAsync("GetAllCompiledAsync.Filtered", filter, filteredException, filteredSw.Elapsed, cancellationToken).ConfigureAwait(false);
         }
     }
     #endregion
@@ -1109,16 +1367,19 @@ public class KyrolusRepositoryAsync<
 
     private async Task InvalidateCacheAsync(object?[]? keyValues, CancellationToken cancellationToken)
     {
-        if (!enableCaching || cache is null) return;
+        if (cache is null) return;
+        var cachePolicy = await ResolveCachePolicyAsync("InvalidateCacheAsync", cancellationToken).ConfigureAwait(false);
+        if (!IsCacheEnabled(cachePolicy)) return;
 
-        if (cacheAllKeyBase is not null)
-            await cache.RemoveAsync(CacheKeyAll(), cancellationToken).ConfigureAwait(false);
+        await cache.RemoveAsync(CacheKeyAll(cachePolicy.KeySuffix), cancellationToken).ConfigureAwait(false);
+        await cache.RemoveKeysByPatternAsync(CacheKeyAll(cachePolicy.KeySuffix) + ":filter=*", cancellationToken).ConfigureAwait(false);
 
         if (keyValues is { Length: > 0 })
         {
-            await cache.RemoveAsync(CacheKeyById(keyValues), cancellationToken).ConfigureAwait(false);
+            var cacheKey = CacheKeyById(keyValues, cachePolicy.KeySuffix);
+            await cache.RemoveAsync(cacheKey, cancellationToken).ConfigureAwait(false);
             if (softDeleteEnabled)
-                await cache.RemoveAsync(CacheKeyById(keyValues!) + ":incdel=1", cancellationToken).ConfigureAwait(false);
+                await cache.RemoveAsync(cacheKey + ":incdel=1", cancellationToken).ConfigureAwait(false);
         }
     }
     #endregion

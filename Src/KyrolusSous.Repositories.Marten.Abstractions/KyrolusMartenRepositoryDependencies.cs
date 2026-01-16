@@ -1,3 +1,4 @@
+using KyrolusSous.Caching.Abstractions;
 using KyrolusSous.Repositories.Marten.Abstractions.Interfaces;
 
 namespace KyrolusSous.Repositories.Marten.Abstractions;
@@ -7,6 +8,9 @@ public sealed record KyrolusMartenRepositoryDependencies(
     IKyrolusMartenAuthorization? Authorization = null,
     IKyrolusMartenValidation? Validation = null,
     IKyrolusMartenSoftDeletePolicy? SoftDeletePolicy = null,
-    IKyrolusMartenCacheProvider? CacheProvider = null,
+    ICacheProvider? CacheProvider = null,
+    ICacheKeyContext? CacheKeyContext = null,
+    IKyrolusRepositoryCachePolicyProvider? CachePolicyProvider = null,
+    KyrolusCachePolicy? CachePolicy = null,
     IKyrolusMartenResiliencePolicy? ResiliencePolicy = null,
     IKyrolusMartenTracing? Tracing = null);

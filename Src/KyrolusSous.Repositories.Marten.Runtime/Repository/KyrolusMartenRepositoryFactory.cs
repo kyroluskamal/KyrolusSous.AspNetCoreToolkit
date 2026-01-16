@@ -13,10 +13,20 @@ public static class KyrolusMartenRepositoryFactory
         where TEntity : class
         where TKey : IEquatable<TKey>
     {
-        var cache = services.GetService<IKyrolusMartenCacheProvider>();
-        var resilience = services.GetService<IKyrolusMartenResiliencePolicy>();
-        var tracing = services.GetService<IKyrolusMartenTracing>();
-        var inner = ActivatorUtilities.CreateInstance<KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>>(services, session, deps ?? new KyrolusMartenRepositoryDependencies());
+        var effectiveDeps = deps ?? new KyrolusMartenRepositoryDependencies(
+            Observer: services.GetService<IKyrolusMartenObserver>(),
+            Authorization: services.GetService<IKyrolusMartenAuthorization>(),
+            Validation: services.GetService<IKyrolusMartenValidation>(),
+            SoftDeletePolicy: services.GetService<IKyrolusMartenSoftDeletePolicy>(),
+            CacheProvider: services.GetService<ICacheProvider>(),
+            CacheKeyContext: services.GetService<ICacheKeyContext>(),
+            CachePolicyProvider: services.GetService<IKyrolusRepositoryCachePolicyProvider>(),
+            ResiliencePolicy: services.GetService<IKyrolusMartenResiliencePolicy>(),
+            Tracing: services.GetService<IKyrolusMartenTracing>());
+        var cache = effectiveDeps.CacheProvider;
+        var resilience = effectiveDeps.ResiliencePolicy;
+        var tracing = effectiveDeps.Tracing;
+        var inner = ActivatorUtilities.CreateInstance<KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>>(services, session, effectiveDeps);
         if (!useDecorator) return inner;
         return new KyrolusMartenRepositoryDecorator<TSession, TEntity, TKey>(inner, cache, resilience, tracing);
     }

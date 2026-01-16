@@ -274,6 +274,22 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
         products.Any(p => p.Name == "Clean Code").ShouldBeFalse();
     }
     #endregion
+    #region Global Filter Tests
+    [Fact(DisplayName = "GetAllAsync uses global filter with multiple filters")]
+    public async Task GetAllAsync_GlobalFilter_MultipleFilters_Works()
+    {
+        // Given
+        var Customfactory = WithPolicy(new KyrolusRepositoryPolicy().AddGlobalWhereFilter<Product>(p => p.Price >= 50m));
+        using var scope = Customfactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+        // When
+        var items = await repo.GetAllAsync(e => e.StockQuantity > 25);
+        // Then
+        items.ShouldNotBeNull();
+        items.Count().ShouldBe(1);
+        items.First().StockQuantity.ShouldBe(80);
+    }
+    #endregion
     #region Include Tests
     [Fact(DisplayName = "GetAllAsync returns entities with Include Properties")]
     public async Task GetAllAsync_IncludeProperties_ReturnsEntitiesWithIncludeProperties()
@@ -671,6 +687,45 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
                 useSplitQuery: true,
                 cancellationToken: cts.Token);
         });
+    }
+    #endregion
+    #region NotifyBefore/NotifyAfter Tests
+    [Fact(DisplayName = "GetAllAsync Should record Event before and After execution")]
+    public async Task GetAllAsync_ShouldRecordEventBeforeAndAfterExecution()
+    {
+        // Given
+        using var scope = Factory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+        var observer = scope.ServiceProvider.GetRequiredService<TestRepositoryObserver>();
+        observer.Reset();
+        // When
+        await repo.GetAllAsync();
+        // Then
+        var beforeEvent = observer.Events.Count(e => e.Stage == ObserverState.Before && e.Operation == "GetAllAsync");
+        beforeEvent.ShouldBe(1);
+        var afterEvent = observer.Events.Count(e => e.Stage == ObserverState.After && e.Operation == "GetAllAsync");
+        afterEvent.ShouldBe(1);
+    }
+
+    [Fact(DisplayName = "GetAllAsync Should notify after finishing with exception if there was an error")]
+    public async Task ShouldNotifyAfterFinishingWithException()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ProductRepository>();
+        var observer = scope.ServiceProvider.GetRequiredService<TestRepositoryObserver>();
+        observer.Reset();
+        await Should.ThrowAsync<InvalidOperationException>(async () =>
+        {
+            await repo.GetAllAsync(
+                filter: null,
+                orderBy: null,
+                includeProperties: ["NotARealNavigation"],
+                includeGraph: null,
+                asNoTracking: true,
+                useSplitQuery: true,
+                cancellationToken: default);
+        });
+        observer.Events.Count(e => e.Stage == ObserverState.After && e.Operation == "GetAllAsync" && e.Exception is not null).ShouldBe(1);
     }
     #endregion
     #region Unhappy Path Tests

@@ -198,6 +198,7 @@ namespace KyrolusSous.Repositories.EF.Generator
             sb.AppendLine("using System.Threading.Tasks;");
             sb.AppendLine("using System.Runtime.CompilerServices;");
             sb.AppendLine("using System.Diagnostics.CodeAnalysis;");
+            sb.AppendLine("using KyrolusSous.Caching.Abstractions;");
             sb.AppendLine("using KyrolusSous.Repositories.EF.Abstractions;");
             sb.AppendLine("using KyrolusSous.Repositories.EF.Abstractions.Interfaces;");
             sb.AppendLine("using KyrolusSous.Repositories.EF.Abstractions.Policy;");
@@ -230,15 +231,15 @@ namespace KyrolusSous.Repositories.EF.Generator
             {
                 softDeleteInterface = string.Empty;
             }
-            var cacheField = "                    private readonly ICacheProvider? cache;\n";
-            var cacheParam = ", ICacheProvider? cache = null";
-            var cacheAssign = "                        this.cache = cache;\n";
+            var cacheField = "                    private readonly ICacheProvider? cache;\n                    private readonly IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider;\n";
+            var cacheParam = ", ICacheProvider? cache = null, IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider = null";
+            var cacheAssign = "                        this.cache = cache;\n                        this.cachePolicyProvider = cachePolicyProvider ?? this.policy?.CachePolicyProvider;\n";
             var prefix = $$$"""
                     public class {{{request.RepositoryName}}} : IKyrolusRepositoryAsync<{{{request.DbContextType.ToDisplayString()}}}, {{{request.EntityType.ToDisplayString()}}}, {{{request.KeyType.ToDisplayString()}}}>{{{keyInterface}}}{{{softDeleteInterface}}}{{{implementsBulk}}}
                     {
                     private readonly {{{request.DbContextType.ToDisplayString()}}} db;
                     private readonly DbSet<{{{request.EntityType.ToDisplayString()}}}> set;
-                    private readonly KyrolusRepositoryPolicy policy;
+                    private readonly KyrolusRepositoryPolicy? policy;
                     private readonly IKyrolusRepositoryObserver? observer;
                     private readonly IKyrolusBulkExecutor<{{{request.EntityType.ToDisplayString()}}}>? bulkExecutor;
                     {{{cacheField}}}
@@ -259,8 +260,8 @@ namespace KyrolusSous.Repositories.EF.Generator
                         this.cacheKeyContext = cacheKeyContext;
                         cachingEnabled = {{{request.EnableCaching.ToString().ToLowerInvariant()}}};
                         cacheTtl = {{{(request.CacheTtlSeconds.HasValue ? $"TimeSpan.FromSeconds({request.CacheTtlSeconds.Value})" : "null")}}};
-                        cacheAllKeyBase = cachingEnabled ? "{{{request.RepositoryName}}}:all:compiled" : null;
-                        globalQueryFilter = policy?.GetGlobalQueryFilter<{{{request.EntityType.ToDisplayString()}}}>();
+                        cacheAllKeyBase = $"{typeof({{{request.EntityType.ToDisplayString()}}}).Name}:all";
+                        globalQueryFilter = this.policy?.GetGlobalQueryFilter<{{{request.EntityType.ToDisplayString()}}}>();
                     }
                     """;
             sb.AppendLine(prefix);
@@ -310,8 +311,8 @@ namespace KyrolusSous.Repositories.EF.Generator
                     {
                         if (keyValues is null) throw new ArgumentNullException(nameof(keyValues));
 
-                        var effectiveAsNoTracking = asNoTracking ?? policy.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
-                        var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
+                        var effectiveAsNoTracking = asNoTracking ?? policy?.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
+                        var effectiveSplit = useSplitQuery ?? policy?.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
 
                         IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = BuildBaseQuery(includeDeleted);
 
@@ -371,8 +372,8 @@ namespace KyrolusSous.Repositories.EF.Generator
                             {
                                 Exception? exception = null;
                                 await NotifyBeforeAsync("GetAllAsync", filter, cancellationToken).ConfigureAwait(false);
-                                var effectiveAsNoTracking = asNoTracking ?? policy.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
-                                var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveAsNoTracking = asNoTracking ?? policy?.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveSplit = useSplitQuery ?? policy?.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
                                 var defaultIncludes = new Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>[] { {{{string.Join(", ", request.DefaultIncludes.Select(ip => $"e => e.{ip}"))}}} };
                                 IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = ApplyGlobalFilter(set.AsQueryable());
                                 foreach (var inc in defaultIncludes) query = query.Include(inc);
@@ -402,9 +403,31 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 }
                                 try
                                 {
-                                    var items = await query.ToListAsync(cancellationToken);
-                                    await NotifyAfterAsync("GetAllAsync", new { Filter = filter, Count = items.Count }, exception, cancellationToken).ConfigureAwait(false);
-                                    return items;
+                                    var isCacheable = cache is not null
+                                        && globalQueryFilter is null
+                                        && filter is null
+                                        && orderBy is null
+                                        && (includeProperties is null || includeProperties.Count == 0)
+                                        && (includeGraph?.Includes is null || includeGraph.Includes.Count == 0);
+                                    if (isCacheable)
+                                    {
+                                        var cachePolicy = await ResolveCachePolicyAsync("GetAllAsync", cancellationToken).ConfigureAwait(false);
+                                        if (IsCacheEnabled(cachePolicy))
+                                        {
+                                            var cacheKey = CacheKeyAll(cachePolicy.KeySuffix);
+                                            var options = BuildCacheEntryOptions(cachePolicy);
+                                            var items = await cache.GetOrCreateAsync(
+                                                cacheKey,
+                                                async ct => await query.ToListAsync(ct).ConfigureAwait(false),
+                                                options,
+                                                cancellationToken).ConfigureAwait(false);
+                                            await NotifyAfterAsync("GetAllAsync", new { Filter = filter, Count = items.Count }, exception, cancellationToken).ConfigureAwait(false);
+                                            return items;
+                                        }
+                                    }
+                                    var result = await query.ToListAsync(cancellationToken);
+                                    await NotifyAfterAsync("GetAllAsync", new { Filter = filter, Count = result.Count }, exception, cancellationToken).ConfigureAwait(false);
+                                    return result;
                                 }
                                 catch (Exception ex)
                                 {
@@ -430,8 +453,8 @@ namespace KyrolusSous.Repositories.EF.Generator
                             {
                                 Exception? exception = null;
                                 await NotifyBeforeAsync("GetAllAsync", filter, cancellationToken).ConfigureAwait(false);
-                                var effectiveAsNoTracking = asNoTracking ?? policy.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
-                                var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveAsNoTracking = asNoTracking ?? policy?.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveSplit = useSplitQuery ?? policy?.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
                                 var defaultIncludes = new Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>[] { {{{string.Join(", ", request.DefaultIncludes.Select(ip => $"e => e.{ip}"))}}} };
                                 IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = ApplyGlobalFilter(set.AsQueryable());
                                 foreach (var inc in defaultIncludes) query = query.Include(inc);
@@ -454,9 +477,30 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 }
                                 try
                                 {
-                                    var items = await query.ToListAsync(cancellationToken);
-                                    await NotifyAfterAsync("GetAllAsync", new { Filter = filter, Count = items.Count }, exception, cancellationToken).ConfigureAwait(false);
-                                    return items;
+                                    var isCacheable = cache is not null
+                                        && globalQueryFilter is null
+                                        && filter is null
+                                        && orderBy is null
+                                        && (includeExpressions is null || includeExpressions.Length == 0);
+                                    if (isCacheable)
+                                    {
+                                        var cachePolicy = await ResolveCachePolicyAsync("GetAllAsync", cancellationToken).ConfigureAwait(false);
+                                        if (IsCacheEnabled(cachePolicy))
+                                        {
+                                            var cacheKey = CacheKeyAll(cachePolicy.KeySuffix);
+                                            var options = BuildCacheEntryOptions(cachePolicy);
+                                            var items = await cache.GetOrCreateAsync(
+                                                cacheKey,
+                                                async ct => await query.ToListAsync(ct).ConfigureAwait(false),
+                                                options,
+                                                cancellationToken).ConfigureAwait(false);
+                                            await NotifyAfterAsync("GetAllAsync", new { Filter = filter, Count = items.Count }, exception, cancellationToken).ConfigureAwait(false);
+                                            return items;
+                                        }
+                                    }
+                                    var result = await query.ToListAsync(cancellationToken);
+                                    await NotifyAfterAsync("GetAllAsync", new { Filter = filter, Count = result.Count }, exception, cancellationToken).ConfigureAwait(false);
+                                    return result;
                                 }
                                 catch (Exception ex)
                                 {
@@ -489,8 +533,8 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 params Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>[] includeExpressions)
                             {
                                 if (selector is null) throw new ArgumentNullException(nameof(selector));
-                                var effectiveAsNoTracking = asNoTracking ?? policy.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
-                                var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveAsNoTracking = asNoTracking ?? policy?.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveSplit = useSplitQuery ?? policy?.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
                                 var defaultIncludes = new Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>[] { {{{string.Join(", ", request.DefaultIncludes.Select(ip => $"e => e.{ip}"))}}} };
                                 IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = ApplyGlobalFilter(set.AsQueryable());
                                 foreach (var inc in defaultIncludes) query = query.Include(inc);
@@ -550,8 +594,8 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 if (effectivePageNumber <= 0) throw new ArgumentOutOfRangeException(nameof(specification.PageNumber), "pageNumber must be greater than 0.");
                                 if (effectivePageSize <= 0) throw new ArgumentOutOfRangeException(nameof(specification.PageSize), "pageSize must be greater than 0.");
 
-                                var effectiveAsNoTracking = asNoTracking ?? policy.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
-                                var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveAsNoTracking = asNoTracking ?? policy?.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveSplit = useSplitQuery ?? policy?.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
                                 var defaultIncludes = new Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>[] { {{{string.Join(", ", request.DefaultIncludes.Select(ip => $"e => e.{ip}"))}}} };
                                 IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = ApplyGlobalFilter(set.AsQueryable());
                                 foreach (var inc in defaultIncludes) query = query.Include(inc);
@@ -770,26 +814,55 @@ namespace KyrolusSous.Repositories.EF.Generator
         }
         private void GetByIdAsync(StringBuilder sb, RepositoryRequest request)
         {
-            var cacheBlock = request.EnableCaching ? $$$"""
-                                if (cachingEnabled && cache is not null && cacheTtl.HasValue
-                                    && (includeExpressions == null || includeExpressions.Length == 0))
+            var cacheBlock = $$$"""
+                                if (cache is not null && (includeExpressions is null || includeExpressions.Length == 0))
                                 {
-                                    var cacheKey = CacheKeyById(keyValues);
-                                    return await cache.GetOrSetAsync(
-                                        cacheKey,
-                                        async ct => await MaterializeByIdAsync(
-                                            keyValues,
-                                            includeDeleted: false,
-                                            includeProperties: null,
-                                            includeGraph: null,
-                                            includeExpressions: includeExpressions,
-                                            asNoTracking: asNoTracking,
-                                            useSplitQuery: useSplitQuery,
-                                            cancellationToken: ct).ConfigureAwait(false),
-                                        cacheTtl,
-                                        cancellationToken: cancellationToken).ConfigureAwait(false);
+                                    var cachePolicy = await ResolveCachePolicyAsync("GetByIdAsync", cancellationToken).ConfigureAwait(false);
+                                    if (IsCacheEnabled(cachePolicy))
+                                    {
+                                        var cacheKey = CacheKeyById(keyValues, cachePolicy.KeySuffix);
+                                        var options = BuildCacheEntryOptions(cachePolicy);
+                                        return await cache.GetOrCreateAsync(
+                                            cacheKey,
+                                            async ct => await MaterializeByIdAsync(
+                                                keyValues,
+                                                includeDeleted: false,
+                                                includeProperties: null,
+                                                includeGraph: null,
+                                                includeExpressions: includeExpressions,
+                                                asNoTracking: asNoTracking,
+                                                useSplitQuery: useSplitQuery,
+                                                cancellationToken: ct).ConfigureAwait(false),
+                                            options,
+                                            cancellationToken: cancellationToken).ConfigureAwait(false);
+                                    }
                                 }
-                """ : string.Empty;
+                """;
+            var cacheBlockIncludeGraph = $$$"""
+                                                                    if (cache is not null
+                                                                        && (includeGraph is null) && (includeProperties is null || includeProperties.Count() == 0))
+                                                                    {
+                                                                        var cachePolicy = await ResolveCachePolicyAsync("GetByIdAsync", cancellationToken).ConfigureAwait(false);
+                                                                        if (IsCacheEnabled(cachePolicy))
+                                                                        {
+                                                                            var cacheKey = CacheKeyById(keyValues, cachePolicy.KeySuffix);
+                                                                            var options = BuildCacheEntryOptions(cachePolicy);
+                                                                            return await cache.GetOrCreateAsync(
+                                                                                cacheKey,
+                                                                                async ct => await MaterializeByIdAsync(
+                                                                                    keyValues,
+                                                                                    includeDeleted: false,
+                                                                                    includeProperties: includeProperties,
+                                                                                    includeGraph: includeGraph,
+                                                                                    includeExpressions: null,
+                                                                                    asNoTracking: asNoTracking,
+                                                                                    useSplitQuery: useSplitQuery,
+                                                                                    cancellationToken: ct).ConfigureAwait(false),
+                                                                                options,
+                                                                                cancellationToken: cancellationToken).ConfigureAwait(false);
+                                                                        }
+                                                                    }
+                                                                    """;
             var methods = $$$"""
                             {{{RequiresUnreferencedCode}}}
                             public async Task<{{{request.EntityType.ToDisplayString()}}}?> GetByIdAsync({{{request.KeyType.ToDisplayString()}}} id, List<string>? includeProperties = null,
@@ -812,7 +885,8 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 if (keyValues is null) throw new ArgumentNullException(nameof(keyValues));
                                 
                                 Exception? exception = null;
-                                
+                                await NotifyBeforeAsync("GetByIdAsync", keyValues, cancellationToken).ConfigureAwait(false);
+                                {{{cacheBlockIncludeGraph}}}
                                 try
                                 {
                                     return await MaterializeByIdAsync(
@@ -840,9 +914,9 @@ namespace KyrolusSous.Repositories.EF.Generator
                             public async Task<{{{request.EntityType.ToDisplayString()}}}?> GetByIdAsync(object?[] keyValues, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default, params Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>[] includeExpressions)
                             {
                                 if (keyValues is null) throw new ArgumentNullException(nameof(keyValues));
-                                {{{cacheBlock}}}
                                 Exception? exception = null;
                                 await NotifyBeforeAsync("GetByIdAsync", keyValues, cancellationToken).ConfigureAwait(false);
+                                {{{cacheBlock}}}
                                 try
                                 {
                                 return await MaterializeByIdAsync(
@@ -895,13 +969,18 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 {
                                     return await GetByIdAsync(id, cancellationToken: cancellationToken);
                                 }
-                                if (cachingEnabled && cache is not null && cacheTtl.HasValue)
+                                if (cache is not null)
                                 {
-                                    var cacheKey = CacheKeyById([id]);
-                                    return await cache.GetOrSetAsync(cacheKey,
-                                        async ct => await _compiledGetById(db, id).FirstOrDefaultAsync(ct).ConfigureAwait(false),
-                                        cacheTtl,
-                                        cancellationToken: cancellationToken);
+                                    var cachePolicy = await ResolveCachePolicyAsync("GetByIdAsync", cancellationToken).ConfigureAwait(false);
+                                    if (IsCacheEnabled(cachePolicy))
+                                    {
+                                        var cacheKey = CacheKeyById([id], cachePolicy.KeySuffix);
+                                        var options = BuildCacheEntryOptions(cachePolicy);
+                                        return await cache.GetOrCreateAsync(cacheKey,
+                                            async ct => await _compiledGetById(db, id).FirstOrDefaultAsync(ct).ConfigureAwait(false),
+                                            options,
+                                            cancellationToken: cancellationToken);
+                                    }
                                 }
                                 return await NotifyAndExecuteAsync("GetByIdCompiledAsync", async () =>
                                     await _compiledGetById(db, id).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false),
@@ -938,13 +1017,18 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     // Global filters can't be injected into compiled queries; fallback to standard path.
                                     return (await GetAllAsync(filter: null, orderBy: null, asNoTracking: null, useSplitQuery: null, cancellationToken: cancellationToken)).ToList();
                                 }
-                                if (cachingEnabled && cache is not null && cacheTtl.HasValue)
+                                if (cache is not null)
                                 {
-                                    var key = CacheKeyAll();
-                                    return await cache.GetOrSetAsync(key,
-                                        async ct => await _compiledGetAll(db).ToListAsync(ct).ConfigureAwait(false),
-                                        cacheTtl,
-                                        cancellationToken: cancellationToken) ?? [];
+                                    var cachePolicy = await ResolveCachePolicyAsync("GetAllAsync", cancellationToken).ConfigureAwait(false);
+                                    if (IsCacheEnabled(cachePolicy))
+                                    {
+                                        var key = CacheKeyAll(cachePolicy.KeySuffix);
+                                        var options = BuildCacheEntryOptions(cachePolicy);
+                                        return await cache.GetOrCreateAsync(key,
+                                            async ct => await _compiledGetAll(db).ToListAsync(ct).ConfigureAwait(false),
+                                            options,
+                                            cancellationToken: cancellationToken) ?? [];
+                                    }
                                 }
                                 return await NotifyAndExecuteAsync("GetAllCompiledAsync", async () =>
                                     await _compiledGetAll(db).ToListAsync(cancellationToken).ConfigureAwait(false),
@@ -973,8 +1057,25 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 {
                                     return (await GetAllAsync(filter, orderBy: null, asNoTracking: asNoTracking, useSplitQuery: useSplitQuery, cancellationToken: cancellationToken)).ToList();
                                 }
-                                var effectiveAsNoTracking = asNoTracking ?? policy.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
-                                var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveAsNoTracking = asNoTracking ?? policy?.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveSplit = useSplitQuery ?? policy?.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
+                                if (cache is not null)
+                                {
+                                    var cachePolicy = await ResolveCachePolicyAsync("GetAllAsync", cancellationToken).ConfigureAwait(false);
+                                    if (IsCacheEnabled(cachePolicy))
+                                    {
+                                        var filterFingerprint = KyrolusExpressionFingerprint.Build(filter);
+                                        var filterPart = EscapeKeyPart(filterFingerprint);
+                                        var trackingPart = effectiveAsNoTracking ? "1" : "0";
+                                        var splitPart = effectiveSplit ? "1" : "0";
+                                        var cacheKey = $"{CacheKeyAll(cachePolicy.KeySuffix)}:filter={filterPart}:nt={trackingPart}:split={splitPart}";
+                                        var options = BuildCacheEntryOptions(cachePolicy);
+                                        return await cache.GetOrCreateAsync(cacheKey,
+                                            async ct => await _compiledGetAllFiltered(db, filter, effectiveAsNoTracking, effectiveSplit).ToListAsync(ct).ConfigureAwait(false),
+                                            options,
+                                            cancellationToken: cancellationToken) ?? [];
+                                    }
+                                }
                                 return await NotifyAndExecuteAsync("GetAllCompiledAsync.Filtered", async () =>
                                     await _compiledGetAllFiltered(db, filter, effectiveAsNoTracking, effectiveSplit).ToListAsync(cancellationToken).ConfigureAwait(false),
                                     filter,
@@ -1154,7 +1255,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 CancellationToken cancellationToken = default)
                             {
                                 if (setPropertyCalls is null) throw new ArgumentNullException(nameof(setPropertyCalls));
-                                var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveSplit = useSplitQuery ?? policy?.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
                                 var query = ApplyGlobalFilter(set.AsQueryable());
                                 if (filter != null) query = query.Where(filter);
                                 if (effectiveSplit) query = query.AsSplitQuery();
@@ -1176,15 +1277,16 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     }
                                     if (cache is not null)
                                     {
-                                        if (cacheAllKeyBase  is not null)
+                                        var cachePolicy = await ResolveCachePolicyAsync("ExecuteUpdateAsync", cancellationToken).ConfigureAwait(false);
+                                        if (IsCacheEnabled(cachePolicy))
                                         {
-                                            await cache.RemoveAsync(CacheKeyAll(), cancellationToken).ConfigureAwait(false);
-                                        }
-                                        if (affectedKeys is not null)
-                                        {
-                                            foreach (var key in affectedKeys)
+                                            await cache.RemoveAsync(CacheKeyAll(cachePolicy.KeySuffix), cancellationToken).ConfigureAwait(false);
+                                            if (affectedKeys is not null)
                                             {
-                                                await InvalidateCachesAsync(key, cancellationToken).ConfigureAwait(false);
+                                                foreach (var key in affectedKeys)
+                                                {
+                                                    await InvalidateCachesAsync(key, cancellationToken).ConfigureAwait(false);
+                                                }
                                             }
                                         }
                                     }
@@ -1197,7 +1299,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 bool? useSplitQuery = null,
                                 CancellationToken cancellationToken = default)
                             {
-                                var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveSplit = useSplitQuery ?? policy?.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
                                 var query = ApplyGlobalFilter(set.AsQueryable());
                                 if (filter != null) query = query.Where(filter);
                                 if (effectiveSplit) query = query.AsSplitQuery();
@@ -1219,15 +1321,16 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     }
                                     if (cache is not null)
                                     {
-                                        if (cacheAllKeyBase  is not null)
+                                        var cachePolicy = await ResolveCachePolicyAsync("ExecuteDeleteAsync", cancellationToken).ConfigureAwait(false);
+                                        if (IsCacheEnabled(cachePolicy))
                                         {
-                                            await cache.RemoveAsync(CacheKeyAll(), cancellationToken).ConfigureAwait(false);
-                                        }
-                                        if (affectedKeys is not null)
-                                        {
-                                            foreach (var key in affectedKeys)
+                                            await cache.RemoveAsync(CacheKeyAll(cachePolicy.KeySuffix), cancellationToken).ConfigureAwait(false);
+                                            if (affectedKeys is not null)
                                             {
-                                                await InvalidateCachesAsync(key, cancellationToken).ConfigureAwait(false);
+                                                foreach (var key in affectedKeys)
+                                                {
+                                                    await InvalidateCachesAsync(key, cancellationToken).ConfigureAwait(false);
+                                                }
                                             }
                                         }
                                     }
@@ -1634,8 +1737,8 @@ public async Task<IEnumerable<{{{request.EntityType.ToDisplayString()}}}>> Updat
                                 bool? useSplitQuery = null,
                                 CancellationToken cancellationToken = default)
                             {
-                                var effectiveAsNoTracking = asNoTracking ?? policy.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
-                                var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveAsNoTracking = asNoTracking ?? policy?.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveSplit = useSplitQuery ?? policy?.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
 
                                 IQueryable<{{{entity}}}> query = BuildBaseQuery(includeDeleted: true);
 
@@ -1669,8 +1772,8 @@ public async Task<IEnumerable<{{{request.EntityType.ToDisplayString()}}}>> Updat
                                 bool? useSplitQuery = null,
                                 CancellationToken cancellationToken = default)
                             {
-                                var effectiveAsNoTracking = asNoTracking ?? policy.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
-                                var effectiveSplit = useSplitQuery ?? policy.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveAsNoTracking = asNoTracking ?? policy?.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveSplit = useSplitQuery ?? policy?.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
 
                                 IQueryable<{{{entity}}}> query = BuildBaseQuery(includeDeleted: true);
 
@@ -1882,24 +1985,37 @@ private async Task<TResult> NotifyAndExecuteAsync<TResult>(string operation, Fun
 }
 
 private string CacheKeyAll()
+    => CacheKeyAll(null);
+
+private string CacheKeyAll(string? policySuffix)
 {
-    var baseKey = cacheAllKeyBase ?? "{{{request.RepositoryName}}}:all:compiled";
+    var baseKey = cacheAllKeyBase ?? $"{typeof({{{request.EntityType.ToDisplayString()}}}).Name}:all";
 
-    var scope = cacheKeyContext?.ScopeKey;
-    if (string.IsNullOrWhiteSpace(scope))
-        return baseKey;
-
-    return $"{baseKey}:scope={Uri.EscapeDataString(scope)}";
-}
-
-private string CacheKeyById(object?[] keyValues)
-{
-    var scope = cacheKeyContext?.ScopeKey;
+    var scope = ResolveCacheScope();
     var scopePart = string.IsNullOrWhiteSpace(scope)
         ? ""
         : $":scope={Uri.EscapeDataString(scope)}";
+    var policyPart = string.IsNullOrWhiteSpace(policySuffix)
+        ? ""
+        : $":policy={Uri.EscapeDataString(policySuffix)}";
 
-    return "{{{request.RepositoryName}}}:id" + scopePart + ":" + BuildKeyValuesFingerprint(keyValues);
+    return $"{baseKey}{scopePart}{policyPart}";
+}
+
+private string CacheKeyById(object?[] keyValues)
+    => CacheKeyById(keyValues, null);
+
+private string CacheKeyById(object?[] keyValues, string? policySuffix)
+{
+    var scope = ResolveCacheScope();
+    var scopePart = string.IsNullOrWhiteSpace(scope)
+        ? ""
+        : $":scope={Uri.EscapeDataString(scope)}";
+    var policyPart = string.IsNullOrWhiteSpace(policySuffix)
+        ? ""
+        : $":policy={Uri.EscapeDataString(policySuffix)}";
+
+    return $"{typeof({{{request.EntityType.ToDisplayString()}}}).Name}:id" + scopePart + policyPart + ":" + BuildKeyValuesFingerprint(keyValues);
 }
 
 private static string BuildKeyValuesFingerprint(object?[] keyValues)
@@ -1917,6 +2033,72 @@ private static string EscapeKeyPart(object? value)
     };
 
     return Uri.EscapeDataString(s);
+}
+
+private static KyrolusCachePolicy MergeCachePolicy(KyrolusCachePolicy basePolicy, KyrolusCachePolicy? overridePolicy)
+{
+    if (overridePolicy is null) return basePolicy;
+    return new KyrolusCachePolicy(
+        AbsoluteExpirationRelativeToNow: overridePolicy.AbsoluteExpirationRelativeToNow ?? basePolicy.AbsoluteExpirationRelativeToNow,
+        SlidingExpiration: overridePolicy.SlidingExpiration ?? basePolicy.SlidingExpiration,
+        Jitter: overridePolicy.Jitter ?? basePolicy.Jitter,
+        NegativeCacheTtl: overridePolicy.NegativeCacheTtl ?? basePolicy.NegativeCacheTtl,
+        Enabled: overridePolicy.Enabled ?? basePolicy.Enabled,
+        KeySuffix: overridePolicy.KeySuffix ?? basePolicy.KeySuffix);
+}
+
+private async ValueTask<KyrolusCachePolicy> ResolveCachePolicyAsync(string operation, CancellationToken ct)
+{
+    var effective = new KyrolusCachePolicy(
+        AbsoluteExpirationRelativeToNow: cacheTtl,
+        Enabled: cachingEnabled);
+    var staticPolicy = policy?.GetCachePolicy<{{{request.EntityType.ToDisplayString()}}}>();
+    effective = MergeCachePolicy(effective, staticPolicy);
+
+    if (cachePolicyProvider is not null)
+    {
+        var context = new KyrolusRepositoryCachePolicyContext(
+            typeof({{{request.EntityType.ToDisplayString()}}}),
+            typeof({{{request.EntityType.ToDisplayString()}}}).Name,
+            operation,
+            ResolveCacheScope(),
+            cacheKeyContext?.TenantId);
+        var dynamicPolicy = await cachePolicyProvider.GetPolicyAsync(context, ct).ConfigureAwait(false);
+        effective = MergeCachePolicy(effective, dynamicPolicy);
+    }
+
+    return effective;
+}
+
+private static bool IsCacheEnabled(KyrolusCachePolicy policy)
+    => policy.Enabled.GetValueOrDefault();
+
+private string? ResolveCacheScope()
+{
+    if (cacheKeyContext is null) return null;
+    if (!string.IsNullOrWhiteSpace(cacheKeyContext.ScopeKey)) return cacheKeyContext.ScopeKey;
+    if (!string.IsNullOrWhiteSpace(cacheKeyContext.TenantId)) return $"tenant={cacheKeyContext.TenantId}";
+    return null;
+}
+
+private string? ResolveCacheRegion()
+{
+    if (cacheKeyContext is null) return null;
+    if (!string.IsNullOrWhiteSpace(cacheKeyContext.Region)) return cacheKeyContext.Region;
+    return ResolveCacheScope();
+}
+
+private KyrolusCacheEntryOptions BuildCacheEntryOptions(KyrolusCachePolicy policy)
+{
+    return new KyrolusCacheEntryOptions
+    {
+        AbsoluteExpirationRelativeToNow = policy.AbsoluteExpirationRelativeToNow,
+        SlidingExpiration = policy.SlidingExpiration,
+        Jitter = policy.Jitter,
+        NegativeExpirationRelativeToNow = policy.NegativeCacheTtl,
+        Region = ResolveCacheRegion(),
+        TenantId = cacheKeyContext?.TenantId
+    };
 }
 
 
@@ -1939,12 +2121,14 @@ private static string EscapeKeyPart(object? value)
 
         private async Task InvalidateCachesAsync(object?[] keyValues, CancellationToken cancellationToken = default)
         {
-            if (!cachingEnabled || cache is null) return;
+            if (cache is null) return;
+            var cachePolicy = await ResolveCachePolicyAsync("InvalidateCacheAsync", cancellationToken).ConfigureAwait(false);
+            if (!IsCacheEnabled(cachePolicy)) return;
 
-            if (cacheAllKeyBase is not null)
-                await cache.RemoveAsync(CacheKeyAll(), cancellationToken).ConfigureAwait(false);
+            await cache.RemoveAsync(CacheKeyAll(cachePolicy.KeySuffix), cancellationToken).ConfigureAwait(false);
+            await cache.RemoveKeysByPatternAsync(CacheKeyAll(cachePolicy.KeySuffix) + ":filter=*", cancellationToken).ConfigureAwait(false);
 
-            var key = CacheKeyById(keyValues);
+            var key = CacheKeyById(keyValues, cachePolicy.KeySuffix);
             await cache.RemoveAsync(key, cancellationToken).ConfigureAwait(false);
         }
 """;
@@ -2691,7 +2875,7 @@ namespace KyrolusSous.Repositories.EF.Generated
             {
                 if (!request.HasSoftDeleteProperty)
                     return null;
-                return "(policy.EnableSoftDeleteDefault ?? false)";
+                return "(policy?.EnableSoftDeleteDefault ?? false)";
             }
         }
         private bool ValidateKeyProperties(SourceProductionContext context, RepositoryRequest request, IPropertySymbol[] entityProperties)

@@ -1,3 +1,5 @@
+using KyrolusSous.Caching.Abstractions;
+
 namespace KyrolusSous.Repositories.EF.Abstractions.Policy;
 
 public sealed class KyrolusRepositoryPolicy
@@ -8,6 +10,9 @@ public sealed class KyrolusRepositoryPolicy
     public string? SoftDeleteProperty { get; init; } = "IsDeleted";
     public string? RowVersionProperty { get; init; }
     public Dictionary<Type, List<Delegate>> GlobalQueryFilters { get; init; } = [];
+    public Dictionary<Type, KyrolusCachePolicy> CachePolicies { get; init; } = [];
+    public KyrolusCachePolicy? DefaultCachePolicy { get; init; }
+    public IKyrolusRepositoryCachePolicyProvider? CachePolicyProvider { get; init; }
     public int ConcurrencyRetryCount { get; init; } = 0;
     public TimeSpan? ConcurrencyRetryDelay { get; init; }
     public int? DefaultPageSize { get; init; }

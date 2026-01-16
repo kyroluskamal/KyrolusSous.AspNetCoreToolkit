@@ -9,6 +9,7 @@ This toolkit bundles Serilog bootstrapping plus Entity Framework repositories (r
 - KyrolusSous.Mediator (abstractions + runtime + generator)
 - KyrolusSous.DataProtection (abstractions + runtime + providers)
 - KyrolusSous.Repositories.EF.Abstractions (contracts, helpers, policies, observer)
+- KyrolusSous.Repositories.EF.Cache.Distributed (IDistributedCache provider for EF repos)
 - KyrolusSous.Repositories.EF.Runtime (repository + unit of work implementations)
 - KyrolusSous.Repositories.EF.Generator (source generator for EF repositories)
 - Tests
@@ -1242,6 +1243,17 @@ Async generic repository + unit-of-work helpers that mirror most generator featu
   ```
 - If you also use generated repos, register this first, then call the generated extension `AddGeneratedKyrolusRepositories()` so the generated types override the fallback.
 
+**EF cache providers**
+- Use `ICacheProvider` (from `KyrolusSous.Caching.Abstractions`).
+- Distributed cache adapter (`IDistributedCache` -> `ICacheProvider`) via `KyrolusSous.Repositories.EF.Cache.Distributed`:
+```csharp
+builder.Services.AddStackExchangeRedisCache(o =>
+{
+    o.Configuration = "<redis-connection>";
+});
+builder.Services.AddKyrolusEfDistributedCacheProvider();
+```
+
 **Constructor (runtime repo)**
 ```csharp
 new KyrolusRepositoryAsync<AppDb, Order, int>(
@@ -1285,7 +1297,7 @@ builder.Services.AddKyrolusMartenRuntime(opts =>
 ```
 Default registrations are provided via `TryAdd*` (no-op or permissive) for:
 `IKyrolusMartenObserver`, `IKyrolusMartenAuthorization`, `IKyrolusMartenValidation`,
-`IKyrolusMartenSoftDeletePolicy`, `IKyrolusMartenCacheProvider`,
+`IKyrolusMartenSoftDeletePolicy`, `ICacheProvider`, `IKyrolusRepositoryCachePolicyProvider`,
 `IKyrolusMartenResiliencePolicy`, `IKyrolusMartenTracing`.
 Register your own implementations to override them.
 
@@ -1649,79 +1661,40 @@ var snapshot = observer.Snapshot();
 ```
 
 ### Marten Cache Provider Use Cases
-Implementations are intentionally external (so you can plug IMemoryCache, IDistributedCache, Redis, etc.).
-Hook it via `KyrolusMartenRepositoryDependencies.CacheProvider`.
+Caching uses `ICacheProvider` (from `KyrolusSous.Caching.Abstractions`).
+Hook it via `KyrolusMartenRepositoryDependencies.CacheProvider` or DI.
+Caching is used for `GetByIdAsync` (when no includes are requested) and `GetAllAsync` (only for simple, no-filter queries), and is invalidated on mutations.
+Use `KyrolusMartenRepositoryDependencies.CachePolicy` or `IKyrolusRepositoryCachePolicyProvider` to enable/disable and set TTL per entity/operation (optionally with a key suffix).
 
 **No-op**
-Use when you want to disable caching.
+Disable caching when you want a deterministic baseline.
 ```csharp
-public sealed class KyrolusMartenNoopCacheProvider : IKyrolusMartenCacheProvider
-{
-    public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default) => Task.FromResult<T?>(default);
-    public Task SetAsync<T>(string key, T value, TimeSpan ttl, CancellationToken cancellationToken = default) => Task.CompletedTask;
-    public Task InvalidateAsync(string key, CancellationToken cancellationToken = default) => Task.CompletedTask;
-}
+builder.Services.TryAddSingleton<ICacheProvider>(NullCacheProvider.Instance);
 ```
 
-**In-memory cache**
-Fast for single-instance apps or tests.
+**Redis (recommended)**
 ```csharp
-public sealed class KyrolusMartenMemoryCacheProvider(IMemoryCache cache) : IKyrolusMartenCacheProvider
-{
-    public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default)
-        => Task.FromResult(cache.TryGetValue(key, out var value) ? (T?)value : default);
-
-    public Task SetAsync<T>(string key, T value, TimeSpan ttl, CancellationToken cancellationToken = default)
-    {
-        cache.Set(key, value, ttl);
-        return Task.CompletedTask;
-    }
-
-    public Task InvalidateAsync(string key, CancellationToken cancellationToken = default)
-    {
-        cache.Remove(key);
-        return Task.CompletedTask;
-    }
-}
+builder.Services.AddKyrolusRedisCacheProvider("localhost:6379"); // registers ICacheProvider
 ```
 
-**Distributed cache**
-Good for multi-instance deployments.
+**IDistributedCache adapter**
 ```csharp
-public sealed class KyrolusMartenDistributedCacheProvider(IDistributedCache cache, JsonSerializerOptions? options = null)
-    : IKyrolusMartenCacheProvider
-{
-    private readonly JsonSerializerOptions json = options ?? new JsonSerializerOptions(JsonSerializerDefaults.Web);
-
-    public async Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default)
-    {
-        var bytes = await cache.GetAsync(key, cancellationToken).ConfigureAwait(false);
-        return bytes is null ? default : JsonSerializer.Deserialize<T>(bytes, json);
-    }
-
-    public async Task SetAsync<T>(string key, T value, TimeSpan ttl, CancellationToken cancellationToken = default)
-    {
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(value, json);
-        await cache.SetAsync(key, bytes, new DistributedCacheEntryOptions
-        {
-            AbsoluteExpirationRelativeToNow = ttl
-        }, cancellationToken).ConfigureAwait(false);
-    }
-
-    public Task InvalidateAsync(string key, CancellationToken cancellationToken = default)
-        => cache.RemoveAsync(key, cancellationToken);
-}
+builder.Services.AddStackExchangeRedisCache(o => o.Configuration = "<redis-connection>");
+builder.Services.AddKyrolusEfDistributedCacheProvider(); // registers ICacheProvider
 ```
 
-**Tenant-aware keys**
-Use when multi-tenancy is enabled to avoid cross-tenant leakage.
+**Policy registry**
 ```csharp
-var key = $"{tenantId}:Order:{id}";
+builder.Services.AddSingleton(sp =>
+    new KyrolusRepositoryCachePolicyRegistry()
+        .SetDefault(new KyrolusCachePolicy(AbsoluteExpirationRelativeToNow: TimeSpan.FromMinutes(2), Enabled: true))
+        .SetForType<Order>("GetById", new KyrolusCachePolicy(AbsoluteExpirationRelativeToNow: TimeSpan.FromMinutes(5))));
+builder.Services.AddSingleton<IKyrolusRepositoryCachePolicyProvider>(sp =>
+    sp.GetRequiredService<KyrolusRepositoryCachePolicyRegistry>());
 ```
 
 **TTL strategy**
-Use short TTL for list queries, longer TTL for GetById.
-Example: 10-30s for list pages, 2-5 minutes for single entity.
+Use short TTL for list queries and longer TTL for GetById (e.g., 10-30s for lists, 2-5 minutes for single entity).
 
 ### Marten Resilience Policy Use Cases
 Implementations live in `Src/KyrolusSous.Repositories.Marten.Abstractions/Resilience`.
@@ -1868,7 +1841,7 @@ var tracing = new KyrolusMartenCompositeTracing(new IKyrolusMartenTracing[]
 Pass `KyrolusMartenRepositoryDependencies` when creating the repo (or override via decorator) to supply:
 - `IKyrolusMartenSoftDeletePolicy` (property name, enabled flag)
 - `IKyrolusMartenObserver`, `IKyrolusMartenAuthorization`, `IKyrolusMartenValidation`
-- `IKyrolusMartenCacheProvider`, `IKyrolusMartenResiliencePolicy`, `IKyrolusMartenTracing`
+- `ICacheProvider`, `IKyrolusRepositoryCachePolicyProvider`, `IKyrolusMartenResiliencePolicy`, `IKyrolusMartenTracing`
 
 ### Marten Soft Delete Policy Use Cases
 Implementations live in `Src/KyrolusSous.Repositories.Marten.Abstractions/SoftDelete`.
@@ -1946,7 +1919,7 @@ Generates high-performance EF repositories to avoid runtime reflection and boile
 **Key outputs**
 - Repository implementing `IKyrolusRepositoryAsync<TContext, TEntity, TKey>` plus soft-delete/bulk interfaces when enabled.
 - Compiled queries (`EF.CompileAsyncQuery`) for `GetByIdCompiledAsync`, `GetAllCompiledAsync()`, and `GetAllCompiledAsync(filter)` (filtered). When a global filter is configured, compiled paths automatically fall back to the regular query to keep filters correct.
-- Optional caching via your `ICacheProvider` (constructor optional): TTL (`CacheTtlSeconds`), per-id keys, an “all” key, and invalidation on Add/AddRange/Update/UpdateRange/Patch/Remove/RemoveRange/Restore/TryRestore/ExecuteUpdate/ExecuteDelete and bulk insert/upsert paths.
+- Optional caching via your `ICacheProvider`: defaults from `EnableCaching`/`CacheTtlSeconds`, with dynamic overrides via `KyrolusRepositoryPolicy` or `IKyrolusRepositoryCachePolicyProvider` (per-entity, per-operation). Keys include optional scope + policy suffix, and invalidation runs on Add/AddRange/Update/UpdateRange/Patch/Remove/RemoveRange/Restore/TryRestore/ExecuteUpdate/ExecuteDelete and bulk insert/upsert paths.
 - Observer hooks (`IKyrolusRepositoryObserver`) around every operation, carrying diagnostics such as result counts and paging totals; concurrency retries bubble attempt counts via `ConcurrencyHelper`.
 - Global query filter delegate (`KyrolusRepositoryPolicy.GlobalQueryFilter`) for multi-tenant or dynamic filtering; applied to all queries.
 - Policy defaults (`KyrolusRepositoryPolicy`): `AsNoTrackingDefault`, `UseSplitQueryDefault`, `EnableSoftDeleteDefault`, `ConcurrencyRetryCount`, `ConcurrencyRetryDelay`, `DefaultPageSize`.
@@ -1980,13 +1953,13 @@ internal partial class OrderRepoMarker {}
 services.AddScoped<OrderRepository>();
 ```
 
-**AOT note**: generated code avoids reflection; for caching, provide an AOT-safe `ICacheProvider` (e.g., Redis implementation). Global filters run via the supplied delegate and are applied to all queries; compiled queries bypassed when a global filter is present to keep filters correct.
+**AOT note**: generated code avoids reflection; for caching, provide an AOT-safe `ICacheProvider` (e.g., distributed cache provider). Global filters run via the supplied delegate and are applied to all queries; compiled queries bypassed when a global filter is present to keep filters correct.
 
 **Advanced options recap**
 - Soft delete: set `EnableSoftDelete` + `SoftDeleteProperty` to mark deletes instead of removing rows.
 - Row version: set `RowVersionProperty` for optimistic concurrency wiring.
 - Defaults: `AsNoTracking`, `UseSplitQuery`, `IncludeProperties` (default includes on every query).
-- Caching: `EnableCaching`, `CacheTtlSeconds`; invalidated on mutations and server-side executes/bulk.
+- Caching: `EnableCaching`, `CacheTtlSeconds`, plus runtime overrides via `KyrolusRepositoryPolicy` / `IKyrolusRepositoryCachePolicyProvider`; invalidated on mutations and server-side executes/bulk.
 - Global filters: set `KyrolusRepositoryPolicy.GlobalQueryFilter` to enforce multi-tenant or dynamic filters everywhere.
 - Observability: implement `IKyrolusRepositoryObserver` to tap before/after operations with payloads (counts, paging totals, retries).
 - Bulk: plug `IKyrolusBulkExecutor` for server-side bulk ops; generator falls back to EF + SaveChanges if none is provided.

@@ -8,6 +8,8 @@ namespace KyrolusSous.Repositories.EF.Generator.TestApp.Models;
     typeof(Guid),
     "Id",
     EnableSoftDelete = true,
+    EnableCaching = true,
+    CacheTtlSeconds = 10,
     SoftDeleteProperty = "IsDeleted",
     IncludeProperties = new[] { "StoreUserRoles", "Categories", "Customers" },
     Namespace = "KyrolusSous.Repositories.EF.Generator.TestApp.Repositories")]

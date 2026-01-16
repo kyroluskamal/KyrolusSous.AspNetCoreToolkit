@@ -1,4 +1,5 @@
 global using System.Collections.Concurrent;
+global using KyrolusSous.Caching.Abstractions;
 global using KyrolusSous.Repositories.EF.Abstractions;
 global using KyrolusSous.Repositories.EF.Generator.TestApp.Models;
 global using Microsoft.EntityFrameworkCore;

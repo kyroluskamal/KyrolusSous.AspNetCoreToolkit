@@ -1,3 +1,4 @@
+using KyrolusSous.Caching.Abstractions;
 using KyrolusSous.Repositories.Marten.Runtime.EventStore;
 using KyrolusSous.Repositories.Marten.Runtime.Projection;
 using KyrolusSous.Repositories.Marten.Runtime.Repository;
@@ -5,7 +6,6 @@ using KyrolusSous.Repositories.Marten.Runtime.Repository.Decorators;
 using KyrolusSous.Repositories.Marten.Runtime.Saga;
 using KyrolusSous.Repositories.Marten.Runtime.UnitOfWork;
 using KyrolusSous.Repositories.Marten.Abstractions.Authorization;
-using KyrolusSous.Repositories.Marten.Abstractions.Cache;
 using KyrolusSous.Repositories.Marten.Abstractions.Observer;
 using KyrolusSous.Repositories.Marten.Abstractions.Resilience;
 using KyrolusSous.Repositories.Marten.Abstractions.SoftDelete;
@@ -31,7 +31,8 @@ public static class KyrolusMartenRuntimeServiceCollectionExtensions
         services.TryAddSingleton(KyrolusMartenAllowAllAuthorization.Instance);
         services.TryAddSingleton(KyrolusMartenNoopValidation.Instance);
         services.TryAddSingleton(KyrolusMartenNoSoftDeletePolicy.Instance);
-        services.TryAddSingleton(KyrolusMartenNoopCacheProvider.Instance);
+        services.TryAddSingleton<ICacheProvider>(NullCacheProvider.Instance);
+        services.TryAddSingleton<IKyrolusRepositoryCachePolicyProvider>(KyrolusNoopRepositoryCachePolicyProvider.Instance);
         services.TryAddSingleton(KyrolusMartenNoopResiliencePolicy.Instance);
         services.TryAddSingleton(KyrolusMartenNoopTracing.Instance);
 
@@ -61,7 +62,9 @@ public static class KyrolusMartenRuntimeServiceCollectionExtensions
             Authorization: services.GetService<IKyrolusMartenAuthorization>(),
             Validation: services.GetService<IKyrolusMartenValidation>(),
             SoftDeletePolicy: services.GetService<IKyrolusMartenSoftDeletePolicy>(),
-            CacheProvider: services.GetService<IKyrolusMartenCacheProvider>(),
+            CacheProvider: services.GetService<ICacheProvider>(),
+            CacheKeyContext: services.GetService<ICacheKeyContext>(),
+            CachePolicyProvider: services.GetService<IKyrolusRepositoryCachePolicyProvider>(),
             ResiliencePolicy: services.GetService<IKyrolusMartenResiliencePolicy>(),
             Tracing: services.GetService<IKyrolusMartenTracing>());
 

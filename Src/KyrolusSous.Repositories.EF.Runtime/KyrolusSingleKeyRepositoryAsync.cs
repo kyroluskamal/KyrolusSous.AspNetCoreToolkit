@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
+using KyrolusSous.Caching.Abstractions;
 using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
 using KyrolusSous.Repositories.EF.Abstractions.Policy;
 using KyrolusSous.Repositories.EF.Abstractions;
@@ -27,8 +28,10 @@ public class KyrolusSingleKeyRepositoryAsync<TDbContext, TEntity, TKey> :
         IKyrolusBulkExecutor<TEntity>? bulkExecutor = null,
         ICacheProvider? cache = null,
         bool enableCaching = false,
-        int? cacheTtlSeconds = null)
-        : base(db, policy, observer, bulkExecutor, cache, enableCaching, cacheTtlSeconds)
+        int? cacheTtlSeconds = null,
+        ICacheKeyContext? cacheKeyContext = null,
+        IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider = null)
+        : base(db, policy, observer, bulkExecutor, cache, enableCaching, cacheTtlSeconds, cacheKeyContext, cachePolicyProvider)
     {
         base.softDeleteEnabled = false;
     }
@@ -76,14 +79,19 @@ public class KyrolusSingleKeyRepositoryAsync<TDbContext, TEntity, TKey> :
         await NotifyBeforeAsync("GetByIdCompiledAsync", id, cancellationToken).ConfigureAwait(false);
         try
         {
-            if (enableCaching && cache is not null)
+            if (cache is not null)
             {
-                var cacheKey = CacheKeyById([id]);
-                return await cache.GetOrSetAsync(
-                    cacheKey,
-                    async ct => await del(db, id).FirstOrDefaultAsync(ct).ConfigureAwait(false),
-                    cacheTtl,
-                    cancellationToken).ConfigureAwait(false);
+                var cachePolicy = await ResolveCachePolicyAsync("GetByIdAsync", cancellationToken).ConfigureAwait(false);
+                if (IsCacheEnabled(cachePolicy))
+                {
+                    var cacheKey = CacheKeyById([id], cachePolicy.KeySuffix);
+                    var options = BuildCacheEntryOptions(cachePolicy);
+                    return await cache.GetOrCreateAsync(
+                        cacheKey,
+                        async ct => await del(db, id).FirstOrDefaultAsync(ct).ConfigureAwait(false),
+                        options,
+                        cancellationToken).ConfigureAwait(false);
+                }
             }
             return await del(db, id).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         }

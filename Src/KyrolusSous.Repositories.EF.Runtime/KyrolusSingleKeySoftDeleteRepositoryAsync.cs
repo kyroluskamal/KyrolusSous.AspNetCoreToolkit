@@ -16,8 +16,10 @@ public class KyrolusSingleKeySoftDeleteRepositoryAsync<TDbContext, TEntity, TKey
         IKyrolusBulkExecutor<TEntity>? bulkExecutor = null,
         ICacheProvider? cache = null,
         bool enableCaching = false,
-        int? cacheTtlSeconds = null) :
-        base(db, policy, observer, bulkExecutor, cache, enableCaching, cacheTtlSeconds)
+        int? cacheTtlSeconds = null,
+        ICacheKeyContext? cacheKeyContext = null,
+        IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider = null) :
+        base(db, policy, observer, bulkExecutor, cache, enableCaching, cacheTtlSeconds, cacheKeyContext, cachePolicyProvider)
     {
         base.softDeleteEnabled = true;
     }
@@ -56,14 +58,19 @@ public class KyrolusSingleKeySoftDeleteRepositoryAsync<TDbContext, TEntity, TKey
         await NotifyBeforeAsync(GetByIdIncludingDeletedAsync, id, cancellationToken).ConfigureAwait(false);
         try
         {
-            if (enableCaching && cache is not null && cacheTtl.HasValue && (includeExpressions == null || includeExpressions.Length == 0))
+            if (cache is not null && (includeExpressions == null || includeExpressions.Length == 0))
             {
-                var cacheKey = CacheKeyById([id]) + ":incdel=1";
-                return await cache.GetOrSetAsync(
-                    cacheKey,
-                    async ct => await MaterializeByIdAsync([id], asNoTracking, useSplitQuery, [], ct, true).ConfigureAwait(false),
-                    cacheTtl,
-                    cancellationToken).ConfigureAwait(false);
+                var cachePolicy = await ResolveCachePolicyAsync(GetByIdIncludingDeletedAsync, cancellationToken).ConfigureAwait(false);
+                if (IsCacheEnabled(cachePolicy))
+                {
+                    var cacheKey = CacheKeyById([id], cachePolicy.KeySuffix) + ":incdel=1";
+                    var options = BuildCacheEntryOptions(cachePolicy);
+                    return await cache.GetOrCreateAsync(
+                        cacheKey,
+                        async ct => await MaterializeByIdAsync([id], asNoTracking, useSplitQuery, [], ct, true).ConfigureAwait(false),
+                        options,
+                        cancellationToken).ConfigureAwait(false);
+                }
             }
 
             return await MaterializeByIdAsync([id], asNoTracking, useSplitQuery, includeExpressions, cancellationToken, true).ConfigureAwait(false);
