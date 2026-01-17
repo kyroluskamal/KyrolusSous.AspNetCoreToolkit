@@ -1,3 +1,5 @@
+using KyrolusSous.Repositories.EF.Abstractions.Helpers;
+using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace KyrolusSous.CQRS.EF.Query;
@@ -10,22 +12,46 @@ public class GetByKeyValuesQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
 {
     public async Task<TResponse?> Handle(GetByKeyValuesQuery<TResponse, TKey> query, CancellationToken cancellationToken)
     {
+        var mergedExpressions = KyrolusIncludeMerge.MergeExpressions(query.IncludeExpressions, query.IncludeGraph);
+        if (query.IncludeDeleted)
+        {
+            IKyrolusCompositeKeySoftDeleteRepository<TResponse>? softRepo = null;
+            try
+            {
+                softRepo = unitOfWork.GetRepository<IKyrolusCompositeKeySoftDeleteRepository<TResponse>>();
+            }
+            catch (InvalidOperationException)
+            {
+                softRepo = null;
+            }
+
+            if (softRepo is not null)
+            {
+                var includes = KyrolusIncludeMerge.MergeExpressions(query.IncludeProperties, query.IncludeGraph, mergedExpressions) ?? [];
+                return await softRepo.GetByIdIncludingDeletedAsync(
+                    query.KeyValues,
+                    query.AsNoTracking,
+                    query.UseSplitQuery,
+                    cancellationToken,
+                    includes);
+            }
+        }
+
         var repo = unitOfWork.GetRepository<IKyrolusCompositeKeyRepositoryAsync<TDbcontext, TResponse, TKey>>();
-        var includeExpressions = query.IncludeExpressions;
-        if (includeExpressions is not null && includeExpressions.Length > 0)
+        if (mergedExpressions is not null && mergedExpressions.Length > 0)
         {
             return await repo.GetByIdAsync(
                 query.KeyValues,
                 query.AsNoTracking,
                 query.UseSplitQuery,
                 cancellationToken,
-                includeExpressions);
+                mergedExpressions);
         }
 
         return await repo.GetByIdAsync(
             query.KeyValues,
             query.IncludeProperties,
-            includeGraph: null,
+            includeGraph: query.IncludeGraph,
             asNoTracking: query.AsNoTracking,
             useSplitQuery: query.UseSplitQuery,
             cancellationToken);

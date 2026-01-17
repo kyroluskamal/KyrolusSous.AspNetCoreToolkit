@@ -1,4 +1,5 @@
 using KyrolusSous.CQRS.Abstractions.Models;
+using KyrolusSous.Repositories.EF.Abstractions.Helpers;
 using Microsoft.EntityFrameworkCore;
 
 namespace KyrolusSous.CQRS.EF.Query;
@@ -12,7 +13,21 @@ public sealed class GetPagedQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUn
     public async Task<KyrolusPagedResult<TResponse>> Handle(GetPagedQuery<TResponse, TKey> query, CancellationToken cancellationToken)
     {
         var repo = unitOfWork.GetRepository<IKyrolusRepositoryAsync<TDbcontext, TResponse, TKey>>();
-        var includes = query.IncludeExpressions ?? [];
+        var includes = KyrolusIncludeMerge.MergeExpressions(query.IncludeProperties, query.IncludeGraph, query.IncludeExpressions) ?? [];
+        if (query.Selector is not null)
+        {
+            var spec = new KyrolusEfPagedQuerySpecification<TResponse>(
+                query.Filter,
+                query.OrderBy,
+                includes,
+                query.PageNumber,
+                query.PageSize,
+                query.AsNoTracking ?? false,
+                query.Selector);
+            var (projectedItems, projectedTotal) = await repo.GetPagedAsync(spec, cancellationToken);
+            return new KyrolusPagedResult<TResponse>(projectedItems, projectedTotal, query.PageNumber, query.PageSize);
+        }
+
         var specification = new KyrolusEfPagedQuerySpecification<TResponse>(
             query.Filter,
             query.OrderBy,

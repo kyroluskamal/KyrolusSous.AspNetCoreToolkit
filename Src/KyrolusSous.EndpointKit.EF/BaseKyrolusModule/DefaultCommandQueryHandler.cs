@@ -1,70 +1,185 @@
 using KyrolusSous.CQRS.Abstractions.Interfaces;
+using KyrolusSous.EndpointKit.EF.BaseKyrolusModule.Authorization;
 using KyrolusSous.EndpointKit.EF.BaseKyrolusModule.Interfaces;
+using KyrolusSous.ExceptionHandling;
+using KyrolusSous.ExceptionHandling.Abstractions.Models;
+using KyrolusSous.ExceptionHandling.Interfaces;
 using KyrolusSous.Repositories.EF.Abstractions.Helpers;
+using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
+using KyrolusSous.Validation.Abstractions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using System.ComponentModel;
 using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 
 namespace KyrolusSous.EndpointKit.EF.BaseKyrolusModule;
 
 public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
     IKyrolusMapper mapper,
     IKyrolusMediatorSender mediator,
-    IKyrolusApiConfig<TResponse> config)
+    IKyrolusApiConfig<TResponse> config,
+    IServiceProvider serviceProvider)
     : ICommandQueryHandler<TResponse, TModel, TKey>,
       IKyrolusEfCommandQueryHandler<TResponse, TModel, TKey>
     where TResponse : class
     where TModel : class
     where TKey : notnull, IEquatable<TKey>
 {
+    private const string ConcurrencyConflictMessage = "Concurrency conflict.";
+    private const string IncludeDeletedPropertyName = "IncludeDeleted";
+    private const string KeyValuesPropertyName = "KeyValues";
+    private const string UseSplitQueryPropertyName = "UseSplitQuery";
     private readonly IKyrolusMapper mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
     private readonly IKyrolusMediatorSender mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
     private readonly IKyrolusApiConfig<TResponse> config = config ?? throw new ArgumentNullException(nameof(config));
     private readonly IKyrolusEfApiConfig<TResponse>? efConfig = config as IKyrolusEfApiConfig<TResponse>;
+    private readonly IKyrolusEfAuthorizationProvider<TResponse> authorizationProvider =
+        serviceProvider.GetService<IKyrolusEfAuthorizationProvider<TResponse>>()
+        ?? KyrolusNoopEfAuthorizationProvider<TResponse>.Instance;
+    private readonly IKyrolusEndpointContext? endpointContext = serviceProvider.GetService<IKyrolusEndpointContext>();
+    private readonly IKyrolusValidationEngine? validationEngine = serviceProvider.GetService<IKyrolusValidationEngine>();
+    private readonly IKyrolusErrorResponseWriter? errorWriter = serviceProvider.GetService<IKyrolusErrorResponseWriter>();
+    private readonly KyrolusHttpErrorContextFactory? errorContextFactory = serviceProvider.GetService<KyrolusHttpErrorContextFactory>();
+    private readonly IHttpContextAccessor? httpContextAccessor = serviceProvider.GetService<IHttpContextAccessor>();
 
-    public async Task<IResult> HandleGetAllAsync(string? filter = null, string? includedProps = null, string? fields = null, bool? cacheable = null)
+    private HttpContext? HttpContext => httpContextAccessor?.HttpContext;
+
+    public async Task<IResult> HandleGetAllAsync(string? filter = null, string? includedProps = null, string? includeGraph = null, string? fields = null, bool? cacheable = null, bool? includeDeleted = null)
     {
-        if (!TryBuildFilter(filter, out var filterExpr, out var errorResult)) return errorResult!;
-        if (!TryBuildIncludes(EndpointNames.GetAll, SplitCsv(includedProps), out var includes, out errorResult)) return errorResult!;
-        if (!TryBuildFields(EndpointNames.GetAll, SplitCsv(fields), out var selectedFields, out errorResult)) return errorResult!;
+        var requestedIncludes = SplitCsv(includedProps);
+        var requestedFields = SplitCsv(fields);
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.GetAll,
+            requestedFields,
+            requestedIncludes,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: null,
+            CancellationToken.None).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
 
+        if (!TryBuildFilter(filter, out var filterExpr, out var errorResult)) return errorResult!;
+        if (!TryBuildIncludes(EndpointNames.GetAll, requestedIncludes, authResult.AllowedIncludes, out var includes, out errorResult)) return errorResult!;
+        if (!TryBuildIncludeGraph(EndpointNames.GetAll, SplitCsv(includeGraph), authResult.AllowedIncludes, out var includeGraphValue, out errorResult)) return errorResult!;
+        if (!TryBuildFields(EndpointNames.GetAll, requestedFields, authResult.AllowedFields, out var selectedFields, out errorResult)) return errorResult!;
+        if (!TryBuildContextFilter(out var contextFilter, out errorResult)) return errorResult!;
+
+        filterExpr = CombineFilters(filterExpr, contextFilter);
+        filterExpr = CombineFilters(filterExpr, authResult.RowFilter);
         var includeExpressions = BuildIncludeExpressions(includes, out var useStringIncludes);
         var query = config.QueryAll;
         ApplyCacheable(query, cacheable);
-        ApplyGetAllQueryOptions(query, filterExpr, orderBy: null, useStringIncludes ? includes : null, includeExpressions, asNoTracking: null, useSplitQuery: null);
+        DefaultCommandQueryHandler<TResponse, TModel, TKey>.ApplyGetAllQueryOptions(
+            query,
+            new GetAllQueryOptions(
+                filterExpr,
+                OrderBy: null,
+                IncludeProperties: useStringIncludes ? includes : null,
+                IncludeExpressions: includeExpressions,
+                IncludeGraph: includeGraphValue,
+                AsNoTracking: null,
+                UseSplitQuery: null));
+
+        var useProjection = TryBuildProjectionSelector(EndpointNames.GetAll, selectedFields, out var selector);
+        if (query is GetAllQuery<TResponse> getAllQuery)
+        {
+            getAllQuery.IncludeDeleted = includeDeleted ?? false;
+            getAllQuery.DeletedOnly = false;
+            if (useProjection) getAllQuery.Selector = selector;
+        }
+        else
+        {
+            TrySetProperty(query, IncludeDeletedPropertyName, includeDeleted ?? false);
+            TrySetProperty(query, "DeletedOnly", false);
+            if (useProjection) TrySetProperty(query, "Selector", selector);
+        }
 
         var result = await mediator.SendAsync(query, CancellationToken.None);
-        return BuildSuccess(result ?? Array.Empty<TResponse>(), EndpointNames.GetAll, StatusCodes.Status200OK, selectedFields);
+        return BuildSuccess(result ?? Array.Empty<TResponse>(), EndpointNames.GetAll, StatusCodes.Status200OK, useProjection ? null : selectedFields);
     }
 
-    public async Task<IResult> HandleGetByIdAsync(TKey id, string? includedProps = null, string? fields = null, bool? cacheable = null)
+    public async Task<IResult> HandleGetByIdAsync(TKey id, string? includedProps = null, string? includeGraph = null, string? fields = null, bool? cacheable = null, bool? includeDeleted = null)
     {
-        if (!TryBuildIncludes(EndpointNames.GetById, SplitCsv(includedProps), out var includes, out var errorResult)) return errorResult!;
-        if (!TryBuildFields(EndpointNames.GetById, SplitCsv(fields), out var selectedFields, out errorResult)) return errorResult!;
+        var requestedIncludes = SplitCsv(includedProps);
+        var requestedFields = SplitCsv(fields);
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.GetById,
+            requestedFields,
+            requestedIncludes,
+            requestedPatchProperties: null,
+            resourceId: id,
+            keyValues: null,
+            CancellationToken.None).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        if (!TryBuildIncludes(EndpointNames.GetById, requestedIncludes, authResult.AllowedIncludes, out var includes, out var errorResult)) return errorResult!;
+        if (!TryBuildIncludeGraph(EndpointNames.GetById, SplitCsv(includeGraph), authResult.AllowedIncludes, out var includeGraphValue, out errorResult)) return errorResult!;
+        if (!TryBuildFields(EndpointNames.GetById, requestedFields, authResult.AllowedFields, out var selectedFields, out errorResult)) return errorResult!;
+        if (!TryRequireTenant(out errorResult)) return errorResult!;
 
         var includeExpressions = BuildIncludeExpressions(includes, out var useStringIncludes);
         var query = config.QueryById;
         ApplyCacheable(query, cacheable);
-        ApplyGetByIdQueryOptions(query, id, useStringIncludes ? includes : null, includeExpressions, asNoTracking: null, useSplitQuery: null);
+        ApplyGetByIdQueryOptions(query, id, useStringIncludes ? includes : null, includeExpressions, includeGraphValue, asNoTracking: null, useSplitQuery: null);
+        if (includeDeleted == true)
+        {
+            TrySetProperty(query, IncludeDeletedPropertyName, true);
+        }
 
         var result = await mediator.SendAsync(query, CancellationToken.None);
         if (result is null) return BuildNotFound();
+        if (!TryEnsureTenantMatch(result, out errorResult)) return errorResult!;
+        if (!TryEnsureRowAuthorization(result, authResult, out errorResult)) return errorResult!;
+        if (TryBuildNotModifiedResult(result, out var notModifiedResult)) return notModifiedResult;
+        TrySetEtagHeader(result);
         return BuildSuccess(result, EndpointNames.GetById, StatusCodes.Status200OK, selectedFields);
     }
 
     public async Task<IResult> HandleCreateAsync(TModel model, bool? cacheable = null)
     {
-        var entity = mapper.MapModelToEntity<TModel, TResponse>(model);
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.Add,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: null,
+            CancellationToken.None).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        var validationResult = await ValidateModelAsync(model, CancellationToken.None).ConfigureAwait(false);
+        if (validationResult is not null) return validationResult;
+        var entity = (TResponse)mapper.MapModelToEntity<TModel, TResponse>(model);
+        IResult? errorResult;
+        if (!TryApplyContextValues(entity, out errorResult)) return errorResult!;
         var command = config.AddCommand;
         ApplyCacheable(command, cacheable);
         TrySetProperty(command, "Entity", entity);
 
         var result = await mediator.SendAsync(command, CancellationToken.None);
+        TrySetEtagHeader(result);
         return BuildSuccess(result, EndpointNames.Add, StatusCodes.Status201Created);
     }
 
     public async Task<IResult> HandleCreateRangeAsync(IEnumerable<TModel> model, bool? cacheable = null)
     {
-        var entities = mapper.MapModelToEntity<TModel, TResponse>(model);
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.AddRange,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: null,
+            CancellationToken.None).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        var validationResult = await ValidateModelRangeAsync(model, CancellationToken.None).ConfigureAwait(false);
+        if (validationResult is not null) return validationResult;
+        var entities = (IEnumerable<TResponse>)mapper.MapModelToEntity<TModel, TResponse>(model);
+        IResult? errorResult;
+        if (!TryApplyContextValues(entities, out errorResult)) return errorResult!;
         var command = config.AddRangeCommand;
         ApplyCacheable(command, cacheable);
         TrySetProperty(command, "Entities", entities);
@@ -75,42 +190,124 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
 
     public async Task<IResult> HandleUpdateAsync(TKey id, TModel model, bool? cacheable = null)
     {
-        var entity = mapper.MapModelToEntity<TModel, TResponse>(model);
-        if (!TrySetEntityId(entity, id, out var errorResult)) return errorResult!;
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.Update,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: null,
+            resourceId: id,
+            keyValues: null,
+            CancellationToken.None).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        var validationResult = await ValidateModelAsync(model, CancellationToken.None).ConfigureAwait(false);
+        if (validationResult is not null) return validationResult;
+        var entity = (TResponse)mapper.MapModelToEntity<TModel, TResponse>(model);
+        IResult? errorResult;
+        if (!TrySetEntityId(entity, id, out errorResult)) return errorResult!;
+        if (!TryApplyContextValues(entity, out errorResult)) return errorResult!;
+        if (!TryApplyIfMatch(entity, out errorResult)) return errorResult!;
+        var accessResult = await TryEnsureAccessAsync(id, includeDeleted: false, cacheable, authResult).ConfigureAwait(false);
+        if (!accessResult.Success) return accessResult.Error!;
 
         var command = config.UpdateCommand;
         ApplyCacheable(command, cacheable);
         TrySetProperty(command, "Entity", entity);
 
-        var result = await mediator.SendAsync(command, CancellationToken.None);
+        TResponse result;
+        try
+        {
+            result = await mediator.SendAsync(command, CancellationToken.None);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return BuildConflict(ConcurrencyConflictMessage);
+        }
+        TrySetEtagHeader(result);
         return BuildSuccess(result, EndpointNames.Update, StatusCodes.Status200OK);
     }
 
     public async Task<IResult> HandleUpdateRangeAsync(IEnumerable<TModel> model, bool? cacheable = null)
     {
-        var entities = mapper.MapModelToEntity<TModel, TResponse>(model);
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.UpdateRange,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: null,
+            CancellationToken.None).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        var validationResult = await ValidateModelRangeAsync(model, CancellationToken.None).ConfigureAwait(false);
+        if (validationResult is not null) return validationResult;
+        var entities = (IEnumerable<TResponse>)mapper.MapModelToEntity<TModel, TResponse>(model);
+        IResult? errorResult;
+        if (!TryApplyContextValues(entities, out errorResult)) return errorResult!;
         var command = config.UpdateRangeCommand;
         ApplyCacheable(command, cacheable);
         TrySetProperty(command, "Entities", entities);
 
-        var result = await mediator.SendAsync(command, CancellationToken.None);
+        IEnumerable<TResponse> result;
+        try
+        {
+            result = await mediator.SendAsync(command, CancellationToken.None);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return BuildConflict(ConcurrencyConflictMessage);
+        }
         return BuildSuccess(result, EndpointNames.UpdateRange, StatusCodes.Status200OK);
     }
 
     public async Task<IResult> HandleRemoveAsync(TKey id, bool? cacheable = null)
     {
-        var keyValues = BuildKeyValues(id);
-        var command = config.RemoveCommand;
-        ApplyCacheable(command, cacheable);
-        TrySetProperty(command, "KeyValues", keyValues);
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.Delete,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: null,
+            resourceId: id,
+            keyValues: null,
+            CancellationToken.None).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
 
-        await mediator.SendAsync(command, CancellationToken.None);
+        var keyValues = BuildKeyValues(id);
+        IKyrolusCommandBase command = config.RemoveCommand;
+        if (efConfig?.UseSoftDeleteForDelete == true)
+        {
+            command = new SoftDeleteByIdCommand<TResponse, TKey>(keyValues, cacheable ?? false);
+        }
+
+        ApplyCacheable(command, cacheable);
+        TrySetProperty(command, KeyValuesPropertyName, keyValues);
+        var accessResult = await TryEnsureAccessAsync(id, includeDeleted: false, cacheable, authResult).ConfigureAwait(false);
+        if (!accessResult.Success) return accessResult.Error!;
+
+        try
+        {
+            await SendCommandAsync(command, CancellationToken.None);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return BuildConflict(ConcurrencyConflictMessage);
+        }
         return BuildSuccess(true, EndpointNames.Delete, StatusCodes.Status200OK);
     }
 
     public async Task<IResult> HandleRemoveRangeAsync(IEnumerable<TModel> model, bool? cacheable = null)
     {
-        var entities = mapper.MapModelToEntity<TModel, TResponse>(model);
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.DeleteRange,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: null,
+            CancellationToken.None).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        var entities = (IEnumerable<TResponse>)mapper.MapModelToEntity<TModel, TResponse>(model);
         var command = config.RemoveRangeCommand;
         ApplyCacheable(command, cacheable);
         TrySetProperty(command, "Entities", entities);
@@ -121,112 +318,423 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
 
     public async Task<IResult> HandlePatchAsync(TKey id, Dictionary<string, object> updates, bool? cacheable = null)
     {
+        ArgumentNullException.ThrowIfNull(updates);
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.Patch,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: updates?.Keys.ToArray(),
+            resourceId: id,
+            keyValues: null,
+            CancellationToken.None).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        if (!TryRequireTenant(out var errorResult)) return errorResult!;
+        if (!TryRejectContextUpdates(updates!, out errorResult)) return errorResult!;
+        if (!TryApplyPatchPermissions(updates!, authResult.AllowedPatchProperties, out var filteredUpdates, out errorResult)) return errorResult!;
+        if (filteredUpdates.Count == 0)
+        {
+            return BuildBadRequest("No patch fields are allowed.");
+        }
+        var ifMatchResult = await TryEnsureIfMatchAsync(id, cacheable).ConfigureAwait(false);
+        if (!ifMatchResult.Success) return ifMatchResult.Error!;
+        var accessResult = await TryEnsureAccessAsync(id, includeDeleted: false, cacheable, authResult).ConfigureAwait(false);
+        if (!accessResult.Success) return accessResult.Error!;
         var keyValues = BuildKeyValues(id);
         var command = config.PatchCommand;
         ApplyCacheable(command, cacheable);
-        TrySetProperty(command, "KeyValues", keyValues);
-        TrySetProperty(command, "Updates", updates);
+        TrySetProperty(command, KeyValuesPropertyName, keyValues);
+        TrySetProperty(command, "Updates", filteredUpdates);
 
-        var result = await mediator.SendAsync(command, CancellationToken.None);
+        TResponse? result;
+        try
+        {
+            result = await mediator.SendAsync(command, CancellationToken.None);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return BuildConflict(ConcurrencyConflictMessage);
+        }
+        if (result is not null) TrySetEtagHeader(result);
         return BuildSuccess(result, EndpointNames.Patch, StatusCodes.Status200OK);
     }
 
-    public async Task<IResult> HandleGetByKeysAsync(string[]? keys, string? includedProps = null, string? fields = null, bool? cacheable = null)
+    public async Task<IResult> HandleGetByKeysAsync(string[]? keys, string? includedProps = null, string? includeGraph = null, string? fields = null, bool? cacheable = null, bool? includeDeleted = null)
     {
         if (!TryBuildKeyValues(keys, out var keyValues, out var errorResult)) return errorResult!;
-        if (!TryBuildIncludes(EndpointNames.GetById, SplitCsv(includedProps), out var includes, out errorResult)) return errorResult!;
-        if (!TryBuildFields(EndpointNames.GetById, SplitCsv(fields), out var selectedFields, out errorResult)) return errorResult!;
+        var requestedIncludes = SplitCsv(includedProps);
+        var requestedFields = SplitCsv(fields);
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.GetById,
+            requestedFields,
+            requestedIncludes,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: keyValues,
+            CancellationToken.None).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        if (!TryBuildIncludes(EndpointNames.GetById, requestedIncludes, authResult.AllowedIncludes, out var includes, out errorResult)) return errorResult!;
+        if (!TryBuildIncludeGraph(EndpointNames.GetById, SplitCsv(includeGraph), authResult.AllowedIncludes, out var includeGraphValue, out errorResult)) return errorResult!;
+        if (!TryBuildFields(EndpointNames.GetById, requestedFields, authResult.AllowedFields, out var selectedFields, out errorResult)) return errorResult!;
+        if (!TryRequireTenant(out errorResult)) return errorResult!;
 
         var includeExpressions = BuildIncludeExpressions(includes, out var useStringIncludes);
         var query = efConfig?.QueryByKeyValues ?? new GetByKeyValuesQuery<TResponse, TKey>(keyValues, cacheable ?? false);
 
         ApplyCacheable(query, cacheable);
-        ApplyGetByKeyValuesQueryOptions(query, keyValues, useStringIncludes ? includes : null, includeExpressions, asNoTracking: null, useSplitQuery: null);
+        ApplyGetByKeyValuesQueryOptions(query, keyValues, useStringIncludes ? includes : null, includeExpressions, includeGraphValue, asNoTracking: null, useSplitQuery: null);
+        if (includeDeleted == true)
+        {
+            TrySetProperty(query, IncludeDeletedPropertyName, true);
+        }
 
         var result = await mediator.SendAsync(query, CancellationToken.None);
         if (result is null) return BuildNotFound();
+        if (!TryEnsureTenantMatch(result, out errorResult)) return errorResult!;
+        if (!TryEnsureRowAuthorization(result, authResult, out errorResult)) return errorResult!;
+        if (TryBuildNotModifiedResult(result, out var notModifiedResult)) return notModifiedResult;
+        TrySetEtagHeader(result);
         return BuildSuccess(result, EndpointNames.GetById, StatusCodes.Status200OK, selectedFields);
     }
 
     public async Task<IResult> HandleUpdateByKeysAsync(string[]? keys, TModel model, bool? cacheable = null)
     {
         if (!TryBuildKeyValues(keys, out var keyValues, out var errorResult)) return errorResult!;
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.Update,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: keyValues,
+            CancellationToken.None).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
 
-        var entity = mapper.MapModelToEntity<TModel, TResponse>(model);
+        var validationResult = await ValidateModelAsync(model, CancellationToken.None).ConfigureAwait(false);
+        if (validationResult is not null) return validationResult;
+        if (!TryRequireTenant(out errorResult)) return errorResult!;
+
+        var entity = (TResponse)mapper.MapModelToEntity<TModel, TResponse>(model);
         if (!TrySetCompositeKey(entity, keyValues, out errorResult)) return errorResult!;
+        if (!TryApplyContextValues(entity, out errorResult)) return errorResult!;
+        if (!TryApplyIfMatch(entity, out errorResult)) return errorResult!;
+        var accessResult = await TryEnsureAccessAsync(keyValues, includeDeleted: false, cacheable, authResult).ConfigureAwait(false);
+        if (!accessResult.Success) return accessResult.Error!;
 
         var command = config.UpdateCommand;
         ApplyCacheable(command, cacheable);
         TrySetProperty(command, "Entity", entity);
 
-        var result = await mediator.SendAsync(command, CancellationToken.None);
+        TResponse result;
+        try
+        {
+            result = await mediator.SendAsync(command, CancellationToken.None);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return BuildConflict(ConcurrencyConflictMessage);
+        }
+        TrySetEtagHeader(result);
         return BuildSuccess(result, EndpointNames.Update, StatusCodes.Status200OK);
     }
 
     public async Task<IResult> HandleRemoveByKeysAsync(string[]? keys, bool? cacheable = null)
     {
         if (!TryBuildKeyValues(keys, out var keyValues, out var errorResult)) return errorResult!;
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.Delete,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: keyValues,
+            CancellationToken.None).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
 
-        var command = config.RemoveCommand;
+        IKyrolusCommandBase command = config.RemoveCommand;
+        if (efConfig?.UseSoftDeleteForDelete == true)
+        {
+            command = new SoftDeleteByIdCommand<TResponse, TKey>(keyValues, cacheable ?? false);
+        }
+
         ApplyCacheable(command, cacheable);
-        TrySetProperty(command, "KeyValues", keyValues);
+        TrySetProperty(command, KeyValuesPropertyName, keyValues);
+        var accessResult = await TryEnsureAccessAsync(keyValues, includeDeleted: false, cacheable, authResult).ConfigureAwait(false);
+        if (!accessResult.Success) return accessResult.Error!;
 
-        await mediator.SendAsync(command, CancellationToken.None);
+        try
+        {
+            await SendCommandAsync(command, CancellationToken.None);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return BuildConflict(ConcurrencyConflictMessage);
+        }
         return BuildSuccess(true, EndpointNames.Delete, StatusCodes.Status200OK);
     }
 
     public async Task<IResult> HandlePatchByKeysAsync(string[]? keys, Dictionary<string, object> updates, bool? cacheable = null)
     {
+        ArgumentNullException.ThrowIfNull(updates);
         if (!TryBuildKeyValues(keys, out var keyValues, out var errorResult)) return errorResult!;
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.Patch,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: updates?.Keys.ToArray(),
+            resourceId: null,
+            keyValues: keyValues,
+            CancellationToken.None).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        if (!TryRequireTenant(out errorResult)) return errorResult!;
+        if (!TryRejectContextUpdates(updates!, out errorResult)) return errorResult!;
+        if (!TryApplyPatchPermissions(updates!, authResult.AllowedPatchProperties, out var filteredUpdates, out errorResult)) return errorResult!;
+        if (filteredUpdates.Count == 0)
+        {
+            return BuildBadRequest("No patch fields are allowed.");
+        }
+        var ifMatchResult = await TryEnsureIfMatchAsync(keyValues, cacheable).ConfigureAwait(false);
+        if (!ifMatchResult.Success) return ifMatchResult.Error!;
+        var accessResult = await TryEnsureAccessAsync(keyValues, includeDeleted: false, cacheable, authResult).ConfigureAwait(false);
+        if (!accessResult.Success) return accessResult.Error!;
 
         var command = config.PatchCommand;
         ApplyCacheable(command, cacheable);
-        TrySetProperty(command, "KeyValues", keyValues);
-        TrySetProperty(command, "Updates", updates);
+        TrySetProperty(command, KeyValuesPropertyName, keyValues);
+        TrySetProperty(command, "Updates", filteredUpdates);
 
-        var result = await mediator.SendAsync(command, CancellationToken.None);
+        TResponse? result;
+        try
+        {
+            result = await mediator.SendAsync(command, CancellationToken.None);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return BuildConflict(ConcurrencyConflictMessage);
+        }
+        if (result is not null) TrySetEtagHeader(result);
         return BuildSuccess(result, EndpointNames.Patch, StatusCodes.Status200OK);
     }
 
-    public async Task<IResult> HandleQueryAsync(QueryRequest? request, bool? cacheable = null, CancellationToken cancellationToken = default)
+    public async Task<IResult> HandleGetDeletedAsync(string? filter = null, string? includedProps = null, string? includeGraph = null, string? fields = null, bool? cacheable = null)
+    {
+        var requestedIncludes = SplitCsv(includedProps);
+        var requestedFields = SplitCsv(fields);
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.GetDeleted,
+            requestedFields,
+            requestedIncludes,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: null,
+            CancellationToken.None).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        if (!TryBuildFilter(filter, out var filterExpr, out var errorResult)) return errorResult!;
+        if (!TryBuildIncludes(EndpointNames.GetDeleted, requestedIncludes, authResult.AllowedIncludes, out var includes, out errorResult)) return errorResult!;
+        if (!TryBuildIncludeGraph(EndpointNames.GetDeleted, SplitCsv(includeGraph), authResult.AllowedIncludes, out var includeGraphValue, out errorResult)) return errorResult!;
+        if (!TryBuildFields(EndpointNames.GetDeleted, requestedFields, authResult.AllowedFields, out var selectedFields, out errorResult)) return errorResult!;
+        if (!TryBuildContextFilter(out var contextFilter, out errorResult)) return errorResult!;
+
+        filterExpr = CombineFilters(filterExpr, contextFilter);
+        filterExpr = CombineFilters(filterExpr, authResult.RowFilter);
+        var includeExpressions = BuildIncludeExpressions(includes, out var useStringIncludes);
+        var query = config.QueryAll;
+        ApplyCacheable(query, cacheable);
+        DefaultCommandQueryHandler<TResponse, TModel, TKey>.ApplyGetAllQueryOptions(
+            query,
+            new GetAllQueryOptions(
+                filterExpr,
+                OrderBy: null,
+                IncludeProperties: useStringIncludes ? includes : null,
+                IncludeExpressions: includeExpressions,
+                IncludeGraph: includeGraphValue,
+                AsNoTracking: null,
+                UseSplitQuery: null));
+
+        var useProjection = TryBuildProjectionSelector(EndpointNames.GetDeleted, selectedFields, out var selector);
+        if (query is GetAllQuery<TResponse> getAllQuery)
+        {
+            getAllQuery.IncludeDeleted = true;
+            getAllQuery.DeletedOnly = true;
+            if (useProjection) getAllQuery.Selector = selector;
+        }
+        else
+        {
+            TrySetProperty(query, IncludeDeletedPropertyName, true);
+            TrySetProperty(query, "DeletedOnly", true);
+            if (useProjection) TrySetProperty(query, "Selector", selector);
+        }
+
+        var result = await mediator.SendAsync(query, CancellationToken.None);
+        return BuildSuccess(result ?? Array.Empty<TResponse>(), EndpointNames.GetDeleted, StatusCodes.Status200OK, useProjection ? null : selectedFields);
+    }
+
+    public async Task<IResult> HandleRestoreAsync(TKey id, bool? cacheable = null)
+    {
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.Restore,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: null,
+            resourceId: id,
+            keyValues: null,
+            CancellationToken.None).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        if (!TryRequireTenant(out var errorResult)) return errorResult!;
+        var accessResult = await TryEnsureAccessAsync(id, includeDeleted: true, cacheable, authResult).ConfigureAwait(false);
+        if (!accessResult.Success) return accessResult.Error!;
+
+        var keyValues = BuildKeyValues(id);
+        var command = efConfig?.RestoreCommand ?? new RestoreByIdCommand<TResponse, TKey>(keyValues, cacheable ?? false);
+        ApplyCacheable(command, cacheable);
+        TrySetProperty(command, KeyValuesPropertyName, keyValues);
+
+        bool restored;
+        try
+        {
+            restored = await mediator.SendAsync(command, CancellationToken.None);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return BuildConflict(ConcurrencyConflictMessage);
+        }
+        return BuildSuccess(restored, EndpointNames.Restore, StatusCodes.Status200OK);
+    }
+
+    public async Task<IResult> HandleRestoreByKeysAsync(string[]? keys, bool? cacheable = null)
+    {
+        if (!TryBuildKeyValues(keys, out var keyValues, out var errorResult)) return errorResult!;
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.Restore,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: keyValues,
+            CancellationToken.None).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        if (!TryRequireTenant(out errorResult)) return errorResult!;
+        var accessResult = await TryEnsureAccessAsync(keyValues, includeDeleted: true, cacheable, authResult).ConfigureAwait(false);
+        if (!accessResult.Success) return accessResult.Error!;
+
+        var command = efConfig?.RestoreCommand ?? new RestoreByIdCommand<TResponse, TKey>(keyValues, cacheable ?? false);
+        ApplyCacheable(command, cacheable);
+        TrySetProperty(command, KeyValuesPropertyName, keyValues);
+
+        bool restored;
+        try
+        {
+            restored = await mediator.SendAsync(command, CancellationToken.None);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return BuildConflict(ConcurrencyConflictMessage);
+        }
+        return BuildSuccess(restored, EndpointNames.Restore, StatusCodes.Status200OK);
+    }
+
+    public async Task<IResult> HandleQueryAsync(QueryRequest? request, bool? cacheable = null, bool? includeDeleted = null, CancellationToken cancellationToken = default)
     {
         request ??= new QueryRequest();
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.Query,
+            request.Fields,
+            request.Includes,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: null,
+            cancellationToken).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
         if (!TryBuildFilter(request.Filters, out var filterExpr, out var errorResult)) return errorResult!;
         if (!TryBuildOrder(request.OrderBy, out var orderExpr, out errorResult)) return errorResult!;
-        if (!TryBuildIncludes(EndpointNames.Query, request.Includes, out var includes, out errorResult)) return errorResult!;
-        if (!TryBuildFields(EndpointNames.Query, request.Fields, out var selectedFields, out errorResult)) return errorResult!;
+        if (!TryBuildIncludes(EndpointNames.Query, request.Includes, authResult.AllowedIncludes, out var includes, out errorResult)) return errorResult!;
+        if (!TryBuildIncludeGraph(EndpointNames.Query, request.IncludeGraph, authResult.AllowedIncludes, out var includeGraphValue, out errorResult)) return errorResult!;
+        if (!TryBuildFields(EndpointNames.Query, request.Fields, authResult.AllowedFields, out var selectedFields, out errorResult)) return errorResult!;
+        if (!TryBuildContextFilter(out var contextFilter, out errorResult)) return errorResult!;
 
+        filterExpr = CombineFilters(filterExpr, contextFilter);
+        filterExpr = CombineFilters(filterExpr, authResult.RowFilter);
         var includeExpressions = BuildIncludeExpressions(includes, out var useStringIncludes);
         var query = config.QueryByProperty;
         ApplyCacheable(query, cacheable);
-        ApplyGetAllQueryOptions(query, filterExpr, orderExpr, useStringIncludes ? includes : null, includeExpressions, request.AsNoTracking, request.UseSplitQuery);
+        DefaultCommandQueryHandler<TResponse, TModel, TKey>.ApplyGetAllQueryOptions(
+            query,
+            new GetAllQueryOptions(
+                filterExpr,
+                orderExpr,
+                IncludeProperties: useStringIncludes ? includes : null,
+                IncludeExpressions: includeExpressions,
+                IncludeGraph: includeGraphValue,
+                AsNoTracking: request.AsNoTracking,
+                UseSplitQuery: request.UseSplitQuery));
+
+        var useProjection = TryBuildProjectionSelector(EndpointNames.Query, selectedFields, out var selector);
+        if (query is GetAllQuery<TResponse> getAllQuery)
+        {
+            getAllQuery.IncludeDeleted = includeDeleted ?? false;
+            getAllQuery.DeletedOnly = false;
+            if (useProjection) getAllQuery.Selector = selector;
+        }
+        else
+        {
+            TrySetProperty(query, IncludeDeletedPropertyName, includeDeleted ?? false);
+            TrySetProperty(query, "DeletedOnly", false);
+            if (useProjection) TrySetProperty(query, "Selector", selector);
+        }
 
         var result = await mediator.SendAsync(query, cancellationToken);
-        return BuildSuccess(result ?? Array.Empty<TResponse>(), EndpointNames.Query, StatusCodes.Status200OK, selectedFields);
+        return BuildSuccess(result ?? [], EndpointNames.Query, StatusCodes.Status200OK, useProjection ? null : selectedFields);
     }
 
     public async Task<IResult> HandleGetAllPagedAsync(KyrolusEfQueryParameters parameters, CancellationToken cancellationToken = default)
     {
+        var requestedIncludes = SplitCsv(parameters.Includes);
+        var requestedFields = SplitCsv(parameters.Fields);
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.Paged,
+            requestedFields,
+            requestedIncludes,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: null,
+            cancellationToken).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
         if (!TryBuildFilter(parameters.Filter, out var filterExpr, out var errorResult)) return errorResult!;
         if (!TryBuildOrder(parameters.OrderBy, out var orderExpr, out errorResult)) return errorResult!;
-        if (!TryBuildIncludes(EndpointNames.Paged, SplitCsv(parameters.Includes), out var includes, out errorResult)) return errorResult!;
-        if (!TryBuildFields(EndpointNames.Paged, SplitCsv(parameters.Fields), out var selectedFields, out errorResult)) return errorResult!;
+        if (!TryBuildIncludes(EndpointNames.Paged, requestedIncludes, authResult.AllowedIncludes, out var includes, out errorResult)) return errorResult!;
+        if (!TryBuildIncludeGraph(EndpointNames.Paged, SplitCsv(parameters.IncludeGraph), authResult.AllowedIncludes, out var includeGraphValue, out errorResult)) return errorResult!;
+        if (!TryBuildFields(EndpointNames.Paged, requestedFields, authResult.AllowedFields, out var selectedFields, out errorResult)) return errorResult!;
+        if (!TryBuildContextFilter(out var contextFilter, out errorResult)) return errorResult!;
 
+        filterExpr = CombineFilters(filterExpr, contextFilter);
+        filterExpr = CombineFilters(filterExpr, authResult.RowFilter);
         var (pageNumber, pageSize) = NormalizePaging(parameters.PageNumber, parameters.PageSize);
         var includeExpressions = BuildIncludeExpressions(includes, out var useStringIncludes);
-        if (useStringIncludes)
+        var includeDeleted = parameters.IncludeDeleted ?? false;
+        var useProjection = TryBuildProjectionSelector(EndpointNames.Paged, selectedFields, out var selector);
+        if (useStringIncludes || includeDeleted)
         {
             var options = new GetAllPagedOptions(
                 filterExpr,
                 orderExpr,
                 includes,
+                includeGraphValue,
                 parameters.AsNoTracking,
                 parameters.UseSplitQuery,
                 pageNumber,
                 pageSize,
-                parameters.Cacheable);
+                parameters.Cacheable,
+                includeDeleted,
+                useProjection ? selector : null);
             var paged = await BuildPagedFromGetAll(options, cancellationToken);
-            return BuildSuccess(paged, EndpointNames.Paged, StatusCodes.Status200OK, selectedFields);
+            return BuildSuccess(paged, EndpointNames.Paged, StatusCodes.Status200OK, useProjection ? null : selectedFields);
         }
 
         var query = new GetPagedQuery<TResponse, TKey>(pageNumber, pageSize, parameters.Cacheable ?? false)
@@ -234,37 +742,61 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
             Filter = filterExpr,
             OrderBy = orderExpr,
             IncludeExpressions = includeExpressions,
+            IncludeGraph = includeGraphValue,
             AsNoTracking = parameters.AsNoTracking,
             UseSplitQuery = parameters.UseSplitQuery
         };
+        if (useProjection)
+        {
+            query.Selector = selector;
+        }
 
         var result = await mediator.SendAsync(query, cancellationToken);
-        return BuildSuccess(result, EndpointNames.Paged, StatusCodes.Status200OK, selectedFields);
+        return BuildSuccess(result, EndpointNames.Paged, StatusCodes.Status200OK, useProjection ? null : selectedFields);
     }
 
     public async Task<IResult> HandleQueryPagedAsync(KyrolusEfPagedQueryRequest request, CancellationToken cancellationToken = default)
     {
         var queryRequest = request.Request ?? new QueryRequest();
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.QueryPaged,
+            queryRequest.Fields,
+            queryRequest.Includes,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: null,
+            cancellationToken).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
         if (!TryBuildFilter(queryRequest.Filters, out var filterExpr, out var errorResult)) return errorResult!;
         if (!TryBuildOrder(queryRequest.OrderBy, out var orderExpr, out errorResult)) return errorResult!;
-        if (!TryBuildIncludes(EndpointNames.QueryPaged, queryRequest.Includes, out var includes, out errorResult)) return errorResult!;
-        if (!TryBuildFields(EndpointNames.QueryPaged, queryRequest.Fields, out var selectedFields, out errorResult)) return errorResult!;
+        if (!TryBuildIncludes(EndpointNames.QueryPaged, queryRequest.Includes, authResult.AllowedIncludes, out var includes, out errorResult)) return errorResult!;
+        if (!TryBuildIncludeGraph(EndpointNames.QueryPaged, queryRequest.IncludeGraph, authResult.AllowedIncludes, out var includeGraphValue, out errorResult)) return errorResult!;
+        if (!TryBuildFields(EndpointNames.QueryPaged, queryRequest.Fields, authResult.AllowedFields, out var selectedFields, out errorResult)) return errorResult!;
+        if (!TryBuildContextFilter(out var contextFilter, out errorResult)) return errorResult!;
 
+        filterExpr = CombineFilters(filterExpr, contextFilter);
+        filterExpr = CombineFilters(filterExpr, authResult.RowFilter);
         var (pageNumber, pageSize) = NormalizePaging(request.PageNumber, request.PageSize);
         var includeExpressions = BuildIncludeExpressions(includes, out var useStringIncludes);
-        if (useStringIncludes)
+        var includeDeleted = request.IncludeDeleted ?? false;
+        var useProjection = TryBuildProjectionSelector(EndpointNames.QueryPaged, selectedFields, out var selector);
+        if (useStringIncludes || includeDeleted)
         {
             var options = new GetAllPagedOptions(
                 filterExpr,
                 orderExpr,
                 includes,
+                includeGraphValue,
                 queryRequest.AsNoTracking,
                 queryRequest.UseSplitQuery,
                 pageNumber,
                 pageSize,
-                request.Cacheable);
+                request.Cacheable,
+                includeDeleted,
+                useProjection ? selector : null);
             var paged = await BuildPagedFromGetAll(options, cancellationToken);
-            return BuildSuccess(paged, EndpointNames.QueryPaged, StatusCodes.Status200OK, selectedFields);
+            return BuildSuccess(paged, EndpointNames.QueryPaged, StatusCodes.Status200OK, useProjection ? null : selectedFields);
         }
 
         var query = new GetPagedQuery<TResponse, TKey>(pageNumber, pageSize, request.Cacheable ?? false)
@@ -272,12 +804,116 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
             Filter = filterExpr,
             OrderBy = orderExpr,
             IncludeExpressions = includeExpressions,
+            IncludeGraph = includeGraphValue,
             AsNoTracking = queryRequest.AsNoTracking,
             UseSplitQuery = queryRequest.UseSplitQuery
         };
+        if (useProjection)
+        {
+            query.Selector = selector;
+        }
 
         var result = await mediator.SendAsync(query, cancellationToken);
-        return BuildSuccess(result, EndpointNames.QueryPaged, StatusCodes.Status200OK, selectedFields);
+        return BuildSuccess(result, EndpointNames.QueryPaged, StatusCodes.Status200OK, useProjection ? null : selectedFields);
+    }
+
+    public async Task<IResult> HandleSeekAsync(KyrolusEfSeekQueryParameters parameters, CancellationToken cancellationToken = default)
+    {
+        var requestedIncludes = SplitCsv(parameters.Includes);
+        var requestedFields = SplitCsv(parameters.Fields);
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.Seek,
+            requestedFields,
+            requestedIncludes,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: null,
+            cancellationToken).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        if (!TryBuildFilter(parameters.Filter, out var filterExpr, out var errorResult)) return errorResult!;
+        if (!TryBuildIncludes(EndpointNames.Seek, requestedIncludes, authResult.AllowedIncludes, out var includes, out errorResult)) return errorResult!;
+        if (!TryBuildIncludeGraph(EndpointNames.Seek, SplitCsv(parameters.IncludeGraph), authResult.AllowedIncludes, out var includeGraphValue, out errorResult)) return errorResult!;
+        if (!TryBuildFields(EndpointNames.Seek, requestedFields, authResult.AllowedFields, out var selectedFields, out errorResult)) return errorResult!;
+        if (!TryBuildContextFilter(out var contextFilter, out errorResult)) return errorResult!;
+        if (!TryResolveSeekProperties(out var seekProperties, out errorResult)) return errorResult!;
+
+        filterExpr = CombineFilters(filterExpr, contextFilter);
+        filterExpr = CombineFilters(filterExpr, authResult.RowFilter);
+        var (_, pageSize) = NormalizePaging(pageNumber: 1, parameters.PageSize);
+        var includeExpressions = BuildIncludeExpressions(includes, out var useStringIncludes);
+        var includeDeleted = parameters.IncludeDeleted ?? false;
+        var useProjection = TryBuildProjectionSelector(EndpointNames.Seek, selectedFields, out var selector);
+
+        var query = new GetSeekQuery<TResponse, TKey>(pageSize, parameters.Cursor, parameters.Cacheable ?? false)
+        {
+            Filter = filterExpr,
+            IncludeProperties = useStringIncludes ? includes : null,
+            IncludeExpressions = includeExpressions,
+            IncludeGraph = includeGraphValue,
+            AsNoTracking = parameters.AsNoTracking,
+            UseSplitQuery = parameters.UseSplitQuery,
+            IncludeDeleted = includeDeleted,
+            IncludeTotalCount = parameters.IncludeTotalCount ?? false,
+            Descending = parameters.Descending ?? false,
+            SeekPropertyNames = seekProperties
+        };
+        if (useProjection)
+        {
+            query.Selector = selector;
+        }
+
+        var result = await mediator.SendAsync(query, cancellationToken);
+        return BuildSuccess(result, EndpointNames.Seek, StatusCodes.Status200OK, useProjection ? null : selectedFields);
+    }
+
+    public async Task<IResult> HandleQuerySeekAsync(KyrolusEfSeekQueryRequest request, CancellationToken cancellationToken = default)
+    {
+        var queryRequest = request.Request ?? new QueryRequest();
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.QuerySeek,
+            queryRequest.Fields,
+            queryRequest.Includes,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: null,
+            cancellationToken).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        if (!TryBuildFilter(queryRequest.Filters, out var filterExpr, out var errorResult)) return errorResult!;
+        if (!TryBuildIncludes(EndpointNames.QuerySeek, queryRequest.Includes, authResult.AllowedIncludes, out var includes, out errorResult)) return errorResult!;
+        if (!TryBuildIncludeGraph(EndpointNames.QuerySeek, queryRequest.IncludeGraph, authResult.AllowedIncludes, out var includeGraphValue, out errorResult)) return errorResult!;
+        if (!TryBuildFields(EndpointNames.QuerySeek, queryRequest.Fields, authResult.AllowedFields, out var selectedFields, out errorResult)) return errorResult!;
+        if (!TryBuildContextFilter(out var contextFilter, out errorResult)) return errorResult!;
+        if (!TryResolveSeekProperties(out var seekProperties, out errorResult)) return errorResult!;
+
+        filterExpr = CombineFilters(filterExpr, contextFilter);
+        filterExpr = CombineFilters(filterExpr, authResult.RowFilter);
+        var (_, pageSize) = NormalizePaging(pageNumber: 1, request.PageSize);
+        var includeExpressions = BuildIncludeExpressions(includes, out var useStringIncludes);
+        var includeDeleted = request.IncludeDeleted ?? false;
+        var useProjection = TryBuildProjectionSelector(EndpointNames.QuerySeek, selectedFields, out var selector);
+
+        var query = new GetSeekQuery<TResponse, TKey>(pageSize, request.Cursor, request.Cacheable ?? false)
+        {
+            Filter = filterExpr,
+            IncludeProperties = useStringIncludes ? includes : null,
+            IncludeExpressions = includeExpressions,
+            IncludeGraph = includeGraphValue,
+            AsNoTracking = queryRequest.AsNoTracking,
+            UseSplitQuery = queryRequest.UseSplitQuery,
+            IncludeDeleted = includeDeleted,
+            IncludeTotalCount = request.IncludeTotalCount ?? false,
+            Descending = request.Descending ?? false,
+            SeekPropertyNames = seekProperties
+        };
+        if (useProjection)
+        {
+            query.Selector = selector;
+        }
+
+        var result = await mediator.SendAsync(query, cancellationToken);
+        return BuildSuccess(result, EndpointNames.QuerySeek, StatusCodes.Status200OK, useProjection ? null : selectedFields);
     }
 
     public async Task<IResult> HandleBulkUpdateAsync(KyrolusEfBulkUpdateRequest request, CancellationToken cancellationToken = default)
@@ -288,16 +924,35 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
             return BuildBadRequest("Updates are required.");
         }
 
-        var queryRequest = request.Request ?? new QueryRequest();
-        if (!TryBuildFilter(queryRequest.Filters, out var filterExpr, out var errorResult)) return errorResult!;
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.BulkUpdate,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: request.Updates.Keys.ToArray(),
+            resourceId: null,
+            keyValues: null,
+            cancellationToken).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
 
+        if (!TryApplyPatchPermissions(request.Updates, authResult.AllowedPatchProperties, out var filteredUpdates, out var errorResult)) return errorResult!;
+        if (filteredUpdates.Count == 0)
+        {
+            return BuildBadRequest("No update fields are allowed.");
+        }
+
+        var queryRequest = request.Request ?? new QueryRequest();
+        if (!TryBuildFilter(queryRequest.Filters, out var filterExpr, out errorResult)) return errorResult!;
+        if (!TryBuildContextFilter(out var contextFilter, out errorResult)) return errorResult!;
+
+        filterExpr = CombineFilters(filterExpr, contextFilter);
+        filterExpr = CombineFilters(filterExpr, authResult.RowFilter);
         var command = efConfig?.ExecuteUpdateCommand
-            ?? new ExecuteUpdateCommand<TResponse, TKey>(filterExpr, request.Updates, request.Cacheable ?? false, queryRequest.UseSplitQuery);
+            ?? new ExecuteUpdateCommand<TResponse, TKey>(filterExpr, filteredUpdates, request.Cacheable ?? false, queryRequest.UseSplitQuery);
 
         ApplyCacheable(command, request.Cacheable);
         TrySetProperty(command, "Filter", filterExpr);
-        TrySetProperty(command, "Updates", request.Updates);
-        TrySetProperty(command, "UseSplitQuery", queryRequest.UseSplitQuery);
+        TrySetProperty(command, "Updates", filteredUpdates);
+        TrySetProperty(command, UseSplitQueryPropertyName, queryRequest.UseSplitQuery);
 
         var result = await mediator.SendAsync(command, cancellationToken);
         return BuildSuccess(result, EndpointNames.BulkUpdate, StatusCodes.Status200OK);
@@ -306,29 +961,192 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
     public async Task<IResult> HandleBulkDeleteAsync(KyrolusEfBulkDeleteRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.BulkDelete,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: null,
+            cancellationToken).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
         var queryRequest = request.Request ?? new QueryRequest();
         if (!TryBuildFilter(queryRequest.Filters, out var filterExpr, out var errorResult)) return errorResult!;
+        if (!TryBuildContextFilter(out var contextFilter, out errorResult)) return errorResult!;
 
+        filterExpr = CombineFilters(filterExpr, contextFilter);
+        filterExpr = CombineFilters(filterExpr, authResult.RowFilter);
         var command = efConfig?.ExecuteDeleteCommand
             ?? new ExecuteDeleteCommand<TResponse, TKey>(filterExpr, request.Cacheable ?? false, queryRequest.UseSplitQuery);
 
         ApplyCacheable(command, request.Cacheable);
         TrySetProperty(command, "Filter", filterExpr);
-        TrySetProperty(command, "UseSplitQuery", queryRequest.UseSplitQuery);
+        TrySetProperty(command, UseSplitQueryPropertyName, queryRequest.UseSplitQuery);
 
         var result = await mediator.SendAsync(command, cancellationToken);
         return BuildSuccess(result, EndpointNames.BulkDelete, StatusCodes.Status200OK);
+    }
+
+    public async Task<IResult> HandleBulkUpsertAsync(IAsyncEnumerable<TModel> models, bool? cacheable = null, CancellationToken cancellationToken = default)
+    {
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.BulkUpsert,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: null,
+            cancellationToken).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        if (!TryResolveSeekProperties(out var keyProperties, out var errorResult)) return errorResult!;
+        var chunkSize = ResolveBulkChunkSize();
+        var results = new List<TResponse>();
+
+        await foreach (var chunk in ChunkAsync(models, chunkSize, cancellationToken))
+        {
+            if (chunk.Count == 0) continue;
+            var entities = (IEnumerable<TResponse>)mapper.MapModelToEntity<TModel, TResponse>(chunk);
+            if (!TryApplyContextValues(entities, out errorResult)) return errorResult!;
+
+            var command = new BulkUpsertCommand<TResponse, TKey>(entities.ToList(), keyProperties, cacheable ?? false);
+            ApplyCacheable(command, cacheable);
+
+            var chunkResult = await mediator.SendAsync(command, cancellationToken);
+            if (chunkResult is not null) results.AddRange(chunkResult);
+        }
+
+        return BuildSuccess(results, EndpointNames.BulkUpsert, StatusCodes.Status200OK);
+    }
+
+    public async Task<IResult> HandleBulkPatchAsync(IAsyncEnumerable<KyrolusEfBulkPatchItem> items, bool? cacheable = null, CancellationToken cancellationToken = default)
+    {
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.BulkPatch,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: null,
+            cancellationToken).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        if (!TryRequireTenant(out var errorResult)) return errorResult!;
+
+        var chunkSize = ResolveBulkChunkSize();
+        var total = 0;
+        await foreach (var chunk in ChunkAsync(items, chunkSize, cancellationToken))
+        {
+            if (chunk.Count == 0) continue;
+            if (!TryParseBulkPatchChunk(chunk, authResult, out var parsed, out errorResult)) return errorResult!;
+            if (parsed.Count == 0) continue;
+
+            var command = new BulkPatchCommand<TResponse, TKey>(parsed, cacheable ?? false);
+            ApplyCacheable(command, cacheable);
+
+            total += await mediator.SendAsync(command, cancellationToken);
+        }
+
+        return BuildSuccess(total, EndpointNames.BulkPatch, StatusCodes.Status200OK);
+    }
+
+    private sealed record GetAllQueryOptions(
+        Expression<Func<TResponse, bool>>? Filter,
+        Func<IQueryable<TResponse>, IOrderedQueryable<TResponse>>? OrderBy,
+        List<string>? IncludeProperties,
+        Expression<Func<TResponse, object?>>[]? IncludeExpressions,
+        IncludeGraph<TResponse>? IncludeGraph,
+        bool? AsNoTracking,
+        bool? UseSplitQuery);
+
+    private bool TryParseBulkPatchChunk(
+        IReadOnlyList<KyrolusEfBulkPatchItem> chunk,
+        KyrolusEfAuthorizationResult<TResponse> authResult,
+        out List<KyrolusBulkPatchItem> parsed,
+        out IResult? errorResult)
+    {
+        parsed = new List<KyrolusBulkPatchItem>(chunk.Count);
+        errorResult = null;
+        foreach (var item in chunk)
+        {
+            if (!TryParseBulkPatchItem(item, authResult, out var parsedItem, out var skip, out errorResult))
+            {
+                return false;
+            }
+
+            if (skip || parsedItem is null) continue;
+            parsed.Add(parsedItem);
+        }
+
+        return true;
+    }
+
+    private bool TryParseBulkPatchItem(
+        KyrolusEfBulkPatchItem item,
+        KyrolusEfAuthorizationResult<TResponse> authResult,
+        out KyrolusBulkPatchItem? parsedItem,
+        out bool skip,
+        out IResult? errorResult)
+    {
+        parsedItem = null;
+        skip = false;
+        errorResult = null;
+
+        if (item.Updates is null || item.Updates.Count == 0)
+        {
+            errorResult = BuildBadRequest("Updates are required.");
+            return false;
+        }
+
+        if (!TryRejectContextUpdates(item.Updates, out errorResult)) return false;
+        if (!TryApplyPatchPermissions(item.Updates, authResult.AllowedPatchProperties, out var filteredUpdates, out errorResult)) return false;
+
+        var keys = ResolveBulkPatchKeys(item);
+        if (!TryBuildKeyValues(keys, out var keyValues, out errorResult)) return false;
+
+        if (filteredUpdates.Count == 0)
+        {
+            if (efConfig?.StrictPatchValidation == true)
+            {
+                errorResult = BuildBadRequest("No patch fields are allowed.");
+                return false;
+            }
+            skip = true;
+            return true;
+        }
+
+        parsedItem = new KyrolusBulkPatchItem(keyValues, filteredUpdates);
+        return true;
+    }
+
+    private static string[]? ResolveBulkPatchKeys(KyrolusEfBulkPatchItem item)
+    {
+        if (item.Keys is { Length: > 0 })
+        {
+            return item.Keys;
+        }
+
+        if (!string.IsNullOrWhiteSpace(item.Id))
+        {
+            return [item.Id];
+        }
+
+        return item.Keys;
     }
 
     private sealed record GetAllPagedOptions(
         Expression<Func<TResponse, bool>>? Filter,
         Func<IQueryable<TResponse>, IOrderedQueryable<TResponse>>? OrderBy,
         List<string>? IncludeProperties,
+        IncludeGraph<TResponse>? IncludeGraph,
         bool? AsNoTracking,
         bool? UseSplitQuery,
         int PageNumber,
         int PageSize,
-        bool? Cacheable);
+        bool? Cacheable,
+        bool IncludeDeleted,
+        Expression<Func<TResponse, TResponse>>? Selector);
 
     private async Task<KyrolusPagedResult<TResponse>> BuildPagedFromGetAll(
         GetAllPagedOptions options,
@@ -339,9 +1157,15 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
             Filter = options.Filter,
             OrderBy = options.OrderBy,
             IncludeProperties = options.IncludeProperties,
+            IncludeGraph = options.IncludeGraph,
             AsNoTracking = options.AsNoTracking,
             UseSplitQuery = options.UseSplitQuery
         };
+        getAllQuery.IncludeDeleted = options.IncludeDeleted;
+        if (options.Selector is not null)
+        {
+            getAllQuery.Selector = options.Selector;
+        }
 
         var items = await mediator.SendAsync(getAllQuery, cancellationToken);
         var list = items?.ToList() ?? [];
@@ -355,11 +1179,626 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
             ? null
             : csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
+    private async Task<IResult?> ValidateModelAsync(TModel model, CancellationToken cancellationToken)
+    {
+        if (validationEngine is null) return null;
+        var failures = await validationEngine.ValidateAsync(model, cancellationToken).ConfigureAwait(false);
+        return failures.Count == 0 ? null : BuildValidationError(failures);
+    }
+
+    private async Task<IResult?> ValidateModelRangeAsync(IEnumerable<TModel> models, CancellationToken cancellationToken)
+    {
+        if (validationEngine is null) return null;
+        var allFailures = new List<KyrolusValidationFailure>();
+        foreach (var model in models)
+        {
+            var failures = await validationEngine.ValidateAsync(model, cancellationToken).ConfigureAwait(false);
+            if (failures.Count > 0) allFailures.AddRange(failures);
+        }
+        return allFailures.Count == 0 ? null : BuildValidationError(allFailures);
+    }
+
+    private async ValueTask<KyrolusEfAuthorizationResult<TResponse>> ResolveAuthorizationAsync(
+        EndpointNames endpoint,
+        IReadOnlyCollection<string>? requestedFields,
+        IReadOnlyCollection<string>? requestedIncludes,
+        IReadOnlyCollection<string>? requestedPatchProperties,
+        object? resourceId,
+        object?[]? keyValues,
+        CancellationToken cancellationToken)
+    {
+        var httpContext = HttpContext;
+        var context = new KyrolusEfAuthorizationContext<TResponse>(
+            endpoint,
+            httpContext?.Request?.Method,
+            httpContext?.Request?.Path.Value,
+            httpContext?.User,
+            httpContext,
+            endpointContext?.TenantId,
+            endpointContext?.ScopeKey,
+            requestedFields,
+            requestedIncludes,
+            requestedPatchProperties,
+            resourceId,
+            keyValues);
+        return await authorizationProvider.AuthorizeAsync(context, cancellationToken).ConfigureAwait(false);
+    }
+
+    private IResult BuildAuthorizationError(KyrolusEfAuthorizationResult<TResponse> authResult)
+        => authResult.ReturnNotFound
+            ? BuildNotFound()
+            : BuildForbidden(authResult.ErrorMessage);
+
+    private bool TryRequireTenant(out IResult? errorResult)
+    {
+        errorResult = null;
+        if (efConfig?.RequireTenant != true) return true;
+        if (!string.IsNullOrWhiteSpace(endpointContext?.TenantId)) return true;
+        errorResult = BuildBadRequest("Tenant id is required.");
+        return false;
+    }
+
+    private bool TryBuildContextFilter(out Expression<Func<TResponse, bool>>? expression, out IResult? errorResult)
+    {
+        errorResult = null;
+        expression = null;
+        if (efConfig is null) return true;
+
+        if (!TryBuildPropertyFilter(efConfig.TenantPropertyName, endpointContext?.TenantId, efConfig.RequireTenant, "tenant", out var tenantFilter, out errorResult))
+        {
+            return false;
+        }
+
+        if (!TryBuildPropertyFilter(efConfig.ScopePropertyName, endpointContext?.ScopeKey, required: false, "scope", out var scopeFilter, out errorResult))
+        {
+            return false;
+        }
+
+        expression = CombineFilters(tenantFilter, scopeFilter);
+        return true;
+    }
+
+    private bool TryBuildPropertyFilter(
+        string? propertyName,
+        string? rawValue,
+        bool required,
+        string label,
+        out Expression<Func<TResponse, bool>>? expression,
+        out IResult? errorResult)
+    {
+        errorResult = null;
+        expression = null;
+        if (string.IsNullOrWhiteSpace(propertyName)) return true;
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            if (required)
+            {
+                errorResult = BuildBadRequest($"{label} is required.");
+                return false;
+            }
+            return true;
+        }
+
+        var prop = typeof(TResponse).GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+        if (prop is null)
+        {
+            errorResult = BuildBadRequest($"Property '{propertyName}' was not found on {typeof(TResponse).Name}.");
+            return false;
+        }
+
+        object? converted;
+        try
+        {
+            var targetType = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+            converted = Convert.ChangeType(rawValue, targetType, CultureInfo.InvariantCulture);
+        }
+        catch
+        {
+            errorResult = BuildBadRequest($"Invalid {label} value.");
+            return false;
+        }
+
+        var parameter = Expression.Parameter(typeof(TResponse), "e");
+        var member = Expression.Property(parameter, prop);
+        var constant = Expression.Constant(converted, prop.PropertyType);
+        expression = Expression.Lambda<Func<TResponse, bool>>(Expression.Equal(member, constant), parameter);
+        return true;
+    }
+
+    private static Expression<Func<TResponse, bool>>? CombineFilters(Expression<Func<TResponse, bool>>? first, Expression<Func<TResponse, bool>>? second)
+    {
+        if (first is null) return second;
+        if (second is null) return first;
+        var parameter = Expression.Parameter(typeof(TResponse), "e");
+        var left = new ReplaceParameterVisitor(first.Parameters[0], parameter).Visit(first.Body)!;
+        var right = new ReplaceParameterVisitor(second.Parameters[0], parameter).Visit(second.Body)!;
+        return Expression.Lambda<Func<TResponse, bool>>(Expression.AndAlso(left, right), parameter);
+    }
+
+    private sealed class ReplaceParameterVisitor(ParameterExpression source, ParameterExpression target) : ExpressionVisitor
+    {
+        private readonly ParameterExpression source = source;
+        private readonly ParameterExpression target = target;
+
+        protected override Expression VisitParameter(ParameterExpression node)
+            => node == source ? target : base.VisitParameter(node);
+    }
+
+    private bool HasContextFilters()
+        => !string.IsNullOrWhiteSpace(efConfig?.TenantPropertyName)
+           || !string.IsNullOrWhiteSpace(efConfig?.ScopePropertyName);
+
+    private bool TryApplyContextValues(TResponse entity, out IResult? errorResult)
+    {
+        errorResult = null;
+        if (efConfig is null) return true;
+        if (!TryApplyContextValue(entity, efConfig.TenantPropertyName, endpointContext?.TenantId, efConfig.RequireTenant, "tenant", out errorResult))
+        {
+            return false;
+        }
+
+        if (!TryApplyContextValue(entity, efConfig.ScopePropertyName, endpointContext?.ScopeKey, required: false, "scope", out errorResult))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool TryApplyContextValues(IEnumerable<TResponse> entities, out IResult? errorResult)
+    {
+        foreach (var entity in entities)
+        {
+            if (!TryApplyContextValues(entity, out errorResult)) return false;
+        }
+
+        errorResult = null;
+        return true;
+    }
+
+    private bool TryApplyContextValue(object target, string? propertyName, string? rawValue, bool required, string label, out IResult? errorResult)
+    {
+        errorResult = null;
+        if (string.IsNullOrWhiteSpace(propertyName)) return true;
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            if (required)
+            {
+                errorResult = BuildBadRequest($"{label} is required.");
+                return false;
+            }
+            return true;
+        }
+
+        if (!TrySetPropertyValue(target, propertyName, rawValue))
+        {
+            errorResult = BuildBadRequest($"Cannot set {label}.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool TryRejectContextUpdates(IReadOnlyDictionary<string, object> updates, out IResult? errorResult)
+    {
+        errorResult = null;
+        if (efConfig is null) return true;
+        if (!string.IsNullOrWhiteSpace(efConfig.TenantPropertyName)
+            && updates.Keys.Any(k => string.Equals(k, efConfig.TenantPropertyName, StringComparison.OrdinalIgnoreCase)))
+        {
+            errorResult = BuildBadRequest("Tenant cannot be updated.");
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(efConfig.ScopePropertyName)
+            && updates.Keys.Any(k => string.Equals(k, efConfig.ScopePropertyName, StringComparison.OrdinalIgnoreCase)))
+        {
+            errorResult = BuildBadRequest("Scope cannot be updated.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool TryApplyPatchPermissions(
+        IReadOnlyDictionary<string, object> updates,
+        IReadOnlyCollection<string>? allowedPatchProperties,
+        out Dictionary<string, object> filtered,
+        out IResult? errorResult)
+    {
+        errorResult = null;
+        filtered = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+        if (updates.Count == 0)
+        {
+            return true;
+        }
+
+        var allowlist = BuildAllowlist(MergeAllowlist(efConfig?.AllowedPatchProperties, allowedPatchProperties));
+        var strict = efConfig?.StrictPatchValidation ?? false;
+        foreach (var (key, value) in updates)
+        {
+            if (allowlist is not null && !allowlist.Contains(key))
+            {
+                if (strict)
+                {
+                    errorResult = BuildBadRequest($"Patch field '{key}' is not allowed.");
+                    return false;
+                }
+                continue;
+            }
+
+            filtered[key] = value;
+        }
+
+        return true;
+    }
+
+    private bool TryEnsureTenantMatch(TResponse entity, out IResult? errorResult)
+    {
+        errorResult = null;
+        if (efConfig is null) return true;
+        if (!TryRequireTenant(out errorResult)) return false;
+
+        if (!TryEnsureContextMatch(entity, efConfig.TenantPropertyName, endpointContext?.TenantId, "tenant", out errorResult))
+        {
+            return false;
+        }
+
+        if (!TryEnsureContextMatch(entity, efConfig.ScopePropertyName, endpointContext?.ScopeKey, "scope", out errorResult))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool TryEnsureRowAuthorization(TResponse entity, KyrolusEfAuthorizationResult<TResponse> authResult, out IResult? errorResult)
+    {
+        errorResult = null;
+        if (authResult.RowFilter is null) return true;
+        try
+        {
+            var predicate = authResult.RowFilter.Compile();
+            if (predicate(entity)) return true;
+        }
+        catch
+        {
+            // If the filter can't be evaluated on the materialized entity, treat as forbidden.
+        }
+
+        errorResult = BuildAuthorizationError(authResult);
+        return false;
+    }
+
+    private bool TryEnsureContextMatch(TResponse entity, string? propertyName, string? rawValue, string label, out IResult? errorResult)
+    {
+        errorResult = null;
+        if (string.IsNullOrWhiteSpace(propertyName) || string.IsNullOrWhiteSpace(rawValue)) return true;
+
+        var prop = typeof(TResponse).GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+        if (prop is null)
+        {
+            errorResult = BuildBadRequest($"Property '{propertyName}' was not found on {typeof(TResponse).Name}.");
+            return false;
+        }
+
+        object? converted;
+        try
+        {
+            var targetType = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+            converted = Convert.ChangeType(rawValue, targetType, CultureInfo.InvariantCulture);
+        }
+        catch
+        {
+            errorResult = BuildBadRequest($"Invalid {label} value.");
+            return false;
+        }
+
+        var current = prop.GetValue(entity);
+        if (!Equals(current, converted))
+        {
+            errorResult = BuildNotFound();
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task<(bool Success, IResult? Error)> TryEnsureAccessAsync(
+        TKey id,
+        bool includeDeleted,
+        bool? cacheable,
+        KyrolusEfAuthorizationResult<TResponse> authResult)
+    {
+        if (!HasContextFilters() && authResult.RowFilter is null) return (true, null);
+        var entity = await LoadByIdAsync(id, includeDeleted, cacheable).ConfigureAwait(false);
+        if (entity is null)
+        {
+            return (false, BuildNotFound());
+        }
+
+        if (!TryEnsureTenantMatch(entity, out var errorResult)) return (false, errorResult);
+        if (!TryEnsureRowAuthorization(entity, authResult, out errorResult)) return (false, errorResult);
+        return (true, null);
+    }
+
+    private async Task<(bool Success, IResult? Error)> TryEnsureAccessAsync(
+        object?[] keyValues,
+        bool includeDeleted,
+        bool? cacheable,
+        KyrolusEfAuthorizationResult<TResponse> authResult)
+    {
+        if (!HasContextFilters() && authResult.RowFilter is null) return (true, null);
+        var entity = await LoadByKeysAsync(keyValues, includeDeleted, cacheable).ConfigureAwait(false);
+        if (entity is null)
+        {
+            return (false, BuildNotFound());
+        }
+
+        if (!TryEnsureTenantMatch(entity, out var errorResult)) return (false, errorResult);
+        if (!TryEnsureRowAuthorization(entity, authResult, out errorResult)) return (false, errorResult);
+        return (true, null);
+    }
+
+    private async Task<TResponse?> LoadByIdAsync(TKey id, bool includeDeleted, bool? cacheable)
+    {
+        var query = config.QueryById;
+        ApplyCacheable(query, cacheable);
+        ApplyGetByIdQueryOptions(query, id, includeProperties: null, includeExpressions: null, includeGraph: null, asNoTracking: true, useSplitQuery: null);
+        if (includeDeleted)
+        {
+            TrySetProperty(query, IncludeDeletedPropertyName, true);
+        }
+        return await mediator.SendAsync(query, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private async Task<TResponse?> LoadByKeysAsync(object?[] keyValues, bool includeDeleted, bool? cacheable)
+    {
+        var query = efConfig?.QueryByKeyValues ?? new GetByKeyValuesQuery<TResponse, TKey>(keyValues, cacheable ?? false);
+        ApplyCacheable(query, cacheable);
+        ApplyGetByKeyValuesQueryOptions(query, keyValues, includeProperties: null, includeExpressions: null, includeGraph: null, asNoTracking: true, useSplitQuery: null);
+        if (includeDeleted)
+        {
+            TrySetProperty(query, IncludeDeletedPropertyName, true);
+        }
+        return await mediator.SendAsync(query, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private bool TryBuildProjectionSelector(EndpointNames endpoint, IReadOnlyList<string>? fields, out Expression<Func<TResponse, TResponse>>? selector)
+    {
+        selector = null;
+        if (fields is null || fields.Count == 0) return false;
+        if (fields.Any(f => f.Contains('.', StringComparison.Ordinal))) return false;
+        var viewModelType = ResolveViewModelType(endpoint);
+        if (viewModelType != typeof(TResponse)) return false;
+
+        var parameter = Expression.Parameter(typeof(TResponse), "e");
+        var bindings = new List<MemberBinding>();
+        foreach (var field in fields)
+        {
+            var prop = typeof(TResponse).GetProperty(field, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (prop is null || !prop.CanWrite) continue;
+            bindings.Add(Expression.Bind(prop, Expression.Property(parameter, prop)));
+        }
+
+        if (bindings.Count == 0) return false;
+        var body = Expression.MemberInit(Expression.New(typeof(TResponse)), bindings);
+        selector = Expression.Lambda<Func<TResponse, TResponse>>(body, parameter);
+        return true;
+    }
+
+    private bool TryApplyIfMatch(TResponse entity, out IResult? errorResult)
+    {
+        errorResult = null;
+        if (efConfig?.EnableEtags != true) return true;
+        if (!TryGetRowVersionProperty(out var rowVersionProperty)) return true;
+        if (!TryGetIfMatchValues(out var ifMatchValues)) return true;
+        var matchValue = ifMatchValues.FirstOrDefault(v => v != "*");
+        if (string.IsNullOrWhiteSpace(matchValue)) return true;
+
+        if (!TryParseEtagValue(matchValue, rowVersionProperty.PropertyType, out var parsed))
+        {
+            errorResult = BuildBadRequest("Invalid If-Match header.");
+            return false;
+        }
+
+        if (!TrySetPropertyValue(entity, rowVersionProperty.Name, parsed))
+        {
+            errorResult = BuildBadRequest("Invalid If-Match value.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task<(bool Success, IResult? Error)> TryEnsureIfMatchAsync(TKey id, bool? cacheable)
+    {
+        if (efConfig?.EnableEtags != true) return (true, null);
+        if (!TryGetIfMatchValues(out var ifMatchValues)) return (true, null);
+        var entity = await LoadByIdAsync(id, includeDeleted: false, cacheable).ConfigureAwait(false);
+        if (entity is null)
+        {
+            return (false, BuildNotFound());
+        }
+
+        if (!TryGetEtagValue(entity, out var etag)) return (true, null);
+        if (ifMatchValues.Any(v => v == "*" || string.Equals(v, etag, StringComparison.Ordinal)))
+        {
+            return (true, null);
+        }
+
+        return (false, BuildConflict(ConcurrencyConflictMessage));
+    }
+
+    private async Task<(bool Success, IResult? Error)> TryEnsureIfMatchAsync(object?[] keyValues, bool? cacheable)
+    {
+        if (efConfig?.EnableEtags != true) return (true, null);
+        if (!TryGetIfMatchValues(out var ifMatchValues)) return (true, null);
+        var entity = await LoadByKeysAsync(keyValues, includeDeleted: false, cacheable).ConfigureAwait(false);
+        if (entity is null)
+        {
+            return (false, BuildNotFound());
+        }
+
+        if (!TryGetEtagValue(entity, out var etag)) return (true, null);
+        if (ifMatchValues.Any(v => v == "*" || string.Equals(v, etag, StringComparison.Ordinal)))
+        {
+            return (true, null);
+        }
+
+        return (false, BuildConflict(ConcurrencyConflictMessage));
+    }
+
+    private bool TryBuildNotModifiedResult(TResponse entity, out IResult result)
+    {
+        result = null!;
+        if (efConfig?.EnableEtags != true) return false;
+        if (!TryGetIfNoneMatchValues(out var ifNoneMatchValues)) return false;
+        if (!TryGetEtagValue(entity, out var etag)) return false;
+        if (!ifNoneMatchValues.Any(v => v == "*" || string.Equals(v, etag, StringComparison.Ordinal))) return false;
+
+        TrySetEtagHeader(etag);
+        result = Results.StatusCode(StatusCodes.Status304NotModified);
+        return true;
+    }
+
+    private void TrySetEtagHeader(TResponse entity)
+    {
+        if (TryGetEtagValue(entity, out var etag))
+        {
+            TrySetEtagHeader(etag);
+        }
+    }
+
+    private void TrySetEtagHeader(string etag)
+    {
+        if (HttpContext is null) return;
+        if (string.IsNullOrWhiteSpace(etag)) return;
+        HttpContext.Response.Headers.ETag = $"\"{etag}\"";
+    }
+
+    private bool TryGetEtagValue(TResponse entity, out string etag)
+    {
+        etag = string.Empty;
+        if (efConfig?.EnableEtags != true) return false;
+        if (!TryGetRowVersionProperty(out var rowVersionProperty)) return false;
+        var value = rowVersionProperty.GetValue(entity);
+        if (value is null) return false;
+        etag = NormalizeEtagValue(value);
+        return !string.IsNullOrWhiteSpace(etag);
+    }
+
+    private bool TryGetRowVersionProperty(out PropertyInfo rowVersionProperty)
+    {
+        rowVersionProperty = null!;
+        if (string.IsNullOrWhiteSpace(efConfig?.RowVersionPropertyName)) return false;
+        var prop = typeof(TResponse).GetProperty(efConfig.RowVersionPropertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+        if (prop is null) return false;
+        rowVersionProperty = prop;
+        return true;
+    }
+
+    private static string NormalizeEtagValue(object value)
+    {
+        return value switch
+        {
+            byte[] bytes => Convert.ToBase64String(bytes),
+            Guid guid => guid.ToString("N"),
+            IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture) ?? string.Empty,
+            _ => value.ToString() ?? string.Empty
+        };
+    }
+
+    private bool TryParseEtagValue(string raw, Type targetType, out object? value)
+    {
+        value = null;
+        var normalized = NormalizeEtagHeader(raw);
+        if (string.IsNullOrWhiteSpace(normalized)) return false;
+
+        var nonNullable = Nullable.GetUnderlyingType(targetType) ?? targetType;
+        try
+        {
+            if (nonNullable == typeof(byte[]))
+            {
+                value = Convert.FromBase64String(normalized);
+                return true;
+            }
+            if (nonNullable == typeof(Guid))
+            {
+                value = Guid.Parse(normalized);
+                return true;
+            }
+            if (nonNullable == typeof(string))
+            {
+                value = normalized;
+                return true;
+            }
+
+            value = Convert.ChangeType(normalized, nonNullable, CultureInfo.InvariantCulture);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool TryGetIfMatchValues(out IReadOnlyList<string> values)
+    {
+        values = Array.Empty<string>();
+        var context = HttpContext;
+        if (context is null) return false;
+        if (!context.Request.Headers.TryGetValue("If-Match", out var header)) return false;
+        values = SplitEtags(header.ToString());
+        return values.Count > 0;
+    }
+
+    private bool TryGetIfNoneMatchValues(out IReadOnlyList<string> values)
+    {
+        values = Array.Empty<string>();
+        var context = HttpContext;
+        if (context is null) return false;
+        if (!context.Request.Headers.TryGetValue("If-None-Match", out var header)) return false;
+        values = SplitEtags(header.ToString());
+        return values.Count > 0;
+    }
+
+    private static IReadOnlyList<string> SplitEtags(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return Array.Empty<string>();
+        var list = new List<string>();
+        foreach (var part in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var normalized = NormalizeEtagHeader(part);
+            if (!string.IsNullOrWhiteSpace(normalized)) list.Add(normalized);
+        }
+        return list;
+    }
+
+    private static string NormalizeEtagHeader(string raw)
+    {
+        var value = raw.Trim();
+        if (value.StartsWith("W/", StringComparison.OrdinalIgnoreCase))
+        {
+            value = value[2..];
+        }
+
+        value = value.Trim();
+        if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
+        {
+            value = value[1..^1];
+        }
+
+        return value.Trim();
+    }
+
     private bool TryBuildFilter(string? filter, out Expression<Func<TResponse, bool>>? expression, out IResult? errorResult)
     {
         errorResult = null;
         var strict = efConfig?.StrictFilterValidation ?? false;
-        if (!FilterBuilder.TryBuildFilterExpression<TResponse>(filter, BuildAllowlist(efConfig?.AllowedFilterProperties), strict, out expression, out var error))
+        var caseInsensitive = efConfig?.FilterCaseInsensitive ?? false;
+        if (!FilterBuilder.TryBuildFilterExpression<TResponse>(filter, BuildAllowlist(efConfig?.AllowedFilterProperties), strict, caseInsensitive, out expression, out var error))
         {
             errorResult = BuildBadRequest(error ?? "Invalid filter.");
             return false;
@@ -378,7 +1817,8 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
     {
         errorResult = null;
         var strict = efConfig?.StrictFilterValidation ?? false;
-        if (!FilterBuilder.TryBuildFilterExpression<TResponse>(clauses, BuildAllowlist(efConfig?.AllowedFilterProperties), strict, out expression, out var error))
+        var caseInsensitive = efConfig?.FilterCaseInsensitive ?? false;
+        if (!FilterBuilder.TryBuildFilterExpression<TResponse>(clauses, BuildAllowlist(efConfig?.AllowedFilterProperties), strict, caseInsensitive, out expression, out var error))
         {
             errorResult = BuildBadRequest(error ?? "Invalid filter.");
             return false;
@@ -413,7 +1853,12 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         return false;
     }
 
-    private bool TryBuildIncludes(EndpointNames endpoint, IEnumerable<string>? requested, out List<string>? includes, out IResult? errorResult)
+    private bool TryBuildIncludes(
+        EndpointNames endpoint,
+        IEnumerable<string>? requested,
+        IReadOnlyCollection<string>? allowedIncludes,
+        out List<string>? includes,
+        out IResult? errorResult)
     {
         errorResult = null;
         var endpointIncludes = GetEndpointConfig(endpoint)?.IncludeProps;
@@ -441,9 +1886,10 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         }
 
         var strict = efConfig?.StrictIncludeValidation ?? false;
+        var allowlist = BuildAllowlist(MergeAllowlist(efConfig?.AllowedIncludeProperties, allowedIncludes));
         includes = KyrolusSousRoutingHelpers.GetIncludedProperties(
             merged,
-            BuildAllowlist(efConfig?.AllowedIncludeProperties),
+            allowlist,
             strict,
             out var error);
 
@@ -453,7 +1899,12 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         return false;
     }
 
-    private bool TryBuildFields(EndpointNames endpoint, IEnumerable<string>? requested, out List<string>? fields, out IResult? errorResult)
+    private bool TryBuildFields(
+        EndpointNames endpoint,
+        IEnumerable<string>? requested,
+        IReadOnlyCollection<string>? allowedFields,
+        out List<string>? fields,
+        out IResult? errorResult)
     {
         errorResult = null;
         if (requested is null)
@@ -462,7 +1913,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
             return true;
         }
 
-        var allowlist = BuildAllowlist(efConfig?.AllowedSelectProperties);
+        var allowlist = BuildAllowlist(MergeAllowlist(efConfig?.AllowedSelectProperties, allowedFields));
         var strict = efConfig?.StrictSelectValidation ?? false;
         var viewModelType = ResolveViewModelType(endpoint);
         var normalized = new List<string>();
@@ -507,6 +1958,158 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         return expressions?.Length > 0 ? expressions : null;
     }
 
+    private bool TryBuildIncludeGraph(
+        EndpointNames endpoint,
+        object? includeGraph,
+        IReadOnlyCollection<string>? allowedIncludes,
+        out IncludeGraph<TResponse>? graph,
+        out IResult? errorResult)
+    {
+        graph = null;
+        errorResult = null;
+        if (includeGraph is null) return true;
+
+        if (includeGraph is IncludeGraph<TResponse> typedGraph)
+        {
+            graph = typedGraph;
+            return true;
+        }
+
+        var paths = ExtractIncludeGraphPaths(includeGraph);
+        return TryBuildIncludeGraph(endpoint, paths, allowedIncludes, out graph, out errorResult);
+    }
+
+    private bool TryBuildIncludeGraph(
+        EndpointNames endpoint,
+        IReadOnlyList<string>? paths,
+        IReadOnlyCollection<string>? allowedIncludes,
+        out IncludeGraph<TResponse>? graph,
+        out IResult? errorResult)
+    {
+        _ = endpoint;
+        graph = null;
+        errorResult = null;
+        if (paths is null || paths.Count == 0) return true;
+
+        var maxDepth = efConfig?.MaxIncludeGraphDepth ?? 0;
+        if (maxDepth <= 0)
+        {
+            errorResult = BuildBadRequest("IncludeGraph is not enabled.");
+            return false;
+        }
+
+        var allowlist = BuildAllowlist(MergeAllowlist(efConfig?.AllowedIncludeProperties, allowedIncludes));
+        var strict = efConfig?.StrictIncludeValidation ?? false;
+        var valid = new List<string>();
+        foreach (var trimmed in NormalizeIncludeGraphPaths(paths))
+        {
+            if (!TryValidateIncludeGraphPath(trimmed, allowlist, strict, maxDepth, out var accepted, out errorResult))
+            {
+                return false;
+            }
+
+            if (accepted is not null)
+            {
+                valid.Add(accepted);
+            }
+        }
+
+        if (valid.Count == 0) return true;
+        graph = KyrolusIncludeGraphBuilder.FromPaths<TResponse>(valid.ToArray());
+        return true;
+    }
+
+    private static IEnumerable<string> NormalizeIncludeGraphPaths(IReadOnlyList<string> paths)
+    {
+        foreach (var path in paths)
+        {
+            if (string.IsNullOrWhiteSpace(path)) continue;
+            yield return path.Trim();
+        }
+    }
+
+    private bool TryValidateIncludeGraphPath(
+        string trimmed,
+        ISet<string>? allowlist,
+        bool strict,
+        int maxDepth,
+        out string? accepted,
+        out IResult? errorResult)
+    {
+        accepted = null;
+        errorResult = null;
+
+        if (allowlist is not null && !allowlist.Contains(trimmed))
+        {
+            return TryRejectIncludeGraphPath(strict, $"IncludeGraph '{trimmed}' is not allowed.", out errorResult);
+        }
+
+        if (!TryResolvePathType(typeof(TResponse), trimmed, out _))
+        {
+            return TryRejectIncludeGraphPath(strict, $"IncludeGraph '{trimmed}' does not exist.", out errorResult);
+        }
+
+        var depth = trimmed.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
+        if (depth > maxDepth)
+        {
+            return TryRejectIncludeGraphPath(strict, $"IncludeGraph '{trimmed}' exceeds max depth {maxDepth}.", out errorResult);
+        }
+
+        accepted = trimmed;
+        return true;
+    }
+
+    private bool TryRejectIncludeGraphPath(bool strict, string message, out IResult? errorResult)
+    {
+        if (strict)
+        {
+            errorResult = BuildBadRequest(message);
+            return false;
+        }
+
+        errorResult = null;
+        return true;
+    }
+
+    private static IReadOnlyList<string>? ExtractIncludeGraphPaths(object? includeGraph)
+    {
+        if (includeGraph is null) return null;
+        if (includeGraph is string raw)
+        {
+            return SplitCsv(raw);
+        }
+
+        if (includeGraph is IEnumerable<string> list)
+        {
+            return [.. list.Where(static p => !string.IsNullOrWhiteSpace(p)).Select(static p => p.Trim())];
+        }
+
+        if (includeGraph is JsonElement json)
+        {
+            return ExtractIncludeGraphPathsFromJson(json);
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyList<string>? ExtractIncludeGraphPathsFromJson(JsonElement json)
+    {
+        if (json.ValueKind == JsonValueKind.String)
+        {
+            return SplitCsv(json.GetString());
+        }
+
+        if (json.ValueKind != JsonValueKind.Array) return null;
+        var values = new List<string>();
+        foreach (var item in json.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String) continue;
+            var value = item.GetString();
+            if (!string.IsNullOrWhiteSpace(value)) values.Add(value);
+        }
+        return values.Count == 0 ? null : values;
+    }
+
     private (int PageNumber, int PageSize) NormalizePaging(int? pageNumber, int? pageSize)
     {
         var defaultSize = efConfig?.DefaultPageSize > 0 ? efConfig.DefaultPageSize : 50;
@@ -519,6 +2122,34 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         return (number, size);
     }
 
+    private int ResolveBulkChunkSize()
+    {
+        var chunk = efConfig?.BulkChunkSize ?? 200;
+        return chunk < 1 ? 1 : chunk;
+    }
+
+    private static async IAsyncEnumerable<List<T>> ChunkAsync<T>(
+        IAsyncEnumerable<T> source,
+        int chunkSize,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var buffer = new List<T>(chunkSize);
+        await foreach (var item in source.WithCancellation(cancellationToken))
+        {
+            buffer.Add(item);
+            if (buffer.Count >= chunkSize)
+            {
+                yield return buffer;
+                buffer = new List<T>(chunkSize);
+            }
+        }
+
+        if (buffer.Count > 0)
+        {
+            yield return buffer;
+        }
+    }
+
     private static void ApplyCacheable(object request, bool? cacheable)
     {
         if (cacheable is null) return;
@@ -528,32 +2159,39 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         }
     }
 
-    private void ApplyGetAllQueryOptions(
+    private Task SendCommandAsync(IKyrolusCommandBase command, CancellationToken cancellationToken)
+    {
+        if (command is IKyrolusCommand nonGeneric)
+        {
+            return mediator.SendAsync(nonGeneric, cancellationToken);
+        }
+
+        return mediator.SendAsync((dynamic)command, cancellationToken);
+    }
+
+    private static void ApplyGetAllQueryOptions(
         IKyrolusQuery<IEnumerable<TResponse>> query,
-        Expression<Func<TResponse, bool>>? filter,
-        Func<IQueryable<TResponse>, IOrderedQueryable<TResponse>>? orderBy,
-        List<string>? includeProperties,
-        Expression<Func<TResponse, object?>>[]? includeExpressions,
-        bool? asNoTracking,
-        bool? useSplitQuery)
+        GetAllQueryOptions options)
     {
         if (query is GetAllQuery<TResponse> getAll)
         {
-            getAll.Filter = filter;
-            getAll.OrderBy = orderBy;
-            getAll.IncludeProperties = includeProperties;
-            getAll.IncludeExpressions = includeExpressions;
-            getAll.AsNoTracking = asNoTracking;
-            getAll.UseSplitQuery = useSplitQuery;
+            getAll.Filter = options.Filter;
+            getAll.OrderBy = options.OrderBy;
+            getAll.IncludeProperties = options.IncludeProperties;
+            getAll.IncludeExpressions = options.IncludeExpressions;
+            getAll.IncludeGraph = options.IncludeGraph;
+            getAll.AsNoTracking = options.AsNoTracking;
+            getAll.UseSplitQuery = options.UseSplitQuery;
             return;
         }
 
-        TrySetProperty(query, "Filter", filter);
-        TrySetProperty(query, "OrderBy", orderBy);
-        TrySetProperty(query, "IncludeProperties", includeProperties);
-        TrySetProperty(query, "IncludeExpressions", includeExpressions);
-        TrySetProperty(query, "AsNoTracking", asNoTracking);
-        TrySetProperty(query, "UseSplitQuery", useSplitQuery);
+        TrySetProperty(query, "Filter", options.Filter);
+        TrySetProperty(query, "OrderBy", options.OrderBy);
+        TrySetProperty(query, "IncludeProperties", options.IncludeProperties);
+        TrySetProperty(query, "IncludeExpressions", options.IncludeExpressions);
+        TrySetProperty(query, "IncludeGraph", options.IncludeGraph);
+        TrySetProperty(query, "AsNoTracking", options.AsNoTracking);
+        TrySetProperty(query, UseSplitQueryPropertyName, options.UseSplitQuery);
     }
 
     private void ApplyGetByIdQueryOptions(
@@ -561,6 +2199,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         TKey id,
         List<string>? includeProperties,
         Expression<Func<TResponse, object?>>[]? includeExpressions,
+        IncludeGraph<TResponse>? includeGraph,
         bool? asNoTracking,
         bool? useSplitQuery)
     {
@@ -569,6 +2208,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
             getById.Id = id;
             getById.IncludeProperties = includeProperties;
             getById.IncludeExpressions = includeExpressions;
+            getById.IncludeGraph = includeGraph;
             getById.AsNoTracking = asNoTracking;
             getById.UseSplitQuery = useSplitQuery;
             return;
@@ -577,8 +2217,9 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         TrySetProperty(query, "Id", id);
         TrySetProperty(query, "IncludeProperties", includeProperties);
         TrySetProperty(query, "IncludeExpressions", includeExpressions);
+        TrySetProperty(query, "IncludeGraph", includeGraph);
         TrySetProperty(query, "AsNoTracking", asNoTracking);
-        TrySetProperty(query, "UseSplitQuery", useSplitQuery);
+        TrySetProperty(query, UseSplitQueryPropertyName, useSplitQuery);
     }
 
     private static void TrySetProperty(object target, string propertyName, object? value)
@@ -619,13 +2260,11 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         }
 
         var keyProperty = efConfig?.KeyPropertyName;
-        if (!string.IsNullOrWhiteSpace(keyProperty))
+        if (!string.IsNullOrWhiteSpace(keyProperty) && !TrySetPropertyValue(entity, keyProperty, id))
         {
-            if (!TrySetPropertyValue(entity, keyProperty, id))
-            {
-                errorResult = BuildBadRequest($"Cannot set key property '{keyProperty}'.");
-                return false;
-            }
+            errorResult = BuildBadRequest($"Cannot set key property '{keyProperty}'.");
+            return false;
+
         }
 
         return true;
@@ -692,8 +2331,8 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
 
         try
         {
-            var converted = Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture);
-            property.SetValue(target, converted);
+            var convertedValue = Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture);
+            property.SetValue(target, convertedValue);
             return true;
         }
         catch
@@ -707,6 +2346,35 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
 
     private static ISet<string>? BuildAllowlist(IReadOnlyCollection<string>? allowed)
         => allowed is null || allowed.Count == 0 ? null : new HashSet<string>(allowed, StringComparer.OrdinalIgnoreCase);
+
+    private static IReadOnlyCollection<string>? MergeAllowlist(
+        IReadOnlyCollection<string>? baseAllowed,
+        IReadOnlyCollection<string>? extraAllowed)
+    {
+        if (baseAllowed is null || baseAllowed.Count == 0) return extraAllowed;
+        if (extraAllowed is null || extraAllowed.Count == 0) return baseAllowed;
+        return baseAllowed.Intersect(extraAllowed, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private bool TryResolveSeekProperties(out IReadOnlyList<string> properties, out IResult? errorResult)
+    {
+        errorResult = null;
+        properties = Array.Empty<string>();
+        if (efConfig?.CompositeKeyPropertyNames is { Count: > 0 } composite)
+        {
+            properties = composite;
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(efConfig?.KeyPropertyName))
+        {
+            properties = [efConfig.KeyPropertyName];
+            return true;
+        }
+
+        errorResult = BuildBadRequest("Seek properties are not configured.");
+        return false;
+    }
 
     private bool TryBuildKeyValues(IReadOnlyList<string>? keys, out object?[] keyValues, out IResult? errorResult)
     {
@@ -775,84 +2443,45 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
     private static IReadOnlyList<string> NormalizeKeys(IReadOnlyList<string>? keys)
     {
         if (keys is null || keys.Count == 0) return Array.Empty<string>();
-        var list = new List<string>();
-        foreach (var key in keys)
-        {
-            if (string.IsNullOrWhiteSpace(key)) continue;
-            foreach (var part in key.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                if (!string.IsNullOrWhiteSpace(part))
-                {
-                    list.Add(part);
-                }
-            }
-        }
-
+        var list = keys
+            .Where(k => !string.IsNullOrWhiteSpace(k))
+            .SelectMany(k => k.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .ToList();
         return list;
     }
+
+    private static readonly IReadOnlyDictionary<Type, Func<string, (bool Success, object? Value)>> KnownKeyParsers =
+        new Dictionary<Type, Func<string, (bool Success, object? Value)>>
+        {
+            [typeof(string)] = raw => (true, raw),
+            [typeof(Guid)] = raw => Guid.TryParse(raw, out var guid) ? (true, guid) : (false, null),
+            [typeof(DateTimeOffset)] = raw =>
+                DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dto)
+                    ? (true, dto)
+                    : (false, null),
+            [typeof(DateTime)] = raw =>
+                DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt)
+                    ? (true, dt)
+                    : (false, null),
+            [typeof(DateOnly)] = raw =>
+                DateOnly.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateOnly)
+                    ? (true, dateOnly)
+                    : (false, null),
+            [typeof(TimeOnly)] = raw =>
+                TimeOnly.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var timeOnly)
+                    ? (true, timeOnly)
+                    : (false, null)
+        };
 
     private static bool TryConvertKey(string raw, Type targetType, out object? value)
     {
         var nonNullable = Nullable.GetUnderlyingType(targetType) ?? targetType;
-        if (nonNullable == typeof(string))
+        if (KnownKeyParsers.TryGetValue(nonNullable, out var parser))
         {
-            value = raw;
-            return true;
-        }
-
-        if (nonNullable == typeof(Guid))
-        {
-            if (Guid.TryParse(raw, out var guid))
-            {
-                value = guid;
-                return true;
-            }
-            value = null;
-            return false;
-        }
-
-        if (nonNullable == typeof(DateTimeOffset))
-        {
-            if (DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dto))
-            {
-                value = dto;
-                return true;
-            }
-            value = null;
-            return false;
-        }
-
-        if (nonNullable == typeof(DateTime))
-        {
-            if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt))
-            {
-                value = dt;
-                return true;
-            }
-            value = null;
-            return false;
-        }
-
-        if (nonNullable == typeof(DateOnly))
-        {
-            if (DateOnly.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateOnly))
-            {
-                value = dateOnly;
-                return true;
-            }
-            value = null;
-            return false;
-        }
-
-        if (nonNullable == typeof(TimeOnly))
-        {
-            if (TimeOnly.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var timeOnly))
-            {
-                value = timeOnly;
-                return true;
-            }
-            value = null;
-            return false;
+            var parsed = parser(raw);
+            value = parsed.Value;
+            return parsed.Success;
         }
 
         if (nonNullable.IsEnum)
@@ -900,6 +2529,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         object?[] keyValues,
         List<string>? includeProperties,
         Expression<Func<TResponse, object?>>[]? includeExpressions,
+        IncludeGraph<TResponse>? includeGraph,
         bool? asNoTracking,
         bool? useSplitQuery)
     {
@@ -908,20 +2538,33 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
             getByKeys.KeyValues = keyValues;
             getByKeys.IncludeProperties = includeProperties;
             getByKeys.IncludeExpressions = includeExpressions;
+            getByKeys.IncludeGraph = includeGraph;
             getByKeys.AsNoTracking = asNoTracking;
             getByKeys.UseSplitQuery = useSplitQuery;
             return;
         }
 
-        TrySetProperty(query, "KeyValues", keyValues);
+        TrySetProperty(query, KeyValuesPropertyName, keyValues);
         TrySetProperty(query, "IncludeProperties", includeProperties);
         TrySetProperty(query, "IncludeExpressions", includeExpressions);
+        TrySetProperty(query, "IncludeGraph", includeGraph);
         TrySetProperty(query, "AsNoTracking", asNoTracking);
-        TrySetProperty(query, "UseSplitQuery", useSplitQuery);
+        TrySetProperty(query, UseSplitQueryPropertyName, useSplitQuery);
     }
 
-    private IResult BuildSuccess(object data, EndpointNames endpoint, int statusCode, IReadOnlyList<string>? selectedFields = null)
+    private IResult BuildSuccess(object? data, EndpointNames endpoint, int statusCode, IReadOnlyList<string>? selectedFields = null)
     {
+        if (data is null)
+        {
+            if (!config.UseEnrichedCustomResponse)
+            {
+                return Results.StatusCode(statusCode);
+            }
+
+            var emptyResponse = new Response(statusCode, "Success", true, null);
+            return Results.Json(emptyResponse, statusCode: statusCode);
+        }
+
         var mapped = MapData(data, endpoint);
         var shaped = selectedFields is null || selectedFields.Count == 0
             ? mapped
@@ -935,26 +2578,48 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         return Results.Json(response, statusCode: statusCode);
     }
 
-    private IResult BuildBadRequest(string message)
-    {
-        if (!config.UseEnrichedCustomResponse)
-        {
-            return Results.BadRequest(message);
-        }
-
-        var response = new Response(StatusCodes.Status400BadRequest, message, false);
-        return Results.Json(response, statusCode: StatusCodes.Status400BadRequest);
-    }
+    private IResult BuildBadRequest(string message, IReadOnlyList<KyrolusErrorItem>? errors = null)
+        => BuildErrorResult(StatusCodes.Status400BadRequest, KyrolusErrorCodes.BadRequest, message, errors);
 
     private IResult BuildNotFound()
+        => BuildErrorResult(StatusCodes.Status404NotFound, KyrolusErrorCodes.NotFound, "Not found");
+
+    private IResult BuildConflict(string message)
+        => BuildErrorResult(StatusCodes.Status409Conflict, KyrolusErrorCodes.ConcurrencyConflict, message);
+
+    private IResult BuildForbidden(string? message = null)
+        => BuildErrorResult(StatusCodes.Status403Forbidden, KyrolusErrorCodes.Forbidden, message ?? "Forbidden");
+
+    private IResult BuildValidationError(IReadOnlyList<KyrolusValidationFailure> failures)
     {
-        if (!config.UseEnrichedCustomResponse)
+        var errors = failures
+            .Select(f => new KyrolusErrorItem(f.FieldPath ?? f.PropertyName, f.ErrorCode, f.ErrorMessage))
+            .ToArray();
+        return BuildErrorResult(StatusCodes.Status400BadRequest, KyrolusErrorCodes.Validation, "Validation error", errors);
+    }
+
+    private IResult BuildErrorResult(int statusCode, string code, string title, IReadOnlyList<KyrolusErrorItem>? errors = null)
+    {
+        if (errorWriter is not null && errorContextFactory is not null && HttpContext is not null)
         {
-            return Results.NotFound();
+            var envelope = new KyrolusErrorEnvelope(code, title, TraceId: null, Errors: errors);
+            var mapping = new KyrolusExceptionMapping(envelope, (HttpStatusCode)statusCode);
+            return new KyrolusErrorResult(mapping, errorWriter, errorContextFactory);
         }
 
-        var response = new Response(StatusCodes.Status404NotFound, "Not found", false);
-        return Results.Json(response, statusCode: StatusCodes.Status404NotFound);
+        if (!config.UseEnrichedCustomResponse)
+        {
+            return statusCode switch
+            {
+                StatusCodes.Status400BadRequest => Results.BadRequest(title),
+                StatusCodes.Status404NotFound => Results.NotFound(),
+                StatusCodes.Status409Conflict => Results.Conflict(title),
+                _ => Results.StatusCode(statusCode)
+            };
+        }
+
+        var response = new Response(statusCode, title, false, errors);
+        return Results.Json(response, statusCode: statusCode);
     }
 
     private object MapData(object data, EndpointNames endpoint)
@@ -1109,6 +2774,3 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         return config.ViewModelType ?? typeof(TResponse);
     }
 }
-
-
-

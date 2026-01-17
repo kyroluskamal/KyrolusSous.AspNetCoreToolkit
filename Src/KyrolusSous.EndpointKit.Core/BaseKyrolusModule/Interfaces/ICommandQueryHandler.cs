@@ -5,8 +5,8 @@ public interface ICommandQueryHandler<TResponse, TModel, TKey>
     where TModel : class
     where TKey : notnull, IEquatable<TKey>
 {
-    public Task<IResult> HandleGetAllAsync([FromQuery] string? filter = null, [FromQuery] string? includedProps = null, [FromQuery] string? fields = null, [FromQuery] bool? cacheable = null);
-    public Task<IResult> HandleGetByIdAsync(TKey id, [FromQuery] string? includedProps = null, [FromQuery] string? fields = null, [FromQuery] bool? cacheable = null);
+    public Task<IResult> HandleGetAllAsync([FromQuery] string? filter = null, [FromQuery] string? includedProps = null, [FromQuery] string? includeGraph = null, [FromQuery] string? fields = null, [FromQuery] bool? cacheable = null, [FromQuery] bool? includeDeleted = null);
+    public Task<IResult> HandleGetByIdAsync(TKey id, [FromQuery] string? includedProps = null, [FromQuery] string? includeGraph = null, [FromQuery] string? fields = null, [FromQuery] bool? cacheable = null, [FromQuery] bool? includeDeleted = null);
     public Task<IResult> HandleCreateAsync(TModel model, [FromQuery] bool? cacheable = null);
     public Task<IResult> HandleCreateRangeAsync(IEnumerable<TModel> model, [FromQuery] bool? cacheable = null);
     public Task<IResult> HandleUpdateAsync([FromRoute] TKey id, TModel model, [FromQuery] bool? cacheable = null);

@@ -155,6 +155,56 @@ public class KyrolusRepositoryAsync<
         return $"{CacheKeyAll(policySuffix)}:filter={filterPart}:nt={trackingPart}:split={splitPart}";
     }
 
+    private IEnumerable<string> ExpandInvalidationTemplates(
+        IReadOnlyCollection<string>? templates,
+        object?[]? keyValues,
+        KyrolusCachePolicy policy)
+    {
+        if (templates is null || templates.Count == 0) yield break;
+
+        var scope = ResolveCacheScope();
+        var tenant = cacheKeyContext?.TenantId;
+        var allKey = CacheKeyAll(policy.KeySuffix);
+        var idKey = keyValues is { Length: > 0 } ? CacheKeyById(keyValues, policy.KeySuffix) : null;
+        var keyFingerprint = keyValues is { Length: > 0 } ? BuildKeyValuesFingerprint(keyValues) : null;
+        foreach (var template in templates)
+        {
+            if (string.IsNullOrWhiteSpace(template)) continue;
+            if (keyValues is null
+                && (template.Contains("{id}", StringComparison.Ordinal)
+                    || template.Contains("{key}", StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            var expanded = template
+                .Replace("{entity}", typeof(TEntity).Name, StringComparison.Ordinal)
+                .Replace("{tenant}", tenant ?? string.Empty, StringComparison.Ordinal)
+                .Replace("{scope}", scope ?? string.Empty, StringComparison.Ordinal)
+                .Replace("{policy}", policy.KeySuffix ?? string.Empty, StringComparison.Ordinal)
+                .Replace("{all}", allKey, StringComparison.Ordinal);
+            expanded = expanded.Replace("{id}", idKey ?? string.Empty, StringComparison.Ordinal);
+            expanded = expanded.Replace("{key}", keyFingerprint ?? string.Empty, StringComparison.Ordinal);
+            if (!string.IsNullOrWhiteSpace(expanded))
+            {
+                yield return expanded;
+            }
+        }
+    }
+
+    private async Task RemoveExtraInvalidationKeysAsync(object?[]? keyValues, KyrolusCachePolicy policy, CancellationToken cancellationToken)
+    {
+        if (cache is null) return;
+        foreach (var key in ExpandInvalidationTemplates(policy.ExtraInvalidationKeys, keyValues, policy))
+        {
+            await cache.RemoveAsync(key, cancellationToken).ConfigureAwait(false);
+        }
+        foreach (var pattern in ExpandInvalidationTemplates(policy.ExtraInvalidationKeyPatterns, keyValues, policy))
+        {
+            await cache.RemoveKeysByPatternAsync(pattern, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     private static string BuildKeyValuesFingerprint(object?[] keyValues)
         => string.Join("|", keyValues.Select((v, i) => $"{i}={EscapeKeyPart(v)}"));
 
@@ -172,13 +222,26 @@ public class KyrolusRepositoryAsync<
     private static KyrolusCachePolicy MergeCachePolicy(KyrolusCachePolicy basePolicy, KyrolusCachePolicy? overridePolicy)
     {
         if (overridePolicy is null) return basePolicy;
+        var extraKeys = MergeInvalidationEntries(basePolicy.ExtraInvalidationKeys, overridePolicy.ExtraInvalidationKeys);
+        var extraPatterns = MergeInvalidationEntries(basePolicy.ExtraInvalidationKeyPatterns, overridePolicy.ExtraInvalidationKeyPatterns);
         return new KyrolusCachePolicy(
             AbsoluteExpirationRelativeToNow: overridePolicy.AbsoluteExpirationRelativeToNow ?? basePolicy.AbsoluteExpirationRelativeToNow,
             SlidingExpiration: overridePolicy.SlidingExpiration ?? basePolicy.SlidingExpiration,
             Jitter: overridePolicy.Jitter ?? basePolicy.Jitter,
             NegativeCacheTtl: overridePolicy.NegativeCacheTtl ?? basePolicy.NegativeCacheTtl,
             Enabled: overridePolicy.Enabled ?? basePolicy.Enabled,
-            KeySuffix: overridePolicy.KeySuffix ?? basePolicy.KeySuffix);
+            KeySuffix: overridePolicy.KeySuffix ?? basePolicy.KeySuffix,
+            ExtraInvalidationKeys: extraKeys,
+            ExtraInvalidationKeyPatterns: extraPatterns);
+    }
+
+    private static IReadOnlyCollection<string>? MergeInvalidationEntries(
+        IReadOnlyCollection<string>? baseEntries,
+        IReadOnlyCollection<string>? overrideEntries)
+    {
+        if (baseEntries is null || baseEntries.Count == 0) return overrideEntries;
+        if (overrideEntries is null || overrideEntries.Count == 0) return baseEntries;
+        return baseEntries.Concat(overrideEntries).Distinct(StringComparer.Ordinal).ToArray();
     }
 
     protected async ValueTask<KyrolusCachePolicy> ResolveCachePolicyAsync(string operation, CancellationToken ct)
@@ -436,7 +499,7 @@ public class KyrolusRepositoryAsync<
             if (cache is not null && (includeExpressions == null || includeExpressions.Length == 0))
             {
                 var cachePolicy = await ResolveCachePolicyAsync(GetByIdAsync, cancellationToken).ConfigureAwait(false);
-                if (IsCacheEnabled(cachePolicy))
+                if (IsCacheEnabled(cachePolicy) && cache is not null)
                 {
                     var cacheKey = CacheKeyById(keyValues, cachePolicy.KeySuffix);
                     var options = BuildCacheEntryOptions(cachePolicy);
@@ -448,7 +511,7 @@ public class KyrolusRepositoryAsync<
                 }
             }
 
-            return await MaterializeByIdAsync(keyValues, asNoTracking, useSplitQuery, includeExpressions, cancellationToken, includeDeleted).ConfigureAwait(false);
+            return await MaterializeByIdAsync(keyValues, asNoTracking, useSplitQuery, includeExpressions!, cancellationToken, includeDeleted).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -591,26 +654,21 @@ public class KyrolusRepositoryAsync<
         await NotifyBeforeAsync(_GetAllAsync, filter, cancellationToken).ConfigureAwait(false);
         try
         {
-            if (cache is not null)
+            var cachePolicy = await ResolveCachePolicyAsync(_GetAllAsync, cancellationToken).ConfigureAwait(false);
+            var isCacheable = globalQueryFilter is null
+                                && filter is null
+                                && orderBy is null
+                                && (includeExpressions is null || includeExpressions.Length == 0);
+            if (cache is not null && isCacheable && IsCacheEnabled(cachePolicy))
             {
-                var isCacheable = globalQueryFilter is null
-                    && filter is null
-                    && orderBy is null
-                    && (includeExpressions is null || includeExpressions.Length == 0);
-                if (isCacheable)
-                {
-                    var cachePolicy = await ResolveCachePolicyAsync(_GetAllAsync, cancellationToken).ConfigureAwait(false);
-                    if (IsCacheEnabled(cachePolicy))
-                    {
+               
                         var cacheKey = CacheKeyAll(cachePolicy.KeySuffix);
                         var options = BuildCacheEntryOptions(cachePolicy);
                         return await cache.GetOrCreateAsync(
                             cacheKey,
-                            async ct => await GetAllInternalAsync(new GetAllCommand(false, false, filter, orderBy, null, null, asNoTracking, useSplitQuery, ct, includeExpressions)).ConfigureAwait(false),
+                            async ct => await GetAllInternalAsync(new GetAllCommand(false, false, filter, orderBy, null, null, asNoTracking, useSplitQuery, ct, includeExpressions!)).ConfigureAwait(false),
                             options,
                             cancellationToken).ConfigureAwait(false);
-                    }
-                }
             }
 
             var query = ApplyGlobalFilter(set.AsQueryable());
@@ -680,11 +738,10 @@ public class KyrolusRepositoryAsync<
             await NotifyBeforeAsync("GetAllCompiledAsync", null, cancellationToken).ConfigureAwait(false);
             try
             {
-                if (cache is not null)
-                {
                     var cachePolicy = await ResolveCachePolicyAsync(_GetAllAsync, cancellationToken).ConfigureAwait(false);
-                    if (IsCacheEnabled(cachePolicy))
-                    {
+                if (cache is not null && IsCacheEnabled(cachePolicy))
+                {
+                    
                         var cacheKey = CacheKeyAll(cachePolicy.KeySuffix);
                         var options = BuildCacheEntryOptions(cachePolicy);
                         return await cache.GetOrCreateAsync(
@@ -696,7 +753,7 @@ public class KyrolusRepositoryAsync<
                             },
                             options,
                             cancellationToken).ConfigureAwait(false) ?? [];
-                    }
+                    
                 }
                 var asyncQueryFallback = del(db);
                 return await asyncQueryFallback.ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -1025,6 +1082,7 @@ public class KyrolusRepositoryAsync<
             if (specification.Includes is not null) query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, specification.Includes);
             if (specification is IKyrolusHasSplitQuery split && split.UseSplitQuery) query = query.AsSplitQuery();
             if (specification.OrderBy is not null) query = specification.OrderBy(query);
+            if (specification is IKyrolusHasLimit limit && limit.Take is > 0) query = query.Take(limit.Take.Value);
             var result = await query.Select(specification.Selector).ToListAsync(cancellationToken).ConfigureAwait(false);
             return result;
         }
@@ -1373,6 +1431,7 @@ public class KyrolusRepositoryAsync<
 
         await cache.RemoveAsync(CacheKeyAll(cachePolicy.KeySuffix), cancellationToken).ConfigureAwait(false);
         await cache.RemoveKeysByPatternAsync(CacheKeyAll(cachePolicy.KeySuffix) + ":filter=*", cancellationToken).ConfigureAwait(false);
+        await RemoveExtraInvalidationKeysAsync(keyValues, cachePolicy, cancellationToken).ConfigureAwait(false);
 
         if (keyValues is { Length: > 0 })
         {

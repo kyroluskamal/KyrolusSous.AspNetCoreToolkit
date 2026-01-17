@@ -8,7 +8,9 @@ public sealed record KyrolusCachePolicy(
     TimeSpan? Jitter = null,
     TimeSpan? NegativeCacheTtl = null,
     bool? Enabled = null,
-    string? KeySuffix = null);
+    string? KeySuffix = null,
+    IReadOnlyCollection<string>? ExtraInvalidationKeys = null,
+    IReadOnlyCollection<string>? ExtraInvalidationKeyPatterns = null);
 
 public interface IKyrolusCachePolicyProvider
 {

@@ -6,7 +6,9 @@ public class GetByKeyValuesQuery<TResponse, TKey>(object?[] keyValues, bool cach
 {
     public List<string>? IncludeProperties { get; set; }
     public Expression<Func<TResponse, object?>>[]? IncludeExpressions { get; set; }
+    public IncludeGraph<TResponse>? IncludeGraph { get; set; }
     public bool? AsNoTracking { get; set; }
     public bool? UseSplitQuery { get; set; }
     public object?[] KeyValues { get; set; } = keyValues;
+    public bool IncludeDeleted { get; set; }
 }

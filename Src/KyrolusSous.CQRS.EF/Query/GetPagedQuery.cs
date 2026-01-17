@@ -11,8 +11,10 @@ public sealed class GetPagedQuery<TResponse, TKey>(int pageNumber, int pageSize,
     public Func<IQueryable<TResponse>, IOrderedQueryable<TResponse>>? OrderBy { get; set; }
     public List<string>? IncludeProperties { get; set; }
     public Expression<Func<TResponse, object?>>[]? IncludeExpressions { get; set; }
+    public IncludeGraph<TResponse>? IncludeGraph { get; set; }
     public bool? AsNoTracking { get; set; }
     public bool? UseSplitQuery { get; set; }
     public int PageNumber { get; set; } = pageNumber;
     public int PageSize { get; set; } = pageSize;
+    public Expression<Func<TResponse, TResponse>>? Selector { get; set; }
 }

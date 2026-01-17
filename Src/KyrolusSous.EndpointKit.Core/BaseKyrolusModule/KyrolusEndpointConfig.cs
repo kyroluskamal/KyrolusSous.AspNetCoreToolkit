@@ -1,3 +1,4 @@
+using KyrolusSous.Caching.Abstractions;
 using KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Interfaces;
 
 namespace KyrolusSous.EndpointKit.Core.BaseKyrolusModule;
@@ -12,4 +13,6 @@ public sealed class KyrolusEndpointConfig : IEndpointConfig
     public string? RateLimitPolicy { get; set; }
     public bool? Idempotent { get; set; }
     public IReadOnlyCollection<KyrolusOpenApiResponse>? Responses { get; set; }
+    public bool? OutputCacheEnabled { get; set; }
+    public KyrolusCachePolicy? OutputCachePolicy { get; set; }
 }

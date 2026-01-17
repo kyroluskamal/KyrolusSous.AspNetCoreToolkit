@@ -1,5 +1,3 @@
-using KyrolusSous.Mediator.Abstractions.Interfaces;
-
 namespace KyrolusSous.CQRS.EF.Command.Bulk;
 
 public sealed class ExecuteDeleteCommand<TResponse, TKey>(

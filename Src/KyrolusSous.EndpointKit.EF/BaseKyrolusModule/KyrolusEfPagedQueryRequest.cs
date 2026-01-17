@@ -6,4 +6,5 @@ public sealed record KyrolusEfPagedQueryRequest(
     QueryRequest? Request,
     int? PageNumber = null,
     int? PageSize = null,
-    bool? Cacheable = null);
+    bool? Cacheable = null,
+    bool? IncludeDeleted = null);

@@ -1,0 +1,15 @@
+namespace KyrolusSous.CQRS.EF.Command.Bulk;
+
+public sealed record KyrolusBulkPatchItem(
+    object?[] KeyValues,
+    Dictionary<string, object> Updates);
+
+public sealed class BulkPatchCommand<TResponse, TKey>(
+    IReadOnlyList<KyrolusBulkPatchItem> items,
+    bool cacheable = false)
+    : CacheableRequest(cacheable), IKyrolusCommand<int>
+    where TResponse : class
+    where TKey : IEquatable<TKey>
+{
+    public IReadOnlyList<KyrolusBulkPatchItem> Items { get; set; } = items;
+}

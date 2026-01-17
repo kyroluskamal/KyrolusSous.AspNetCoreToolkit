@@ -61,7 +61,7 @@ public class KyrolusSingleKeySoftDeleteRepositoryAsync<TDbContext, TEntity, TKey
             if (cache is not null && (includeExpressions == null || includeExpressions.Length == 0))
             {
                 var cachePolicy = await ResolveCachePolicyAsync(GetByIdIncludingDeletedAsync, cancellationToken).ConfigureAwait(false);
-                if (IsCacheEnabled(cachePolicy))
+                if (IsCacheEnabled(cachePolicy) && cache is not null)
                 {
                     var cacheKey = CacheKeyById([id], cachePolicy.KeySuffix) + ":incdel=1";
                     var options = BuildCacheEntryOptions(cachePolicy);
@@ -73,7 +73,7 @@ public class KyrolusSingleKeySoftDeleteRepositoryAsync<TDbContext, TEntity, TKey
                 }
             }
 
-            return await MaterializeByIdAsync([id], asNoTracking, useSplitQuery, includeExpressions, cancellationToken, true).ConfigureAwait(false);
+            return await MaterializeByIdAsync([id], asNoTracking, useSplitQuery, includeExpressions!, cancellationToken, true).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

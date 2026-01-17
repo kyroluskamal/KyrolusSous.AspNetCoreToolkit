@@ -5,13 +5,20 @@ public interface IKyrolusEfCommandQueryHandler<TResponse, TModel, TKey>
     where TModel : class
     where TKey : notnull, IEquatable<TKey>
 {
-    Task<IResult> HandleQueryAsync([FromBody] QueryRequest? request, [FromQuery] bool? cacheable = null, CancellationToken cancellationToken = default);
+    Task<IResult> HandleQueryAsync([FromBody] QueryRequest? request, [FromQuery] bool? cacheable = null, [FromQuery] bool? includeDeleted = null, CancellationToken cancellationToken = default);
     Task<IResult> HandleGetAllPagedAsync([AsParameters] KyrolusEfQueryParameters parameters, CancellationToken cancellationToken = default);
     Task<IResult> HandleQueryPagedAsync([FromBody] KyrolusEfPagedQueryRequest request, CancellationToken cancellationToken = default);
+    Task<IResult> HandleSeekAsync([AsParameters] KyrolusEfSeekQueryParameters parameters, CancellationToken cancellationToken = default);
+    Task<IResult> HandleQuerySeekAsync([FromBody] KyrolusEfSeekQueryRequest request, CancellationToken cancellationToken = default);
     Task<IResult> HandleBulkUpdateAsync([FromBody] KyrolusEfBulkUpdateRequest request, CancellationToken cancellationToken = default);
     Task<IResult> HandleBulkDeleteAsync([FromBody] KyrolusEfBulkDeleteRequest request, CancellationToken cancellationToken = default);
-    Task<IResult> HandleGetByKeysAsync([FromQuery] string[]? keys, [FromQuery] string? includedProps = null, [FromQuery] string? fields = null, [FromQuery] bool? cacheable = null);
+    Task<IResult> HandleBulkUpsertAsync([FromBody] IAsyncEnumerable<TModel> models, [FromQuery] bool? cacheable = null, CancellationToken cancellationToken = default);
+    Task<IResult> HandleBulkPatchAsync([FromBody] IAsyncEnumerable<KyrolusEfBulkPatchItem> items, [FromQuery] bool? cacheable = null, CancellationToken cancellationToken = default);
+    Task<IResult> HandleGetByKeysAsync([FromQuery] string[]? keys, [FromQuery] string? includedProps = null, [FromQuery] string? includeGraph = null, [FromQuery] string? fields = null, [FromQuery] bool? cacheable = null, [FromQuery] bool? includeDeleted = null);
     Task<IResult> HandleUpdateByKeysAsync([FromQuery] string[]? keys, [FromBody] TModel model, [FromQuery] bool? cacheable = null);
     Task<IResult> HandleRemoveByKeysAsync([FromQuery] string[]? keys, [FromQuery] bool? cacheable = null);
     Task<IResult> HandlePatchByKeysAsync([FromQuery] string[]? keys, [FromBody] Dictionary<string, object> updates, [FromQuery] bool? cacheable = null);
+    Task<IResult> HandleGetDeletedAsync([FromQuery] string? filter = null, [FromQuery] string? includedProps = null, [FromQuery] string? includeGraph = null, [FromQuery] string? fields = null, [FromQuery] bool? cacheable = null);
+    Task<IResult> HandleRestoreAsync([FromRoute] TKey id, [FromQuery] bool? cacheable = null);
+    Task<IResult> HandleRestoreByKeysAsync([FromQuery] string[]? keys, [FromQuery] bool? cacheable = null);
 }

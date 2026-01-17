@@ -1,3 +1,4 @@
+using KyrolusSous.Caching.Abstractions;
 using System;
 
 namespace KyrolusSous.EndpointKit.Core.BaseKyrolusModule;
@@ -16,6 +17,8 @@ public class ApiKyrolusApiConfig<TResponse> : IKyrolusApiConfig<TResponse>
     public bool IdempotencyIncludeGet { get; set; } = false;
     public string IdempotencyHeaderName { get; set; } = "Idempotency-Key";
     public TimeSpan? IdempotencyTtl { get; set; } = TimeSpan.FromMinutes(10);
+    public bool EnableOutputCaching { get; set; } = false;
+    public KyrolusCachePolicy? OutputCachePolicy { get; set; }
     public IKyrolusQuery<TResponse?> QueryById { get; set; } = default!;
     public IKyrolusQuery<IEnumerable<TResponse>> QueryAll { get; set; } = default!;
     public IKyrolusQuery<IEnumerable<TResponse>> QueryByProperty { get; set; } = default!;

@@ -6,12 +6,13 @@ public sealed class KyrolusEfPagedQuerySpecification<TEntity>(
     IReadOnlyList<Expression<Func<TEntity, object?>>> includes,
     int pageNumber,
     int pageSize,
-    bool asNoTracking)
+    bool asNoTracking,
+    Expression<Func<TEntity, TEntity>>? selector = null)
     : IKyrolusPagedQuerySpecification<TEntity, TEntity>
     where TEntity : class
 {
     public Expression<Func<TEntity, bool>>? Filter { get; } = filter;
-    public Expression<Func<TEntity, TEntity>> Selector { get; } = static entity => entity;
+    public Expression<Func<TEntity, TEntity>> Selector { get; } = selector ?? (static entity => entity);
     public Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? OrderBy { get; } = orderBy;
     public IReadOnlyList<Expression<Func<TEntity, object?>>> Includes { get; } = includes ?? [];
     public bool AsNoTracking { get; } = asNoTracking;

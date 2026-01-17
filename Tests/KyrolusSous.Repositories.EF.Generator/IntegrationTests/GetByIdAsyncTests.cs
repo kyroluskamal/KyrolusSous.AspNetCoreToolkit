@@ -1,6 +1,3 @@
-using KyrolusSous.Repositories.EF.Abstractions;
-using SQLitePCL;
-
 namespace KyrolusSous.Repositories.EF.Generator.IntegrationTests;
 
 public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : KyrolusGeneratorFixture(factory)
@@ -744,19 +741,18 @@ public class GetByIdAsyncTests(WebApplicationFactory<Program> factory) : Kyrolus
             // Then
             counter.Count.ShouldBe(1);
             store.ShouldNotBeNull();
-
-            //And When
             counter.Reset();
-
+            //And When
             var storeFromCache = await repo.GetByIdAsync(storeId);
             // Then
             counter.Count.ShouldBe(0);
             storeFromCache.ShouldNotBeNull();
             cacheProvider.Count.ShouldBe(1);
-
+            //And When
             await Task.Delay(TimeSpan.FromSeconds(10));
             counter.Reset();
             cacheProvider.Clear();
+            // Then
             await repo.GetByIdAsync(storeId);
             counter.Count.ShouldBe(1);
             cacheProvider.Count.ShouldBe(1);

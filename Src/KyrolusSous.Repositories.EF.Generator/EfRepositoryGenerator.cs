@@ -412,7 +412,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     if (isCacheable)
                                     {
                                         var cachePolicy = await ResolveCachePolicyAsync("GetAllAsync", cancellationToken).ConfigureAwait(false);
-                                        if (IsCacheEnabled(cachePolicy))
+                                        if (IsCacheEnabled(cachePolicy) && cache is not null)
                                         {
                                             var cacheKey = CacheKeyAll(cachePolicy.KeySuffix);
                                             var options = BuildCacheEntryOptions(cachePolicy);
@@ -485,7 +485,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     if (isCacheable)
                                     {
                                         var cachePolicy = await ResolveCachePolicyAsync("GetAllAsync", cancellationToken).ConfigureAwait(false);
-                                        if (IsCacheEnabled(cachePolicy))
+                                        if (IsCacheEnabled(cachePolicy) && cache is not null)
                                         {
                                             var cacheKey = CacheKeyAll(cachePolicy.KeySuffix);
                                             var options = BuildCacheEntryOptions(cachePolicy);
@@ -818,7 +818,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 if (cache is not null && (includeExpressions is null || includeExpressions.Length == 0))
                                 {
                                     var cachePolicy = await ResolveCachePolicyAsync("GetByIdAsync", cancellationToken).ConfigureAwait(false);
-                                    if (IsCacheEnabled(cachePolicy))
+                                    if (IsCacheEnabled(cachePolicy) && cache is not null)
                                     {
                                         var cacheKey = CacheKeyById(keyValues, cachePolicy.KeySuffix);
                                         var options = BuildCacheEntryOptions(cachePolicy);
@@ -843,7 +843,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                                                         && (includeGraph is null) && (includeProperties is null || includeProperties.Count() == 0))
                                                                     {
                                                                         var cachePolicy = await ResolveCachePolicyAsync("GetByIdAsync", cancellationToken).ConfigureAwait(false);
-                                                                        if (IsCacheEnabled(cachePolicy))
+                                                                        if (IsCacheEnabled(cachePolicy) && cache is not null)
                                                                         {
                                                                             var cacheKey = CacheKeyById(keyValues, cachePolicy.KeySuffix);
                                                                             var options = BuildCacheEntryOptions(cachePolicy);
@@ -972,7 +972,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 if (cache is not null)
                                 {
                                     var cachePolicy = await ResolveCachePolicyAsync("GetByIdAsync", cancellationToken).ConfigureAwait(false);
-                                    if (IsCacheEnabled(cachePolicy))
+                                    if (IsCacheEnabled(cachePolicy) && cache is not null)
                                     {
                                         var cacheKey = CacheKeyById([id], cachePolicy.KeySuffix);
                                         var options = BuildCacheEntryOptions(cachePolicy);
@@ -1020,7 +1020,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 if (cache is not null)
                                 {
                                     var cachePolicy = await ResolveCachePolicyAsync("GetAllAsync", cancellationToken).ConfigureAwait(false);
-                                    if (IsCacheEnabled(cachePolicy))
+                                    if (IsCacheEnabled(cachePolicy) && cache is not null)
                                     {
                                         var key = CacheKeyAll(cachePolicy.KeySuffix);
                                         var options = BuildCacheEntryOptions(cachePolicy);
@@ -1062,7 +1062,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 if (cache is not null)
                                 {
                                     var cachePolicy = await ResolveCachePolicyAsync("GetAllAsync", cancellationToken).ConfigureAwait(false);
-                                    if (IsCacheEnabled(cachePolicy))
+                                    if (IsCacheEnabled(cachePolicy) && cache is not null)
                                     {
                                         var filterFingerprint = KyrolusExpressionFingerprint.Build(filter);
                                         var filterPart = EscapeKeyPart(filterFingerprint);
@@ -2035,16 +2035,79 @@ private static string EscapeKeyPart(object? value)
     return Uri.EscapeDataString(s);
 }
 
+private IEnumerable<string> ExpandInvalidationTemplates(
+    IReadOnlyCollection<string>? templates,
+    object?[]? keyValues,
+    KyrolusCachePolicy policy)
+{
+    if (templates is null || templates.Count == 0) yield break;
+
+    var scope = ResolveCacheScope();
+    var tenant = cacheKeyContext?.TenantId;
+    var allKey = CacheKeyAll(policy.KeySuffix);
+    var idKey = keyValues is { Length: > 0 } ? CacheKeyById(keyValues, policy.KeySuffix) : null;
+    var keyFingerprint = keyValues is { Length: > 0 } ? BuildKeyValuesFingerprint(keyValues) : null;
+    foreach (var template in templates)
+    {
+        if (string.IsNullOrWhiteSpace(template)) continue;
+        if (keyValues is null
+            && (template.Contains("{id}", StringComparison.Ordinal)
+                || template.Contains("{key}", StringComparison.Ordinal)))
+        {
+            continue;
+        }
+
+        var expanded = template
+            .Replace("{entity}", typeof({{{request.EntityType.ToDisplayString()}}}).Name, StringComparison.Ordinal)
+            .Replace("{tenant}", tenant ?? string.Empty, StringComparison.Ordinal)
+            .Replace("{scope}", scope ?? string.Empty, StringComparison.Ordinal)
+            .Replace("{policy}", policy.KeySuffix ?? string.Empty, StringComparison.Ordinal)
+            .Replace("{all}", allKey, StringComparison.Ordinal);
+        expanded = expanded.Replace("{id}", idKey ?? string.Empty, StringComparison.Ordinal);
+        expanded = expanded.Replace("{key}", keyFingerprint ?? string.Empty, StringComparison.Ordinal);
+        if (!string.IsNullOrWhiteSpace(expanded))
+        {
+            yield return expanded;
+        }
+    }
+}
+
+private async Task RemoveExtraInvalidationKeysAsync(object?[]? keyValues, KyrolusCachePolicy policy, CancellationToken cancellationToken)
+{
+    if (cache is null) return;
+    foreach (var key in ExpandInvalidationTemplates(policy.ExtraInvalidationKeys, keyValues, policy))
+    {
+        await cache.RemoveAsync(key, cancellationToken).ConfigureAwait(false);
+    }
+    foreach (var pattern in ExpandInvalidationTemplates(policy.ExtraInvalidationKeyPatterns, keyValues, policy))
+    {
+        await cache.RemoveKeysByPatternAsync(pattern, cancellationToken).ConfigureAwait(false);
+    }
+}
+
 private static KyrolusCachePolicy MergeCachePolicy(KyrolusCachePolicy basePolicy, KyrolusCachePolicy? overridePolicy)
 {
     if (overridePolicy is null) return basePolicy;
+    var extraKeys = MergeInvalidationEntries(basePolicy.ExtraInvalidationKeys, overridePolicy.ExtraInvalidationKeys);
+    var extraPatterns = MergeInvalidationEntries(basePolicy.ExtraInvalidationKeyPatterns, overridePolicy.ExtraInvalidationKeyPatterns);
     return new KyrolusCachePolicy(
         AbsoluteExpirationRelativeToNow: overridePolicy.AbsoluteExpirationRelativeToNow ?? basePolicy.AbsoluteExpirationRelativeToNow,
         SlidingExpiration: overridePolicy.SlidingExpiration ?? basePolicy.SlidingExpiration,
         Jitter: overridePolicy.Jitter ?? basePolicy.Jitter,
         NegativeCacheTtl: overridePolicy.NegativeCacheTtl ?? basePolicy.NegativeCacheTtl,
         Enabled: overridePolicy.Enabled ?? basePolicy.Enabled,
-        KeySuffix: overridePolicy.KeySuffix ?? basePolicy.KeySuffix);
+        KeySuffix: overridePolicy.KeySuffix ?? basePolicy.KeySuffix,
+        ExtraInvalidationKeys: extraKeys,
+        ExtraInvalidationKeyPatterns: extraPatterns);
+}
+
+private static IReadOnlyCollection<string>? MergeInvalidationEntries(
+    IReadOnlyCollection<string>? baseEntries,
+    IReadOnlyCollection<string>? overrideEntries)
+{
+    if (baseEntries is null || baseEntries.Count == 0) return overrideEntries;
+    if (overrideEntries is null || overrideEntries.Count == 0) return baseEntries;
+    return baseEntries.Concat(overrideEntries).Distinct(StringComparer.Ordinal).ToArray();
 }
 
 private async ValueTask<KyrolusCachePolicy> ResolveCachePolicyAsync(string operation, CancellationToken ct)
@@ -2127,6 +2190,7 @@ private KyrolusCacheEntryOptions BuildCacheEntryOptions(KyrolusCachePolicy polic
 
             await cache.RemoveAsync(CacheKeyAll(cachePolicy.KeySuffix), cancellationToken).ConfigureAwait(false);
             await cache.RemoveKeysByPatternAsync(CacheKeyAll(cachePolicy.KeySuffix) + ":filter=*", cancellationToken).ConfigureAwait(false);
+            await RemoveExtraInvalidationKeysAsync(keyValues, cachePolicy, cancellationToken).ConfigureAwait(false);
 
             var key = CacheKeyById(keyValues, cachePolicy.KeySuffix);
             await cache.RemoveAsync(key, cancellationToken).ConfigureAwait(false);

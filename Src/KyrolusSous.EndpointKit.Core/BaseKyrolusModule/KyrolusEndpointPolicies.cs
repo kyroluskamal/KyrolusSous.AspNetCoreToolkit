@@ -41,6 +41,12 @@ public static class KyrolusEndpointPolicies
             });
         }
 
+        builder.AddEndpointFilterFactory((context, next) =>
+        {
+            var filter = new KyrolusOutputCacheEndpointFilter<TResponse>(config, endpoint);
+            return invocation => filter.InvokeAsync(invocation, next);
+        });
+
         return builder;
     }
 }

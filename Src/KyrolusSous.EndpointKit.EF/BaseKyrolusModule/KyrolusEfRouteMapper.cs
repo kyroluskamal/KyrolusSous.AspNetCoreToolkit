@@ -1,3 +1,4 @@
+using KyrolusSous.CQRS.Abstractions.Models;
 using KyrolusSous.EndpointKit.Core.BaseKyrolusModule;
 using KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Interfaces;
 using KyrolusSous.EndpointKit.EF.BaseKyrolusModule.Interfaces;
@@ -65,6 +66,19 @@ public sealed class KyrolusEfRouteMapper<TResponse, TModel, TKey> : IRouteMapper
                 .ApplyEndpointPolicies(config, EndpointNames.QueryPaged);
         }
 
+        if (efConfig is { EnableSeekEndpoints: true })
+        {
+            var seekResponseType = typeof(KyrolusSeekResult<>).MakeGenericType(ResolveViewModelType(config, EndpointNames.Seek));
+            group.MapGet($"{config.Route}s/seek", efHandler.HandleSeekAsync)
+                .Authorize(Authorize(config, EndpointNames.Seek))
+                .ApplyOpenApi(config, EndpointNames.Seek, seekResponseType)
+                .ApplyEndpointPolicies(config, EndpointNames.Seek);
+            group.MapPost($"/{config.Route}s/query/seek", efHandler.HandleQuerySeekAsync)
+                .Authorize(Authorize(config, EndpointNames.QuerySeek))
+                .ApplyOpenApi(config, EndpointNames.QuerySeek, seekResponseType)
+                .ApplyEndpointPolicies(config, EndpointNames.QuerySeek);
+        }
+
         if (efConfig is { EnableCompositeKeyEndpoints: true } && (compositeKeyOnly || ShouldMap(EndpointNames.GetById)))
         {
             group.MapGet($"/{config.Route}/by-keys", efHandler.HandleGetByKeysAsync)
@@ -113,6 +127,46 @@ public sealed class KyrolusEfRouteMapper<TResponse, TModel, TKey> : IRouteMapper
                 .ApplyEndpointPolicies(config, EndpointNames.BulkDelete);
         }
 
+        if (efConfig is { EnableBulkEndpoints: true } && ShouldMap(EndpointNames.BulkUpsert))
+        {
+            group.MapPost($"/{config.Route}s/bulk/upsert", efHandler.HandleBulkUpsertAsync)
+                .Authorize(Authorize(config, EndpointNames.BulkUpsert))
+                .ApplyOpenApi(config, EndpointNames.BulkUpsert)
+                .ApplyEndpointPolicies(config, EndpointNames.BulkUpsert);
+        }
+
+        if (efConfig is { EnableBulkEndpoints: true } && ShouldMap(EndpointNames.BulkPatch))
+        {
+            group.MapPost($"/{config.Route}s/bulk/patch", efHandler.HandleBulkPatchAsync)
+                .Authorize(Authorize(config, EndpointNames.BulkPatch))
+                .ApplyOpenApi(config, EndpointNames.BulkPatch)
+                .ApplyEndpointPolicies(config, EndpointNames.BulkPatch);
+        }
+
+        if (efConfig is { EnableSoftDeleteEndpoints: true } && ShouldMap(EndpointNames.GetDeleted))
+        {
+            group.MapGet($"/{config.Route}s/deleted", efHandler.HandleGetDeletedAsync)
+                .Authorize(Authorize(config, EndpointNames.GetDeleted))
+                .ApplyOpenApi(config, EndpointNames.GetDeleted)
+                .ApplyEndpointPolicies(config, EndpointNames.GetDeleted);
+        }
+
+        if (efConfig is { EnableSoftDeleteEndpoints: true } && ShouldMap(EndpointNames.Restore))
+        {
+            group.MapPost($"/{config.Route}/{{id}}/restore", efHandler.HandleRestoreAsync)
+                .Authorize(Authorize(config, EndpointNames.Restore))
+                .ApplyOpenApi(config, EndpointNames.Restore)
+                .ApplyEndpointPolicies(config, EndpointNames.Restore);
+        }
+
+        if (efConfig is { EnableSoftDeleteEndpoints: true, EnableCompositeKeyEndpoints: true } && (compositeKeyOnly || ShouldMap(EndpointNames.Restore)))
+        {
+            group.MapPost($"/{config.Route}/by-keys/restore", efHandler.HandleRestoreByKeysAsync)
+                .Authorize(Authorize(config, EndpointNames.Restore))
+                .ApplyOpenApi(config, EndpointNames.Restore)
+                .ApplyEndpointPolicies(config, EndpointNames.Restore);
+        }
+
         if (compositeKeyOnly)
         {
             config.AllEndpointsExcept = originalAllEndpointsExcept;
@@ -148,6 +202,12 @@ public sealed class KyrolusEfRouteMapper<TResponse, TModel, TKey> : IRouteMapper
         var endpointConfig = config.EndpointConfig.FirstOrDefault(e => e.Name == endpoint);
         var viewModelType = endpointConfig?.ViewModelType ?? config.ViewModelType ?? typeof(TResponse);
         return typeof(KyrolusPagedResult<>).MakeGenericType(viewModelType);
+    }
+
+    private static Type ResolveViewModelType(IKyrolusApiConfig<TResponse> config, EndpointNames endpoint)
+    {
+        var endpointConfig = config.EndpointConfig.FirstOrDefault(e => e.Name == endpoint);
+        return endpointConfig?.ViewModelType ?? config.ViewModelType ?? typeof(TResponse);
     }
 
     private static IEnumerable<EndpointNames> GetEndpointsToMap(IKyrolusApiConfig<TResponse> config)

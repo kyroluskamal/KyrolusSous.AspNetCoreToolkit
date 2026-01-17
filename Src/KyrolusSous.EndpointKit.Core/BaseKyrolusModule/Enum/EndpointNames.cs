@@ -8,6 +8,8 @@ public enum EndpointNames
     Query,
     Paged,
     QueryPaged,
+    Seek,
+    QuerySeek,
     Add,
     AddRange,
     Update,
@@ -17,5 +19,9 @@ public enum EndpointNames
     Patch,
     BulkUpdate,
     BulkDelete,
+    BulkUpsert,
+    BulkPatch,
+    GetDeleted,
+    Restore,
     Custom
 }

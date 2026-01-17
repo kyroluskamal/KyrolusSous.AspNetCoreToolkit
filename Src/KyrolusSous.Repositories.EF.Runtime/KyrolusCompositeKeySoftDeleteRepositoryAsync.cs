@@ -65,7 +65,7 @@ public class KyrolusCompositeKeySoftDeleteRepositoryAsync<TDbContext, TEntity> :
                 }
             }
 
-            return await MaterializeByIdAsync(keyValues!, asNoTracking, useSplitQuery, includeExpressions, cancellationToken, true).ConfigureAwait(false);
+            return await MaterializeByIdAsync(keyValues!, asNoTracking, useSplitQuery, includeExpressions!, cancellationToken, true).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
