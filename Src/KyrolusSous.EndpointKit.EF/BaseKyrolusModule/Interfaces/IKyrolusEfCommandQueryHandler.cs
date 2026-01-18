@@ -1,3 +1,5 @@
+using KyrolusSous.EndpointKit.Core.Batch;
+
 namespace KyrolusSous.EndpointKit.EF.BaseKyrolusModule.Interfaces;
 
 public interface IKyrolusEfCommandQueryHandler<TResponse, TModel, TKey>
@@ -10,6 +12,8 @@ public interface IKyrolusEfCommandQueryHandler<TResponse, TModel, TKey>
     Task<IResult> HandleQueryPagedAsync([FromBody] KyrolusEfPagedQueryRequest request, CancellationToken cancellationToken = default);
     Task<IResult> HandleSeekAsync([AsParameters] KyrolusEfSeekQueryParameters parameters, CancellationToken cancellationToken = default);
     Task<IResult> HandleQuerySeekAsync([FromBody] KyrolusEfSeekQueryRequest request, CancellationToken cancellationToken = default);
+    Task<IResult> HandleCountAsync([FromQuery] string? filter = null, [FromQuery] bool? includeDeleted = null, CancellationToken cancellationToken = default);
+    Task<IResult> HandleHeadByIdAsync(TKey id, CancellationToken cancellationToken = default);
     Task<IResult> HandleBulkUpdateAsync([FromBody] KyrolusEfBulkUpdateRequest request, CancellationToken cancellationToken = default);
     Task<IResult> HandleBulkDeleteAsync([FromBody] KyrolusEfBulkDeleteRequest request, CancellationToken cancellationToken = default);
     Task<IResult> HandleBulkUpsertAsync([FromBody] IAsyncEnumerable<TModel> models, [FromQuery] bool? cacheable = null, CancellationToken cancellationToken = default);
@@ -21,4 +25,5 @@ public interface IKyrolusEfCommandQueryHandler<TResponse, TModel, TKey>
     Task<IResult> HandleGetDeletedAsync([FromQuery] string? filter = null, [FromQuery] string? includedProps = null, [FromQuery] string? includeGraph = null, [FromQuery] string? fields = null, [FromQuery] bool? cacheable = null);
     Task<IResult> HandleRestoreAsync([FromRoute] TKey id, [FromQuery] bool? cacheable = null);
     Task<IResult> HandleRestoreByKeysAsync([FromQuery] string[]? keys, [FromQuery] bool? cacheable = null);
+    Task<IResult> HandleBatchAsync([FromBody] KyrolusBatchRequest<TModel, TKey> request, CancellationToken cancellationToken = default);
 }

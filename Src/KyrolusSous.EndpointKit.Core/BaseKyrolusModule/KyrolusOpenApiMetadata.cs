@@ -54,14 +54,30 @@ public static class KyrolusOpenApiMetadata
             ? StatusCodes.Status201Created
             : StatusCodes.Status200OK;
         var successType = overrideResponseType ?? ResolveSuccessType(config, endpoint);
-        responses.Add(new KyrolusOpenApiResponse(successStatus, successType));
 
-        if (endpoint is EndpointNames.GetById)
+        // HEAD returns no body, just status
+        if (endpoint is EndpointNames.Head)
         {
-            responses.Add(ProblemResponse(StatusCodes.Status404NotFound));
+            responses.Add(new KyrolusOpenApiResponse(StatusCodes.Status200OK, null));
+            responses.Add(new KyrolusOpenApiResponse(StatusCodes.Status404NotFound, null));
+        }
+        else
+        {
+            responses.Add(new KyrolusOpenApiResponse(successStatus, successType));
         }
 
-        responses.Add(ProblemResponse(StatusCodes.Status400BadRequest));
+        if (endpoint is EndpointNames.GetById or EndpointNames.Head)
+        {
+            if (endpoint != EndpointNames.Head) // Already added for HEAD
+            {
+                responses.Add(ProblemResponse(StatusCodes.Status404NotFound));
+            }
+        }
+
+        if (endpoint != EndpointNames.Head)
+        {
+            responses.Add(ProblemResponse(StatusCodes.Status400BadRequest));
+        }
 
         if (RequireAuthorization(config, endpoint))
         {
@@ -96,8 +112,10 @@ public static class KyrolusOpenApiMetadata
             EndpointNames.GetAll or EndpointNames.Query or EndpointNames.GetDeleted => typeof(IEnumerable<>).MakeGenericType(viewModelType),
             EndpointNames.AddRange or EndpointNames.UpdateRange or EndpointNames.BulkUpsert => typeof(IEnumerable<>).MakeGenericType(viewModelType),
             EndpointNames.BulkUpdate or EndpointNames.BulkDelete or EndpointNames.BulkPatch => typeof(int),
+            EndpointNames.Count => typeof(long),
             EndpointNames.Seek or EndpointNames.QuerySeek => typeof(KyrolusSeekResult<>).MakeGenericType(viewModelType),
             EndpointNames.Delete or EndpointNames.DeleteRange or EndpointNames.Restore => typeof(bool),
+            EndpointNames.Batch => typeof(object), // Batch response type is set by route mapper
             EndpointNames.Paged or EndpointNames.QueryPaged => typeof(IEnumerable<>).MakeGenericType(viewModelType),
             _ => viewModelType
         };

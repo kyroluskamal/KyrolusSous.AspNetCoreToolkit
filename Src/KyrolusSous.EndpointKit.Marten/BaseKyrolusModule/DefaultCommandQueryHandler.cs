@@ -1,4 +1,6 @@
 using KyrolusSous.CQRS.Abstractions.Interfaces;
+using KyrolusSous.CQRS.Marten.Query;
+using KyrolusSous.EndpointKit.Core.Batch;
 using KyrolusSous.EndpointKit.Marten.BaseKyrolusModule.Authorization;
 using KyrolusSous.EndpointKit.Marten.BaseKyrolusModule.Interfaces;
 using KyrolusSous.ExceptionHandling;
@@ -930,6 +932,61 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         return BuildSuccess(result, EndpointNames.QuerySeek, StatusCodes.Status200OK, useProjection ? null : selectedFields);
     }
 
+    public async Task<IResult> HandleCountAsync(string? filter = null, bool? includeDeleted = null, CancellationToken cancellationToken = default)
+    {
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.Count,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: null,
+            cancellationToken).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        if (!TryBuildFilter(filter, out var filterExpr, out var errorResult)) return errorResult!;
+        if (!TryBuildContextFilter(out var contextFilter, out errorResult)) return errorResult!;
+
+        filterExpr = CombineFilters(filterExpr, contextFilter);
+        filterExpr = CombineFilters(filterExpr, authResult.RowFilter);
+
+        var query = new CountQuery<TResponse>(cacheable: false)
+        {
+            Filter = filterExpr,
+            IncludeDeleted = includeDeleted ?? false,
+            TenantId = endpointContext?.TenantId
+        };
+
+        var count = await mediator.SendAsync(query, cancellationToken);
+        return BuildSuccess(count, EndpointNames.Count, StatusCodes.Status200OK);
+    }
+
+    public async Task<IResult> HandleHeadByIdAsync(TKey id, CancellationToken cancellationToken = default)
+    {
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.Head,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: null,
+            resourceId: id,
+            keyValues: null,
+            cancellationToken).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        if (!TryRequireTenant(out var errorResult)) return errorResult!;
+
+        var query = config.QueryById;
+        ApplyGetByIdQueryOptions(query, id, includeProperties: null, includeExpressions: null, includeGraph: null, asNoTracking: true, useSplitQuery: null, tenantId: endpointContext?.TenantId);
+
+        var result = await mediator.SendAsync(query, cancellationToken);
+        if (result is null) return Results.NotFound();
+        if (!TryEnsureTenantMatch(result, out errorResult)) return errorResult!;
+        if (!TryEnsureRowAuthorization(result, authResult, out errorResult)) return errorResult!;
+
+        TrySetEtagHeader(result);
+        return Results.Ok();
+    }
+
     public async Task<IResult> HandleBulkUpdateAsync(KyrolusMartenBulkUpdateRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -1063,6 +1120,475 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         }
 
         return BuildSuccess(total, EndpointNames.BulkPatch, StatusCodes.Status200OK);
+    }
+
+    public async Task<IResult> HandleBatchAsync(KyrolusBatchRequest<TModel, TKey> request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        // Validate batch options
+        if (martenConfig?.BatchOptions is null || !martenConfig.BatchOptions.Enabled)
+        {
+            return BuildBadRequest("Batch operations are not enabled for this endpoint.");
+        }
+
+        var batchOptions = martenConfig.BatchOptions;
+        if (request.Operations.Count == 0)
+        {
+            return BuildBadRequest("No operations provided.");
+        }
+
+        if (request.Operations.Count > batchOptions.MaxOperationsPerBatch)
+        {
+            return BuildBadRequest($"Too many operations. Maximum allowed is {batchOptions.MaxOperationsPerBatch}.");
+        }
+
+        // Authorize batch endpoint
+        var authResult = await ResolveAuthorizationAsync(
+            EndpointNames.Batch,
+            requestedFields: null,
+            requestedIncludes: null,
+            requestedPatchProperties: null,
+            resourceId: null,
+            keyValues: null,
+            cancellationToken).ConfigureAwait(false);
+        if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
+
+        // Check atomic mode
+        var useAtomic = request.Atomic;
+        if (useAtomic && !batchOptions.AllowNonAtomic && !request.Atomic)
+        {
+            useAtomic = true; // Force atomic if non-atomic not allowed
+        }
+
+        var results = new List<KyrolusBatchOperationResult<TResponse, TKey>>();
+        var shouldContinue = true;
+
+        foreach (var operation in request.Operations)
+        {
+            if (!shouldContinue)
+            {
+                results.Add(KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+                    operation.OperationId,
+                    operation.Operation,
+                    operation.Id,
+                    StatusCodes.Status400BadRequest,
+                    "SKIPPED",
+                    "Operation skipped due to previous failure."));
+                continue;
+            }
+
+            // Validate operation type is allowed
+            if (!batchOptions.AllowedOperations.Contains(operation.Operation))
+            {
+                var opResult = KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+                    operation.OperationId,
+                    operation.Operation,
+                    operation.Id,
+                    StatusCodes.Status400BadRequest,
+                    "OPERATION_NOT_ALLOWED",
+                    $"Operation type '{operation.Operation}' is not allowed.");
+                results.Add(opResult);
+
+                if (!request.ContinueOnError && !operation.ContinueOnError)
+                {
+                    shouldContinue = false;
+                }
+                continue;
+            }
+
+            var result = await ExecuteBatchOperationAsync(operation, request.ReturnData, cancellationToken).ConfigureAwait(false);
+            results.Add(result);
+
+            if (!result.Success && !request.ContinueOnError && !operation.ContinueOnError)
+            {
+                shouldContinue = false;
+            }
+        }
+
+        var response = KyrolusBatchResponse<TResponse, TKey>.FromResults(results);
+        var statusCode = response.Success ? StatusCodes.Status200OK : StatusCodes.Status207MultiStatus;
+        return Results.Json(response, statusCode: statusCode);
+    }
+
+    private async Task<KyrolusBatchOperationResult<TResponse, TKey>> ExecuteBatchOperationAsync(
+        KyrolusBatchOperation<TModel, TKey> operation,
+        bool returnData,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return operation.Operation switch
+            {
+                KyrolusBatchOperationType.Create => await ExecuteBatchCreateAsync(operation, returnData, cancellationToken),
+                KyrolusBatchOperationType.Update => await ExecuteBatchUpdateAsync(operation, returnData, cancellationToken),
+                KyrolusBatchOperationType.Patch => await ExecuteBatchPatchAsync(operation, returnData, cancellationToken),
+                KyrolusBatchOperationType.Delete => await ExecuteBatchDeleteAsync(operation, cancellationToken),
+                KyrolusBatchOperationType.Upsert => await ExecuteBatchUpsertAsync(operation, returnData, cancellationToken),
+                _ => KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+                    operation.OperationId,
+                    operation.Operation,
+                    operation.Id,
+                    StatusCodes.Status400BadRequest,
+                    "UNKNOWN_OPERATION",
+                    $"Unknown operation type: {operation.Operation}")
+            };
+        }
+        catch (ConcurrencyException)
+        {
+            return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+                operation.OperationId,
+                operation.Operation,
+                operation.Id,
+                StatusCodes.Status409Conflict,
+                "CONCURRENCY_CONFLICT",
+                "Concurrency conflict.");
+        }
+        catch (Exception ex)
+        {
+            return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+                operation.OperationId,
+                operation.Operation,
+                operation.Id,
+                StatusCodes.Status500InternalServerError,
+                "INTERNAL_ERROR",
+                ex.Message);
+        }
+    }
+
+    private async Task<KyrolusBatchOperationResult<TResponse, TKey>> ExecuteBatchCreateAsync(
+        KyrolusBatchOperation<TModel, TKey> operation,
+        bool returnData,
+        CancellationToken cancellationToken)
+    {
+        if (operation.Data is null)
+        {
+            return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+                operation.OperationId,
+                operation.Operation,
+                operation.Id,
+                StatusCodes.Status400BadRequest,
+                "MISSING_DATA",
+                "Data is required for create operation.");
+        }
+
+        var validationResult = await ValidateBatchModelAsync(operation.Data, cancellationToken).ConfigureAwait(false);
+        if (validationResult is not null)
+        {
+            return validationResult;
+        }
+
+        var entity = (TResponse)mapper.MapModelToEntity<TModel, TResponse>(operation.Data);
+        if (!TryApplyContextValues(entity, out _))
+        {
+            return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+                operation.OperationId,
+                operation.Operation,
+                operation.Id,
+                StatusCodes.Status400BadRequest,
+                "CONTEXT_ERROR",
+                "Failed to apply context values.");
+        }
+
+        var command = config.AddCommand;
+        TrySetProperty(command, "Entity", entity);
+        var result = await mediator.SendAsync(command, cancellationToken);
+        var resultId = TryGetEntityId(result);
+
+        return KyrolusBatchOperationResult<TResponse, TKey>.Succeeded(
+            operation.OperationId,
+            operation.Operation,
+            resultId,
+            StatusCodes.Status201Created,
+            returnData ? result : default);
+    }
+
+    private async Task<KyrolusBatchOperationResult<TResponse, TKey>> ExecuteBatchUpdateAsync(
+        KyrolusBatchOperation<TModel, TKey> operation,
+        bool returnData,
+        CancellationToken cancellationToken)
+    {
+        if (operation.Id is null)
+        {
+            return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+                operation.OperationId,
+                operation.Operation,
+                operation.Id,
+                StatusCodes.Status400BadRequest,
+                "MISSING_ID",
+                "ID is required for update operation.");
+        }
+
+        if (operation.Data is null)
+        {
+            return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+                operation.OperationId,
+                operation.Operation,
+                operation.Id,
+                StatusCodes.Status400BadRequest,
+                "MISSING_DATA",
+                "Data is required for update operation.");
+        }
+
+        var validationResult = await ValidateBatchModelAsync(operation.Data, cancellationToken).ConfigureAwait(false);
+        if (validationResult is not null)
+        {
+            return validationResult;
+        }
+
+        var entity = (TResponse)mapper.MapModelToEntity<TModel, TResponse>(operation.Data);
+        if (!TrySetEntityId(entity, operation.Id, out _))
+        {
+            return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+                operation.OperationId,
+                operation.Operation,
+                operation.Id,
+                StatusCodes.Status400BadRequest,
+                "ID_ERROR",
+                "Failed to set entity ID.");
+        }
+
+        if (!TryApplyContextValues(entity, out _))
+        {
+            return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+                operation.OperationId,
+                operation.Operation,
+                operation.Id,
+                StatusCodes.Status400BadRequest,
+                "CONTEXT_ERROR",
+                "Failed to apply context values.");
+        }
+
+        var command = config.UpdateCommand;
+        TrySetProperty(command, "Entity", entity);
+        var result = await mediator.SendAsync(command, cancellationToken);
+
+        return KyrolusBatchOperationResult<TResponse, TKey>.Succeeded(
+            operation.OperationId,
+            operation.Operation,
+            operation.Id,
+            StatusCodes.Status200OK,
+            returnData ? result : default);
+    }
+
+    private async Task<KyrolusBatchOperationResult<TResponse, TKey>> ExecuteBatchPatchAsync(
+        KyrolusBatchOperation<TModel, TKey> operation,
+        bool returnData,
+        CancellationToken cancellationToken)
+    {
+        if (operation.Id is null)
+        {
+            return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+                operation.OperationId,
+                operation.Operation,
+                operation.Id,
+                StatusCodes.Status400BadRequest,
+                "MISSING_ID",
+                "ID is required for patch operation.");
+        }
+
+        if (operation.Data is null)
+        {
+            return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+                operation.OperationId,
+                operation.Operation,
+                operation.Id,
+                StatusCodes.Status400BadRequest,
+                "MISSING_DATA",
+                "Data is required for patch operation.");
+        }
+
+        // Convert model to dictionary of updates
+        var updates = ConvertModelToUpdates(operation.Data);
+        if (updates.Count == 0)
+        {
+            return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+                operation.OperationId,
+                operation.Operation,
+                operation.Id,
+                StatusCodes.Status400BadRequest,
+                "NO_UPDATES",
+                "No update fields provided.");
+        }
+
+        var keyValues = BuildKeyValues(operation.Id);
+        var command = config.PatchCommand;
+        TrySetProperty(command, KeyValuesPropertyName, keyValues);
+        TrySetProperty(command, "Updates", updates);
+
+        var result = await mediator.SendAsync(command, cancellationToken);
+
+        return KyrolusBatchOperationResult<TResponse, TKey>.Succeeded(
+            operation.OperationId,
+            operation.Operation,
+            operation.Id,
+            StatusCodes.Status200OK,
+            returnData ? result : default);
+    }
+
+    private async Task<KyrolusBatchOperationResult<TResponse, TKey>> ExecuteBatchDeleteAsync(
+        KyrolusBatchOperation<TModel, TKey> operation,
+        CancellationToken cancellationToken)
+    {
+        if (operation.Id is null)
+        {
+            return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+                operation.OperationId,
+                operation.Operation,
+                operation.Id,
+                StatusCodes.Status400BadRequest,
+                "MISSING_ID",
+                "ID is required for delete operation.");
+        }
+
+        var keyValues = BuildKeyValues(operation.Id);
+        IKyrolusCommandBase command = config.RemoveCommand;
+        if (martenConfig?.UseSoftDeleteForDelete == true)
+        {
+            command = new SoftDeleteByIdCommand<TResponse, TKey>(keyValues, false);
+        }
+
+        TrySetProperty(command, KeyValuesPropertyName, keyValues);
+        await SendCommandAsync(command, cancellationToken);
+
+        return KyrolusBatchOperationResult<TResponse, TKey>.Succeeded(
+            operation.OperationId,
+            operation.Operation,
+            operation.Id,
+            StatusCodes.Status200OK);
+    }
+
+    private async Task<KyrolusBatchOperationResult<TResponse, TKey>> ExecuteBatchUpsertAsync(
+        KyrolusBatchOperation<TModel, TKey> operation,
+        bool returnData,
+        CancellationToken cancellationToken)
+    {
+        if (operation.Data is null)
+        {
+            return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+                operation.OperationId,
+                operation.Operation,
+                operation.Id,
+                StatusCodes.Status400BadRequest,
+                "MISSING_DATA",
+                "Data is required for upsert operation.");
+        }
+
+        var validationResult = await ValidateBatchModelAsync(operation.Data, cancellationToken).ConfigureAwait(false);
+        if (validationResult is not null)
+        {
+            return validationResult;
+        }
+
+        var entity = (TResponse)mapper.MapModelToEntity<TModel, TResponse>(operation.Data);
+        if (operation.Id is not null)
+        {
+            TrySetEntityId(entity, operation.Id, out _);
+        }
+
+        if (!TryApplyContextValues(entity, out _))
+        {
+            return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+                operation.OperationId,
+                operation.Operation,
+                operation.Id,
+                StatusCodes.Status400BadRequest,
+                "CONTEXT_ERROR",
+                "Failed to apply context values.");
+        }
+
+        // Check if entity exists
+        var existingId = operation.Id ?? TryGetEntityId(entity);
+        TResponse result;
+        int statusCode;
+
+        if (existingId is not null && !existingId.Equals(default(TKey)))
+        {
+            // Try to load existing
+            var query = config.QueryById;
+            ApplyGetByIdQueryOptions(query, existingId, includeProperties: null, includeExpressions: null, includeGraph: null, asNoTracking: true, useSplitQuery: null, tenantId: endpointContext?.TenantId);
+            var existing = await mediator.SendAsync(query, cancellationToken);
+
+            if (existing is not null)
+            {
+                // Update
+                var updateCommand = config.UpdateCommand;
+                TrySetProperty(updateCommand, "Entity", entity);
+                result = await mediator.SendAsync(updateCommand, cancellationToken);
+                statusCode = StatusCodes.Status200OK;
+            }
+            else
+            {
+                // Create
+                var addCommand = config.AddCommand;
+                TrySetProperty(addCommand, "Entity", entity);
+                result = await mediator.SendAsync(addCommand, cancellationToken);
+                statusCode = StatusCodes.Status201Created;
+            }
+        }
+        else
+        {
+            // Create new
+            var addCommand = config.AddCommand;
+            TrySetProperty(addCommand, "Entity", entity);
+            result = await mediator.SendAsync(addCommand, cancellationToken);
+            statusCode = StatusCodes.Status201Created;
+        }
+
+        var resultId = TryGetEntityId(result) ?? operation.Id;
+        return KyrolusBatchOperationResult<TResponse, TKey>.Succeeded(
+            operation.OperationId,
+            operation.Operation,
+            resultId,
+            statusCode,
+            returnData ? result : default);
+    }
+
+    private async Task<KyrolusBatchOperationResult<TResponse, TKey>?> ValidateBatchModelAsync(
+        TModel model,
+        CancellationToken cancellationToken)
+    {
+        if (validationEngine is null) return null;
+        var failures = await validationEngine.ValidateAsync(model, cancellationToken).ConfigureAwait(false);
+        if (failures.Count == 0) return null;
+
+        var details = failures
+            .Select(f => new KyrolusBatchErrorDetail(f.FieldPath ?? f.PropertyName, f.ErrorCode ?? "VALIDATION_ERROR", f.ErrorMessage))
+            .ToList();
+
+        return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
+            null,
+            KyrolusBatchOperationType.Create,
+            default,
+            StatusCodes.Status400BadRequest,
+            "VALIDATION_ERROR",
+            "Validation failed.",
+            details);
+    }
+
+    private TKey? TryGetEntityId(TResponse? entity)
+    {
+        if (entity is null) return default;
+        var idProperty = typeof(TResponse).GetProperty("Id", BindingFlags.Public | BindingFlags.Instance);
+        if (idProperty is null) return default;
+        var value = idProperty.GetValue(entity);
+        return value is TKey key ? key : default;
+    }
+
+    private static Dictionary<string, object> ConvertModelToUpdates(TModel model)
+    {
+        var updates = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        var properties = typeof(TModel).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        foreach (var prop in properties)
+        {
+            if (!prop.CanRead) continue;
+            var value = prop.GetValue(model);
+            if (value is not null)
+            {
+                updates[prop.Name] = value;
+            }
+        }
+        return updates;
     }
 
     private sealed record GetAllQueryOptions(

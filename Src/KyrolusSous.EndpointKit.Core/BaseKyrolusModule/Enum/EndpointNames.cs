@@ -5,6 +5,8 @@ public enum EndpointNames
     All,
     GetAll,
     GetById,
+    Head,
+    Count,
     Query,
     Paged,
     QueryPaged,
@@ -23,5 +25,6 @@ public enum EndpointNames
     BulkPatch,
     GetDeleted,
     Restore,
+    Batch,
     Custom
 }

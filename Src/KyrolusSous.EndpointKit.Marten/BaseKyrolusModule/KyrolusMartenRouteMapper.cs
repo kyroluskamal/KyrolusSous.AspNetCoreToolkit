@@ -1,6 +1,7 @@
 using KyrolusSous.CQRS.Abstractions.Models;
 using KyrolusSous.EndpointKit.Core.BaseKyrolusModule;
 using KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Interfaces;
+using KyrolusSous.EndpointKit.Core.Batch;
 using KyrolusSous.EndpointKit.Marten.BaseKyrolusModule.Interfaces;
 
 namespace KyrolusSous.EndpointKit.Marten.BaseKyrolusModule;
@@ -51,6 +52,22 @@ public sealed class KyrolusMartenRouteMapper<TResponse, TModel, TKey> : IRouteMa
                 .Authorize(Authorize(config, EndpointNames.Query))
                 .ApplyOpenApi(config, EndpointNames.Query)
                 .ApplyEndpointPolicies(config, EndpointNames.Query);
+        }
+
+        if (martenConfig is { EnableCountEndpoint: true })
+        {
+            group.MapGet($"/{config.Route}s/$count", efHandler.HandleCountAsync)
+                .Authorize(Authorize(config, EndpointNames.Count))
+                .ApplyOpenApi(config, EndpointNames.Count, typeof(long))
+                .ApplyEndpointPolicies(config, EndpointNames.Count);
+        }
+
+        if (martenConfig is { EnableHeadEndpoint: true } && ShouldMap(EndpointNames.GetById))
+        {
+            group.MapMethods($"/{config.Route}/{{id}}", ["HEAD"], efHandler.HandleHeadByIdAsync)
+                .Authorize(Authorize(config, EndpointNames.Head))
+                .ApplyOpenApi(config, EndpointNames.Head)
+                .ApplyEndpointPolicies(config, EndpointNames.Head);
         }
 
         if (martenConfig is { EnablePagedEndpoints: true })
@@ -165,6 +182,15 @@ public sealed class KyrolusMartenRouteMapper<TResponse, TModel, TKey> : IRouteMa
                 .Authorize(Authorize(config, EndpointNames.Restore))
                 .ApplyOpenApi(config, EndpointNames.Restore)
                 .ApplyEndpointPolicies(config, EndpointNames.Restore);
+        }
+
+        if (martenConfig is { BatchOptions.Enabled: true })
+        {
+            var batchResponseType = typeof(KyrolusBatchResponse<,>).MakeGenericType(ResolveViewModelType(config, EndpointNames.Batch), typeof(TKey));
+            group.MapPost($"/{config.Route}s/{martenConfig.BatchOptions.RouteSuffix}", efHandler.HandleBatchAsync)
+                .Authorize(Authorize(config, EndpointNames.Batch))
+                .ApplyOpenApi(config, EndpointNames.Batch, batchResponseType)
+                .ApplyEndpointPolicies(config, EndpointNames.Batch);
         }
 
         if (compositeKeyOnly)

@@ -1,3 +1,7 @@
+using KyrolusSous.EndpointKit.Core.Batch;
+using KyrolusSous.EndpointKit.Core.Envelope;
+using KyrolusSous.EndpointKit.Core.Hateoas;
+
 namespace KyrolusSous.EndpointKit.EF.BaseKyrolusModule.Interfaces;
 
 public interface IKyrolusEfApiConfig<TResponse> : IKyrolusApiConfig<TResponse>
@@ -19,6 +23,8 @@ public interface IKyrolusEfApiConfig<TResponse> : IKyrolusApiConfig<TResponse>
     bool EnableQueryEndpoints { get; set; }
     bool EnablePagedEndpoints { get; set; }
     bool EnableSeekEndpoints { get; set; }
+    bool EnableCountEndpoint { get; set; }
+    bool EnableHeadEndpoint { get; set; }
     bool EnableCompositeKeyEndpoints { get; set; }
     bool EnableBulkEndpoints { get; set; }
     int BulkChunkSize { get; set; }
@@ -39,4 +45,7 @@ public interface IKyrolusEfApiConfig<TResponse> : IKyrolusApiConfig<TResponse>
     IKyrolusCommand<int>? ExecuteUpdateCommand { get; set; }
     IKyrolusCommand<int>? ExecuteDeleteCommand { get; set; }
     IKyrolusCommand<bool>? RestoreCommand { get; set; }
+    KyrolusBatchOptions BatchOptions { get; set; }
+    KyrolusEnvelopeOptions EnvelopeOptions { get; set; }
+    KyrolusHateoasOptions HateoasOptions { get; set; }
 }

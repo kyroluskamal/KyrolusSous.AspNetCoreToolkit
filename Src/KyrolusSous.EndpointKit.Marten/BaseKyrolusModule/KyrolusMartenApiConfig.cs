@@ -1,4 +1,7 @@
 using KyrolusSous.EndpointKit.Core.BaseKyrolusModule;
+using KyrolusSous.EndpointKit.Core.Batch;
+using KyrolusSous.EndpointKit.Core.Envelope;
+using KyrolusSous.EndpointKit.Core.Hateoas;
 using KyrolusSous.EndpointKit.Marten.BaseKyrolusModule.Interfaces;
 
 namespace KyrolusSous.EndpointKit.Marten.BaseKyrolusModule;
@@ -22,6 +25,8 @@ public sealed class KyrolusMartenApiConfig<TResponse> : ApiKyrolusApiConfig<TRes
     public bool EnableQueryEndpoints { get; set; } = true;
     public bool EnablePagedEndpoints { get; set; } = true;
     public bool EnableSeekEndpoints { get; set; } = true;
+    public bool EnableCountEndpoint { get; set; } = true;
+    public bool EnableHeadEndpoint { get; set; } = true;
     public bool EnableCompositeKeyEndpoints { get; set; } = true;
     public bool EnableBulkEndpoints { get; set; } = false;
     public int BulkChunkSize { get; set; } = 200;
@@ -42,4 +47,7 @@ public sealed class KyrolusMartenApiConfig<TResponse> : ApiKyrolusApiConfig<TRes
     public IKyrolusCommand<int>? ExecuteUpdateCommand { get; set; }
     public IKyrolusCommand<int>? ExecuteDeleteCommand { get; set; }
     public IKyrolusCommand<bool>? RestoreCommand { get; set; }
+    public KyrolusBatchOptions BatchOptions { get; set; } = new();
+    public KyrolusEnvelopeOptions EnvelopeOptions { get; set; } = new();
+    public KyrolusHateoasOptions HateoasOptions { get; set; } = new();
 }
