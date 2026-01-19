@@ -161,6 +161,7 @@ namespace KyrolusSous.Repositories.EF.Generator
 
             ClassName(sb, request);
             MaterializeHelpers(sb, request, keyNamesLiteral);
+            GetAllInternalAsync(sb, request);
             GetAllAsync(sb, request);
             QueryAsync(sb, request);
             GetPagedDefaults(sb, request);
@@ -355,23 +356,17 @@ namespace KyrolusSous.Repositories.EF.Generator
             sb.AppendLine(code);
             sb.AppendLine();
         }
-
-        private void ClassEnd(StringBuilder sb)
-        {
-            sb.AppendLine("}");
-        }
-        private void GetAllAsync(StringBuilder sb, RepositoryRequest request)
+        private void GetAllInternalAsync(StringBuilder sb, RepositoryRequest request)
         {
             var softDeleteExpr = CalculateSoftDelete(request);
-            var GetAll = $$$"""
+            var method = $$$"""
                             {{{RequiresUnreferencedCode}}}
-                            public async Task<IEnumerable<{{{request.EntityType.ToDisplayString()}}}>> GetAllAsync(Expression<Func<{{{request.EntityType.ToDisplayString()}}}, bool>>? filter = null,
+                            public async Task<List<{{{request.EntityType.ToDisplayString()}}}>> GetAllInternalAsync(Expression<Func<{{{request.EntityType.ToDisplayString()}}}, bool>>? filter = null,
                             Func<IQueryable<{{{request.EntityType.ToDisplayString()}}}>, IOrderedQueryable<{{{request.EntityType.ToDisplayString()}}}>>? orderBy = null,
                             List<string>? includeProperties = null, IncludeGraph<{{{request.EntityType.ToDisplayString()}}}>? includeGraph = null, bool? asNoTracking = null, bool? useSplitQuery = null,
-                            CancellationToken cancellationToken = default)
+                            CancellationToken ct = default,
+                            params Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>[] includeExpressions)
                             {
-                                Exception? exception = null;
-                                await NotifyBeforeAsync("GetAllAsync", filter, cancellationToken).ConfigureAwait(false);
                                 var effectiveAsNoTracking = asNoTracking ?? policy?.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
                                 var effectiveSplit = useSplitQuery ?? policy?.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
                                 var defaultIncludes = new Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>[] { {{{string.Join(", ", request.DefaultIncludes.Select(ip => $"e => e.{ip}"))}}} };
@@ -382,11 +377,11 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     query = query.AsNoTracking();
                                 if (effectiveSplit)
                                     query = query.AsSplitQuery();
-                                if (filter != null)
+                                if (filter is not null)
                                     query = query.Where(filter);
-                                if (orderBy != null)
+                                if (orderBy is not null)
                                     query = orderBy(query);
-                                if (includeProperties is not null)
+                                if (includeProperties! is not null)
                                 {
                                     foreach (var includeProperty in includeProperties)
                                     {
@@ -400,7 +395,34 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     {
                                         query = query.Include(includeExpression);
                                     }
+                                }if (includeExpressions  is not null)
+                                {
+                                    foreach (var includeExpression in includeExpressions)
+                                    {
+                                        query = query.Include(includeExpression);
+                                    }
                                 }
+                                return await query.ToListAsync(ct).ConfigureAwait(false);
+                            }
+                            """;
+            sb.AppendLine(method);
+            sb.AppendLine();
+        }
+        private void ClassEnd(StringBuilder sb)
+        {
+            sb.AppendLine("}");
+        }
+        private void GetAllAsync(StringBuilder sb, RepositoryRequest request)
+        {
+            var GetAll = $$$"""
+                            {{{RequiresUnreferencedCode}}}
+                            public async Task<IEnumerable<{{{request.EntityType.ToDisplayString()}}}>> GetAllAsync(Expression<Func<{{{request.EntityType.ToDisplayString()}}}, bool>>? filter = null,
+                            Func<IQueryable<{{{request.EntityType.ToDisplayString()}}}>, IOrderedQueryable<{{{request.EntityType.ToDisplayString()}}}>>? orderBy = null,
+                            List<string>? includeProperties = null, IncludeGraph<{{{request.EntityType.ToDisplayString()}}}>? includeGraph = null, bool? asNoTracking = null, bool? useSplitQuery = null,
+                            CancellationToken cancellationToken = default)
+                            {
+                                Exception? exception = null;
+                                await NotifyBeforeAsync("GetAllAsync", filter, cancellationToken).ConfigureAwait(false);
                                 try
                                 {
                                     var isCacheable = cache is not null
@@ -418,14 +440,14 @@ namespace KyrolusSous.Repositories.EF.Generator
                                             var options = BuildCacheEntryOptions(cachePolicy);
                                             var items = await cache.GetOrCreateAsync(
                                                 cacheKey,
-                                                async ct => await query.ToListAsync(ct).ConfigureAwait(false),
+                                                async ct => await GetAllInternalAsync(filter, orderBy, includeProperties!, includeGraph!, asNoTracking, useSplitQuery,ct, Array.Empty<Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>>()),
                                                 options,
                                                 cancellationToken).ConfigureAwait(false);
                                             await NotifyAfterAsync("GetAllAsync", new { Filter = filter, Count = items.Count }, exception, cancellationToken).ConfigureAwait(false);
                                             return items;
                                         }
                                     }
-                                    var result = await query.ToListAsync(cancellationToken);
+                                    var result = await GetAllInternalAsync(filter, orderBy, includeProperties!, includeGraph!, asNoTracking, useSplitQuery,cancellationToken, Array.Empty<Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>>());
                                     await NotifyAfterAsync("GetAllAsync", new { Filter = filter, Count = result.Count }, exception, cancellationToken).ConfigureAwait(false);
                                     return result;
                                 }
@@ -453,28 +475,6 @@ namespace KyrolusSous.Repositories.EF.Generator
                             {
                                 Exception? exception = null;
                                 await NotifyBeforeAsync("GetAllAsync", filter, cancellationToken).ConfigureAwait(false);
-                                var effectiveAsNoTracking = asNoTracking ?? policy?.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
-                                var effectiveSplit = useSplitQuery ?? policy?.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
-                                var defaultIncludes = new Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>[] { {{{string.Join(", ", request.DefaultIncludes.Select(ip => $"e => e.{ip}"))}}} };
-                                IQueryable<{{{request.EntityType.ToDisplayString()}}}> query = ApplyGlobalFilter(set.AsQueryable());
-                                foreach (var inc in defaultIncludes) query = query.Include(inc);
-                                {{{(softDeleteExpr is null ? string.Empty : $"if ({softDeleteExpr}) query = query.Where(e => !e.{request.SoftDeleteProperty});")}}}
-                                if (effectiveAsNoTracking)
-                                    query = query.AsNoTracking();
-                                if (effectiveSplit)
-                                    query = query.AsSplitQuery();
-                                if (filter != null)
-                                    query = query.Where(filter);
-                                if (orderBy != null)
-                                    query = orderBy(query);
-                                
-                                if (includeExpressions != null)
-                                {
-                                    foreach (var includeExpression in includeExpressions)
-                                    {
-                                        query = query.Include(includeExpression);
-                                    }
-                                }
                                 try
                                 {
                                     var isCacheable = cache is not null
@@ -491,14 +491,14 @@ namespace KyrolusSous.Repositories.EF.Generator
                                             var options = BuildCacheEntryOptions(cachePolicy);
                                             var items = await cache.GetOrCreateAsync(
                                                 cacheKey,
-                                                async ct => await query.ToListAsync(ct).ConfigureAwait(false),
+                                                async ct => await GetAllInternalAsync(filter, orderBy, null, null!, asNoTracking, useSplitQuery,ct, includeExpressions??Array.Empty<Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>>()),
                                                 options,
                                                 cancellationToken).ConfigureAwait(false);
                                             await NotifyAfterAsync("GetAllAsync", new { Filter = filter, Count = items.Count }, exception, cancellationToken).ConfigureAwait(false);
                                             return items;
                                         }
                                     }
-                                    var result = await query.ToListAsync(cancellationToken);
+                                    var result = await GetAllInternalAsync(filter, orderBy, null!, null!, asNoTracking, useSplitQuery,cancellationToken, includeExpressions??Array.Empty<Expression<Func<{{{request.EntityType.ToDisplayString()}}}, object?>>>());
                                     await NotifyAfterAsync("GetAllAsync", new { Filter = filter, Count = result.Count }, exception, cancellationToken).ConfigureAwait(false);
                                     return result;
                                 }
