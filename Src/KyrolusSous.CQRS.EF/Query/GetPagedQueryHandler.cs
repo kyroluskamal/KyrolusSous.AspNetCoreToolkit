@@ -17,24 +17,33 @@ public sealed class GetPagedQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUn
         if (query.Selector is not null)
         {
             var spec = new KyrolusEfPagedQuerySpecification<TResponse>(
-                query.Filter,
-                query.OrderBy,
-                includes,
+                new SpecificationInputs<TResponse, TResponse>(
+                    Filter: query.Filter,
+                    OrderBy: query.OrderBy,
+                    AsNoTracking: query.AsNoTracking ?? false,
+                    UseSplitQuery: query.UseSplitQuery ?? false,
+                    IncludeDeleted: false,
+                    Selector: query.Selector,
+                    Includes: includes
+                ),
                 query.PageNumber,
-                query.PageSize,
-                query.AsNoTracking ?? false,
-                query.Selector);
+                query.PageSize);
             var (projectedItems, projectedTotal) = await repo.GetPagedAsync(spec, cancellationToken);
             return new KyrolusPagedResult<TResponse>(projectedItems, projectedTotal, query.PageNumber, query.PageSize);
         }
 
         var specification = new KyrolusEfPagedQuerySpecification<TResponse>(
-            query.Filter,
-            query.OrderBy,
-            includes,
+           new SpecificationInputs<TResponse, TResponse>(
+                    Filter: query.Filter,
+                    OrderBy: query.OrderBy,
+                    AsNoTracking: query.AsNoTracking ?? false,
+                    UseSplitQuery: query.UseSplitQuery ?? false,
+                    IncludeDeleted: false,
+                    Selector: query.Selector,
+                    Includes: includes
+                ),
             query.PageNumber,
-            query.PageSize,
-            query.AsNoTracking ?? false);
+            query.PageSize);
 
         var (items, total) = await repo.GetPagedWithDefaultsAsync(
             specification,

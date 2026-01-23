@@ -39,12 +39,17 @@ public class CountQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUnitOfWork u
 
         var repo = unitOfWork.GetRepository<IKyrolusRepositoryAsync<TDbcontext, TResponse, TKey>>();
         var spec = new KyrolusEfPagedQuerySpecification<TResponse>(
-            query.Filter,
-            orderBy: null,
-            includes: [],
+            new SpecificationInputs<TResponse, TResponse>(
+                Filter: query.Filter,
+                OrderBy: null,
+                AsNoTracking: true,
+                UseSplitQuery: false,
+                Includes: null,
+                IncludeDeleted: query.IncludeDeleted,
+                Selector: null
+                ),
             pageNumber: 1,
-            pageSize: 1,
-            asNoTracking: true);
+            pageSize: 1);
         var (_, total) = await repo.GetPagedAsync(spec, cancellationToken).ConfigureAwait(false);
         return total;
     }

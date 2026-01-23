@@ -58,11 +58,15 @@ public class GetAllQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUnitOfWork 
         {
             var includes = KyrolusIncludeMerge.MergeExpressions(query.IncludeProperties, query.IncludeGraph, mergedExpressions) ?? [];
             var spec = new KyrolusEfQuerySpecification<TResponse, TResponse>(
-                query.Filter,
-                query.OrderBy,
-                includes,
-                query.Selector,
-                query.AsNoTracking ?? false);
+                new SpecificationInputs<TResponse, TResponse>(
+                    Filter: query.Filter,
+                    OrderBy: query.OrderBy,
+                    IncludeDeleted: false,
+                    Selector: query.Selector,
+                    Includes: includes,
+                    AsNoTracking: query.AsNoTracking ?? false,
+                    UseSplitQuery: query.UseSplitQuery ?? false
+                ));
             return await repo.QueryAsync(spec, cancellationToken);
         }
 

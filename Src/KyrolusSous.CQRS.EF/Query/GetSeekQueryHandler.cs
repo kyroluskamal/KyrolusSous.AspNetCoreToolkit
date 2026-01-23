@@ -1,6 +1,4 @@
 using KyrolusSous.CQRS.Abstractions.Models;
-using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
-using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 
 namespace KyrolusSous.CQRS.EF.Query;
@@ -49,13 +47,16 @@ public sealed class GetSeekQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
         {
             var repo = unitOfWork.GetRepository<IKyrolusRepositoryAsync<TDbcontext, TResponse, TKey>>();
             var spec = new KyrolusEfSeekQuerySpecification<TResponse, TResponse>(
-                effectiveFilter,
-                orderBy,
-                includes,
-                query.PageSize,
-                query.AsNoTracking ?? false,
-                query.Selector ?? (static entity => entity),
-                query.UseSplitQuery ?? false);
+                take: query.PageSize,
+                new SpecificationInputs<TResponse, TResponse>(
+                    Filter: effectiveFilter,
+                    OrderBy: orderBy,
+                    Includes: includes,
+                    AsNoTracking: query.AsNoTracking ?? false,
+                    Selector: query.Selector ?? (static entity => entity),
+                    UseSplitQuery: query.UseSplitQuery ?? false,
+                    IncludeDeleted: query.IncludeDeleted
+                ));
             items = await repo.QueryAsync(spec, cancellationToken).ConfigureAwait(false);
         }
 
@@ -89,12 +90,17 @@ public sealed class GetSeekQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
         var repo = unitOfWork.GetRepository<IKyrolusRepositoryAsync<TDbcontext, TResponse, TKey>>();
         var includes = KyrolusIncludeMerge.MergeExpressions(query.IncludeProperties, query.IncludeGraph, query.IncludeExpressions) ?? [];
         var spec = new KyrolusEfPagedQuerySpecification<TResponse>(
-            query.Filter,
-            orderBy,
-            includes,
+            new SpecificationInputs<TResponse, TResponse>(
+                Filter: query.Filter,
+                OrderBy: orderBy,
+                AsNoTracking: true,
+                UseSplitQuery: query.UseSplitQuery ?? false,
+                IncludeDeleted: query.IncludeDeleted,
+                Includes: includes,
+                Selector: null
+            ),
             pageNumber: 1,
-            pageSize: 1,
-            asNoTracking: true);
+            pageSize: 1);
         var (_, total) = await repo.GetPagedAsync(spec, cancellationToken).ConfigureAwait(false);
         return total;
     }
@@ -110,13 +116,16 @@ public sealed class GetSeekQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
         {
             var repo = unitOfWork.GetRepository<IKyrolusRepositoryAsync<TDbcontext, TResponse, TKey>>();
             var spec = new KyrolusEfSeekQuerySpecification<TResponse, TResponse>(
-                filter,
-                orderBy,
-                KyrolusIncludeMerge.MergeExpressions(query.IncludeProperties, query.IncludeGraph, query.IncludeExpressions) ?? [],
                 query.PageSize,
-                query.AsNoTracking ?? false,
-                query.Selector ?? (static entity => entity),
-                query.UseSplitQuery ?? false);
+                new SpecificationInputs<TResponse, TResponse>(
+                    Filter: query.Filter,
+                    OrderBy: orderBy,
+                    AsNoTracking: query.AsNoTracking ?? false,
+                    UseSplitQuery: query.UseSplitQuery ?? false,
+                    Includes: KyrolusIncludeMerge.MergeExpressions(query.IncludeProperties, query.IncludeGraph, query.IncludeExpressions) ?? [],
+                    IncludeDeleted: query.IncludeDeleted,
+                    Selector: query.Selector ?? (static entity => entity)
+                ));
             return await repo.QueryAsync(spec, cancellationToken).ConfigureAwait(false);
         }
 
@@ -306,9 +315,16 @@ public sealed class GetSeekQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
     }
 
     private static string GetMethodName(bool first, bool desc)
-        => first
-            ? (desc ? nameof(Queryable.OrderByDescending) : nameof(Queryable.OrderBy))
-            : (desc ? nameof(Queryable.ThenByDescending) : nameof(Queryable.ThenBy));
+    {
+        if (first)
+        {
+            if (desc) return nameof(Queryable.OrderByDescending);
+            return nameof(Queryable.OrderBy);
+        }
+
+        if (desc) return nameof(Queryable.ThenByDescending);
+        return nameof(Queryable.ThenBy);
+    }
 
     private static MethodInfo GetQueryableMethod(string name, Type entityType, Type memberType)
     {

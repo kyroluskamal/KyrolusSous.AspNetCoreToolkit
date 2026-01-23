@@ -11,7 +11,7 @@ public class KyrolusEFRepositoryBase<TEntity>
         Expression current = parameter;
         foreach (var segment in propertyPath.Split('.'))
             current = Expression.PropertyOrField(current, segment);
-        
+
         var body = Expression.Convert(current, typeof(object));
         return Expression.Lambda<Func<TEntity, object?>>(body, parameter);
     }
@@ -197,8 +197,6 @@ public class KyrolusEFRepositoryBase<TEntity>
             result = null;
             return false;
         }
-
-        // نفس سلوك كودك: Enum.Parse ممكن يرمي exception لو النص غلط
         if (value is string s)
         {
             result = Enum.Parse(underlying, s, ignoreCase: true);

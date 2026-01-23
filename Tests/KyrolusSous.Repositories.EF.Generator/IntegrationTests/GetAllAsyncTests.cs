@@ -729,15 +729,15 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
     }
     #endregion
     #region Cache tests
-    // [Fact]
-    // public void TestName()
-    // {
-    //     // Given
+    [Fact(DisplayName = "GetAllyAsync should be cached if the cache is enabled")]
+    public void TestName()
+    {
+        // Given
 
-    //     // When
+        // When
 
-    //     // Then
-    // }
+        // Then
+    }
     #endregion
     #region Unhappy Path Tests
     [Fact(DisplayName = "GetAllAsync throws when include string is invalid navigation")]

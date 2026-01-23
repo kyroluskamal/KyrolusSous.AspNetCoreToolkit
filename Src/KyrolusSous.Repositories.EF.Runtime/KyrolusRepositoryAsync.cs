@@ -1,6 +1,9 @@
+using System.Security.Cryptography;
 using KyrolusSous.Caching.Abstractions;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 
 namespace KyrolusSous.Repositories.EF.Runtime;
+
 
 /// <summary>
 /// Generic repository implementation that mirrors the generated repository features:
@@ -40,6 +43,34 @@ public class KyrolusRepositoryAsync<
     protected virtual Expression<Func<TEntity, object?>>[] DefaultIncludes => [];
     private const string GetByIdAsync = "GetByIdAsync";
     private const string _GetAllAsync = "GetAllAsync";
+    protected sealed record MaterializeByIdCommand
+    (
+        object?[] KeyValues,
+        bool IncludeDeleted,
+        List<string>? IncludeProperties,
+        IncludeGraph<TEntity>? IncludeGraph,
+        Expression<Func<TEntity, object?>>[] IncludeExpressions,
+        bool? AsNoTracking,
+        bool? UseSplitQuery,
+        CancellationToken CancellationToken
+    );
+    protected record GetAllCommand(bool IncludeDeleted,
+            bool DeletedOnly,
+            Expression<Func<TEntity, bool>>? Filter,
+            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? OrderBy,
+            List<string>? IncludeProperties,
+            IncludeGraph<TEntity>? IncludeGraph,
+            bool? AsNoTracking,
+            bool? UseSplitQuery,
+            CancellationToken CancellationToken,
+            params Expression<Func<TEntity, object?>>[] IncludeExpressions);
+    protected record GetByIdCommand(
+        object?[] KeyValues, List<string>? IncludeProperties,
+                IncludeGraph<TEntity>? IncludeGraph, bool? AsNoTracking = null,
+        bool? UseSplitQuery = null, bool IncludeDeleted = false,
+        CancellationToken CancellationToken = default,
+        params Expression<Func<TEntity, object?>>[] IncludeExpressions
+    );
 #pragma warning disable S107
     public KyrolusRepositoryAsync(
         TDbContext db,
@@ -304,16 +335,7 @@ public class KyrolusRepositoryAsync<
         if (split) query = query.AsSplitQuery();
         return query;
     }
-    protected record GetAllCommand(bool IncludeDeleted,
-        bool DeletedOnly,
-        Expression<Func<TEntity, bool>>? Filter,
-        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? OrderBy,
-        List<string>? IncludeProperties,
-        IncludeGraph<TEntity>? IncludeGraph,
-        bool? AsNoTracking,
-        bool? UseSplitQuery,
-        CancellationToken CancellationToken,
-        params Expression<Func<TEntity, object?>>[] IncludeExpressions);
+
     protected async Task<IReadOnlyList<TEntity>> GetAllInternalAsync(GetAllCommand getAllCommand)
     {
         if ((getAllCommand.IncludeDeleted || getAllCommand.DeletedOnly) && !softDeleteEnabled)
@@ -486,32 +508,37 @@ public class KyrolusRepositoryAsync<
 
     #region Protected key helpers
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    protected async Task<TEntity?> GetByIdInternalAsync(object?[] keyValues, bool? asNoTracking = null,
-        bool? useSplitQuery = null, bool includeDeleted = false,
-        CancellationToken cancellationToken = default,
-        params Expression<Func<TEntity, object?>>[] includeExpressions)
+    protected async Task<TEntity?> GetByIdInternalAsync(GetByIdCommand cmd)
     {
         var sw = Stopwatch.StartNew();
         Exception? exception = null;
-        await NotifyBeforeAsync(GetByIdAsync, keyValues, cancellationToken).ConfigureAwait(false);
+        await NotifyBeforeAsync(GetByIdAsync, cmd.KeyValues, cmd.CancellationToken).ConfigureAwait(false);
         try
         {
-            if (cache is not null && (includeExpressions == null || includeExpressions.Length == 0))
+            if (cache is not null && (cmd.IncludeExpressions == null || cmd.IncludeExpressions.Length == 0))
             {
-                var cachePolicy = await ResolveCachePolicyAsync(GetByIdAsync, cancellationToken).ConfigureAwait(false);
+                var cachePolicy = await ResolveCachePolicyAsync(GetByIdAsync, cmd.CancellationToken).ConfigureAwait(false);
                 if (IsCacheEnabled(cachePolicy) && cache is not null)
                 {
-                    var cacheKey = CacheKeyById(keyValues, cachePolicy.KeySuffix);
+                    var cacheKey = CacheKeyById(cmd.KeyValues, cachePolicy.KeySuffix);
                     var options = BuildCacheEntryOptions(cachePolicy);
                     return await cache.GetOrCreateAsync(
                         cacheKey,
-                        async ct => await MaterializeByIdAsync(keyValues, asNoTracking, useSplitQuery, [], ct, includeDeleted).ConfigureAwait(false),
+                        async ct => await MaterializeByIdAsync(
+                            new MaterializeByIdCommand(cmd.KeyValues,
+                            cmd.IncludeDeleted, cmd.IncludeProperties,
+                            cmd.IncludeGraph, cmd.IncludeExpressions!, cmd.AsNoTracking,
+                            cmd.UseSplitQuery, cmd.CancellationToken)
+                        ).ConfigureAwait(false),
                         options,
-                        cancellationToken).ConfigureAwait(false);
+                        cmd.CancellationToken).ConfigureAwait(false);
                 }
             }
 
-            return await MaterializeByIdAsync(keyValues, asNoTracking, useSplitQuery, includeExpressions!, cancellationToken, includeDeleted).ConfigureAwait(false);
+            return await MaterializeByIdAsync(new MaterializeByIdCommand(cmd.KeyValues,
+                            cmd.IncludeDeleted, cmd.IncludeProperties,
+                            cmd.IncludeGraph, cmd.IncludeExpressions!, cmd.AsNoTracking,
+                            cmd.UseSplitQuery, cmd.CancellationToken)).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -521,7 +548,7 @@ public class KyrolusRepositoryAsync<
         finally
         {
             sw.Stop();
-            await NotifyAfterAsync(GetByIdAsync, keyValues, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
+            await NotifyAfterAsync(GetByIdAsync, cmd.KeyValues, exception, sw.Elapsed, cmd.CancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -577,23 +604,52 @@ public class KyrolusRepositoryAsync<
             await NotifyAfterAsync(GetByIdAsync, keyValues, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
         }
     }
-
-    protected async Task<TEntity?> MaterializeByIdAsync(object?[] keyValues, bool? asNoTracking, bool? useSplitQuery, Expression<Func<TEntity, object?>>[] includeExpressions, CancellationToken ct, bool includeDeleted)
+    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
+    protected async Task<TEntity?> MaterializeByIdAsync(
+                MaterializeByIdCommand cmd)
     {
-        var query = BuildBaseQuery(includeDeleted);
-        if (asNoTracking ?? asNoTrackingDefault) query = query.AsNoTracking();
-        if (useSplitQuery ?? splitQueryDefault) query = query.AsSplitQuery();
-        var defaultIncludes = DefaultIncludes;
-        if (defaultIncludes.Length > 0)
-        {
-            query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, defaultIncludes);
-        }
-        if (includeExpressions is not null && includeExpressions.Length > 0)
-            query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, includeExpressions);
+        ArgumentNullException.ThrowIfNull(cmd.KeyValues);
 
-        var predicate = BuildKeyPredicate(keyValues, keyPropertyNames);
-        return await query.FirstOrDefaultAsync(predicate, ct).ConfigureAwait(false);
+        var effectiveAsNoTracking = cmd.AsNoTracking ?? policy?.AsNoTrackingDefault ?? true;
+        var effectiveSplit = cmd.UseSplitQuery ?? policy?.UseSplitQueryDefault ?? false;
+
+        IQueryable<TEntity> query = BuildBaseQuery(cmd.IncludeDeleted);
+
+        // Default includes
+        foreach (var inc in DefaultIncludes)
+            query = query.Include(inc);
+
+        // String includes
+        if (cmd.IncludeProperties is { Count: > 0 })
+        {
+            foreach (var includeProperty in cmd.IncludeProperties)
+            {
+                if (string.IsNullOrWhiteSpace(includeProperty)) continue;
+                query = query.Include(includeProperty);
+            }
+        }
+
+        // Graph includes
+        if (cmd.IncludeGraph is { Includes: { Count: > 0 } includes })
+        {
+            foreach (var includeExpression in includes)
+                query = query.Include(includeExpression);
+        }
+
+        // Expression includes
+        if (cmd.IncludeExpressions is { Length: > 0 })
+        {
+            foreach (var includeExpression in cmd.IncludeExpressions)
+                query = KyrolusRepositoryAsync<TDbContext, TEntity, TKey>.ApplyIncludes(query, cmd.IncludeExpressions);
+        }
+
+        if (effectiveAsNoTracking) query = query.AsNoTracking();
+        if (effectiveSplit) query = query.AsSplitQuery();
+
+        var predicate = BuildKeyPredicate(cmd.KeyValues, keyPropertyNames);
+        return await query.FirstOrDefaultAsync(predicate, cmd.CancellationToken).ConfigureAwait(false);
     }
+
     #endregion
 
     #region GetAll
@@ -661,14 +717,14 @@ public class KyrolusRepositoryAsync<
                                 && (includeExpressions is null || includeExpressions.Length == 0);
             if (cache is not null && isCacheable && IsCacheEnabled(cachePolicy))
             {
-               
-                        var cacheKey = CacheKeyAll(cachePolicy.KeySuffix);
-                        var options = BuildCacheEntryOptions(cachePolicy);
-                        return await cache.GetOrCreateAsync(
-                            cacheKey,
-                            async ct => await GetAllInternalAsync(new GetAllCommand(false, false, filter, orderBy, null, null, asNoTracking, useSplitQuery, ct, includeExpressions!)).ConfigureAwait(false),
-                            options,
-                            cancellationToken).ConfigureAwait(false);
+
+                var cacheKey = CacheKeyAll(cachePolicy.KeySuffix);
+                var options = BuildCacheEntryOptions(cachePolicy);
+                return await cache.GetOrCreateAsync(
+                    cacheKey,
+                    async ct => await GetAllInternalAsync(new GetAllCommand(false, false, filter, orderBy, null, null, asNoTracking, useSplitQuery, ct, includeExpressions!)).ConfigureAwait(false),
+                    options,
+                    cancellationToken).ConfigureAwait(false);
             }
 
             var query = ApplyGlobalFilter(set.AsQueryable());
@@ -738,22 +794,22 @@ public class KyrolusRepositoryAsync<
             await NotifyBeforeAsync("GetAllCompiledAsync", null, cancellationToken).ConfigureAwait(false);
             try
             {
-                    var cachePolicy = await ResolveCachePolicyAsync(_GetAllAsync, cancellationToken).ConfigureAwait(false);
+                var cachePolicy = await ResolveCachePolicyAsync(_GetAllAsync, cancellationToken).ConfigureAwait(false);
                 if (cache is not null && IsCacheEnabled(cachePolicy))
                 {
-                    
-                        var cacheKey = CacheKeyAll(cachePolicy.KeySuffix);
-                        var options = BuildCacheEntryOptions(cachePolicy);
-                        return await cache.GetOrCreateAsync(
-                            cacheKey,
-                            async ct =>
-                            {
-                                var asyncQuery = del(db);
-                                return await asyncQuery.ToListAsync(ct).ConfigureAwait(false);
-                            },
-                            options,
-                            cancellationToken).ConfigureAwait(false) ?? [];
-                    
+
+                    var cacheKey = CacheKeyAll(cachePolicy.KeySuffix);
+                    var options = BuildCacheEntryOptions(cachePolicy);
+                    return await cache.GetOrCreateAsync(
+                        cacheKey,
+                        async ct =>
+                        {
+                            var asyncQuery = del(db);
+                            return await asyncQuery.ToListAsync(ct).ConfigureAwait(false);
+                        },
+                        options,
+                        cancellationToken).ConfigureAwait(false) ?? [];
+
                 }
                 var asyncQueryFallback = del(db);
                 return await asyncQueryFallback.ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -874,7 +930,7 @@ public class KyrolusRepositoryAsync<
         try
         {
             var keyValues = GetPrimaryKeyValues(entity);
-            var existing = await MaterializeByIdAsync(keyValues, false, false, [], cancellationToken, false).ConfigureAwait(false)
+            var existing = await MaterializeByIdAsync(new MaterializeByIdCommand(keyValues, false, null, null, [], false, false, cancellationToken)).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException($"{typeof(TEntity).Name} not found for keys {string.Join(',', keyValues)}");
             UpdateEntityProperties(entity, existing);
             await InvalidateCacheAsync(keyValues, cancellationToken).ConfigureAwait(false);
@@ -915,7 +971,7 @@ public class KyrolusRepositoryAsync<
         await NotifyBeforeAsync("PatchAsync", keyValues, cancellationToken).ConfigureAwait(false);
         try
         {
-            var entity = await MaterializeByIdAsync(keyValues, false, false, [], cancellationToken, false).ConfigureAwait(false)
+            var entity = await MaterializeByIdAsync(new MaterializeByIdCommand(keyValues, false, null, null, [], false, false, cancellationToken)).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException($"{typeof(TEntity).Name} not found for keys {string.Join(',', keyValues)}");
 
             var entityType = db.Model.FindEntityType(typeof(TEntity))
@@ -961,7 +1017,7 @@ public class KyrolusRepositoryAsync<
         await NotifyBeforeAsync("RemoveAsync", keyValues, cancellationToken).ConfigureAwait(false);
         try
         {
-            var entity = await MaterializeByIdAsync(keyValues, false, false, [], cancellationToken, !isSoftDelete).ConfigureAwait(false)
+            var entity = await MaterializeByIdAsync(new MaterializeByIdCommand(keyValues, !isSoftDelete, null, null, [], false, false, cancellationToken)).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException($"{typeof(TEntity).Name} not found for keys {string.Join(',', keyValues)}");
 
             if (isSoftDelete && softDeleteEnabled)
@@ -1065,6 +1121,7 @@ public class KyrolusRepositoryAsync<
     public async Task<List<TResult>> QueryAsync<TResult>(IKyrolusQuerySpecification<TEntity, TResult> specification, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(specification);
+        if (specification.Selector is null) throw new ArgumentNullException(nameof(specification), "specification.Selector is required");
         var sw = Stopwatch.StartNew();
         Exception? exception = null;
         await NotifyBeforeAsync("QueryAsync.Spec", specification, cancellationToken).ConfigureAwait(false);
@@ -1102,6 +1159,7 @@ public class KyrolusRepositoryAsync<
     public async Task<(IReadOnlyList<TResult> Items, int TotalCount)> GetPagedAsync<TResult>(IKyrolusPagedQuerySpecification<TEntity, TResult> specification, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(specification);
+        if (specification.Selector is null) throw new ArgumentNullException(nameof(specification), "specification.Selector is required");
         var pageNumber = specification.PageNumber;
         var pageSize = specification.PageSize;
         if (pageNumber <= 0) throw new ArgumentOutOfRangeException(nameof(specification), "PageNumber must be greater than 0.");
@@ -1354,7 +1412,7 @@ public class KyrolusRepositoryAsync<
         {
             if (!softDeleteEnabled) throw new InvalidOperationException("Soft delete is not enabled for this repository.");
 
-            var entity = await MaterializeByIdAsync(keyValues, false, false, [], cancellationToken, true).ConfigureAwait(false)
+            var entity = await MaterializeByIdAsync(new MaterializeByIdCommand(keyValues, true, null, null, [], false, false, cancellationToken)).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException($"{typeof(TEntity).Name} not found for keys {string.Join(',', keyValues)}");
 
             var entry = db.Entry(entity);

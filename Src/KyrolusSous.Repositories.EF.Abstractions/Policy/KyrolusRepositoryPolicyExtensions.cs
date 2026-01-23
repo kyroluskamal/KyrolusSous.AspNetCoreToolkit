@@ -84,4 +84,23 @@ public static class KyrolusRepositoryPolicyExtensions
             return cachePolicy;
         return policy.DefaultCachePolicy;
     }
+
+    public static KyrolusRepositoryPolicy SetCacheReadOperations<TEntity>(
+    this KyrolusRepositoryPolicy policy,
+    KyrolusCacheReadOperations operations)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        policy.CacheReadOperations[typeof(TEntity)] = operations;
+        return policy;
+    }
+
+    public static KyrolusCacheReadOperations GetCacheReadOperations<TEntity>(
+        this KyrolusRepositoryPolicy policy)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        return policy.CacheReadOperations.TryGetValue(typeof(TEntity), out var ops)
+            ? ops
+            : policy.DefaultCacheReadOperations;
+    }
+
 }

@@ -46,6 +46,28 @@ public class KyrolusSingleKeySoftDeleteRepositoryAsync<TDbContext, TEntity, TKey
         }
     }
 
+    public async Task<IReadOnlyList<TEntity>> GetAllIncludingDeletedAsync(Expression<Func<TEntity, bool>>? filter = null, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default, params Expression<Func<TEntity, object?>>[] includeExpressions)
+    {
+        var GetAllIncludingDeletedAsync = "GetAllIncludingDeletedAsync";
+        var sw = Stopwatch.StartNew();
+        Exception? exception = null;
+        await NotifyBeforeAsync(GetAllIncludingDeletedAsync, filter, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await GetAllInternalAsync(new GetAllCommand(true, false, filter, orderBy, null, null, asNoTracking, useSplitQuery, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            exception = ex;
+            throw;
+        }
+        finally
+        {
+            sw.Stop();
+            await NotifyAfterAsync(GetAllIncludingDeletedAsync, filter, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     public async Task<TEntity?> GetByIdIncludingDeletedAsync(TKey id,
         bool? asNoTracking = null,
         bool? useSplitQuery = null,
@@ -67,13 +89,50 @@ public class KyrolusSingleKeySoftDeleteRepositoryAsync<TDbContext, TEntity, TKey
                     var options = BuildCacheEntryOptions(cachePolicy);
                     return await cache.GetOrCreateAsync(
                         cacheKey,
-                        async ct => await MaterializeByIdAsync([id], asNoTracking, useSplitQuery, [], ct, true).ConfigureAwait(false),
+                        async ct => await MaterializeByIdAsync(new MaterializeByIdCommand([id], true, null, null, includeExpressions ?? [], asNoTracking, useSplitQuery, cancellationToken)).ConfigureAwait(false),
                         options,
                         cancellationToken).ConfigureAwait(false);
                 }
             }
 
-            return await MaterializeByIdAsync([id], asNoTracking, useSplitQuery, includeExpressions!, cancellationToken, true).ConfigureAwait(false);
+            return await MaterializeByIdAsync(new MaterializeByIdCommand([id], true, null, null, includeExpressions ?? [], asNoTracking, useSplitQuery, cancellationToken)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            exception = ex;
+            throw;
+        }
+        finally
+        {
+            sw.Stop();
+            await NotifyAfterAsync(GetByIdIncludingDeletedAsync, id, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    public async Task<TEntity?> GetByIdIncludingDeletedAsync(TKey id, List<string>? includeProperties = null, IncludeGraph<TEntity>? includeGraph = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default)
+    {
+        var GetByIdIncludingDeletedAsync = "GetByIdIncludingDeletedAsync";
+        var sw = Stopwatch.StartNew();
+        Exception? exception = null;
+        await NotifyBeforeAsync(GetByIdIncludingDeletedAsync, id, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (cache is not null && (includeProperties is not { Count: > 0 } || includeGraph is not { Includes.Count: > 0 }))
+            {
+                var cachePolicy = await ResolveCachePolicyAsync(GetByIdIncludingDeletedAsync, cancellationToken).ConfigureAwait(false);
+                if (IsCacheEnabled(cachePolicy) && cache is not null)
+                {
+                    var cacheKey = CacheKeyById([id], cachePolicy.KeySuffix) + ":incdel=1";
+                    var options = BuildCacheEntryOptions(cachePolicy);
+                    return await cache.GetOrCreateAsync(
+                        cacheKey,
+                        async ct => await MaterializeByIdAsync(new MaterializeByIdCommand([id], true, includeProperties, includeGraph, [], asNoTracking, useSplitQuery, cancellationToken)).ConfigureAwait(false),
+                        options,
+                        cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            return await MaterializeByIdAsync(new MaterializeByIdCommand([id], true, includeProperties, includeGraph, [], asNoTracking, useSplitQuery, cancellationToken)).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -96,6 +155,28 @@ public class KyrolusSingleKeySoftDeleteRepositoryAsync<TDbContext, TEntity, TKey
         try
         {
             return await GetAllInternalAsync(new GetAllCommand(true, true, filter, orderBy, includeProperties, includeGraph, asNoTracking, useSplitQuery, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            exception = ex;
+            throw;
+        }
+        finally
+        {
+            sw.Stop();
+            await NotifyAfterAsync(GetDeletedOnlyAsync, filter, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    public async Task<IReadOnlyList<TEntity>> GetDeletedOnlyAsync(Expression<Func<TEntity, bool>>? filter = null, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default, params Expression<Func<TEntity, object?>>[] includeExpressions)
+    {
+        var GetDeletedOnlyAsync = "GetDeletedOnlyAsync";
+        var sw = Stopwatch.StartNew();
+        Exception? exception = null;
+        await NotifyBeforeAsync(GetDeletedOnlyAsync, filter, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await GetAllInternalAsync(new GetAllCommand(true, true, filter, orderBy, null, null, asNoTracking, useSplitQuery, cancellationToken, includeExpressions));
         }
         catch (Exception ex)
         {

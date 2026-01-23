@@ -11,6 +11,8 @@ public sealed class KyrolusRepositoryPolicy
     public string? RowVersionProperty { get; init; }
     public Dictionary<Type, List<Delegate>> GlobalQueryFilters { get; init; } = [];
     public Dictionary<Type, KyrolusCachePolicy> CachePolicies { get; init; } = [];
+    public Dictionary<Type, KyrolusCacheReadOperations> CacheReadOperations { get; init; } = [];
+    public KyrolusCacheReadOperations DefaultCacheReadOperations { get; init; } = KyrolusCacheReadOperations.SafeDefaults;
     public KyrolusCachePolicy? DefaultCachePolicy { get; init; }
     public IKyrolusRepositoryCachePolicyProvider? CachePolicyProvider { get; init; }
     public int ConcurrencyRetryCount { get; init; } = 0;

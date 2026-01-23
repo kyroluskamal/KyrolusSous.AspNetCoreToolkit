@@ -43,8 +43,12 @@ public class KyrolusSingleKeyRepositoryAsync<TDbContext, TEntity, TKey> :
         var hasIncludeProps = includeProperties is { Count: > 0 } && includeProperties.Any(p => !string.IsNullOrWhiteSpace(p));
         if (!hasIncludeProps)
         {
-            var includes = includeGraph?.Includes?.ToArray() ?? [];
-            return GetByIdInternalAsync([id], asNoTracking, useSplitQuery, false, cancellationToken, includes);
+            return GetByIdInternalAsync(new GetByIdCommand(
+                [id],
+                includeProperties,
+                includeGraph,
+                asNoTracking,
+                useSplitQuery, false, cancellationToken));
         }
         return GetByIdInternalWithStringIncludesAsync([id], includeProperties!, includeGraph, asNoTracking, useSplitQuery, cancellationToken);
     }
@@ -56,7 +60,7 @@ public class KyrolusSingleKeyRepositoryAsync<TDbContext, TEntity, TKey> :
         CancellationToken cancellationToken = default,
         params Expression<Func<TEntity, object?>>[] includeExpressions)
     {
-        return GetByIdInternalAsync([id], asNoTracking, useSplitQuery, false, cancellationToken, includeExpressions);
+        return GetByIdInternalAsync(new GetByIdCommand([id], null, null, asNoTracking, useSplitQuery, false, cancellationToken));
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
@@ -65,7 +69,7 @@ public class KyrolusSingleKeyRepositoryAsync<TDbContext, TEntity, TKey> :
         ArgumentNullException.ThrowIfNull(id);
 
         if (globalQueryFilter is not null || keyPropertyNames.Length != 1)
-            return await GetByIdInternalAsync([id], null, null, false, cancellationToken).ConfigureAwait(false);
+            return await GetByIdInternalAsync(new GetByIdCommand([id], null, null, false, false, false, cancellationToken)).ConfigureAwait(false);
 
         var del = CompiledById.GetOrAdd(typeof(TEntity), _ =>
         {

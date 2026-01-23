@@ -5,11 +5,18 @@ public interface IKyrolusRepositoryAsync<TDbcontext, TEntity, TKey>
     where TDbcontext : DbContext
 {
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    Task<IEnumerable<TEntity>> GetAllAsync(Expression<Func<TEntity, bool>>? filter = null, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
-        List<string>? includeProperties = null, IncludeGraph<TEntity>? includeGraph = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default);
+    Task<IEnumerable<TEntity>> GetAllAsync(
+        Expression<Func<TEntity, bool>>? filter = null,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
+        List<string>? includeProperties = null,
+        IncludeGraph<TEntity>? includeGraph = null,
+        bool? asNoTracking = null,
+        bool? useSplitQuery = null,
+        CancellationToken cancellationToken = default);
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    Task<IEnumerable<TEntity>> GetAllAsync(Expression<Func<TEntity, bool>>? filter,
+    Task<IEnumerable<TEntity>> GetAllAsync(
+        Expression<Func<TEntity, bool>>? filter,
         Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy,
         bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default,
         params Expression<Func<TEntity, object?>>[] includeExpressions);

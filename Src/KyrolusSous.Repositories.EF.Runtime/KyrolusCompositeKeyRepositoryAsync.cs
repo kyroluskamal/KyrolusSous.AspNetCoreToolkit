@@ -30,8 +30,7 @@ public class KyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity>(
         var hasIncludeProps = includeProperties is { Count: > 0 } && includeProperties.Any(p => !string.IsNullOrWhiteSpace(p));
         if (!hasIncludeProps)
         {
-            var includes = includeGraph?.Includes?.ToArray() ?? [];
-            return GetByIdInternalAsync(keyValues ?? [], asNoTracking, useSplitQuery,false, cancellationToken,  includes);
+            return GetByIdInternalAsync(new GetByIdCommand(keyValues, includeProperties, includeGraph, asNoTracking, useSplitQuery, false, cancellationToken));
         }
         return GetByIdInternalWithStringIncludesAsync(keyValues ?? [], includeProperties!, includeGraph, asNoTracking, useSplitQuery, cancellationToken);
     }
@@ -43,7 +42,7 @@ public class KyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity>(
         CancellationToken cancellationToken = default,
         params Expression<Func<TEntity, object?>>[] includeExpressions)
     {
-        return GetByIdInternalAsync(keyValues ?? [], asNoTracking, useSplitQuery,false, cancellationToken,  includeExpressions);
+        return GetByIdInternalAsync(new GetByIdCommand(keyValues, null, null, asNoTracking, useSplitQuery, false, cancellationToken, includeExpressions));
     }
 
     public Task<TEntity?> PatchAsync(object?[]? keyValues, Dictionary<string, object> updates, CancellationToken cancellationToken = default)
