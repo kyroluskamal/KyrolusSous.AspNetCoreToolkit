@@ -218,4 +218,15 @@ public class KyrolusEFRepositoryBase<TEntity>
         result = Convert.ChangeType(value, underlying, CultureInfo.InvariantCulture);
         return true;
     }
+    public static KyrolusCacheReadOperations MapReadOperation(string operation) => operation switch
+    {
+        "GetByIdAsync" => KyrolusCacheReadOperations.GetByIdAsync,
+        "GetAllAsync" => KyrolusCacheReadOperations.GetAllAsync,
+        "GetByIdCompiledAsync" => KyrolusCacheReadOperations.GetByIdCompiledAsync,
+        "GetAllCompiledAsync" => KyrolusCacheReadOperations.GetAllCompiledAsync,
+        "GetAllIncludingDeletedAsync" => KyrolusCacheReadOperations.GetAllIncludingDeletedAsync,
+        "GetDeletedOnlyAsync" => KyrolusCacheReadOperations.GetDeletedOnlyAsync,
+        "GetByIdIncludingDeletedAsync" => KyrolusCacheReadOperations.GetByIdIncludingDeletedAsync,
+        _ => KyrolusCacheReadOperations.None
+    };
 }

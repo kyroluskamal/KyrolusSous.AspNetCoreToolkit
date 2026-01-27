@@ -8,10 +8,9 @@ public record SpecificationInputs<TEntity, TResult>(Expression<Func<TEntity, boo
     Expression<Func<TEntity, TResult>>? Selector,
     Expression<Func<TEntity, object?>>[]? Includes);
 public sealed class KyrolusEfSeekQuerySpecification<TEntity, TResult>(
-        int take,
         SpecificationInputs<TEntity, TResult> spec
     )
-    : IKyrolusQuerySpecification<TEntity, TResult>, IKyrolusHasSplitQuery, IKyrolusHasLimit
+    : IKyrolusQuerySpecification<TEntity, TResult>, IKyrolusHasSplitQuery
     where TEntity : class
 {
     public Expression<Func<TEntity, bool>>? Filter { get; } = spec.Filter;
@@ -19,7 +18,6 @@ public sealed class KyrolusEfSeekQuerySpecification<TEntity, TResult>(
     public Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? OrderBy { get; } = spec.OrderBy;
     public bool AsNoTracking { get; } = spec.AsNoTracking;
     public bool UseSplitQuery { get; } = spec.UseSplitQuery;
-    public int? Take { get; } = take > 0 ? take : null;
     public bool IncludeDeleted => spec.IncludeDeleted;
     public Expression<Func<TEntity, object?>>[]? Includes => spec.Includes;
 

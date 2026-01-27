@@ -20,7 +20,7 @@ public sealed class KyrolusEfRouteMapper<TResponse, TModel, TKey> : IRouteMapper
     {
         var efConfig = config as IKyrolusEfApiConfig<TResponse>;
         var compositeKeyOnly = efConfig?.CompositeKeyOnly == true;
-        var originalAllEndpointsExcept = config.AllEndpointsExcept ?? Array.Empty<EndpointNames>();
+        EndpointNames[] originalAllEndpointsExcept = config.AllEndpointsExcept.ToArray();
         if (compositeKeyOnly)
         {
             var excluded = new HashSet<EndpointNames>(originalAllEndpointsExcept ?? []);
@@ -41,7 +41,7 @@ public sealed class KyrolusEfRouteMapper<TResponse, TModel, TKey> : IRouteMapper
         {
             if (compositeKeyOnly)
             {
-                config.AllEndpointsExcept = originalAllEndpointsExcept;
+                config.AllEndpointsExcept = originalAllEndpointsExcept ?? Array.Empty<EndpointNames>();
             }
             return group;
         }
@@ -195,7 +195,7 @@ public sealed class KyrolusEfRouteMapper<TResponse, TModel, TKey> : IRouteMapper
 
         if (compositeKeyOnly)
         {
-            config.AllEndpointsExcept = originalAllEndpointsExcept;
+            config.AllEndpointsExcept = originalAllEndpointsExcept ?? Array.Empty<EndpointNames>();
         }
         return group;
     }

@@ -53,7 +53,13 @@ public interface IKyrolusRepositoryAsync<TDbcontext, TEntity, TKey>
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     Task<List<TResult>> QueryAsync<TResult>(IKyrolusQuerySpecification<TEntity, TResult> specification, CancellationToken cancellationToken = default);
-
+    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
+    Task<List<TResult>> QueryAsync<TResult>(Expression<Func<TEntity, bool>>? filter,
+    Expression<Func<TEntity, TResult>> selector,
+    Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
+        bool? asNoTracking = null, bool? useSplitQuery = null,
+        CancellationToken cancellationToken = default,
+        params Expression<Func<TEntity, object?>>[] includeExpressions);
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     Task<(IReadOnlyList<TResult> Items, int TotalCount)> GetPagedAsync<TResult>(IKyrolusPagedQuerySpecification<TEntity, TResult> specification, CancellationToken cancellationToken = default);
 
@@ -82,10 +88,6 @@ public interface IKyrolusRepositoryAsync<TDbcontext, TEntity, TKey>
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     Task<RepositoryOperationResult<bool>> TryRemoveAsync(TEntity entity, CancellationToken cancellationToken = default);
-
-    // Optional compiled query for GetAll with default includes/soft-delete/AsNoTracking defaults (generated when applicable)
-    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    Task<List<TEntity>> GetAllCompiledAsync(CancellationToken cancellationToken = default);
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     Task<List<TEntity>> GetAllCompiledAsync(Expression<Func<TEntity, bool>> filter,

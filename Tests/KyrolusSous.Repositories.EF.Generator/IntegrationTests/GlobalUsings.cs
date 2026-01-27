@@ -16,3 +16,5 @@ global using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
 global using KyrolusSous.Repositories.EF.Abstractions.Policy;
 global using KyrolusSous.Repositories.EF.Generated;
 global using KyrolusSous.Repositories.EF.Generator.TestApp.Repositories;
+global using System.Data.Common;
+global using Microsoft.EntityFrameworkCore.Diagnostics;

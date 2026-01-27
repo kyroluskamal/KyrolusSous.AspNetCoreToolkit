@@ -1,8 +1,5 @@
 global using System.Linq.Expressions;
-using KyrolusSous.Repositories.EF.Abstractions.Query;
-using System.Collections;
 using System.Globalization;
-using System.Reflection;
 using System.Text;
 
 
@@ -146,51 +143,34 @@ public static class FilterBuilder
         }
 
         var normalized = NormalizeOperator(op);
-        if (normalized is "isnull" or "notnull")
+        if (IsUnsupportedOperator(normalized))
         {
-            condition = BuildNullCheck(member, normalized == "notnull");
-            return true;
-        }
-
-        if (normalized is "in" or "between")
-        {
-            var values = SplitValueList(clause.Value);
-            if (values.Count == 0)
-            {
-                error = $"Operator '{normalized}' requires values.";
-                return false;
-            }
-
-            if (normalized == "between")
-            {
-                if (!TryBuildBetween(member, memberType, values, caseInsensitive, out condition, out error))
-                {
-                    return false;
-                }
-                return true;
-            }
-
-            if (!TryBuildIn(member, memberType, values, caseInsensitive, out condition, out error))
-            {
-                return false;
-            }
-            return true;
-        }
-
-        if (normalized is "any" or "all")
-        {
-            var values = SplitValueList(clause.Value);
-            if (!TryBuildAnyAll(member, memberType, values, null, normalized == "any", caseInsensitive, out condition, out error))
-            {
-                return false;
-            }
-            return true;
+            error = $"Operator '{normalized}' is not supported.";
+            return false;
         }
 
         if (!TryConvert(clause.Value, memberType, out var typedValue))
         {
             error = $"Value '{clause.Value}' could not be converted to {memberType.Name}.";
             return false;
+        }
+
+        if (typedValue is null)
+        {
+            if (!IsNullComparableOperator(normalized))
+            {
+                error = $"Operator '{normalized}' does not allow null values.";
+                return false;
+            }
+
+            if (memberType.IsValueType && Nullable.GetUnderlyingType(memberType) is null)
+            {
+                error = $"Property '{clause.Property}' does not allow null values.";
+                return false;
+            }
+
+            condition = BuildNullCheck(member, IsNotEqualsOperator(normalized));
+            return true;
         }
 
         condition = BuildComparison(member, memberType, normalized, typedValue, caseInsensitive);
@@ -307,48 +287,10 @@ public static class FilterBuilder
             }
 
             var normalized = NormalizeOperator(op);
-            if (normalized is "isnull" or "notnull")
+            if (IsUnsupportedOperator(normalized))
             {
-                return BuildNullCheck(member, normalized == "notnull");
-            }
-
-            if (normalized is "in" or "between" or "any" or "all")
-            {
-                SkipWhitespace();
-                var content = ReadBracketedContent();
-                if (string.IsNullOrWhiteSpace(content))
-                {
-                    Error ??= $"Operator '{normalized}' requires a value list.";
-                    return null;
-                }
-
-                var values = SplitValueList(content);
-                if (normalized == "between")
-                {
-                    if (!TryBuildBetween(member, memberType, values, caseInsensitive, out var between, out var betweenError))
-                    {
-                        Error = betweenError;
-                        return null;
-                    }
-                    return between;
-                }
-
-                if (normalized is "any" or "all")
-                {
-                    if (!TryBuildAnyAll(member, memberType, values, content, normalized == "any", caseInsensitive, out var anyAll, out var anyAllError))
-                    {
-                        Error = anyAllError;
-                        return null;
-                    }
-                    return anyAll;
-                }
-
-                if (!TryBuildIn(member, memberType, values, caseInsensitive, out var inExpr, out var inError))
-                {
-                    Error = inError;
-                    return null;
-                }
-                return inExpr;
+                Error ??= $"Operator '{normalized}' is not supported.";
+                return null;
             }
 
             SkipWhitespace();
@@ -362,6 +304,23 @@ public static class FilterBuilder
             {
                 Error = $"Value '{rawValue}' could not be converted to {memberType.Name}.";
                 return null;
+            }
+
+            if (typedValue is null)
+            {
+                if (!IsNullComparableOperator(normalized))
+                {
+                    Error ??= $"Operator '{normalized}' does not allow null values.";
+                    return null;
+                }
+
+                if (memberType.IsValueType && Nullable.GetUnderlyingType(memberType) is null)
+                {
+                    Error ??= $"Property '{property}' does not allow null values.";
+                    return null;
+                }
+
+                return BuildNullCheck(member, IsNotEqualsOperator(normalized));
             }
 
             return BuildComparison(member, memberType, normalized, typedValue, caseInsensitive);
@@ -390,14 +349,14 @@ public static class FilterBuilder
         private string? ReadOperator()
         {
             SkipWhitespace();
-            if (TryMatch("==") || TryMatch("!=") || TryMatch(">=") || TryMatch("<="))
+            if (TryMatch("==") || TryMatch("!=") || TryMatch(">=") || TryMatch("<=") || TryMatch("<>"))
             {
                 var op = text.Substring(index, 2);
                 index += 2;
                 return op;
             }
 
-            if (TryMatch(">") || TryMatch("<"))
+            if (TryMatch("=") || TryMatch(">") || TryMatch("<"))
             {
                 var op = text[index].ToString();
                 index++;
@@ -778,6 +737,8 @@ public static class FilterBuilder
         {
             "eq" => "==",
             "neq" => "!=",
+            "=" => "==",
+            "<>" => "!=",
             "gt" => ">",
             "lt" => "<",
             "gte" => ">=",
@@ -785,6 +746,15 @@ public static class FilterBuilder
             _ => normalized
         };
     }
+
+    private static bool IsUnsupportedOperator(string normalized)
+        => normalized is "isnull" or "notnull" or "in" or "between" or "any" or "all";
+
+    private static bool IsNullComparableOperator(string normalized)
+        => normalized is "==" or "!=" or "eq" or "neq";
+
+    private static bool IsNotEqualsOperator(string normalized)
+        => normalized is "!=" or "neq";
 
     private static bool TryGetEnumerableElementType(Type type, out Type elementType)
     {

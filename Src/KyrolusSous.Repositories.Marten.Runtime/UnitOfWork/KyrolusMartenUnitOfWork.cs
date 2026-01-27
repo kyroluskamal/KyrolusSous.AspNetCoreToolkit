@@ -54,6 +54,7 @@ public sealed class KyrolusMartenUnitOfWork<TSession>(
                 CacheProvider: serviceProvider.GetService<ICacheProvider>(),
                 CacheKeyContext: serviceProvider.GetService<ICacheKeyContext>(),
                 CachePolicyProvider: serviceProvider.GetService<IKyrolusRepositoryCachePolicyProvider>(),
+                PolicyProvider: serviceProvider.GetService<IKyrolusMartenRepositoryPolicyProvider>(),
                 ResiliencePolicy: serviceProvider.GetService<IKyrolusMartenResiliencePolicy>(),
                 Tracing: serviceProvider.GetService<IKyrolusMartenTracing>());
             return ActivatorUtilities.CreateInstance(serviceProvider, innerType, session, deps);

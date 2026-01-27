@@ -6,40 +6,50 @@ public class KyrolusMartenSoftDeleteRepositoryAsync<TSession, TEntity, TKey>
     where TEntity : class
     where TKey : IEquatable<TKey>
 {
-    private readonly string isDeletedPropertyName;
-    private readonly bool filterByDefault;
-    private readonly bool enabled;
-    private readonly PropertyInfo? isDeletedProperty;
+    private string isDeletedPropertyName = string.Empty;
+    private bool filterByDefault;
+    private bool enabled;
+    private PropertyInfo? isDeletedProperty;
 
     public KyrolusMartenSoftDeleteRepositoryAsync(
         TSession session,
         KyrolusMartenRepositoryDependencies? services = null)
         : base(session, services)
     {
-        var configuredName = services?.SoftDeletePolicy?.PropertyName?.Trim();
+        RefreshSoftDeletePolicy();
+    }
+
+    private void RefreshSoftDeletePolicy()
+    {
+        var configuredName = SoftDeletePolicy?.PropertyName?.Trim();
         if (string.IsNullOrWhiteSpace(configuredName))
         {
             enabled = false;
+            filterByDefault = false;
             isDeletedPropertyName = string.Empty;
             isDeletedProperty = null;
+            return;
         }
-        else
+
+        var prop = isDeletedProperty;
+        if (prop is null || !string.Equals(prop.Name, configuredName, StringComparison.OrdinalIgnoreCase))
         {
-            var prop = typeof(TEntity).GetProperty(configuredName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
-            if (prop == null || prop.PropertyType != typeof(bool))
-            {
-                enabled = false;
-                isDeletedPropertyName = string.Empty;
-                isDeletedProperty = null;
-            }
-            else
-            {
-                enabled = services?.SoftDeletePolicy?.Enabled ?? true;
-                filterByDefault = services?.SoftDeletePolicy?.FilterDeletedByDefault ?? true;
-                isDeletedPropertyName = prop.Name; // preserve actual casing
-                isDeletedProperty = prop;
-            }
+            prop = typeof(TEntity).GetProperty(configuredName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
         }
+
+        if (prop == null || prop.PropertyType != typeof(bool))
+        {
+            enabled = false;
+            filterByDefault = false;
+            isDeletedPropertyName = string.Empty;
+            isDeletedProperty = null;
+            return;
+        }
+
+        enabled = SoftDeletePolicy?.Enabled ?? true;
+        filterByDefault = SoftDeletePolicy?.FilterDeletedByDefault ?? true;
+        isDeletedPropertyName = prop.Name; // preserve actual casing
+        isDeletedProperty = prop;
     }
 
     private bool ShouldFilter(bool includeSoftDeleted) => enabled && !includeSoftDeleted && filterByDefault && !string.IsNullOrEmpty(isDeletedPropertyName);
@@ -50,6 +60,8 @@ public class KyrolusMartenSoftDeleteRepositoryAsync<TSession, TEntity, TKey>
         MartenQueryOptions<TEntity>? options = null,
         CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        RefreshSoftDeletePolicy();
         var opts = options ?? new MartenQueryOptions<TEntity>();
         if (ShouldFilter(opts.IncludeSoftDeleted))
         {
@@ -68,6 +80,8 @@ public class KyrolusMartenSoftDeleteRepositoryAsync<TSession, TEntity, TKey>
         MartenQueryOptions<TEntity>? options = null,
         CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        RefreshSoftDeletePolicy();
         var opts = options ?? new MartenQueryOptions<TEntity>();
         var session = ResolveSession(opts);
         var hasIncludes = (opts.IncludeProperties?.Count ?? 0) > 0 || (opts.IncludeExpressions?.Length ?? 0) > 0;
@@ -110,6 +124,8 @@ public class KyrolusMartenSoftDeleteRepositoryAsync<TSession, TEntity, TKey>
         MartenQueryOptions<TEntity>? options = null,
         CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        RefreshSoftDeletePolicy();
         var opts = options ?? new MartenQueryOptions<TEntity>();
         var session = ResolveSession(opts);
         var hasIncludes = (opts.IncludeProperties?.Count ?? 0) > 0 || (opts.IncludeExpressions?.Length ?? 0) > 0;
@@ -144,25 +160,62 @@ public class KyrolusMartenSoftDeleteRepositoryAsync<TSession, TEntity, TKey>
         return new MartenEntityResult<TEntity>(item, ver);
     }
 
-    public Task<IEnumerable<TEntity>> GetAllIncludingDeletedAsync(
+    public async Task<IEnumerable<TEntity>> GetAllIncludingDeletedAsync(
         MartenQueryOptions<TEntity>? options = null,
         CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        RefreshSoftDeletePolicy();
         var opts = options ?? new MartenQueryOptions<TEntity>();
         opts = opts with { IncludeSoftDeleted = true };
-        return base.GetAllAsync(opts, cancellationToken);
+        var hasIncludes = (opts.IncludeProperties?.Count ?? 0) > 0 || (opts.IncludeExpressions?.Length ?? 0) > 0;
+        var isCacheable = !hasIncludes
+            && opts.Filter is null
+            && opts.Specification is null
+            && opts.OrderBy is null
+            && opts.ConfigureQuery is null;
+
+        if (CacheProvider is not null && isCacheable)
+        {
+            var resolvedPolicy = await ResolveCachePolicyAsync(nameof(GetAllIncludingDeletedAsync), opts.TenantId, cancellationToken).ConfigureAwait(false);
+            if (IsCacheEnabled(resolvedPolicy))
+            {
+                var cacheKey = BuildCacheAllKey(opts.TenantId, resolvedPolicy.KeySuffix) + ":incdel=1";
+                var optionsEntry = BuildCacheEntryOptions(resolvedPolicy, opts.TenantId);
+                return await CacheProvider.GetOrCreateAsync<List<TEntity>>(
+                    cacheKey,
+                    async ct =>
+                    {
+                        var query = BuildQuery(opts, out var session);
+                        var list = await query.ToListAsync(ct).ConfigureAwait(false);
+                        var materialized = list is List<TEntity> typed ? typed : list.ToList();
+                        await ApplyIncludesAsync(materialized, opts.IncludeProperties, opts.IncludeExpressions, session, ct).ConfigureAwait(false);
+                        return materialized;
+                    },
+                    optionsEntry,
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        var fallbackQuery = BuildQuery(opts, out var fallbackSession);
+        var fallbackList = await fallbackQuery.ToListAsync(cancellationToken).ConfigureAwait(false);
+        await ApplyIncludesAsync(fallbackList, opts.IncludeProperties, opts.IncludeExpressions, fallbackSession, cancellationToken).ConfigureAwait(false);
+        return fallbackList;
     }
 
     public async Task<IEnumerable<TEntity>> GetDeletedOnlyAsync(
         MartenQueryOptions<TEntity>? options = null,
         CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        RefreshSoftDeletePolicy();
         if (!enabled || string.IsNullOrEmpty(isDeletedPropertyName))
         {
             return Array.Empty<TEntity>();
         }
 
         var opts = options ?? new MartenQueryOptions<TEntity>();
+        var hasUserFilter = opts.Filter is not null;
         var param = Expression.Parameter(typeof(TEntity), "e");
         var prop = Expression.Property(param, isDeletedPropertyName);
         var isDeleted = Expression.Equal(prop, Expression.Constant(true));
@@ -175,7 +228,39 @@ public class KyrolusMartenSoftDeleteRepositoryAsync<TSession, TEntity, TKey>
         }
 
         opts = opts with { Filter = deletedFilter, IncludeSoftDeleted = true };
-        return await base.GetAllAsync(opts, cancellationToken).ConfigureAwait(false);
+        var hasIncludes = (opts.IncludeProperties?.Count ?? 0) > 0 || (opts.IncludeExpressions?.Length ?? 0) > 0;
+        var isCacheable = !hasIncludes
+            && !hasUserFilter
+            && opts.Specification is null
+            && opts.OrderBy is null
+            && opts.ConfigureQuery is null;
+
+        if (CacheProvider is not null && isCacheable)
+        {
+            var resolvedPolicy = await ResolveCachePolicyAsync(nameof(GetDeletedOnlyAsync), opts.TenantId, cancellationToken).ConfigureAwait(false);
+            if (IsCacheEnabled(resolvedPolicy))
+            {
+                var cacheKey = BuildCacheAllKey(opts.TenantId, resolvedPolicy.KeySuffix) + ":incdel=1:delonly=1";
+                var optionsEntry = BuildCacheEntryOptions(resolvedPolicy, opts.TenantId);
+                return await CacheProvider.GetOrCreateAsync<List<TEntity>>(
+                    cacheKey,
+                    async ct =>
+                    {
+                        var query = BuildQuery(opts, out var session);
+                        var list = await query.ToListAsync(ct).ConfigureAwait(false);
+                        var materialized = list is List<TEntity> typed ? typed : list.ToList();
+                        await ApplyIncludesAsync(materialized, opts.IncludeProperties, opts.IncludeExpressions, session, ct).ConfigureAwait(false);
+                        return materialized;
+                    },
+                    optionsEntry,
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        var fallbackQuery = BuildQuery(opts, out var fallbackSession);
+        var fallbackList = await fallbackQuery.ToListAsync(cancellationToken).ConfigureAwait(false);
+        await ApplyIncludesAsync(fallbackList, opts.IncludeProperties, opts.IncludeExpressions, fallbackSession, cancellationToken).ConfigureAwait(false);
+        return fallbackList;
     }
 
     protected override IEnumerable<string> GetAdditionalEntityCacheKeysForInvalidation(
@@ -183,6 +268,7 @@ public class KyrolusMartenSoftDeleteRepositoryAsync<TSession, TEntity, TKey>
         string? tenantId,
         KyrolusCachePolicy policy)
     {
+        RefreshSoftDeletePolicy();
         if (!enabled || string.IsNullOrEmpty(isDeletedPropertyName))
         {
             return Array.Empty<string>();
@@ -191,10 +277,26 @@ public class KyrolusMartenSoftDeleteRepositoryAsync<TSession, TEntity, TKey>
         return [BuildCacheKey(tenantId, id, policy.KeySuffix) + ":incdel=1"];
     }
 
+    protected override IEnumerable<string> GetAdditionalAllCacheKeysForInvalidation(
+        string? tenantId,
+        KyrolusCachePolicy policy)
+    {
+        RefreshSoftDeletePolicy();
+        if (!enabled || string.IsNullOrEmpty(isDeletedPropertyName))
+        {
+            return Array.Empty<string>();
+        }
+
+        var baseKey = BuildCacheAllKey(tenantId, policy.KeySuffix);
+        return [baseKey + ":incdel=1", baseKey + ":incdel=1:delonly=1"];
+    }
+
     public override async IAsyncEnumerable<TEntity> StreamAsync(
         MartenQueryOptions<TEntity>? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        RefreshSoftDeletePolicy();
         foreach (var item in await GetAllAsync(options, cancellationToken).ConfigureAwait(false))
         {
             yield return item;
@@ -203,6 +305,8 @@ public class KyrolusMartenSoftDeleteRepositoryAsync<TSession, TEntity, TKey>
 
     public override async Task<PageResult<TEntity>> GetPageAsync(MartenQueryOptions<TEntity>? options = null, MartenPageRequest? page = null, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        RefreshSoftDeletePolicy();
         var opts = options ?? new MartenQueryOptions<TEntity>();
         if (ShouldFilter(opts.IncludeSoftDeleted))
         {
@@ -216,19 +320,24 @@ public class KyrolusMartenSoftDeleteRepositoryAsync<TSession, TEntity, TKey>
         return await base.GetPageAsync(opts, page, cancellationToken).ConfigureAwait(false);
     }
 
-    public override Task<bool> RemoveAsync(TEntity entity, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)
+    public override async Task<bool> RemoveAsync(TEntity entity, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        RefreshSoftDeletePolicy();
         if (!enabled || string.IsNullOrEmpty(isDeletedPropertyName))
         {
-            return base.RemoveAsync(entity, expectedVersion, tenantId, cancellationToken);
+            return await base.RemoveAsync(entity, expectedVersion, tenantId, cancellationToken).ConfigureAwait(false);
         }
 
         ApplyProperty(entity, isDeletedPropertyName, true);
-        return base.UpdateAsync(entity, expectedVersion, tenantId, cancellationToken).ContinueWith(_ => true, cancellationToken);
+        await base.UpdateAsync(entity, expectedVersion, tenantId, cancellationToken).ConfigureAwait(false);
+        return true;
     }
 
     public override async Task<bool> RemoveAsync(TKey id, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        RefreshSoftDeletePolicy();
         if (!enabled || string.IsNullOrEmpty(isDeletedPropertyName))
         {
             return await base.RemoveAsync(id, expectedVersion, tenantId, cancellationToken).ConfigureAwait(false);
@@ -241,26 +350,32 @@ public class KyrolusMartenSoftDeleteRepositoryAsync<TSession, TEntity, TKey>
         return true;
     }
 
-    public override Task<int> DeleteWhereAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)
+    public override async Task<int> DeleteWhereAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        RefreshSoftDeletePolicy();
         if (!enabled || string.IsNullOrEmpty(isDeletedPropertyName))
         {
-            return base.DeleteWhereAsync(filter, tenantId, cancellationToken);
+            return await base.DeleteWhereAsync(filter, tenantId, cancellationToken).ConfigureAwait(false);
         }
 
         var patch = Session.Patch<TEntity>(filter);
         patch.Set(isDeletedPropertyName, true);
-        return Task.FromResult(0);
+        return 0;
     }
 
-    public Task<bool> RestoreAsync(TKey id, string? tenantId = null, CancellationToken cancellationToken = default)
+    public async Task<bool> RestoreAsync(TKey id, string? tenantId = null, CancellationToken cancellationToken = default)
     {
-        if (!enabled || string.IsNullOrEmpty(isDeletedPropertyName)) return Task.FromResult(false);
-        return RestoreInternalAsync(id, cancellationToken);
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        RefreshSoftDeletePolicy();
+        if (!enabled || string.IsNullOrEmpty(isDeletedPropertyName)) return false;
+        return await RestoreInternalAsync(id, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<bool> RestoreRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        RefreshSoftDeletePolicy();
         if (!enabled || string.IsNullOrEmpty(isDeletedPropertyName)) return false;
         foreach (var entity in entities)
         {
@@ -270,12 +385,14 @@ public class KyrolusMartenSoftDeleteRepositoryAsync<TSession, TEntity, TKey>
         return true;
     }
 
-    public Task<int> RestoreWhereAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)
+    public async Task<int> RestoreWhereAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)
     {
-        if (!enabled || string.IsNullOrEmpty(isDeletedPropertyName)) return Task.FromResult(0);
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        RefreshSoftDeletePolicy();
+        if (!enabled || string.IsNullOrEmpty(isDeletedPropertyName)) return 0;
         var patch = Session.Patch<TEntity>(filter);
         patch.Set(isDeletedPropertyName, false);
-        return Task.FromResult(0);
+        return 0;
     }
 
     private async Task<bool> RestoreInternalAsync(TKey id, CancellationToken cancellationToken)

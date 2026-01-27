@@ -8,15 +8,17 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
     protected TSession Session { get; } = rootSession ?? throw new ArgumentNullException(nameof(rootSession));
 
     public IKyrolusMartenObserver? Observer { get; private set; } = services?.Observer;
-    public IKyrolusMartenAuthorization? Authorization { get; } = services?.Authorization;
-    public IKyrolusMartenValidation? Validation { get; } = services?.Validation;
-    public IKyrolusMartenSoftDeletePolicy? SoftDeletePolicy { get; } = services?.SoftDeletePolicy;
-    public ICacheProvider? CacheProvider { get; } = services?.CacheProvider;
-    private readonly ICacheKeyContext? cacheKeyContext = services?.CacheKeyContext;
-    private readonly IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider = services?.CachePolicyProvider;
-    private readonly KyrolusCachePolicy? cachePolicy = services?.CachePolicy;
-    public IKyrolusMartenResiliencePolicy? ResiliencePolicy { get; } = services?.ResiliencePolicy;
-    public IKyrolusMartenTracing? Tracing { get; } = services?.Tracing;
+    public IKyrolusMartenAuthorization? Authorization { get; private set; } = services?.Authorization;
+    public IKyrolusMartenValidation? Validation { get; private set; } = services?.Validation;
+    public IKyrolusMartenSoftDeletePolicy? SoftDeletePolicy { get; private set; } = services?.SoftDeletePolicy;
+    public ICacheProvider? CacheProvider { get; private set; } = services?.CacheProvider;
+    private ICacheKeyContext? cacheKeyContext = services?.CacheKeyContext;
+    private IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider = services?.CachePolicyProvider;
+    private KyrolusCachePolicy? cachePolicy = services?.CachePolicy;
+    public IKyrolusMartenResiliencePolicy? ResiliencePolicy { get; private set; } = services?.ResiliencePolicy;
+    public IKyrolusMartenTracing? Tracing { get; private set; } = services?.Tracing;
+    private readonly IKyrolusMartenRepositoryPolicyProvider? policyProvider = services?.PolicyProvider;
+    private Task? policyInitTask;
     private static readonly TimeSpan DefaultCacheTtl = TimeSpan.FromMinutes(5);
     private static readonly ConcurrentDictionary<Type, PropertyInfo?> IdPropertyCache = new();
     public void SetObserver(IKyrolusMartenObserver? observer) => Observer = observer;
@@ -127,8 +129,52 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
             return $"tenant={resolvedTenant}";
         return null;
     }
+
+    protected async Task EnsurePolicyInitializedAsync(CancellationToken ct)
+    {
+        if (policyProvider is null) return;
+
+        var initTask = policyInitTask;
+        if (initTask is null)
+        {
+            var newTask = InitializePolicyAsync(ct);
+            initTask = Interlocked.CompareExchange(ref policyInitTask, newTask, null) ?? newTask;
+        }
+
+        await initTask.ConfigureAwait(false);
+    }
+
+    private async Task InitializePolicyAsync(CancellationToken ct)
+    {
+        var context = new KyrolusMartenRepositoryPolicyContext(
+            typeof(TEntity),
+            typeof(TEntity).Name,
+            typeof(TSession),
+            ResolveCacheScope(null),
+            cacheKeyContext?.TenantId);
+
+        var dynamicDeps = await policyProvider!.GetPolicyAsync(context, ct).ConfigureAwait(false);
+        if (dynamicDeps is null) return;
+
+        ApplyPolicy(dynamicDeps);
+    }
+
+    private void ApplyPolicy(KyrolusMartenRepositoryDependencies deps)
+    {
+        if (deps.Observer is not null) Observer = deps.Observer;
+        if (deps.Authorization is not null) Authorization = deps.Authorization;
+        if (deps.Validation is not null) Validation = deps.Validation;
+        if (deps.SoftDeletePolicy is not null) SoftDeletePolicy = deps.SoftDeletePolicy;
+        if (deps.CacheProvider is not null) CacheProvider = deps.CacheProvider;
+        if (deps.CacheKeyContext is not null) cacheKeyContext = deps.CacheKeyContext;
+        if (deps.CachePolicyProvider is not null) cachePolicyProvider = deps.CachePolicyProvider;
+        if (deps.CachePolicy is not null) cachePolicy = deps.CachePolicy;
+        if (deps.ResiliencePolicy is not null) ResiliencePolicy = deps.ResiliencePolicy;
+        if (deps.Tracing is not null) Tracing = deps.Tracing;
+    }
     protected async ValueTask<KyrolusCachePolicy> ResolveCachePolicyAsync(string operation, string? tenantId, CancellationToken ct)
     {
+        await EnsurePolicyInitializedAsync(ct).ConfigureAwait(false);
         var effective = new KyrolusCachePolicy(
             AbsoluteExpirationRelativeToNow: DefaultCacheTtl,
             Enabled: false);
@@ -300,6 +346,7 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
         MartenQueryOptions<TEntity>? options = null,
         CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var opts = options ?? new MartenQueryOptions<TEntity>();
         var hasIncludes = (opts.IncludeProperties?.Count ?? 0) > 0 || (opts.IncludeExpressions?.Length ?? 0) > 0;
         var isCacheable = !hasIncludes
@@ -344,6 +391,7 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
     }
     public virtual async Task<MartenEntityResult<TEntity>?> GetByIdAsync(TKey id, MartenQueryOptions<TEntity>? options = null, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var opts = options ?? new MartenQueryOptions<TEntity>();
         var session = ResolveSession(opts);
         var hasIncludes = (opts.IncludeProperties?.Count ?? 0) > 0 || (opts.IncludeExpressions?.Length ?? 0) > 0;
@@ -381,6 +429,7 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
         Func<IMartenQueryable<TEntity>, IMartenQueryable<TProjection>> selector,
         CancellationToken cancellationToken = default) where TProjection : notnull
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var opts = options ?? new MartenQueryOptions<TEntity>();
         var baseQuery = BuildQuery(opts, out var session);
         var projected = selector(baseQuery);
@@ -394,6 +443,7 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
         MartenPageRequest? page = null,
         CancellationToken cancellationToken = default) where TProjection : notnull
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var opts = options ?? new MartenQueryOptions<TEntity>();
         var request = page ?? new MartenPageRequest();
         var pageNumber = request.PageNumber < 1 ? 1 : request.PageNumber;
@@ -408,6 +458,7 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
     }
     public virtual async Task<PageResult<TEntity>> GetPageAsync(MartenQueryOptions<TEntity>? options = null, MartenPageRequest? page = null, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var opts = options ?? new MartenQueryOptions<TEntity>();
         var request = page ?? new MartenPageRequest();
         var pageNumber = request.PageNumber < 1 ? 1 : request.PageNumber;
@@ -421,12 +472,14 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
     }
     public async Task<TEntity> AddAsync(TEntity entity, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         Session.Store(entity);
         await InvalidateCacheAsync(entity, null, cancellationToken).ConfigureAwait(false);
         return entity;
     }
     public async Task<IEnumerable<TEntity>> AddRangeAsync(IEnumerable<TEntity> entities, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var array = entities.ToArray();
         Session.Store(array);
         await InvalidateCacheAsync(array, null, cancellationToken).ConfigureAwait(false);
@@ -434,6 +487,7 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
     }
     public async Task<TEntity> UpsertAsync(TEntity entity, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var session = ResolveSession(tenantId);
         session.Store(entity);
         await InvalidateCacheAsync(entity, tenantId, cancellationToken).ConfigureAwait(false);
@@ -441,6 +495,7 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
     }
     public async Task<IEnumerable<TEntity>> UpsertRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var array = entities.ToArray();
         var session = ResolveSession(tenantId);
         session.Store(array);
@@ -449,6 +504,7 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
     }
     public async Task<TEntity?> UpdateAsync(TEntity entity, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var session = ResolveSession(tenantId);
         if (expectedVersion.HasValue) session.UpdateExpectedVersion(entity, expectedVersion.Value);
         else session.Store(entity);
@@ -456,9 +512,13 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
         return entity;
     }
     public async Task<IEnumerable<TEntity>> UpdateRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)
-            => await UpsertRangeAsync(entities, tenantId, cancellationToken).ConfigureAwait(false);
+    {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        return await UpsertRangeAsync(entities, tenantId, cancellationToken).ConfigureAwait(false);
+    }
     public async Task<MartenEntityResult<TEntity>?> PatchAsync(TKey id, Dictionary<string, object> updates, string? tenantId = null, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var session = ResolveSession(tenantId);
         var entity = await PatchEntityAsync(id, updates, session, cancellationToken).ConfigureAwait(false);
         if (entity is null) return null;
@@ -467,16 +527,18 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
         await InvalidateCacheAsync(id, tenantId, cancellationToken).ConfigureAwait(false);
         return new MartenEntityResult<TEntity>(entity, version);
     }
-    public Task<int> PatchWhereAsync(Expression<Func<TEntity, bool>> filter, Dictionary<string, object> updates, string? tenantId = null, CancellationToken cancellationToken = default)
+    public async Task<int> PatchWhereAsync(Expression<Func<TEntity, bool>> filter, Dictionary<string, object> updates, string? tenantId = null, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var session = ResolveSession(tenantId);
         var patch = session.Patch<TEntity>(filter);
         foreach (var kv in updates) patch.Set(kv.Key, kv.Value);
         // Marten executes on SaveChanges; return 0 as placeholder
-        return Task.FromResult(0);
+        return 0;
     }
     public virtual async Task<bool> RemoveAsync(TEntity entity, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var session = ResolveSession(tenantId);
         session.Delete(entity);
         await InvalidateCacheAsync(entity, tenantId, cancellationToken).ConfigureAwait(false);
@@ -484,32 +546,37 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
     }
     public virtual async Task<bool> RemoveAsync(TKey id, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var session = ResolveSession(tenantId);
         session.Delete<TEntity>(id!);
         await InvalidateCacheAsync(id, tenantId, cancellationToken).ConfigureAwait(false);
         return true;
     }
-    public virtual Task<int> DeleteWhereAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)
+    public virtual async Task<int> DeleteWhereAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var session = ResolveSession(tenantId);
         session.DeleteWhere(filter);
-        return Task.FromResult(0);
+        return 0;
     }
     public async Task<bool> RemoveRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var session = ResolveSession(tenantId);
         var array = entities.ToArray();
         session.Delete(array);
         await InvalidateCacheAsync(array, tenantId, cancellationToken).ConfigureAwait(false);
         return true;
     }
-    public Task<bool> ExistAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)
+    public async Task<bool> ExistAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var session = ResolveSession(tenantId);
-        return session.Query<TEntity>().AnyAsync(filter, token: cancellationToken);
+        return await session.Query<TEntity>().AnyAsync(filter, token: cancellationToken).ConfigureAwait(false);
     }
     public virtual async IAsyncEnumerable<TEntity> StreamAsync(MartenQueryOptions<TEntity>? options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var opts = options ?? new MartenQueryOptions<TEntity>();
         var query = BuildQuery(opts, out var session);
         await foreach (var item in query.ToAsyncEnumerable().WithCancellation(cancellationToken))
@@ -521,6 +588,7 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
     public async Task<TResult> ExecuteCompiledQueryAsync<TCompiled, TResult>(TCompiled query, CancellationToken cancellationToken = default)
         where TCompiled : ICompiledQuery<TEntity, TResult>
     {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         if (CacheProvider is null)
             return await Session.QueryAsync(query, cancellationToken).ConfigureAwait(false);
         var tenantId = ResolveTenantId((string?)null);
@@ -536,13 +604,17 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
             cancellationToken).ConfigureAwait(false);
     }
     public async Task<TResult> WithSessionAsync<TResult>(MartenSessionMode mode, Func<TSession, Task<TResult>> work, CancellationToken cancellationToken = default)
-    => await work(Session).ConfigureAwait(false);
-    public Task<int> TransformWhereAsync(Expression<Func<TEntity, bool>> filter, string transformName, object? arguments = null, string? tenantId = null, CancellationToken cancellationToken = default)
     {
-        _ = ResolveSession(tenantId);
-        return Task.FromResult(0);
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        return await work(Session).ConfigureAwait(false);
     }
-    private IMartenQueryable<TEntity> BuildQuery(MartenQueryOptions<TEntity> opts, out IDocumentSession session)
+    public async Task<int> TransformWhereAsync(Expression<Func<TEntity, bool>> filter, string transformName, object? arguments = null, string? tenantId = null, CancellationToken cancellationToken = default)
+    {
+        await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        _ = ResolveSession(tenantId);
+        return 0;
+    }
+    protected IMartenQueryable<TEntity> BuildQuery(MartenQueryOptions<TEntity> opts, out IDocumentSession session)
     {
         session = ResolveSession(opts);
         IMartenQueryable<TEntity> query = opts.Specification is null

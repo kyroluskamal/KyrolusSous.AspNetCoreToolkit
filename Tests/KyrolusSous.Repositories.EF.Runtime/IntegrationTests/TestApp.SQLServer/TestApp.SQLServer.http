@@ -1,0 +1,6 @@
+@TestApp.SQLServer_HostAddress = http://localhost:5149
+
+GET {{TestApp.SQLServer_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

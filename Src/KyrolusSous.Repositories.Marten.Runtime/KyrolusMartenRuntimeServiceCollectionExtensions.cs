@@ -32,7 +32,9 @@ public static class KyrolusMartenRuntimeServiceCollectionExtensions
         services.TryAddSingleton(KyrolusMartenNoopValidation.Instance);
         services.TryAddSingleton(KyrolusMartenNoSoftDeletePolicy.Instance);
         services.TryAddSingleton<ICacheProvider>(NullCacheProvider.Instance);
-        services.TryAddSingleton<IKyrolusRepositoryCachePolicyProvider>(KyrolusNoopRepositoryCachePolicyProvider.Instance);
+        services.TryAddSingleton<KyrolusRepositoryCachePolicyRegistry>();
+        services.TryAddSingleton<IKyrolusRepositoryCachePolicyProvider>(sp => sp.GetRequiredService<KyrolusRepositoryCachePolicyRegistry>());
+        services.TryAddSingleton<IKyrolusMartenRepositoryPolicyProvider>(KyrolusNoopMartenRepositoryPolicyProvider.Instance);
         services.TryAddSingleton(KyrolusMartenNoopResiliencePolicy.Instance);
         services.TryAddSingleton(KyrolusMartenNoopTracing.Instance);
 
@@ -65,6 +67,7 @@ public static class KyrolusMartenRuntimeServiceCollectionExtensions
             CacheProvider: services.GetService<ICacheProvider>(),
             CacheKeyContext: services.GetService<ICacheKeyContext>(),
             CachePolicyProvider: services.GetService<IKyrolusRepositoryCachePolicyProvider>(),
+            PolicyProvider: services.GetService<IKyrolusMartenRepositoryPolicyProvider>(),
             ResiliencePolicy: services.GetService<IKyrolusMartenResiliencePolicy>(),
             Tracing: services.GetService<IKyrolusMartenTracing>());
 

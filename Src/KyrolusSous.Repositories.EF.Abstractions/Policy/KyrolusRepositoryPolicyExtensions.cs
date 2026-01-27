@@ -103,4 +103,51 @@ public static class KyrolusRepositoryPolicyExtensions
             : policy.DefaultCacheReadOperations;
     }
 
+    public static KyrolusRepositoryPolicy SetDefaultIncludeProperties<TEntity>(
+        this KyrolusRepositoryPolicy policy,
+        params string[] includeProperties)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        if (includeProperties is null)
+        {
+            policy.DefaultIncludeProperties.Remove(typeof(TEntity));
+            return policy;
+        }
+
+        var normalized = NormalizeIncludeProperties(includeProperties);
+        if (normalized.Length == 0)
+            policy.DefaultIncludeProperties.Remove(typeof(TEntity));
+        else
+            policy.DefaultIncludeProperties[typeof(TEntity)] = normalized;
+
+        return policy;
+    }
+
+    public static string[] GetDefaultIncludeProperties<TEntity>(
+        this KyrolusRepositoryPolicy policy)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        if (!policy.DefaultIncludeProperties.TryGetValue(typeof(TEntity), out var includeProperties) || includeProperties is null)
+            return [];
+
+        return NormalizeIncludeProperties(includeProperties);
+    }
+
+    private static string[] NormalizeIncludeProperties(IEnumerable<string> includeProperties)
+    {
+        var result = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var include in includeProperties)
+        {
+            if (string.IsNullOrWhiteSpace(include)) continue;
+            var trimmed = include.Trim();
+            if (trimmed.Length == 0) continue;
+            if (seen.Add(trimmed))
+                result.Add(trimmed);
+        }
+
+        return [.. result];
+    }
+
 }

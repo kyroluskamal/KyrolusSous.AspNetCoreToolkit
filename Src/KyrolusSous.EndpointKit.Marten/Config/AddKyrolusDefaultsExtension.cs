@@ -27,7 +27,8 @@ public static class AddKyrolusDefaultsExtension
         services.TryAddSingleton<ICacheProvider>(NullCacheProvider.Instance);
         services.TryAddSingleton<IKyrolusIdempotencyStore, KyrolusCacheIdempotencyStore>();
         services.TryAddSingleton(typeof(IKyrolusMartenAuthorizationProvider<>), typeof(KyrolusNoopMartenAuthorizationProvider<>));
-        services.TryAddSingleton<IKyrolusEndpointCachePolicyProvider>(KyrolusNoopEndpointCachePolicyProvider.Instance);
+        services.TryAddSingleton<KyrolusEndpointCachePolicyRegistry>();
+        services.TryAddSingleton<IKyrolusEndpointCachePolicyProvider>(sp => sp.GetRequiredService<KyrolusEndpointCachePolicyRegistry>());
         services.Configure<OpenApiOptions>(options =>
         {
             options.AddOperationTransformer<KyrolusOpenApiOperationTransformer>();

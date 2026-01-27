@@ -21,6 +21,7 @@ public static class KyrolusMartenRepositoryFactory
             CacheProvider: services.GetService<ICacheProvider>(),
             CacheKeyContext: services.GetService<ICacheKeyContext>(),
             CachePolicyProvider: services.GetService<IKyrolusRepositoryCachePolicyProvider>(),
+            PolicyProvider: services.GetService<IKyrolusMartenRepositoryPolicyProvider>(),
             ResiliencePolicy: services.GetService<IKyrolusMartenResiliencePolicy>(),
             Tracing: services.GetService<IKyrolusMartenTracing>());
         var cache = effectiveDeps.CacheProvider;

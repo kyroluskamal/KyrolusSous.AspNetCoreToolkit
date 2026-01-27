@@ -18,189 +18,62 @@ public class KyrolusSingleKeySoftDeleteRepositoryAsync<TDbContext, TEntity, TKey
         bool enableCaching = false,
         int? cacheTtlSeconds = null,
         ICacheKeyContext? cacheKeyContext = null,
-        IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider = null) :
-        base(db, policy, observer, bulkExecutor, cache, enableCaching, cacheTtlSeconds, cacheKeyContext, cachePolicyProvider)
+        IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider = null,
+        IKyrolusRepositoryPolicyProvider? policyProvider = null) :
+        base(db, policy, observer, bulkExecutor, cache, enableCaching, cacheTtlSeconds, cacheKeyContext, cachePolicyProvider, policyProvider)
     {
-        base.softDeleteEnabled = true;
+        softDeleteEnabled = true;
     }
-
+    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public async Task<IReadOnlyList<TEntity>> GetAllIncludingDeletedAsync(Expression<Func<TEntity, bool>>? filter = null, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null, List<string>? includeProperties = null, IncludeGraph<TEntity>? includeGraph = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default)
-    {
-        var GetAllIncludingDeletedAsync = "GetAllIncludingDeletedAsync";
-        var sw = Stopwatch.StartNew();
-        Exception? exception = null;
-        await NotifyBeforeAsync(GetAllIncludingDeletedAsync, filter, cancellationToken).ConfigureAwait(false);
-        try
-        {
-            return await GetAllInternalAsync(new GetAllCommand(true, false, filter, orderBy, includeProperties, includeGraph, asNoTracking, useSplitQuery, cancellationToken));
-        }
-        catch (Exception ex)
-        {
-            exception = ex;
-            throw;
-        }
-        finally
-        {
-            sw.Stop();
-            await NotifyAfterAsync(GetAllIncludingDeletedAsync, filter, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
+        => await GetAllInternalAsync(new GetAllCommand(nameof(GetAllIncludingDeletedAsync),
+                    includeProperties is not { Count: > 0 } && includeGraph is not { Includes.Count: > 0 }
+                    , filter, orderBy, includeProperties, includeGraph, asNoTracking, useSplitQuery, cancellationToken, false, true)).ConfigureAwait(false);
+    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public async Task<IReadOnlyList<TEntity>> GetAllIncludingDeletedAsync(Expression<Func<TEntity, bool>>? filter = null, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default, params Expression<Func<TEntity, object?>>[] includeExpressions)
-    {
-        var GetAllIncludingDeletedAsync = "GetAllIncludingDeletedAsync";
-        var sw = Stopwatch.StartNew();
-        Exception? exception = null;
-        await NotifyBeforeAsync(GetAllIncludingDeletedAsync, filter, cancellationToken).ConfigureAwait(false);
-        try
-        {
-            return await GetAllInternalAsync(new GetAllCommand(true, false, filter, orderBy, null, null, asNoTracking, useSplitQuery, cancellationToken));
-        }
-        catch (Exception ex)
-        {
-            exception = ex;
-            throw;
-        }
-        finally
-        {
-            sw.Stop();
-            await NotifyAfterAsync(GetAllIncludingDeletedAsync, filter, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
+        => await GetAllInternalAsync(new GetAllCommand(nameof(GetAllIncludingDeletedAsync),
+                    includeExpressions is not { Length: > 0 }
+                    , filter, orderBy, null, null, asNoTracking, useSplitQuery, cancellationToken, false, true, includeExpressions)).ConfigureAwait(false);
+    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public async Task<TEntity?> GetByIdIncludingDeletedAsync(TKey id,
-        bool? asNoTracking = null,
-        bool? useSplitQuery = null,
-        CancellationToken cancellationToken = default,
+        bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default,
         params Expression<Func<TEntity, object?>>[] includeExpressions)
-    {
-        var GetByIdIncludingDeletedAsync = "GetByIdIncludingDeletedAsync";
-        var sw = Stopwatch.StartNew();
-        Exception? exception = null;
-        await NotifyBeforeAsync(GetByIdIncludingDeletedAsync, id, cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (cache is not null && (includeExpressions == null || includeExpressions.Length == 0))
-            {
-                var cachePolicy = await ResolveCachePolicyAsync(GetByIdIncludingDeletedAsync, cancellationToken).ConfigureAwait(false);
-                if (IsCacheEnabled(cachePolicy) && cache is not null)
-                {
-                    var cacheKey = CacheKeyById([id], cachePolicy.KeySuffix) + ":incdel=1";
-                    var options = BuildCacheEntryOptions(cachePolicy);
-                    return await cache.GetOrCreateAsync(
-                        cacheKey,
-                        async ct => await MaterializeByIdAsync(new MaterializeByIdCommand([id], true, null, null, includeExpressions ?? [], asNoTracking, useSplitQuery, cancellationToken)).ConfigureAwait(false),
-                        options,
-                        cancellationToken).ConfigureAwait(false);
-                }
-            }
-
-            return await MaterializeByIdAsync(new MaterializeByIdCommand([id], true, null, null, includeExpressions ?? [], asNoTracking, useSplitQuery, cancellationToken)).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            exception = ex;
-            throw;
-        }
-        finally
-        {
-            sw.Stop();
-            await NotifyAfterAsync(GetByIdIncludingDeletedAsync, id, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
+    => await GetByIdInternalAsync(new GetByIdCommand(nameof(GetByIdIncludingDeletedAsync),
+                    includeExpressions is not { Length: > 0 }, [id], null, null, asNoTracking, useSplitQuery, true, cancellationToken, includeExpressions)).ConfigureAwait(false);
+    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public async Task<TEntity?> GetByIdIncludingDeletedAsync(TKey id, List<string>? includeProperties = null, IncludeGraph<TEntity>? includeGraph = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default)
-    {
-        var GetByIdIncludingDeletedAsync = "GetByIdIncludingDeletedAsync";
-        var sw = Stopwatch.StartNew();
-        Exception? exception = null;
-        await NotifyBeforeAsync(GetByIdIncludingDeletedAsync, id, cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (cache is not null && (includeProperties is not { Count: > 0 } || includeGraph is not { Includes.Count: > 0 }))
-            {
-                var cachePolicy = await ResolveCachePolicyAsync(GetByIdIncludingDeletedAsync, cancellationToken).ConfigureAwait(false);
-                if (IsCacheEnabled(cachePolicy) && cache is not null)
-                {
-                    var cacheKey = CacheKeyById([id], cachePolicy.KeySuffix) + ":incdel=1";
-                    var options = BuildCacheEntryOptions(cachePolicy);
-                    return await cache.GetOrCreateAsync(
-                        cacheKey,
-                        async ct => await MaterializeByIdAsync(new MaterializeByIdCommand([id], true, includeProperties, includeGraph, [], asNoTracking, useSplitQuery, cancellationToken)).ConfigureAwait(false),
-                        options,
-                        cancellationToken).ConfigureAwait(false);
-                }
-            }
-
-            return await MaterializeByIdAsync(new MaterializeByIdCommand([id], true, includeProperties, includeGraph, [], asNoTracking, useSplitQuery, cancellationToken)).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            exception = ex;
-            throw;
-        }
-        finally
-        {
-            sw.Stop();
-            await NotifyAfterAsync(GetByIdIncludingDeletedAsync, id, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
+      => await GetByIdInternalAsync(new GetByIdCommand(nameof(GetByIdIncludingDeletedAsync),
+                    includeProperties is not { Count: > 0 } && includeGraph is not { Includes.Count: > 0 }, [id], includeProperties, includeGraph, asNoTracking, useSplitQuery, true, cancellationToken)).ConfigureAwait(false);
+    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public async Task<IReadOnlyList<TEntity>> GetDeletedOnlyAsync(Expression<Func<TEntity, bool>>? filter = null, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null, List<string>? includeProperties = null, IncludeGraph<TEntity>? includeGraph = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default)
-    {
-        var GetDeletedOnlyAsync = "GetDeletedOnlyAsync";
-        var sw = Stopwatch.StartNew();
-        Exception? exception = null;
-        await NotifyBeforeAsync(GetDeletedOnlyAsync, filter, cancellationToken).ConfigureAwait(false);
-        try
-        {
-            return await GetAllInternalAsync(new GetAllCommand(true, true, filter, orderBy, includeProperties, includeGraph, asNoTracking, useSplitQuery, cancellationToken));
-        }
-        catch (Exception ex)
-        {
-            exception = ex;
-            throw;
-        }
-        finally
-        {
-            sw.Stop();
-            await NotifyAfterAsync(GetDeletedOnlyAsync, filter, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
+     => await GetAllInternalAsync(new GetAllCommand(nameof(GetDeletedOnlyAsync),
+                    includeProperties is not { Count: > 0 } && includeGraph is not { Includes.Count: > 0 }
+                    , filter, orderBy, includeProperties, includeGraph, asNoTracking, useSplitQuery, cancellationToken, true, true)).ConfigureAwait(false);
+    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public async Task<IReadOnlyList<TEntity>> GetDeletedOnlyAsync(Expression<Func<TEntity, bool>>? filter = null, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default, params Expression<Func<TEntity, object?>>[] includeExpressions)
-    {
-        var GetDeletedOnlyAsync = "GetDeletedOnlyAsync";
-        var sw = Stopwatch.StartNew();
-        Exception? exception = null;
-        await NotifyBeforeAsync(GetDeletedOnlyAsync, filter, cancellationToken).ConfigureAwait(false);
-        try
-        {
-            return await GetAllInternalAsync(new GetAllCommand(true, true, filter, orderBy, null, null, asNoTracking, useSplitQuery, cancellationToken, includeExpressions));
-        }
-        catch (Exception ex)
-        {
-            exception = ex;
-            throw;
-        }
-        finally
-        {
-            sw.Stop();
-            await NotifyAfterAsync(GetDeletedOnlyAsync, filter, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
+    => await GetAllInternalAsync(new GetAllCommand(nameof(GetDeletedOnlyAsync),
+                    includeExpressions is not { Length: > 0 }
+                    , filter, orderBy, null, null, asNoTracking, useSplitQuery, cancellationToken, true, true, includeExpressions)).ConfigureAwait(false);
+    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<bool> RestoreAsync(TKey id, CancellationToken cancellationToken = default)
-    => RestoreInternalAsync([id], cancellationToken);
-
-
+    {
+        ArgumentNullException.ThrowIfNull(id);
+        return ExecuteWithNotificationsAsync(nameof(RestoreAsync), new { Id = id }, async ct =>
+            await RestoreInternalAsync([id], ct).ConfigureAwait(false),
+            kv => new { Id = id }, null, cancellationToken);
+    }
+    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<bool> SoftDeleteAsync(TKey id, CancellationToken cancellationToken = default)
-    => RemoveInternalAsync([id], true, cancellationToken);
-
-
+    {
+        ArgumentNullException.ThrowIfNull(id);
+        return ExecuteWithNotificationsAsync(nameof(SoftDeleteAsync), new { Id = id }, async ct =>
+            await RemoveInternalAsync([id], true, ct).ConfigureAwait(false),
+            kv => new { Id = id }, null, cancellationToken);
+    }
+    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<RepositoryOperationResult<bool>> TryRestoreAsync(TKey id, CancellationToken cancellationToken = default)
-    => TryRestoreInternalAsync([id], cancellationToken);
-
+    => TryRestoreInternalAsync([id], nameof(TryRestoreAsync), cancellationToken);
+    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<RepositoryOperationResult<bool>> TrySoftDeleteAsync(TKey id, CancellationToken cancellationToken = default)
-    => TryRemoveInternalAsync([id], true, cancellationToken);
+    => TryRemoveInternalAsync([id], nameof(TrySoftDeleteAsync), true, cancellationToken);
 }

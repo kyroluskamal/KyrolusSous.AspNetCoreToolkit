@@ -422,14 +422,10 @@ public static class EntityApi
             });
 
             // Compiled queries (where available)
-            group.MapGet("/compiled", async (
+            group.MapGet("/compiled", (
                 KyrolusUnitOfWork uow,
                 CancellationToken ct) =>
-            {
-                var repo = uow.Get<TRepo>();
-                var compiled = await repo.GetAllCompiledAsync(ct);
-                return Results.Ok(compiled);
-            });
+                Results.BadRequest("Compiled GetAll requires a non-trivial filter. Use /all instead."));
 
             // Compiled get by id for single-key (route) or composite (query keys)
             group.MapGet("/{id}/compiled", async (

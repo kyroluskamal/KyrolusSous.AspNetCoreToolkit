@@ -7,6 +7,9 @@ public sealed class KyrolusRepositoryPolicy
     public bool? AsNoTrackingDefault { get; init; }
     public bool? UseSplitQueryDefault { get; init; }
     public bool? EnableSoftDeleteDefault { get; init; }
+    public KyrolusDefaultIncludeMode DefaultIncludeMode { get; init; } = KyrolusDefaultIncludeMode.Merge;
+    public Dictionary<Type, string[]> DefaultIncludeProperties { get; init; } = [];
+    public IKyrolusRepositoryPolicyProvider? PolicyProvider { get; init; }
     public string? SoftDeleteProperty { get; init; } = "IsDeleted";
     public string? RowVersionProperty { get; init; }
     public Dictionary<Type, List<Delegate>> GlobalQueryFilters { get; init; } = [];

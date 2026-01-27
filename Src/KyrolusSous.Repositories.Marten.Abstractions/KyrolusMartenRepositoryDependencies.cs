@@ -12,5 +12,6 @@ public sealed record KyrolusMartenRepositoryDependencies(
     ICacheKeyContext? CacheKeyContext = null,
     IKyrolusRepositoryCachePolicyProvider? CachePolicyProvider = null,
     KyrolusCachePolicy? CachePolicy = null,
+    IKyrolusMartenRepositoryPolicyProvider? PolicyProvider = null,
     IKyrolusMartenResiliencePolicy? ResiliencePolicy = null,
     IKyrolusMartenTracing? Tracing = null);

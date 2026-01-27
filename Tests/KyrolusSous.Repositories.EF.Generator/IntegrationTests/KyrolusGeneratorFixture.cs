@@ -1,6 +1,4 @@
 
-using KyrolusSous.Repositories.EF.Abstractions.Policy;
-
 namespace KyrolusSous.Repositories.EF.Generator.IntegrationTests;
 
 public class KyrolusGeneratorFixture(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>, IAsyncLifetime

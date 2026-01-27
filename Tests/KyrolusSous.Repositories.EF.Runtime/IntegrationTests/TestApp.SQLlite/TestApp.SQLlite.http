@@ -1,0 +1,6 @@
+@TestApp.SQLlite_HostAddress = http://localhost:5116
+
+GET {{TestApp.SQLlite_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

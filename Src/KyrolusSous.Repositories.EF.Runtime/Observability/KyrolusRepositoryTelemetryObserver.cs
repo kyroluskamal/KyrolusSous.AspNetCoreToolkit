@@ -35,10 +35,7 @@ public sealed class KyrolusRepositoryTelemetryObserver : IKyrolusRepositoryObser
         {
             activity.SetTag("repo.operation", operation);
             if (options.LogPayloadType && payload is not null)
-            {
                 activity.SetTag("repo.payload.type", payload.GetType().FullName);
-            }
-
             var stack = activityStack.Value ??= new ConcurrentStack<Activity>();
             stack.Push(activity);
         }
@@ -62,7 +59,6 @@ public sealed class KyrolusRepositoryTelemetryObserver : IKyrolusRepositoryObser
             {
                 activity.SetStatus(ActivityStatusCode.Ok);
             }
-
             activity.Dispose();
         }
 
@@ -71,13 +67,9 @@ public sealed class KyrolusRepositoryTelemetryObserver : IKyrolusRepositoryObser
             var success = exception is null;
             KyrolusRepositoryInstrumentation.RecordOperation(operation, success);
             KyrolusRepositoryInstrumentation.RecordDuration(operation, duration.Value, success);
-            if (!success)
-            {
-                KyrolusRepositoryInstrumentation.RecordError(operation);
-            }
+            if (!success) KyrolusRepositoryInstrumentation.RecordError(operation);
 
-            if (ShouldLog(duration.Value, exception))
-            {
+            if (ShouldLog(duration.Value, exception) && logger.IsEnabled(options.LogLevel))
                 logger.Log(
                     options.LogLevel,
                     exception,
@@ -85,7 +77,6 @@ public sealed class KyrolusRepositoryTelemetryObserver : IKyrolusRepositoryObser
                     operation,
                     duration.Value.TotalMilliseconds,
                     success);
-            }
         }
 
         return Task.CompletedTask;

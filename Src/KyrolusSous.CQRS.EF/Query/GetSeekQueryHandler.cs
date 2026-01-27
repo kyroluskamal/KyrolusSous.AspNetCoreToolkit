@@ -47,7 +47,6 @@ public sealed class GetSeekQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
         {
             var repo = unitOfWork.GetRepository<IKyrolusRepositoryAsync<TDbcontext, TResponse, TKey>>();
             var spec = new KyrolusEfSeekQuerySpecification<TResponse, TResponse>(
-                take: query.PageSize,
                 new SpecificationInputs<TResponse, TResponse>(
                     Filter: effectiveFilter,
                     OrderBy: orderBy,
@@ -57,7 +56,9 @@ public sealed class GetSeekQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
                     UseSplitQuery: query.UseSplitQuery ?? false,
                     IncludeDeleted: query.IncludeDeleted
                 ));
-            items = await repo.QueryAsync(spec, cancellationToken).ConfigureAwait(false);
+            items = (await repo.QueryAsync(spec, cancellationToken).ConfigureAwait(false))
+                .Take(query.PageSize)
+                .ToList();
         }
 
         var nextToken = BuildNextToken(items, seekProperties, query.Descending);
@@ -116,7 +117,6 @@ public sealed class GetSeekQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
         {
             var repo = unitOfWork.GetRepository<IKyrolusRepositoryAsync<TDbcontext, TResponse, TKey>>();
             var spec = new KyrolusEfSeekQuerySpecification<TResponse, TResponse>(
-                query.PageSize,
                 new SpecificationInputs<TResponse, TResponse>(
                     Filter: query.Filter,
                     OrderBy: orderBy,
@@ -126,7 +126,9 @@ public sealed class GetSeekQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
                     IncludeDeleted: query.IncludeDeleted,
                     Selector: query.Selector ?? (static entity => entity)
                 ));
-            return await repo.QueryAsync(spec, cancellationToken).ConfigureAwait(false);
+            return (await repo.QueryAsync(spec, cancellationToken).ConfigureAwait(false))
+                .Take(query.PageSize)
+                .ToList();
         }
 
         var graph = KyrolusIncludeMerge.MergeGraph(query.IncludeGraph, query.IncludeExpressions);

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Diagnostics.Metrics;
 
 namespace KyrolusSous.Repositories.EF.Abstractions.Observability;

@@ -1,7 +1,4 @@
 
-
-using KyrolusSous.Caching.Abstractions;
-
 namespace KyrolusSous.Repositories.EF.Runtime;
 
 /// <summary>
@@ -16,44 +13,42 @@ public class KyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity>(
     bool enableCaching = false,
     int? cacheTtlSeconds = null,
     ICacheKeyContext? cacheKeyContext = null,
-    IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider = null) :
-    KyrolusRepositoryAsync<TDbContext, TEntity, object?>(db, policy, observer, bulkExecutor, cache, enableCaching, cacheTtlSeconds, cacheKeyContext, cachePolicyProvider),
+    IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider = null,
+    IKyrolusRepositoryPolicyProvider? policyProvider = null) :
+    KyrolusRepositoryAsync<TDbContext, TEntity, object?>(db, policy, observer, bulkExecutor, cache, enableCaching, cacheTtlSeconds, cacheKeyContext, cachePolicyProvider, policyProvider),
     IKyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity, object?>
     where TDbContext : DbContext
     where TEntity : class
 {
-
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<TEntity?> GetByIdAsync(object?[] keyValues,
         List<string>? includeProperties = null, IncludeGraph<TEntity>? includeGraph = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default)
-    {
-        var hasIncludeProps = includeProperties is { Count: > 0 } && includeProperties.Any(p => !string.IsNullOrWhiteSpace(p));
-        if (!hasIncludeProps)
-        {
-            return GetByIdInternalAsync(new GetByIdCommand(keyValues, includeProperties, includeGraph, asNoTracking, useSplitQuery, false, cancellationToken));
-        }
-        return GetByIdInternalWithStringIncludesAsync(keyValues ?? [], includeProperties!, includeGraph, asNoTracking, useSplitQuery, cancellationToken);
-    }
-
+    => GetByIdInternalAsync(new GetByIdCommand(nameof(GetByIdAsync), includeProperties is not { Count: > 0 } && includeGraph is not { Includes.Count: > 0 }, keyValues, includeProperties, includeGraph, asNoTracking, useSplitQuery, false, cancellationToken));
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    public Task<TEntity?> GetByIdAsync(object?[] keyValues,
-        bool? asNoTracking = null,
-        bool? useSplitQuery = null,
-        CancellationToken cancellationToken = default,
-        params Expression<Func<TEntity, object?>>[] includeExpressions)
+    public Task<TEntity?> GetByIdAsync(object?[] keyValues, bool? asNoTracking = null,
+        bool? useSplitQuery = null, CancellationToken cancellationToken = default,params Expression<Func<TEntity, object?>>[] includeExpressions)
+        => GetByIdInternalAsync(new GetByIdCommand(nameof(GetByIdAsync), true, keyValues, null, null, asNoTracking, useSplitQuery, false, cancellationToken, includeExpressions));
+    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
+    public async Task<TEntity?> PatchAsync(object?[]? keyValues, Dictionary<string, object> updates, CancellationToken cancellationToken = default)
     {
-        return GetByIdInternalAsync(new GetByIdCommand(keyValues, null, null, asNoTracking, useSplitQuery, false, cancellationToken, includeExpressions));
+        ArgumentException.ThrowIfKeyValuesIsNotValid(keyValues, keyPropertyNames.Length);
+        ArgumentException.ThrowIfUpdatesIsNotValid(updates);
+        return await ExecuteWithNotificationsAsync(nameof(PatchAsync), (keyValues, updates), async ct =>
+            await PatchInternalAsync(keyValues, updates, cancellationToken).ConfigureAwait(false),
+            e => new { KeyValues = keyValues, Updates = updates }, null, cancellationToken).ConfigureAwait(false);
     }
-
-    public Task<TEntity?> PatchAsync(object?[]? keyValues, Dictionary<string, object> updates, CancellationToken cancellationToken = default)
-        => PatchInternalAsync(keyValues, updates, cancellationToken);
-
+    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<RepositoryOperationResult<TEntity>> TryPatchAsync(object?[]? keyValues, Dictionary<string, object> updates, CancellationToken cancellationToken = default)
-        => TryPatchInternalAsync(keyValues, updates, cancellationToken);
-
+    => TryPatchInternalAsync(keyValues, nameof(TryPatchAsync), updates, cancellationToken);
+    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<bool> RemoveAsync(object?[]? keyValues, CancellationToken cancellationToken = default)
-        => RemoveInternalAsync(keyValues, false, cancellationToken);
-
+    {
+        ArgumentException.ThrowIfKeyValuesIsNotValid(keyValues, keyPropertyNames.Length);
+        return ExecuteWithNotificationsAsync(nameof(RemoveAsync), keyValues, async ct =>
+            await RemoveInternalAsync(keyValues, false, ct).ConfigureAwait(false),
+            kv => new { KeyValues = kv }, null, cancellationToken);
+    }
+    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<RepositoryOperationResult<bool>> TryRemoveAsync(object?[]? keyValues, CancellationToken cancellationToken = default)
-        => TryRemoveInternalAsync(keyValues, false, cancellationToken);
+        => TryRemoveInternalAsync(keyValues, nameof(TryRemoveAsync), false, cancellationToken);
 }

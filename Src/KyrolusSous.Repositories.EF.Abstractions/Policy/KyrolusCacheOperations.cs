@@ -10,9 +10,9 @@ public enum KyrolusCacheReadOperations
     GetAllAsync = 1 << 2,
     GetAllCompiledAsync = 1 << 3,
 
-    QuerySpecAsync = 1 << 4,
-    PagedSpecAsync = 1 << 5,
-    StreamAsync = 1 << 6,
+    GetAllIncludingDeletedAsync = 1 << 7,
+    GetDeletedOnlyAsync = 1 << 8,
+    GetByIdIncludingDeletedAsync = 1 << 9,
     SafeDefaults = GetByIdAsync | GetByIdCompiledAsync | GetAllCompiledAsync,
     All = ~0
 }
