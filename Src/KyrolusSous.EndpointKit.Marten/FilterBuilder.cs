@@ -110,6 +110,48 @@ public static class FilterBuilder
             return false;
         }
 
+        if (IsNullOperator(normalized))
+        {
+            if (memberType.IsValueType && Nullable.GetUnderlyingType(memberType) is null)
+            {
+                error = $"Property '{clause.Property}' does not allow null values.";
+                return false;
+            }
+
+            condition = BuildNullCheck(member, normalized == "notnull");
+            return true;
+        }
+
+        if (normalized == "in")
+        {
+            var values = SplitValueList(clause.Value);
+            if (!TryBuildIn(member, memberType, values, caseInsensitive, out condition, out error))
+            {
+                return false;
+            }
+            return true;
+        }
+
+        if (normalized == "between")
+        {
+            var values = SplitValueList(clause.Value);
+            if (!TryBuildBetween(member, memberType, values, caseInsensitive, out condition, out error))
+            {
+                return false;
+            }
+            return true;
+        }
+
+        if (normalized is "any" or "all")
+        {
+            var values = SplitValueList(clause.Value);
+            if (!TryBuildAnyAll(member, memberType, values, clause.Value, normalized == "any", caseInsensitive, out condition, out error))
+            {
+                return false;
+            }
+            return true;
+        }
+
         if (!TryConvert(clause.Value, memberType, out var typedValue))
         {
             error = $"Value '{clause.Value}' could not be converted to {memberType.Name}.";
@@ -254,11 +296,55 @@ public static class FilterBuilder
                 return null;
             }
 
+            if (IsNullOperator(normalized))
+            {
+                if (memberType.IsValueType && Nullable.GetUnderlyingType(memberType) is null)
+                {
+                    Error ??= $"Property '{property}' does not allow null values.";
+                    return null;
+                }
+
+                return BuildNullCheck(member, normalized == "notnull");
+            }
+
             SkipWhitespace();
             if (!TryReadValue(out var rawValue))
             {
                 Error ??= "Value is required.";
                 return null;
+            }
+
+            if (normalized == "in")
+            {
+                var values = SplitValueList(rawValue);
+                if (!TryBuildIn(member, memberType, values, caseInsensitive, out var inExpr, out var inError))
+                {
+                    Error = inError;
+                    return null;
+                }
+                return inExpr;
+            }
+
+            if (normalized == "between")
+            {
+                var values = SplitValueList(rawValue);
+                if (!TryBuildBetween(member, memberType, values, caseInsensitive, out var betweenExpr, out var betweenError))
+                {
+                    Error = betweenError;
+                    return null;
+                }
+                return betweenExpr;
+            }
+
+            if (normalized is "any" or "all")
+            {
+                var values = SplitValueList(rawValue);
+                if (!TryBuildAnyAll(member, memberType, values, rawValue, normalized == "any", caseInsensitive, out var anyAllExpr, out var anyAllError))
+                {
+                    Error = anyAllError;
+                    return null;
+                }
+                return anyAllExpr;
             }
 
             if (!TryConvert(rawValue, memberType, out var typedValue))
@@ -717,13 +803,21 @@ public static class FilterBuilder
     }
 
     private static bool IsUnsupportedOperator(string normalized)
-        => normalized is "isnull" or "notnull" or "in" or "between" or "any" or "all";
+        => normalized is not (
+            "==" or "!=" or ">" or "<" or ">=" or "<="
+            or "eq" or "neq" or "gt" or "lt" or "gte" or "lte"
+            or "contains" or "startswith" or "endswith"
+            or "in" or "between" or "any" or "all"
+            or "isnull" or "notnull");
 
     private static bool IsNullComparableOperator(string normalized)
         => normalized is "==" or "!=" or "eq" or "neq";
 
     private static bool IsNotEqualsOperator(string normalized)
         => normalized is "!=" or "neq";
+
+    private static bool IsNullOperator(string normalized)
+        => normalized is "isnull" or "notnull";
 
     private static bool TryGetEnumerableElementType(Type type, out Type elementType)
     {
@@ -747,6 +841,12 @@ public static class FilterBuilder
     {
         var span = raw.AsSpan();
         if (span.IndexOfAny("=<>".AsSpan()) >= 0) return true;
+        if (span.Contains(" eq ", StringComparison.OrdinalIgnoreCase)) return true;
+        if (span.Contains(" neq ", StringComparison.OrdinalIgnoreCase)) return true;
+        if (span.Contains(" gt ", StringComparison.OrdinalIgnoreCase)) return true;
+        if (span.Contains(" gte ", StringComparison.OrdinalIgnoreCase)) return true;
+        if (span.Contains(" lt ", StringComparison.OrdinalIgnoreCase)) return true;
+        if (span.Contains(" lte ", StringComparison.OrdinalIgnoreCase)) return true;
         if (span.Contains(" contains ", StringComparison.OrdinalIgnoreCase)) return true;
         if (span.Contains(" startswith ", StringComparison.OrdinalIgnoreCase)) return true;
         if (span.Contains(" endswith ", StringComparison.OrdinalIgnoreCase)) return true;

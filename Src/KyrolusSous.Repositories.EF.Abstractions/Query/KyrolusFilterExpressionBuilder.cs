@@ -1,24 +1,14 @@
 global using System.Linq.Expressions;
 using System.Globalization;
-using System.Linq;
 using System.Reflection;
 using System.Text;
 
+namespace KyrolusSous.Repositories.EF.Abstractions.Query;
 
-namespace KyrolusSous.EndpointKit.EF;
-
-public static class FilterBuilder
+public static class KyrolusFilterExpressionBuilder
 {
-    public static Expression<Func<TEntity, bool>>? BuildFilterExpression<TEntity>(string? filter)
-    {
-        _ = TryBuildFilterExpression<TEntity>(filter, null, false, false, out var expression, out _);
-        return expression;
-    }
-
     public static bool TryBuildFilterExpression<TEntity>(
         string? filter,
-        ISet<string>? allowedProperties,
-        bool strict,
         bool caseInsensitive,
         out Expression<Func<TEntity, bool>>? expression,
         out string? error)
@@ -27,7 +17,7 @@ public static class FilterBuilder
         error = null;
         if (string.IsNullOrWhiteSpace(filter)) return true;
 
-        var parser = new FilterParser<TEntity>(filter, allowedProperties, strict, caseInsensitive);
+        var parser = new FilterParser<TEntity>(filter, caseInsensitive);
         var body = parser.ParseExpression();
         if (parser.Error is not null)
         {
@@ -36,204 +26,19 @@ public static class FilterBuilder
         }
 
         if (body is null) return true;
-        var parameter = parser.Parameter;
-        expression = Expression.Lambda<Func<TEntity, bool>>(body, parameter);
-        return true;
-    }
-
-    private static bool TryBuildFilterExpression(
-        Type entityType,
-        string? filter,
-        ISet<string>? allowedProperties,
-        bool strict,
-        bool caseInsensitive,
-        out LambdaExpression? expression,
-        out string? error)
-    {
-        expression = null;
-        error = null;
-        if (string.IsNullOrWhiteSpace(filter)) return true;
-
-        try
-        {
-            var generic = typeof(FilterBuilder).GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.IsGenericMethodDefinition && m.Name == nameof(TryBuildFilterExpression))
-                .FirstOrDefault(m =>
-                {
-                    var p = m.GetParameters();
-                    return p.Length == 6 && p[0].ParameterType == typeof(string);
-                });
-
-            if (generic is null)
-            {
-                error = "Unable to locate generic TryBuildFilterExpression method.";
-                return false;
-            }
-
-            var concrete = generic.MakeGenericMethod(entityType);
-            var args = new object?[] { filter, allowedProperties, strict, caseInsensitive, null, null };
-            var result = (bool)concrete.Invoke(null, args)!;
-            expression = args[4] as LambdaExpression;
-            error = args[5] as string;
-            return result;
-        }
-        catch (Exception ex)
-        {
-            error = ex.Message;
-            return false;
-        }
-    }
-
-    public static bool TryBuildFilterExpression<TEntity>(
-        IReadOnlyList<FilterClause>? clauses,
-        ISet<string>? allowedProperties,
-        bool strict,
-        bool caseInsensitive,
-        out Expression<Func<TEntity, bool>>? expression,
-        out string? error)
-    {
-        expression = null;
-        error = null;
-        if (clauses is null || clauses.Count == 0) return true;
-
-        var parameter = Expression.Parameter(typeof(TEntity), "x");
-        Expression? combined = null;
-        foreach (var clause in clauses)
-        {
-            if (!IsAllowed(allowedProperties, clause.Property))
-            {
-                if (strict)
-                {
-                    error = $"Filtering by '{clause.Property}' is not allowed.";
-                    return false;
-                }
-                continue;
-            }
-
-            if (!TryBuildConditionExpression<TEntity>(clause, parameter, caseInsensitive, out var condition, out error))
-            {
-                return false;
-            }
-
-            combined = combined is null ? condition : Expression.AndAlso(combined, condition);
-        }
-
-        if (combined is null) return true;
-        expression = Expression.Lambda<Func<TEntity, bool>>(combined, parameter);
-        return true;
-    }
-
-    private static bool TryBuildConditionExpression<TEntity>(
-        FilterClause clause,
-        ParameterExpression parameter,
-        bool caseInsensitive,
-        out Expression condition,
-        out string? error)
-    {
-        error = null;
-        condition = null!;
-        if (!TryBuildMemberAccess(parameter, clause.Property, out var member, out var memberType, out error))
-        {
-            return false;
-        }
-
-        var op = clause.Operator?.Trim();
-        if (string.IsNullOrWhiteSpace(op))
-        {
-            error = "Operator is required.";
-            return false;
-        }
-
-        var normalized = NormalizeOperator(op);
-        if (IsUnsupportedOperator(normalized))
-        {
-            error = $"Operator '{normalized}' is not supported.";
-            return false;
-        }
-
-        if (IsNullOperator(normalized))
-        {
-            if (memberType.IsValueType && Nullable.GetUnderlyingType(memberType) is null)
-            {
-                error = $"Property '{clause.Property}' does not allow null values.";
-                return false;
-            }
-
-            condition = BuildNullCheck(member, normalized == "notnull");
-            return true;
-        }
-
-        if (normalized == "in")
-        {
-            var values = SplitValueList(clause.Value);
-            if (!TryBuildIn(member, memberType, values, caseInsensitive, out condition, out error))
-            {
-                return false;
-            }
-            return true;
-        }
-
-        if (normalized == "between")
-        {
-            var values = SplitValueList(clause.Value);
-            if (!TryBuildBetween(member, memberType, values, caseInsensitive, out condition, out error))
-            {
-                return false;
-            }
-            return true;
-        }
-
-        if (normalized is "any" or "all")
-        {
-            var values = SplitValueList(clause.Value);
-            if (!TryBuildAnyAll(member, memberType, values, clause.Value, normalized == "any", caseInsensitive, out condition, out error))
-            {
-                return false;
-            }
-            return true;
-        }
-
-        if (!TryConvert(clause.Value, memberType, out var typedValue))
-        {
-            error = $"Value '{clause.Value}' could not be converted to {memberType.Name}.";
-            return false;
-        }
-
-        if (typedValue is null)
-        {
-            if (!IsNullComparableOperator(normalized))
-            {
-                error = $"Operator '{normalized}' does not allow null values.";
-                return false;
-            }
-
-            if (memberType.IsValueType && Nullable.GetUnderlyingType(memberType) is null)
-            {
-                error = $"Property '{clause.Property}' does not allow null values.";
-                return false;
-            }
-
-            condition = BuildNullCheck(member, IsNotEqualsOperator(normalized));
-            return true;
-        }
-
-        condition = BuildComparison(member, memberType, normalized, typedValue, caseInsensitive);
+        expression = Expression.Lambda<Func<TEntity, bool>>(body, parser.Parameter);
         return true;
     }
 
     private sealed class FilterParser<TEntity>
     {
         private readonly string text;
-        private readonly ISet<string>? allowed;
-        private readonly bool strict;
         private readonly bool caseInsensitive;
         private int index;
 
-        public FilterParser(string text, ISet<string>? allowed, bool strict, bool caseInsensitive)
+        public FilterParser(string text, bool caseInsensitive)
         {
             this.text = text;
-            this.allowed = allowed;
-            this.strict = strict;
             this.caseInsensitive = caseInsensitive;
             Parameter = Expression.Parameter(typeof(TEntity), "x");
         }
@@ -241,8 +46,7 @@ public static class FilterBuilder
         public ParameterExpression Parameter { get; }
         public string? Error { get; private set; }
 
-        public Expression? ParseExpression()
-            => ParseOr();
+        public Expression? ParseExpression() => ParseOr();
 
         private Expression? ParseOr()
         {
@@ -306,16 +110,6 @@ public static class FilterBuilder
                 return null;
             }
 
-            if (!IsAllowed(allowed, property))
-            {
-                if (strict)
-                {
-                    Error = $"Filtering by '{property}' is not allowed.";
-                    return null;
-                }
-                return null;
-            }
-
             SkipWhitespace();
             var op = ReadOperator();
             if (string.IsNullOrWhiteSpace(op))
@@ -344,7 +138,6 @@ public static class FilterBuilder
                     Error ??= $"Property '{property}' does not allow null values.";
                     return null;
                 }
-
                 return BuildNullCheck(member, normalized == "notnull");
             }
 
@@ -355,7 +148,7 @@ public static class FilterBuilder
                 return null;
             }
 
-            if (normalized == "in")
+            if (normalized is "in")
             {
                 var values = SplitValueList(rawValue);
                 if (!TryBuildIn(member, memberType, values, caseInsensitive, out var inExpr, out var inError))
@@ -366,7 +159,7 @@ public static class FilterBuilder
                 return inExpr;
             }
 
-            if (normalized == "between")
+            if (normalized is "between")
             {
                 var values = SplitValueList(rawValue);
                 if (!TryBuildBetween(member, memberType, values, caseInsensitive, out var betweenExpr, out var betweenError))
@@ -739,7 +532,7 @@ public static class FilterBuilder
         Expression? predicateBody = null;
         if (!string.IsNullOrWhiteSpace(rawContent) && LooksLikeFilter(rawContent))
         {
-            if (!TryBuildFilterExpression(elementType, rawContent, null, false, caseInsensitive, out var nested, out var nestedError))
+            if (!TryBuildFilterExpressionInternal(elementType, rawContent, caseInsensitive, out var nested, out var nestedError))
             {
                 error = nestedError;
                 return false;
@@ -852,121 +645,6 @@ public static class FilterBuilder
     private static bool IsNullOperator(string normalized)
         => normalized is "isnull" or "notnull";
 
-    private static bool TryConvert(string? raw, Type targetType, out object? result)
-    {
-        result = null;
-        if (raw is null) return true;
-
-        var nonNullableType = Nullable.GetUnderlyingType(targetType) ?? targetType;
-        if (IsNullLiteral(raw))
-        {
-            result = null;
-            return true;
-        }
-
-        if (TryConvertKnownType(raw, nonNullableType, out result, out var handled))
-        {
-            return true;
-        }
-        if (handled)
-        {
-            return false;
-        }
-
-        if (TryConvertEnum(raw, nonNullableType, out result, out handled))
-        {
-            return true;
-        }
-        if (handled)
-        {
-            return false;
-        }
-
-        return TryConvertUsingChangeType(raw, nonNullableType, out result);
-    }
-
-    private static bool IsNullLiteral(string raw)
-        => string.Equals(raw, "null", StringComparison.OrdinalIgnoreCase);
-
-    private static bool TryConvertKnownType(string raw, Type targetType, out object? result, out bool handled)
-    {
-        handled = true;
-        result = null;
-
-        if (targetType == typeof(string))
-        {
-            result = raw.Trim('"').Trim('\'');
-            return true;
-        }
-
-        if (targetType == typeof(Guid) && Guid.TryParse(raw, out var guid))
-        {
-            result = guid;
-            return true;
-        }
-
-        if (targetType == typeof(DateTimeOffset) && DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dto))
-        {
-            result = dto;
-            return true;
-        }
-
-        if (targetType == typeof(DateTime) && DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt))
-        {
-            result = dt;
-            return true;
-        }
-
-        if (targetType == typeof(DateOnly) && DateOnly.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateOnly))
-        {
-            result = dateOnly;
-            return true;
-        }
-
-        if (targetType == typeof(TimeOnly) && TimeOnly.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var timeOnly))
-        {
-            result = timeOnly;
-            return true;
-        }
-
-        handled = false;
-        return false;
-    }
-
-    private static bool TryConvertEnum(string raw, Type targetType, out object? result, out bool handled)
-    {
-        handled = targetType.IsEnum;
-        result = null;
-        if (!handled)
-        {
-            return false;
-        }
-
-        try
-        {
-            result = Enum.Parse(targetType, raw, ignoreCase: true);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static bool TryConvertUsingChangeType(string raw, Type targetType, out object? result)
-    {
-        result = null;
-        try
-        {
-            result = Convert.ChangeType(raw, targetType, CultureInfo.InvariantCulture);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
     private static bool TryGetEnumerableElementType(Type type, out Type elementType)
     {
         elementType = null!;
@@ -1078,8 +756,128 @@ public static class FilterBuilder
         return true;
     }
 
-    private static bool IsAllowed(ISet<string>? allowlist, string property)
-        => allowlist is null || allowlist.Count == 0 || allowlist.Contains(property);
+    private static bool TryConvert(string? raw, Type targetType, out object? result)
+    {
+        result = null;
+        if (raw is null)
+        {
+            return true;
+        }
+
+        var nonNullableType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+        if (string.Equals(raw, "null", StringComparison.OrdinalIgnoreCase))
+        {
+            result = null;
+            return true;
+        }
+
+        if (nonNullableType == typeof(string))
+        {
+            result = raw.Trim('"').Trim('\'');
+            return true;
+        }
+
+        if (nonNullableType == typeof(Guid))
+        {
+            if (Guid.TryParse(raw, out var guid))
+            {
+                result = guid;
+                return true;
+            }
+            return false;
+        }
+
+        if (nonNullableType == typeof(DateTimeOffset))
+        {
+            if (DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dto))
+            {
+                result = dto;
+                return true;
+            }
+            return false;
+        }
+
+        if (nonNullableType == typeof(DateTime))
+        {
+            if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt))
+            {
+                result = dt;
+                return true;
+            }
+            return false;
+        }
+
+        if (nonNullableType == typeof(DateOnly))
+        {
+            if (DateOnly.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateOnly))
+            {
+                result = dateOnly;
+                return true;
+            }
+            return false;
+        }
+
+        if (nonNullableType == typeof(TimeOnly))
+        {
+            if (TimeOnly.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var timeOnly))
+            {
+                result = timeOnly;
+                return true;
+            }
+            return false;
+        }
+
+        if (nonNullableType.IsEnum)
+        {
+            try
+            {
+                result = Enum.Parse(nonNullableType, raw, ignoreCase: true);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        try
+        {
+            result = Convert.ChangeType(raw, nonNullableType, CultureInfo.InvariantCulture);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool TryBuildFilterExpressionInternal(
+        Type entityType,
+        string? filter,
+        bool caseInsensitive,
+        out LambdaExpression? expression,
+        out string? error)
+    {
+        expression = null;
+        error = null;
+        if (string.IsNullOrWhiteSpace(filter)) return true;
+
+        var generic = typeof(KyrolusFilterExpressionBuilder)
+            .GetMethod(nameof(TryBuildFilterExpression), BindingFlags.Public | BindingFlags.Static);
+
+        if (generic is null)
+        {
+            error = "Unable to locate filter expression builder.";
+            return false;
+        }
+
+        var concrete = generic.MakeGenericMethod(entityType);
+        var args = new object?[] { filter, caseInsensitive, null, null };
+        var result = (bool)concrete.Invoke(null, args)!;
+        expression = args[2] as LambdaExpression;
+        error = args[3] as string;
+        return result;
+    }
 
     private sealed class ReplaceParameterVisitor(ParameterExpression source, ParameterExpression target) : ExpressionVisitor
     {
@@ -1089,5 +887,4 @@ public static class FilterBuilder
         protected override Expression VisitParameter(ParameterExpression node)
             => node == source ? target : base.VisitParameter(node);
     }
-
 }

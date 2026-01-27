@@ -195,7 +195,7 @@ namespace KyrolusSous.Repositories.EF.Generator
             AddAsync(sb, request);
             AddRangeAsync(sb, request);
             ExistAsync(sb, request);
-            PatchAsync(sb, request, keyProps, keyNamesLiteral, rowRevisionProp);
+            PatchAsync(sb, request, keyNamesLiteral, rowRevisionProp);
             RemoveAsync(sb, request, keyProps, keyNamesLiteral);
             UpdateAsync(sb, request, keyNamesLiteral, keyDisplayFromEntity, rowRevisionProp);
             TryWithSaveAsync(sb, request);
@@ -730,7 +730,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     null, specification.AsNoTracking, specification is IKyrolusHasSplitQuery split && split.UseSplitQuery,
                                     false, specification.Includes)).ConfigureAwait(false);
                                     return await query.Select(specification.Selector).ToListAsync(ct);
-                                }, (x) => specification, null, cancellationToken).ConfigureAwait(false);
+                                }, (x) => specification, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
                             }
                             """;
             sb.AppendLine(method);
@@ -757,7 +757,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                         .Select(specification.Selector)
                                         .ToListAsync(ct);
                                     return (items, total);
-                                }, (items) => (specification.PageNumber, specification.PageSize), null, cancellationToken).ConfigureAwait(false);
+                                }, (items) => (specification.PageNumber, specification.PageSize), ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
                             }
                             """;
             sb.AppendLine(method);
@@ -823,7 +823,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                             cancellationToken: ct);
                                     }
                                     return await _compiledGetById(db, {{{keyProp}}}).FirstOrDefaultAsync(ct).ConfigureAwait(false);
-                                }, (item) => {{{keyProp}}}, null, cancellationToken).ConfigureAwait(false);
+                                }, (item) => {{{keyProp}}}, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
                             """;
                 sb.AppendLine(method);
                 sb.AppendLine();
@@ -879,7 +879,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                             cancellationToken: ct) ?? [];
                                     }
                                     return await _compiledGetAllFiltered(db, filter, effectiveAsNoTracking, effectiveSplit).ToListAsync(ct).ConfigureAwait(false);
-                                }, (item) => filter, null, cancellationToken).ConfigureAwait(false);
+                                }, (item) => filter, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
                             }
                             """;
             sb.AppendLine(compiledAll);
@@ -897,7 +897,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                         await set.AddAsync(entity, cancellationToken).ConfigureAwait(false);
                         await InvalidateCachesAsync(entity, cancellationToken).ConfigureAwait(false);
                         return entity;
-                    }, (entity) => entity, null, cancellationToken).ConfigureAwait(false);
+                    }, (e) => e, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
                 }
                 """;
             sb.AppendLine(method);
@@ -925,7 +925,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     {
                                         return RepositoryOperationResult<{{{T(request.EntityType)}}}>.Failed(ex);
                                     }
-                                }, (e) => e, null, cancellationToken).ConfigureAwait(false);
+                                }, (e) => e, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
                             }
                             {{{RequiresUnreferencedCode}}}
                             public async Task<RepositoryOperationResult<{{{T(request.EntityType)}}}>> TryPatchAsync({{{keyParamterString}}}, Dictionary<string, object> updates, CancellationToken cancellationToken = default)
@@ -946,7 +946,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     {
                                         return RepositoryOperationResult<{{{T(request.EntityType)}}}>.Failed(ex);
                                     }
-                                }, (x) => updates, null, cancellationToken).ConfigureAwait(false);
+                                }, (x) => updates, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
                             }
                             {{{RequiresUnreferencedCode}}}
                             public async Task<RepositoryOperationResult<bool>> TryRemoveAsync({{{T(request.EntityType)}}} entity, CancellationToken cancellationToken = default)
@@ -964,7 +964,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     {
                                         return RepositoryOperationResult<bool>.Failed(ex);
                                     }
-                                }, (e) => e, null, cancellationToken).ConfigureAwait(false);
+                                }, (e) => e, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
                             }
                             {{{RequiresUnreferencedCode}}}
                             public async Task<RepositoryOperationResult<bool>> TryRemoveAsync({{{keyParamterString}}}, CancellationToken cancellationToken = default)
@@ -982,7 +982,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     {
                                         return RepositoryOperationResult<bool>.Failed(ex);
                                     }
-                                },(x)=> {{{keyNameOf}}}, null, cancellationToken).ConfigureAwait(false);
+                                },(x)=> {{{keyNameOf}}}, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
                             }
                             """;
             sb.AppendLine(method);
@@ -1009,7 +1009,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     var affectedEf = await db.SaveChangesAsync(ct).ConfigureAwait(false);
                                     if (cache is not null) await InvalidateCachesAsync(collection, ct).ConfigureAwait(false);
                                     return affectedEf;
-                                }, entities => entities, null, cancellationToken);
+                                }, entities => entities, ex => new { Exception = ex.Message }, cancellationToken);
                             }
                             {{{RequiresUnreferencedCode}}}
                             public async Task<int> BulkUpsertAsync(IEnumerable<{{{T(request.EntityType)}}}> entities, Expression<Func<{{{T(request.EntityType)}}}, bool>> matchOn, CancellationToken cancellationToken = default)
@@ -1029,7 +1029,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     var affectedEf = await db.SaveChangesAsync(ct).ConfigureAwait(false);
                                     if (cache is not null) await InvalidateCachesAsync(collection, ct).ConfigureAwait(false);
                                     return affectedEf;
-                                }, entities => entities, null, cancellationToken);
+                                }, entities => entities, ex => new { Exception = ex.Message }, cancellationToken);
                             }
                             """ : string.Empty;
 
@@ -1069,7 +1069,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                             await InvalidateListCachesAsync(ct).ConfigureAwait(false);
                                     }
                                     return affected;
-                                }, x => x, null, cancellationToken);
+                                }, x => x, ex => new { Exception = ex.Message }, cancellationToken);
                             }
 
                             {{{RequiresUnreferencedCode}}}
@@ -1105,7 +1105,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                             await InvalidateListCachesAsync(ct).ConfigureAwait(false);
                                     }
                                     return affected;
-                                    }, x => x, null, cancellationToken);
+                                    }, x => x, ex => new { Exception = ex.Message }, cancellationToken);
                             }
                             {{{bulkSection}}}
                             """;
@@ -1124,7 +1124,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     await set.AddRangeAsync(entities, ct).ConfigureAwait(false);
                                     await InvalidateCachesAsync(entities, ct).ConfigureAwait(false);
                                     return entities;
-                                }, (entities) => entities, null, cancellationToken).ConfigureAwait(false);
+                                }, (entities) => entities, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
                             }
                             """;
             sb.AppendLine(method);
@@ -1140,13 +1140,13 @@ namespace KyrolusSous.Repositories.EF.Generator
                                 {
                                     var query = await CalculateQueryAsync(new CalculateQueryCommand([filter], null, null, null, true, null, false, null)).ConfigureAwait(false);
                                     return await query.AnyAsync(filter, ct).ConfigureAwait(false);
-                                }, (item) => filter, null, cancellationToken).ConfigureAwait(false);
+                                }, (item) => filter, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
                             """;
             sb.AppendLine(method);
             sb.AppendLine();
         }
 
-        private void PatchAsync(StringBuilder sb, RepositoryRequest request, KeyProp[] keyProps, string keyNamesLiteral, IPropertySymbol? rowVersionProp)
+        private void PatchAsync(StringBuilder sb, RepositoryRequest request,string keyNamesLiteral, IPropertySymbol? rowVersionProp)
         {
             var rowVersionName = rowVersionProp?.Name;
             var skipRowVersion = rowVersionName is null
@@ -1199,7 +1199,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                         }
 
                         return entity;
-                    }, (update) => updates, null, cancellationToken).ConfigureAwait(false);
+                    }, (update) => updates, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
                 }
                 """;
             sb.AppendLine(method);
@@ -1223,7 +1223,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     var removed = RemoveInternal(entityInDb);
                                     if (removed) await InvalidateCachesAsync(entity, ct).ConfigureAwait(false);
                                     return removed;
-                                }, (entity) => entity, null, cancellationToken).ConfigureAwait(false);
+                                }, (e) => e, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
                             }
                             {{{RequiresUnreferencedCode}}}
                             public async Task<bool> RemoveAsync({{{keyParamterString}}}, CancellationToken cancellationToken = default)
@@ -1236,7 +1236,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                     var removed = RemoveInternal(entity);
                                     if (removed) await InvalidateCachesAsync({{{keyValues}}}, ct).ConfigureAwait(false);
                                     return removed;
-                                }, (x)=>{{{keyNameOf}}}, null, cancellationToken).ConfigureAwait(false);
+                                }, (x)=>{{{keyNameOf}}}, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
                             }
                             {{{RequiresUnreferencedCode}}}
                             public async Task<bool> RemoveRangeAsync(IEnumerable<{{{T(request.EntityType)}}}> entities, CancellationToken cancellationToken = default)
@@ -1263,7 +1263,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                                         }
                                         throw new InvalidOperationException("One or more entities could not be removed.");
                                     }
-                                }, entities => entities, null, cancellationToken).ConfigureAwait(false);
+                                }, entities => entities, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
                             }
                             """;
             sb.AppendLine(method);
@@ -1291,7 +1291,7 @@ public async Task<{{{T(request.EntityType)}}}> UpdateAsync({{{T(request.EntityTy
                 {{{rowVersionUpdate}}}
                 await InvalidateCachesAsync(entity, ct).ConfigureAwait(false);
                 return entity;
-            }, (entity) => entity, null, cancellationToken).ConfigureAwait(false);
+            }, (entity) => entity, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
 }
 
 {{{RequiresUnreferencedCode}}}
@@ -1310,7 +1310,7 @@ public async Task<IEnumerable<{{{T(request.EntityType)}}}>> UpdateRangeAsync(IEn
                 }
                 await InvalidateCachesAsync(entities, ct).ConfigureAwait(false);
                 return result;
-            }, entities => entities, null, cancellationToken).ConfigureAwait(false);
+            }, entities => entities, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
 }
 """;
             sb.AppendLine(method);
@@ -1418,7 +1418,7 @@ public async Task<IEnumerable<{{{T(request.EntityType)}}}>> UpdateRangeAsync(IEn
                                     {
                                         return RepositoryOperationResult<bool>.Failed(ex);
                                     }
-                                }, (item) => item, null, cancellationToken).ConfigureAwait(false);
+                                }, (item) => item, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
                             {{{RequiresUnreferencedCode}}}
                             public async Task<bool> RestoreAsync({{{keyParamterString}}}, CancellationToken cancellationToken = default)
                             {
@@ -1463,7 +1463,7 @@ public async Task<IEnumerable<{{{T(request.EntityType)}}}>> UpdateRangeAsync(IEn
                                     {
                                         return RepositoryOperationResult<bool>.Failed(ex);
                                     }
-                                }, (item) => item, null, cancellationToken).ConfigureAwait(false);
+                                }, (item) => item, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
                             """;
 
             sb.AppendLine(code);
@@ -2374,6 +2374,16 @@ namespace KyrolusSous.Repositories.EF.Generated
                     if (string.IsNullOrWhiteSpace(f.Operator))
                         throw new ArgumentException($"Invalid filter for property '{f.Property}': 'Operator' is required.", nameof(request));
 
+                    if (IsExtendedOperator(f.Operator))
+                    {
+                        var filterText = BuildFilterString(f.Property, f.Operator, f.Value);
+                        if (!KyrolusFilterExpressionBuilder.TryBuildFilterExpression<{{T(request.EntityType)}}>(filterText, false, out var ext, out var extError) || ext is null)
+                            throw new ArgumentException($"Invalid filter: property='{f.Property}', operator='{f.Operator}', value='{f.Value}'. {extError}", nameof(request));
+
+                        filter = filter is null ? ext : And(filter, ext);
+                        continue;
+                    }
+
                     if (f.Value is null)
                     {
                         if (!IsNullComparableOperator(f.Operator))
@@ -2485,6 +2495,44 @@ namespace KyrolusSous.Repositories.EF.Generated
             _ => null
         };
 
+        private static bool IsExtendedOperator(string op)
+        {
+            var normalized = op.Trim().ToLowerInvariant();
+            return normalized is "in" or "between" or "any" or "all" or "isnull" or "notnull";
+        }
+
+        private static bool IsNullOperator(string op)
+            => op.Equals("isnull", StringComparison.OrdinalIgnoreCase)
+            || op.Equals("notnull", StringComparison.OrdinalIgnoreCase);
+
+        private static string BuildFilterString(string property, string op, string? value)
+        {
+            var normalized = op.Trim();
+            if (IsNullOperator(normalized))
+                return $"{property} {normalized}";
+
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException($"Invalid filter: property='{property}', operator='{op}', value is required.");
+
+            var trimmed = value.Trim();
+            if (IsWrapped(trimmed))
+                return $"{property} {normalized} {trimmed}";
+
+            return $"{property} {normalized} [{trimmed}]";
+        }
+
+        private static bool IsWrapped(string value)
+        {
+            if (value.Length < 2) return false;
+            var first = value[0];
+            var last = value[value.Length - 1];
+            return (first == '(' && last == ')')
+                || (first == '[' && last == ']')
+                || (first == '{' && last == '}')
+                || (first == '"' && last == '"')
+                || (first == '\'' && last == '\'');
+        }
+
         private static Expression<Func<{{T(request.EntityType)}}, bool>> BuildNullPredicate<TProp>(Expression<Func<{{T(request.EntityType)}}, TProp>> selector, string op)
         {
             var param = selector.Parameters[0];
@@ -2549,7 +2597,7 @@ namespace KyrolusSous.Repositories.EF.Generated
         }
 
         private PropertyBuckets CollectPropertyBuckets(RepositoryRequest request)
-        {
+        { var system = "System";
             var allProps = GetEntityProperties(request);
             var stringProps = allProps
                 .Where(p => p.Type.SpecialType == SpecialType.System_String)
@@ -2583,7 +2631,9 @@ namespace KyrolusSous.Repositories.EF.Generated
                 .Select(p => (Prop: p, Info: Unwrap(p.Type)))
                 .Where(t =>
                     t.Info.type.SpecialType == SpecialType.System_DateTime ||
-                    (t.Info.type.Name == "DateTimeOffset" && t.Info.type.ContainingNamespace.ToDisplayString() == "System"))
+                    (t.Info.type.Name == "DateTimeOffset" && t.Info.type.ContainingNamespace.ToDisplayString() == system) ||
+                    (t.Info.type.Name == "DateOnly" && t.Info.type.ContainingNamespace.ToDisplayString() == system) ||
+                    (t.Info.type.Name == "TimeOnly" && t.Info.type.ContainingNamespace.ToDisplayString() == system))
                 .Select(t => (t.Prop.Name, Type: t.Info.type, t.Info.isNullable))
                 .ToArray();
 
@@ -2595,7 +2645,7 @@ namespace KyrolusSous.Repositories.EF.Generated
 
             var guidProps = allProps
                 .Select(p => (Prop: p, Info: Unwrap(p.Type)))
-                .Where(t => t.Info.type.Name == "Guid" && t.Info.type.ContainingNamespace.ToDisplayString() == "System")
+                .Where(t => t.Info.type.Name == "Guid" && t.Info.type.ContainingNamespace.ToDisplayString() == system)
                 .Select(t => (t.Prop.Name, Type: t.Info.type, t.Info.isNullable))
                 .ToArray();
 

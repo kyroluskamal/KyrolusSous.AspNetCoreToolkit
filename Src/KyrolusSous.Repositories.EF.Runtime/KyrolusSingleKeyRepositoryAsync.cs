@@ -65,7 +65,7 @@ public class KyrolusSingleKeyRepositoryAsync<TDbContext, TEntity, TKey> :
                 }
                 return await del(db, id).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
             },
-            e => new { Id = id }, null, cancellationToken).ConfigureAwait(false);
+            e => new { Id = id }, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public async Task<TEntity?> PatchAsync(TKey id, Dictionary<string, object> updates, CancellationToken cancellationToken = default)
@@ -74,7 +74,7 @@ public class KyrolusSingleKeyRepositoryAsync<TDbContext, TEntity, TKey> :
         ArgumentNullException.ThrowIfNull(updates);
         return await ExecuteWithNotificationsAsync(nameof(PatchAsync), (id, updates), async ct =>
             await PatchInternalAsync([id], updates, cancellationToken).ConfigureAwait(false),
-            e => new { Id = id, Updates = updates }, null, cancellationToken).ConfigureAwait(false);
+            e => new { Id = id, Updates = updates }, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<RepositoryOperationResult<TEntity>> TryPatchAsync(TKey id, Dictionary<string, object> updates, CancellationToken cancellationToken = default)
@@ -85,7 +85,7 @@ public class KyrolusSingleKeyRepositoryAsync<TDbContext, TEntity, TKey> :
         ArgumentNullException.ThrowIfNull(id);
         return await ExecuteWithNotificationsAsync(nameof(RemoveAsync), new { Id = id }, async ct =>
             await RemoveInternalAsync([id], false, ct).ConfigureAwait(false),
-            kv => new { Id = id }, null, cancellationToken).ConfigureAwait(false);
+            kv => new { Id = id }, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<RepositoryOperationResult<bool>> TryRemoveAsync(TKey id, CancellationToken cancellationToken = default)

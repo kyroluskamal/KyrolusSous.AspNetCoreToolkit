@@ -54,7 +54,7 @@ public class KyrolusCompositeKeySoftDeleteRepositoryAsync<TDbContext, TEntity> :
         ArgumentException.ThrowIfKeyValuesIsNotValid(keyValues, keyPropertyNames.Length);
         return ExecuteWithNotificationsAsync(nameof(RestoreAsync), keyValues, async ct =>
             await RestoreInternalAsync(keyValues, ct).ConfigureAwait(false),
-            kv => new { KeyValues = kv }, null, cancellationToken);
+            kv => new { KeyValues = kv }, ex => new { Exception = ex.Message }, cancellationToken);
     }
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<bool> SoftDeleteAsync(object?[]? keyValues, CancellationToken cancellationToken = default)
@@ -62,7 +62,7 @@ public class KyrolusCompositeKeySoftDeleteRepositoryAsync<TDbContext, TEntity> :
         ArgumentException.ThrowIfKeyValuesIsNotValid(keyValues, keyPropertyNames.Length);
         return ExecuteWithNotificationsAsync(nameof(SoftDeleteAsync), keyValues, async ct =>
             await RemoveInternalAsync(keyValues, true, ct).ConfigureAwait(false),
-            kv => new { KeyValues = kv }, null, cancellationToken);
+            kv => new { KeyValues = kv }, ex => new { Exception = ex.Message }, cancellationToken);
     }
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<RepositoryOperationResult<bool>> TryRestoreAsync(object?[]? keyValues, CancellationToken cancellationToken = default)

@@ -35,7 +35,7 @@ public class KyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity>(
         ArgumentException.ThrowIfUpdatesIsNotValid(updates);
         return await ExecuteWithNotificationsAsync(nameof(PatchAsync), (keyValues, updates), async ct =>
             await PatchInternalAsync(keyValues, updates, cancellationToken).ConfigureAwait(false),
-            e => new { KeyValues = keyValues, Updates = updates }, null, cancellationToken).ConfigureAwait(false);
+            e => new { KeyValues = keyValues, Updates = updates }, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<RepositoryOperationResult<TEntity>> TryPatchAsync(object?[]? keyValues, Dictionary<string, object> updates, CancellationToken cancellationToken = default)
@@ -46,7 +46,7 @@ public class KyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity>(
         ArgumentException.ThrowIfKeyValuesIsNotValid(keyValues, keyPropertyNames.Length);
         return ExecuteWithNotificationsAsync(nameof(RemoveAsync), keyValues, async ct =>
             await RemoveInternalAsync(keyValues, false, ct).ConfigureAwait(false),
-            kv => new { KeyValues = kv }, null, cancellationToken);
+            kv => new { KeyValues = kv }, ex => new { Exception = ex.Message }, cancellationToken);
     }
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<RepositoryOperationResult<bool>> TryRemoveAsync(object?[]? keyValues, CancellationToken cancellationToken = default)

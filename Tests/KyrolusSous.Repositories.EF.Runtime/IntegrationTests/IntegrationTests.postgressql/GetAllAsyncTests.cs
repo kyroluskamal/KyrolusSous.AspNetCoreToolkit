@@ -1,5 +1,3 @@
-using KyrolusSous.Repositories.EF.Abstractions;
-
 namespace KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql;
 
 public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusRuntimePSFixture(factory)
@@ -274,6 +272,79 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusR
         products.ShouldNotBeNull();
         products.Count.ShouldBe(2);
         products.Any(p => p.Name == "Clean Code").ShouldBeFalse();
+    }
+
+    [Fact(DisplayName = "GetAllAsync uses in operator for numeric properties")]
+    public async Task GetAllAsync_NumericProperty_In_Operator_Works()
+    {
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("StockQuantity", "in", "25,50")]
+            ));
+        response.EnsureSuccessStatusCode();
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(2);
+        products.Select(p => p.StockQuantity).OrderBy(x => x).ShouldBe([25, 50]);
+    }
+
+    [Fact(DisplayName = "GetAllAsync uses between operator for decimal properties")]
+    public async Task GetAllAsync_DecimalProperty_Between_Operator_Works()
+    {
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("Price", "between", "100,300")]
+            ));
+        response.EnsureSuccessStatusCode();
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(1);
+        products[0].Price.ShouldBe(199m);
+    }
+
+    [Fact(DisplayName = "GetAllAsync uses any operator for collection properties")]
+    public async Task GetAllAsync_CollectionProperty_Any_Operator_Works()
+    {
+        var electronicsId = "55555555-5555-5555-5555-555555555551";
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("ProductCategories", "any", $"CategoryId = {electronicsId}")]
+            ));
+        response.EnsureSuccessStatusCode();
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(2);
+        products.Any(p => p.Name == "Clean Code").ShouldBeFalse();
+    }
+
+    [Fact(DisplayName = "GetAllAsync uses all operator for collection properties")]
+    public async Task GetAllAsync_CollectionProperty_All_Operator_Works()
+    {
+        var booksId = "55555555-5555-5555-5555-555555555552";
+        var (response, products, _) = await ArrangeAndActUseingHttpForListAsync<Product>(new QueryRequest(
+            Filters: [new FilterClause("ProductCategories", "all", $"CategoryId = {booksId}")]
+            ));
+        response.EnsureSuccessStatusCode();
+        products.ShouldNotBeNull();
+        products.Count.ShouldBe(1);
+        products[0].Name.ShouldBe("Clean Code");
+    }
+
+    [Fact(DisplayName = "GetAllAsync uses isnull operator for nullable properties")]
+    public async Task GetAllAsync_NullableProperty_IsNull_Operator_Works()
+    {
+        var (response, payments, _) = await ArrangeAndActUseingHttpForListAsync<Payment>(new QueryRequest(
+            Filters: [new FilterClause("PaidAt", "isnull", null)]
+            ));
+        response.EnsureSuccessStatusCode();
+        payments.ShouldNotBeNull();
+        payments.Count.ShouldBe(0);
+    }
+
+    [Fact(DisplayName = "GetAllAsync uses notnull operator for nullable properties")]
+    public async Task GetAllAsync_NullableProperty_NotNull_Operator_Works()
+    {
+        var (response, payments, _) = await ArrangeAndActUseingHttpForListAsync<Payment>(new QueryRequest(
+            Filters: [new FilterClause("PaidAt", "notnull", null)]
+            ));
+        response.EnsureSuccessStatusCode();
+        payments.ShouldNotBeNull();
+        payments.Count.ShouldBe(1);
+        payments[0].PaidAt.ShouldNotBeNull();
     }
     #endregion
     #region Global Filter Tests
@@ -731,15 +802,219 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusR
     }
     #endregion
     #region Cache tests
-    // [Fact(DisplayName = "GetAllyAsync should be cached if the cache is enabled")]
-    // public void TestName()
-    // {
-    //     // Given
+    [Fact(DisplayName = "GetAllAsync caches results when cache is enabled and allowed")]
+    public async Task GetAllAsync_Caches_WhenEnabled()
+    {
+        var policy = new KyrolusRepositoryPolicy
+        {
+            DefaultCachePolicy = new KyrolusCachePolicy(Enabled: true),
+            DefaultCacheReadOperations = KyrolusCacheReadOperations.GetAllAsync
+        };
 
-    //     // When
+        var customFactory = WithPolicy(policy);
+        using var scope = customFactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
+        var cache = scope.ServiceProvider.GetRequiredService<InMemoryCacheProvider>();
+        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
 
-    //     // Then
-    // }
+        cache.Clear();
+        cache.Count.ShouldBe(0);
+
+        counter.Reset();
+        var first = await repo.GetAllAsync();
+        first.Count().ShouldBe(3);
+        cache.Count.ShouldBe(1);
+        counter.Count.ShouldBeGreaterThan(0);
+
+        counter.Reset();
+        var second = await repo.GetAllAsync();
+        second.Count().ShouldBe(3);
+        cache.Count.ShouldBe(1);
+        counter.Count.ShouldBe(0);
+    }
+
+    [Fact(DisplayName = "GetAllAsync does not cache when filter is provided")]
+    public async Task GetAllAsync_DoesNotCache_WithFilter()
+    {
+        var policy = new KyrolusRepositoryPolicy
+        {
+            DefaultCachePolicy = new KyrolusCachePolicy(Enabled: true),
+            DefaultCacheReadOperations = KyrolusCacheReadOperations.GetAllAsync
+        };
+
+        var customFactory = WithPolicy(policy);
+        using var scope = customFactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
+        var cache = scope.ServiceProvider.GetRequiredService<InMemoryCacheProvider>();
+
+        cache.Clear();
+        cache.Count.ShouldBe(0);
+
+        var items = await repo.GetAllAsync(p => p.Price > 0m);
+        items.Count().ShouldBe(3);
+        cache.Count.ShouldBe(0);
+    }
+
+    [Fact(DisplayName = "GetAllAsync does not cache when includes are provided")]
+    public async Task GetAllAsync_DoesNotCache_WithIncludes()
+    {
+        var policy = new KyrolusRepositoryPolicy
+        {
+            DefaultCachePolicy = new KyrolusCachePolicy(Enabled: true),
+            DefaultCacheReadOperations = KyrolusCacheReadOperations.GetAllAsync
+        };
+
+        var customFactory = WithPolicy(policy);
+        using var scope = customFactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
+        var cache = scope.ServiceProvider.GetRequiredService<InMemoryCacheProvider>();
+
+        cache.Clear();
+        cache.Count.ShouldBe(0);
+
+        var items = await repo.GetAllAsync(
+            includeProperties: ["Reviews"],
+            cancellationToken: default);
+
+        items.Count().ShouldBe(3);
+        cache.Count.ShouldBe(0);
+    }
+
+    [Fact(DisplayName = "GetAllAsync does not cache when global filter is set")]
+    public async Task GetAllAsync_DoesNotCache_WithGlobalFilter()
+    {
+        var policy = new KyrolusRepositoryPolicy
+        {
+            DefaultCachePolicy = new KyrolusCachePolicy(Enabled: true),
+            DefaultCacheReadOperations = KyrolusCacheReadOperations.GetAllAsync
+        }.AddGlobalWhereFilter<Product>(p => p.Price > 0m);
+
+        var customFactory = WithPolicy(policy);
+        using var scope = customFactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
+        var cache = scope.ServiceProvider.GetRequiredService<InMemoryCacheProvider>();
+
+        cache.Clear();
+        cache.Count.ShouldBe(0);
+
+        var items = await repo.GetAllAsync();
+        items.Count().ShouldBe(3);
+        cache.Count.ShouldBe(0);
+    }
+
+    [Fact(DisplayName = "GetAllAsync does not cache when orderBy is provided")]
+    public async Task GetAllAsync_DoesNotCache_WithOrderBy()
+    {
+        var policy = new KyrolusRepositoryPolicy
+        {
+            DefaultCachePolicy = new KyrolusCachePolicy(Enabled: true),
+            DefaultCacheReadOperations = KyrolusCacheReadOperations.GetAllAsync
+        };
+
+        var customFactory = WithPolicy(policy);
+        using var scope = customFactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
+        var cache = scope.ServiceProvider.GetRequiredService<InMemoryCacheProvider>();
+
+        cache.Clear();
+        cache.Count.ShouldBe(0);
+
+        var items = await repo.GetAllAsync(orderBy: q => q.OrderBy(p => p.Price));
+        items.Count().ShouldBe(3);
+        cache.Count.ShouldBe(0);
+    }
+
+    [Fact(DisplayName = "GetAllAsync does not cache when includeGraph is provided")]
+    public async Task GetAllAsync_DoesNotCache_WithIncludeGraph()
+    {
+        var policy = new KyrolusRepositoryPolicy
+        {
+            DefaultCachePolicy = new KyrolusCachePolicy(Enabled: true),
+            DefaultCacheReadOperations = KyrolusCacheReadOperations.GetAllAsync
+        };
+
+        var customFactory = WithPolicy(policy);
+        using var scope = customFactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
+        var cache = scope.ServiceProvider.GetRequiredService<InMemoryCacheProvider>();
+
+        cache.Clear();
+        cache.Count.ShouldBe(0);
+
+        var items = await repo.GetAllAsync(
+            filter: null,
+            orderBy: null,
+            includeProperties: null,
+            includeGraph: new IncludeGraph<Product>(x => x.Reviews),
+            asNoTracking: true,
+            useSplitQuery: true,
+            cancellationToken: default);
+
+        items.Count().ShouldBe(3);
+        cache.Count.ShouldBe(0);
+    }
+
+    [Fact(DisplayName = "GetAllAsync does not cache when includeExpressions are provided")]
+    public async Task GetAllAsync_DoesNotCache_WithIncludeExpressions()
+    {
+        var policy = new KyrolusRepositoryPolicy
+        {
+            DefaultCachePolicy = new KyrolusCachePolicy(Enabled: true),
+            DefaultCacheReadOperations = KyrolusCacheReadOperations.GetAllAsync
+        };
+
+        var customFactory = WithPolicy(policy);
+        using var scope = customFactory.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
+        var cache = scope.ServiceProvider.GetRequiredService<InMemoryCacheProvider>();
+
+        cache.Clear();
+        cache.Count.ShouldBe(0);
+
+        var items = await repo.GetAllAsync(
+            filter: null,
+            orderBy: null,
+            asNoTracking: true,
+            useSplitQuery: null,
+            cancellationToken: default,
+            includeExpressions: static p => p.Reviews);
+
+        items.Count().ShouldBe(3);
+        cache.Count.ShouldBe(0);
+    }
+
+    [Fact(DisplayName = "GetAllAsync cache key varies by tenant scope")]
+    public async Task GetAllAsync_CacheKey_UsesTenantScope()
+    {
+        var policy = new KyrolusRepositoryPolicy
+        {
+            DefaultCachePolicy = new KyrolusCachePolicy(Enabled: true),
+            DefaultCacheReadOperations = KyrolusCacheReadOperations.GetAllAsync
+        };
+
+        var customFactory = WithPolicy(policy);
+        using var client = customFactory.CreateClient();
+        using var scope = customFactory.Services.CreateScope();
+        var cache = scope.ServiceProvider.GetRequiredService<InMemoryCacheProvider>();
+
+        cache.Clear();
+        cache.Count.ShouldBe(0);
+
+        static HttpRequestMessage BuildRequest(string tenant)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/product");
+            request.Headers.Add("X-Tenant-Id", tenant);
+            return request;
+        }
+
+        var responseA = await client.SendAsync(BuildRequest("tenant-a"));
+        responseA.EnsureSuccessStatusCode();
+        cache.Count.ShouldBe(1);
+
+        var responseB = await client.SendAsync(BuildRequest("tenant-b"));
+        responseB.EnsureSuccessStatusCode();
+        cache.Count.ShouldBe(2);
+    }
     #endregion
     #region Unhappy Path Tests
     [Fact(DisplayName = "GetAllAsync throws when include string is invalid navigation")]

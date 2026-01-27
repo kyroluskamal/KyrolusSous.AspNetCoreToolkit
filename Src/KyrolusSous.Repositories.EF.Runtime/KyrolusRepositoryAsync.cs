@@ -175,7 +175,7 @@ public class KyrolusRepositoryAsync<
 
             var asyncQueryFallback = filteredDel(db, filter, requestedNoTracking, requestedSplit);
             return await asyncQueryFallback.ToListAsync(cancellationToken).ConfigureAwait(false);
-        }, (e) => new { filter, e.Count }, null, cancellationToken).ConfigureAwait(false);
+        }, (e) => new { filter, e.Count }, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
     #endregion
 
@@ -189,7 +189,7 @@ public class KyrolusRepositoryAsync<
             await set.AddAsync(entity, ct).ConfigureAwait(false);
             await InvalidateCachesAsync(entity, ct).ConfigureAwait(false);
             return entity;
-        }, e => entity, null, cancellationToken).ConfigureAwait(false);
+        }, e => entity, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
@@ -202,7 +202,7 @@ public class KyrolusRepositoryAsync<
         await set.AddRangeAsync(entities, ct).ConfigureAwait(false);
         await InvalidateCachesAsync(entities, ct).ConfigureAwait(false);
         return entities;
-    }, e => e, null, cancellationToken).ConfigureAwait(false);
+    }, e => e, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
@@ -217,7 +217,7 @@ public class KyrolusRepositoryAsync<
             UpdateEntityProperties(entity, existing);
             await InvalidateCachesAsync(keyValues, ct).ConfigureAwait(false);
             return existing;
-        }, e => entity, null, cancellationToken).ConfigureAwait(false);
+        }, e => entity, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
@@ -234,7 +234,7 @@ public class KyrolusRepositoryAsync<
                 updated.Add(u);
             }
             return updated;
-        }, e => e, null, cancellationToken).ConfigureAwait(false);
+        }, e => e, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
@@ -265,7 +265,7 @@ public class KyrolusRepositoryAsync<
         ArgumentNullException.ThrowIfNull(entity);
         return await ExecuteWithNotificationsAsync(nameof(RemoveAsync), entity, async ct =>
         await RemoveInternalAsync(GetPrimaryKeyValues(entity), false, ct).ConfigureAwait(false),
-        removed => new { Entity = entity, Removed = removed }, null, cancellationToken).ConfigureAwait(false);
+        removed => new { Entity = entity, Removed = removed }, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
@@ -299,7 +299,7 @@ public class KyrolusRepositoryAsync<
             results.Add(r);
         }
         return results.All(r => r);
-    }, removed => new { Entities = entities, Removed = removed }, null, cancellationToken).ConfigureAwait(false);
+    }, removed => new { Entities = entities, Removed = removed }, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public async Task<bool> ExistAsync(Expression<Func<TEntity, bool>> filter, CancellationToken cancellationToken = default)
@@ -308,7 +308,7 @@ public class KyrolusRepositoryAsync<
         var query = ApplyGlobalFilter(set.AsQueryable());
         if (softDeleteEnabled) query = ApplySoftDelete(query);
         return await query.AnyAsync(filter, ct).ConfigureAwait(false);
-    }, e => filter, null, cancellationToken).ConfigureAwait(false);
+    }, e => filter, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     #endregion
 
     #region Streaming / Query / Paging
@@ -384,7 +384,7 @@ public class KyrolusRepositoryAsync<
                 specification.Includes)).ConfigureAwait(false);
             var result = await query.Select(specification.Selector).ToListAsync(ct).ConfigureAwait(false);
             return result;
-        }, e => e, null, cancellationToken).ConfigureAwait(false);
+        }, e => e, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
@@ -410,7 +410,7 @@ public class KyrolusRepositoryAsync<
                 .Select(specification.Selector)
                 .ToListAsync(ct).ConfigureAwait(false);
             return (items, total);
-        }, (items) => (specification.PageNumber, specification.PageSize), null, cancellationToken).ConfigureAwait(false);
+        }, (items) => (specification.PageNumber, specification.PageSize), ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
@@ -440,7 +440,7 @@ public class KyrolusRepositoryAsync<
                 .Take(effectivePageSize)
                 .ToListAsync(ct).ConfigureAwait(false);
             return (items, total);
-        }, (items) => (effectivePageNumber, effectivePageSize), null, cancellationToken).ConfigureAwait(false);
+        }, (items) => (effectivePageNumber, effectivePageSize), ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
     #endregion
 
@@ -465,7 +465,7 @@ public class KyrolusRepositoryAsync<
             var result = await query.ExecuteUpdateAsync(setPropertyCalls, cancellationToken).ConfigureAwait(false);
             await InvalidateListCachesAsync(cancellationToken).ConfigureAwait(false);
             return result;
-        }, e => filter, null, cancellationToken).ConfigureAwait(false);
+        }, e => filter, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
@@ -483,7 +483,7 @@ public class KyrolusRepositoryAsync<
         var result = await query.ExecuteDeleteAsync(ct).ConfigureAwait(false);
         await InvalidateListCachesAsync(ct).ConfigureAwait(false);
         return result;
-    }, e => filter, null, cancellationToken).ConfigureAwait(false);
+    }, e => filter, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     #endregion
 
     #region Try* wrappers
@@ -494,7 +494,7 @@ public class KyrolusRepositoryAsync<
         return await ExecuteWithNotificationsAsync(nameof(TryUpdateAsync), entity, async ct => await ConcurrencyHelper.ExecuteWithConcurrencyRetryAsync(
                 () => UpdateAsync(entity, ct), policy, async ex => await ConcurrencyHelper.BuildConcurrencyInfoAsync(ex, rowVersionProperty, ct).ConfigureAwait(false),
                 ct).ConfigureAwait(false)
-        , e => entity, null, cancellationToken).ConfigureAwait(false);
+        , e => entity, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     protected async Task<RepositoryOperationResult<TEntity>> TryPatchInternalAsync(object?[]? keyValues, string operationName, Dictionary<string, object> updates, CancellationToken cancellationToken = default)
@@ -507,7 +507,7 @@ public class KyrolusRepositoryAsync<
                     policy,
                     async ex => await ConcurrencyHelper.BuildConcurrencyInfoAsync(ex, rowVersionProperty, ct).ConfigureAwait(false),
                     ct).ConfigureAwait(false)
-        , e => new { KeyValues = keyValues, Updates = updates }, null, cancellationToken).ConfigureAwait(false);
+        , e => new { KeyValues = keyValues, Updates = updates }, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
@@ -524,7 +524,7 @@ public class KyrolusRepositoryAsync<
                 policy,
                 async ex => await ConcurrencyHelper.BuildConcurrencyInfoAsync(ex, rowVersionProperty, ct).ConfigureAwait(false),
                 ct).ConfigureAwait(false)
-            , removed => new { Entity = entity, Removed = removed }, null, cancellationToken).ConfigureAwait(false);
+            , removed => new { Entity = entity, Removed = removed }, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
@@ -542,7 +542,7 @@ public class KyrolusRepositoryAsync<
             policy,
             async ex => await ConcurrencyHelper.BuildConcurrencyInfoAsync(ex, rowVersionProperty, cancellationToken).ConfigureAwait(false),
             cancellationToken),
-        e => new { KeyValues = keyValues, IsSoftDelete = isSoftDelete }, null, cancellationToken);
+        e => new { KeyValues = keyValues, IsSoftDelete = isSoftDelete }, ex => new { Exception = ex.Message }, cancellationToken);
     }
     #endregion
 
@@ -591,7 +591,7 @@ public class KyrolusRepositoryAsync<
             {
                 return RepositoryOperationResult<bool>.Failed(ex);
             }
-        }, e => keyValues, null, cancellationToken).ConfigureAwait(false);
+        }, e => keyValues, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
     #endregion
     #region Query helpers
@@ -915,7 +915,7 @@ public class KyrolusRepositoryAsync<
                     options, ct).ConfigureAwait(false);
             }
             return await query.ToListAsync(ct).ConfigureAwait(false);
-        }, (e) => new { cmd.Filter, e.Count }, null, cmd.CancellationToken);
+        }, (e) => new { cmd.Filter, e.Count }, ex => ex.Message, cmd.CancellationToken);
     }
     private static void AddIncludeDeeltedKey(ref string cacheKey, bool includeDeleted)
     {
@@ -1126,7 +1126,7 @@ public class KyrolusRepositoryAsync<
                                     cmd.IncludeDeleted, cmd.IncludeProperties,
                                     cmd.IncludeGraph, cmd.IncludeExpressions!, cmd.AsNoTracking,
                                     cmd.UseSplitQuery, cmd.CancellationToken)).ConfigureAwait(false);
-                }, (c) => cmd.KeyValues, null, cmd.CancellationToken);
+                }, (c) => cmd.KeyValues, ex => ex.Message, cmd.CancellationToken);
     }
 
     private IQueryable<TEntity> ApplyAllIncludes(
@@ -1199,29 +1199,32 @@ public class KyrolusRepositoryAsync<
         try
         {
             var result = await action(cancellationToken).ConfigureAwait(false);
-            var afterPayload = successPayloadFactory is null
-                ? beforePayload
-                : successPayloadFactory(result);
-            sw.Stop();
-            await NotifyAfterAsync(operationName, afterPayload, null, sw.Elapsed, cancellationToken).ConfigureAwait(false);
             return result;
         }
         catch (Exception ex)
         {
             exception = ex;
-            throw;
+            throw exception;
         }
         finally
         {
-            sw.Stop();
+            sw.Stop(); object? afterPayload = null;
             if (exception is not null)
             {
-                var afterPayload = errorPayloadFactory is null
+                afterPayload = errorPayloadFactory is null
                     ? beforePayload
                     : errorPayloadFactory(exception);
 
-                await NotifyAfterAsync(operationName, afterPayload, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
             }
+            else if (successPayloadFactory is not null)
+            {
+                afterPayload = successPayloadFactory;
+            }
+            else
+            {
+                afterPayload = beforePayload;
+            }
+            await NotifyAfterAsync(operationName, afterPayload, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
         }
     }
     private string[] GetPrimaryKeyNames()

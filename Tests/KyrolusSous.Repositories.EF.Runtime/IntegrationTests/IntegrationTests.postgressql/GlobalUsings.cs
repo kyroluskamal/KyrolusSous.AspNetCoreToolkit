@@ -11,5 +11,6 @@ global using System.Globalization;
 global using System.Net;
 global using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
 global using KyrolusSous.Repositories.EF.Abstractions.Policy;
+global using KyrolusSous.Caching.Abstractions;
 global using KyrolusSous.Repositories.EF.Runtime.TestApp;
 global using KyrolusSous.Repositories.EF.Runtime.TestApp.Models;
