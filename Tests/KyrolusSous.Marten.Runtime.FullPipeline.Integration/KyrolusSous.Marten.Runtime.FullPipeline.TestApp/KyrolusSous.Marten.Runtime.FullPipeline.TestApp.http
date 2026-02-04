@@ -1,0 +1,6 @@
+@KyrolusSous.Marten.Runtime.FullPipeline.TestApp_HostAddress = http://localhost:5191
+
+GET {{KyrolusSous.Marten.Runtime.FullPipeline.TestApp_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

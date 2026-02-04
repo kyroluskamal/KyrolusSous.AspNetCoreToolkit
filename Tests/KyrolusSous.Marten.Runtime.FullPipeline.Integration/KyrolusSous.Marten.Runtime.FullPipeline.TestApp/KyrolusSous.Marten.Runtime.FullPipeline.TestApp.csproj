@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.2" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageReference Include="OpenIddict.AspNetCore" Version="7.2.0" />
+    <PackageReference Include="OpenIddict.Core" Version="7.2.0" />
+    <PackageReference Include="OpenIddict.EntityFrameworkCore" Version="7.2.0" />
+    <PackageReference Include="OpenIddict.Server" Version="7.2.0" />
+    <PackageReference Include="OpenIddict.Validation.AspNetCore" Version="7.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Src\KyrolusSous.Caching.Redis\KyrolusSous.Caching.Redis.csproj" />
+    <ProjectReference Include="..\..\..\Src\KyrolusSous.CQRS.ExceptionHandling\KyrolusSous.CQRS.ExceptionHandling.csproj" />
+    <ProjectReference Include="..\..\..\Src\KyrolusSous.CQRS.Marten\KyrolusSous.CQRS.Marten.csproj" />
+    <ProjectReference Include="..\..\..\Src\KyrolusSous.CQRS.Validation\KyrolusSous.CQRS.Validation.csproj" />
+    <ProjectReference Include="..\..\..\Src\KyrolusSous.DataProtection.Redis\KyrolusSous.DataProtection.Redis.csproj" />
+    <ProjectReference Include="..\..\..\Src\KyrolusSous.DataProtection.Runtime\KyrolusSous.DataProtection.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\Src\KyrolusSous.EndpointKit.Marten\KyrolusSous.EndpointKit.Marten.csproj" />
+    <ProjectReference Include="..\..\..\Src\KyrolusSous.ExceptionHandling.FluentValidation\KyrolusSous.ExceptionHandling.FluentValidation.csproj" />
+    <ProjectReference Include="..\..\..\Src\KyrolusSous.ExceptionHandling.Redis\KyrolusSous.ExceptionHandling.Redis.csproj" />
+    <ProjectReference Include="..\..\..\Src\KyrolusSous.ExceptionHandling\KyrolusSous.ExceptionHandling.csproj" />
+    <ProjectReference Include="..\..\..\Src\KyrolusSous.Logging.Serilog\KyrolusSous.Logging.Serilog.csproj" />
+    <ProjectReference Include="..\..\..\Src\KyrolusSous.Mediator.Runtime\KyrolusSous.Mediator.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\Src\KyrolusSous.Repositories.Marten.Abstractions\KyrolusSous.Repositories.Marten.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\Src\KyrolusSous.Repositories.Marten.Runtime\KyrolusSous.Repositories.Marten.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\Src\KyrolusSous.Validation.FluentValidation\KyrolusSous.Validation.FluentValidation.csproj" />
+    <ProjectReference Include="..\..\..\Src\KyrolusSous.Validation.Runtime\KyrolusSous.Validation.Runtime.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverageAttribute" />
+  </ItemGroup>
+</Project>
