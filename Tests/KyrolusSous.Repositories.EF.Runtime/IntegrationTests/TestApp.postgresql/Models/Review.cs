@@ -1,5 +1,3 @@
-using KyrolusSous.Repositories.EF.Abstractions;
-
 namespace KyrolusSous.Repositories.EF.Runtime.TestApp.Models;
 
 public class Review

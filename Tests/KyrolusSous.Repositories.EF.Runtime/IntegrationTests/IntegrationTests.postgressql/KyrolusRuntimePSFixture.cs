@@ -1,3 +1,6 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+
 namespace KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql;
 
 
@@ -5,6 +8,7 @@ public class KyrolusRuntimePSFixture(WebApplicationFactory<Program> factory) : I
 {
     public HttpClient _client = default!;
     private WebApplicationFactory<Program> _factory = default!;
+    private readonly string _databaseName = $"kyrolus_runtime_tests_{Guid.NewGuid():N}";
     public WebApplicationFactory<Program> Factory => _factory;
 
     public static readonly JsonSerializerOptions JsonOptions =
@@ -27,6 +31,20 @@ public class KyrolusRuntimePSFixture(WebApplicationFactory<Program> factory) : I
         => factory.WithWebHostBuilder(builder =>
         {
             builder.UseSetting(WebHostDefaults.EnvironmentKey, "Development");
+            builder.ConfigureLogging(logging =>
+            {
+                logging.ClearProviders();
+                logging.AddDebug();
+            });
+            var connectionString = $"Host=localhost;Port=5432;Database={_databaseName};Username=postgres;Password=postgres";
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var overrides = new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:Default"] = connectionString
+                };
+                config.AddInMemoryCollection(overrides);
+            });
 
             builder.ConfigureServices(services =>
             {
@@ -36,7 +54,7 @@ public class KyrolusRuntimePSFixture(WebApplicationFactory<Program> factory) : I
                 services.AddDbContext<ApplicationDbContext>((sp, options) =>
                 {
                     var interceptor = sp.GetRequiredService<CommandCounterInterceptor>();
-                    options.UseNpgsql("Host=localhost;Port=5432;Database=kyrolus_runtime_tests;Username=postgres;Password=postgres");
+                    options.UseNpgsql(connectionString);
                     options.AddInterceptors(interceptor);
                 });
                 services.AddKyrolusRuntimeRepositories();
@@ -94,5 +112,66 @@ public class KyrolusRuntimePSFixture(WebApplicationFactory<Program> factory) : I
             item = JsonSerializer.Deserialize<TEntity>(content, JsonOptions);
         return (response, item, content);
     }
+    public async Task WithSoftDeletedAsync_SingleKey<TEntity>(
+    Guid id,
+    Func<HttpResponseMessage, List<TEntity>?, string?, KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, TEntity, Guid>, Task> testBody, QueryRequest? queyrequest = null)
+    where TEntity : class
+    {
+        var qRequest = queyrequest is null ? new QueryRequest { IncludeDeleted = true } : queyrequest with { IncludeDeleted = true };
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var repo = scope.ServiceProvider
+            .GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, TEntity, Guid>>();
+        var uow = scope.ServiceProvider.GetRequiredService<IKyrolusUnitOfWork>();
 
+        bool deleted = false;
+        try
+        {
+            deleted = await repo.SoftDeleteAsync(id);
+            deleted.ShouldBeTrue();
+            var result = await uow.SaveChangesAsync();
+            result.ShouldBeGreaterThan(0);
+            var (response, items, content) = await ArrangeAndActUseingHttpForListAsync<TEntity>(qRequest);
+            await testBody(response, items!, content, repo);
+        }
+        finally
+        {
+            if (deleted)
+            {
+                await repo.RestoreAsync(id);
+                var result = await uow.SaveChangesAsync();
+                result.ShouldBeGreaterThan(0);
+            }
+        }
+    }
+    public async Task WithSoftDeletedAsync_CompositeKey<TEntity>(
+    object[] keyValues,
+    Func<HttpResponseMessage, List<TEntity>?, string?, KyrolusCompositeKeySoftDeleteRepositoryAsync<ApplicationDbContext, TEntity>, Task> testBody, QueryRequest? queyrequest = null)
+    where TEntity : class
+    {
+        var qRequest = queyrequest is null ? new QueryRequest { IncludeDeleted = true } : queyrequest with { IncludeDeleted = true };
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var repo = scope.ServiceProvider
+            .GetRequiredService<KyrolusCompositeKeySoftDeleteRepositoryAsync<ApplicationDbContext, TEntity>>();
+        var uow = scope.ServiceProvider.GetRequiredService<IKyrolusUnitOfWork>();
+
+        bool deleted = false;
+        try
+        {
+            deleted = await repo.SoftDeleteAsync(keyValues);
+            deleted.ShouldBeTrue();
+            var result = await uow.SaveChangesAsync();
+            result.ShouldBeGreaterThan(0);
+            var (response, items, content) = await ArrangeAndActUseingHttpForListAsync<TEntity>(qRequest);
+            await testBody(response, items!, content, repo);
+        }
+        finally
+        {
+            if (deleted)
+            {
+                await repo.RestoreAsync(keyValues);
+                var result = await uow.SaveChangesAsync();
+                result.ShouldBeGreaterThan(0);
+            }
+        }
+    }
 }

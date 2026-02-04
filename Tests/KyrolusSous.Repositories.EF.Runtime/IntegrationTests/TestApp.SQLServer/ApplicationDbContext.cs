@@ -71,24 +71,14 @@ public class ApplicationDbContext(DbContextOptions options) : DbContext(options)
 
         // Concurrency tokens
         var provider = Database.ProviderName ?? string.Empty;
-        if (provider.Contains("Sqlite", StringComparison.OrdinalIgnoreCase))
-        {
-            mb.Entity<Product>().Property(x => x.RowVersion)
-                .IsConcurrencyToken()
-                .IsRequired(false)
-                .ValueGeneratedNever();
-            mb.Entity<Order>().Property(x => x.RowVersion)
-                .IsConcurrencyToken()
-                .IsRequired(false)
-                .ValueGeneratedNever();
-        }
-        else if (provider.Contains("SqlServer", StringComparison.OrdinalIgnoreCase))
+        if (provider.Contains("SqlServer", StringComparison.OrdinalIgnoreCase))
         {
             mb.Entity<Product>().Property(x => x.RowVersion).IsRowVersion();
             mb.Entity<Order>().Property(x => x.RowVersion).IsRowVersion();
         }
         else
         {
+            // Default configuration for SQLite and other providers
             mb.Entity<Product>().Property(x => x.RowVersion)
                 .IsConcurrencyToken()
                 .IsRequired(false)

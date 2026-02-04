@@ -1,7 +1,30 @@
+
 namespace KyrolusSous.Repositories.EF.Runtime.TestApp;
 
 public static class DataSeeder
 {
+    public readonly static Guid tenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    public readonly static Guid storeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    public readonly static Guid storeId2 = Guid.Parse("22222222-2222-2222-2222-222222222223");
+
+    public readonly static Guid roleAdminId = Guid.Parse("33333333-3333-3333-3333-333333333331");
+    public readonly static Guid roleManagerId = Guid.Parse("33333333-3333-3333-3333-333333333332");
+
+    public readonly static Guid userAliceId = Guid.Parse("44444444-4444-4444-4444-444444444441");
+    public readonly static Guid userBobId = Guid.Parse("44444444-4444-4444-4444-444444444442");
+
+    public readonly static Guid categoryElectronicsId = Guid.Parse("55555555-5555-5555-5555-555555555551");
+    public readonly static Guid categoryBooksId = Guid.Parse("55555555-5555-5555-5555-555555555552");
+
+    public readonly static Guid productLaptopId = Guid.Parse("66666666-6666-6666-6666-666666666661");
+    public readonly static Guid productHeadphonesId = Guid.Parse("66666666-6666-6666-6666-666666666662");
+    public readonly static Guid productBookId = Guid.Parse("66666666-6666-6666-6666-666666666663");
+
+    public readonly static Guid customerJohnId = Guid.Parse("77777777-7777-7777-7777-777777777771");
+    public readonly static Guid customerJaneId = Guid.Parse("77777777-7777-7777-7777-777777777772");
+
+    public readonly static Guid orderId = Guid.Parse("88888888-8888-8888-8888-888888888881");
+
     public static async Task SeedAsync(ApplicationDbContext db, CancellationToken ct = default)
     {
         if (await db.Tenants.AnyAsync(ct))
@@ -10,29 +33,7 @@ public static class DataSeeder
         }
 
         var now = DateTimeOffset.UtcNow;
-
-        var tenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
-        var storeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
-        var storeId2 = Guid.Parse("22222222-2222-2222-2222-222222222223");
-
-        var roleAdminId = Guid.Parse("33333333-3333-3333-3333-333333333331");
-        var roleManagerId = Guid.Parse("33333333-3333-3333-3333-333333333332");
-
-        var userAliceId = Guid.Parse("44444444-4444-4444-4444-444444444441");
-        var userBobId = Guid.Parse("44444444-4444-4444-4444-444444444442");
-
-        var categoryElectronicsId = Guid.Parse("55555555-5555-5555-5555-555555555551");
-        var categoryBooksId = Guid.Parse("55555555-5555-5555-5555-555555555552");
-
-        var productLaptopId = Guid.Parse("66666666-6666-6666-6666-666666666661");
-        var productHeadphonesId = Guid.Parse("66666666-6666-6666-6666-666666666662");
-        var productBookId = Guid.Parse("66666666-6666-6666-6666-666666666663");
-
-        var customerJohnId = Guid.Parse("77777777-7777-7777-7777-777777777771");
-        var customerJaneId = Guid.Parse("77777777-7777-7777-7777-777777777772");
-
-        var orderId = Guid.Parse("88888888-8888-8888-8888-888888888881");
-        var tenant = new Tenant
+        var tenant = new Tenant()
         {
             Id = tenantId,
             Name = "Contoso Shops",
@@ -100,8 +101,13 @@ public static class DataSeeder
             Sku = "LP-15",
             Price = 1200m,
             StockQuantity = 25,
+            AddedAt = new TimeOnly(10, 30),
+            AddedIn = new DateOnly(2024, 6, 15),
             IsActive = true,
+            Weight = null,
+            Count = 10,
             RowVersion = [0],
+            DiscontinuedAt = new DateTime(2025, 12, 31, 0, 0, 0, DateTimeKind.Utc),
             CreatedAt = DateTimeOffset.Parse("2024-06-01T00:00:00Z", CultureInfo.InvariantCulture),
             UpdatedAt = now
         };
@@ -114,8 +120,13 @@ public static class DataSeeder
             Sku = "NC-100",
             Price = 199m,
             StockQuantity = 80,
+            AddedAt = new TimeOnly(14, 0),
+            AddedIn = new DateOnly(2024, 8, 5),
             IsActive = true,
             RowVersion = [0],
+            Weight = 0.25m,
+            Count = 5,
+            DiscontinuedAt = new DateTime(2025, 12, 31, 0, 0, 0, DateTimeKind.Utc),
             CreatedAt = DateTimeOffset.Parse("2024-08-01T00:00:00Z", CultureInfo.InvariantCulture),
             UpdatedAt = now
         };
@@ -129,7 +140,12 @@ public static class DataSeeder
             Price = 35m,
             StockQuantity = 50,
             IsActive = true,
+            AddedIn = new DateOnly(2025, 1, 1),
+            AddedAt = new TimeOnly(9, 0),
             RowVersion = [0],
+            Weight = 0.5m,
+            Count = null,
+            DiscontinuedAt = new DateTime(2025, 12, 31, 0, 0, 0, DateTimeKind.Utc),
             CreatedAt = DateTimeOffset.Parse("2025-01-01T00:00:00Z", CultureInfo.InvariantCulture),
             UpdatedAt = now
         };

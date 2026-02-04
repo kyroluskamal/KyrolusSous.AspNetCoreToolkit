@@ -25,7 +25,22 @@ public static class EntityApi
                 var includeProperties = request?.Includes is { Length: > 0 }
                     ? new List<string>(request.Includes)
                     : null;
-                var items = await Repo(uow).GetAllAsync(
+                IEnumerable<TEntity> items;
+                var repo = Repo(uow);
+                if (request is { IncludeDeleted: true } && repo is IKyrolusSoftDeleteRepository<TEntity> x)
+                {
+                    items = await x.GetAllIncludingDeletedAsync(
+                     parts.Filter,
+                     parts.OrderBy,
+                     includeProperties,
+                     parts.IncludeGraph,
+                     asNoTracking: parts.AsNoTracking,
+                     useSplitQuery: parts.UseSplitQuery,
+                     cancellationToken: ct);
+                }
+                else
+                {
+                    items = await repo.GetAllAsync(
                     parts.Filter,
                     parts.OrderBy,
                     includeProperties,
@@ -33,6 +48,7 @@ public static class EntityApi
                     asNoTracking: parts.AsNoTracking,
                     useSplitQuery: parts.UseSplitQuery,
                     cancellationToken: ct);
+                }
                 return Results.Ok(items);
             });
 #pragma warning disable S1192 // RequiresUnreferencedCode
@@ -176,7 +192,7 @@ public static class EntityApi
                 if (repo is null) return Results.BadRequest("Composite-key endpoint requires composite-key repo.");
                 var keyValues = ResolveCompositeKeys(keys);
 
-                var result = await repo.TryRemoveAsync(keyValues,  ct);
+                var result = await repo.TryRemoveAsync(keyValues, ct);
                 if (result.Status == KyrolusRepositoryOperationStatus.NotFound)
                     return Results.NotFound();
                 if (result.Status == KyrolusRepositoryOperationStatus.Failed && result.Exception is not null)
