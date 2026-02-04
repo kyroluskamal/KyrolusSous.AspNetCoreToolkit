@@ -32,6 +32,12 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
     {
         var resolvedTenant = ResolveTenantId(tenantId);
         if (string.IsNullOrWhiteSpace(resolvedTenant)) return Session;
+        var sessionTenant = TryResolveSessionTenantId(Session);
+        if (!string.IsNullOrWhiteSpace(sessionTenant) &&
+            string.Equals(sessionTenant, resolvedTenant, StringComparison.OrdinalIgnoreCase))
+        {
+            return Session;
+        }
         var method = typeof(IDocumentSession).GetMethod("ForTenant", new[] { typeof(string) });
         if (method is null) return Session;
         var resolved = method.Invoke(Session, [resolvedTenant]);
@@ -863,4 +869,26 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
     private static MethodInfo GetLoadManyAsyncMethod() =>
         typeof(IDocumentSession).GetMethods(BindingFlags.Public | BindingFlags.Instance)
             .First(m => m.Name == "LoadManyAsync" && m.IsGenericMethodDefinition && m.GetParameters().Length == 2);
+
+    private static string? TryResolveSessionTenantId(IDocumentSession session)
+    {
+        var type = session.GetType();
+        var tenantIdProp = type.GetProperty("TenantId", BindingFlags.Public | BindingFlags.Instance);
+        if (tenantIdProp is not null && tenantIdProp.PropertyType == typeof(string))
+        {
+            return tenantIdProp.GetValue(session) as string;
+        }
+
+        var tenantProp = type.GetProperty("Tenant", BindingFlags.Public | BindingFlags.Instance);
+        if (tenantProp is null) return null;
+
+        var tenant = tenantProp.GetValue(session);
+        if (tenant is null) return null;
+
+        var tenantType = tenant.GetType();
+        var idProp = tenantType.GetProperty("TenantId", BindingFlags.Public | BindingFlags.Instance)
+            ?? tenantType.GetProperty("Id", BindingFlags.Public | BindingFlags.Instance);
+        if (idProp is null || idProp.PropertyType != typeof(string)) return null;
+        return idProp.GetValue(tenant) as string;
+    }
 }

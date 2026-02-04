@@ -112,6 +112,11 @@ public sealed class MartenRepositoryGenerator : IIncrementalGenerator
             diRegistrations.Add($$"""            services.AddScoped<{{iface}}, {{className}}>();""");
         }
 
+        if (requests.Count > 0)
+        {
+            diRegistrations.Add("            services.TryAddScoped(typeof(KyrolusSous.Repositories.Marten.Abstractions.Query.IQueryHelper<>), typeof(KyrolusSous.Repositories.Marten.Runtime.MartenRuntimeQueryHelper<>));");
+        }
+
         EmitDiExtension(context, diNamespaces, diRegistrations);
         EmitUnitOfWorks(context, unitOfWorkMap);
         EmitInfrastructure(context, requests);

@@ -21,8 +21,8 @@ public sealed class KyrolusMartenUnitOfWork<TSession>(
         if (cache.TryGetValue(type, out var existing)) return (TRepo)existing;
 
         object? repo = repositoryFactory?.Invoke(type);
-        repo ??= serviceProvider?.GetService(type);
         repo ??= BuildRepository(type);
+        repo ??= serviceProvider?.GetService(type);
         if (repo is null) throw new InvalidOperationException($"Repository of type '{type.FullName}' is not registered.");
 
         cache[type] = repo;

@@ -12,6 +12,7 @@ using KyrolusSous.Repositories.Marten.Abstractions.SoftDelete;
 using KyrolusSous.Repositories.Marten.Abstractions.Tracing;
 using KyrolusSous.Repositories.Marten.Abstractions.Validation;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using KyrolusSous.Repositories.Marten.Abstractions.Query;
 
 namespace KyrolusSous.Repositories.Marten.Runtime;
 
@@ -37,6 +38,7 @@ public static class KyrolusMartenRuntimeServiceCollectionExtensions
         services.TryAddSingleton<IKyrolusMartenRepositoryPolicyProvider>(KyrolusNoopMartenRepositoryPolicyProvider.Instance);
         services.TryAddSingleton(KyrolusMartenNoopResiliencePolicy.Instance);
         services.TryAddSingleton(KyrolusMartenNoopTracing.Instance);
+        services.TryAddScoped(typeof(IQueryHelper<>), typeof(MartenRuntimeQueryHelper<>));
 
         services.AddScoped(typeof(IKyrolusMartenRepositoryAsync<,,>), typeof(KyrolusMartenRepositoryAsync<,,>));
         services.AddScoped(typeof(IKyrolusMartenSoftDeleteRepositoryAsync<,,>), typeof(KyrolusMartenSoftDeleteRepositoryAsync<,,>));
