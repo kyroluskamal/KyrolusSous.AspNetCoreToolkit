@@ -1,8 +1,12 @@
 using System.Reflection;
 using KyrolusSous.Swagger;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Logging.ClearProviders();
+builder.Logging.AddDebug();
 
 builder.Services.AddSwaggerService(options =>
 {

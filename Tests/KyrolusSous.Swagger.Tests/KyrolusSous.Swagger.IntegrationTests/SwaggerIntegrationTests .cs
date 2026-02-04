@@ -15,7 +15,7 @@ public class SwaggerIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     public SwaggerIntegrationTests(WebApplicationFactory<Program> factory)
     {
         // Create a dummy XML file for testing XML comments in integration tests.
-        _dummyXmlFilePath = Path.Combine(AppContext.BaseDirectory, $"{typeof(Program).Assembly.GetName().Name}.xml");
+        _dummyXmlFilePath = Path.Combine(Path.GetTempPath(), $"{typeof(Program).Assembly.GetName().Name}-{Guid.NewGuid():N}.xml");
         File.WriteAllText(_dummyXmlFilePath, "<doc><assembly><name>TestAssembly</name></assembly><members></members></doc>");
 
         _factory = factory.WithWebHostBuilder(builder =>
@@ -46,9 +46,20 @@ public class SwaggerIntegrationTests : IClassFixture<WebApplicationFactory<Progr
             if (disposing)
             {
                 _factory.Dispose();
-                if (File.Exists(_dummyXmlFilePath))
+                try
                 {
-                    File.Delete(_dummyXmlFilePath);
+                    if (File.Exists(_dummyXmlFilePath))
+                    {
+                        File.Delete(_dummyXmlFilePath);
+                    }
+                }
+                catch (IOException)
+                {
+                    // Ignore cleanup failures caused by file locks in test hosts.
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Ignore cleanup failures caused by file locks in test hosts.
                 }
             }
             _disposed = true;

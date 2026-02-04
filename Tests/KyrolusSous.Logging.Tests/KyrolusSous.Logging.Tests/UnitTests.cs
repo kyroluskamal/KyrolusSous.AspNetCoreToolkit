@@ -37,7 +37,7 @@ public class LoggerUnitTests
         logger.Information("Hello, World!");
 
         testSink.Events.ShouldNotBeEmpty();
-        Assert.Equal("Hello, World!", testSink.Events[0].MessageTemplate.Text);
+        testSink.Events[0].MessageTemplate.Text.ShouldBe("Hello, World!");
 
         var loggedEvent = testSink.Events[0];
         loggedEvent.Properties.ShouldContainKey("Application");

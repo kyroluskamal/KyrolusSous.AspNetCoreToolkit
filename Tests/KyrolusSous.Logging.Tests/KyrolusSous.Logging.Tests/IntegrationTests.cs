@@ -59,6 +59,10 @@ public class LoggingIntegrationTestBase : IClassFixture<WebApplicationFactory<Pr
         {
             // Swallow if the file is locked by an external process; tests rely on new writes, not deletion failure.
         }
+        catch (UnauthorizedAccessException)
+        {
+            // Swallow if the file is locked by an external process; tests rely on new writes, not deletion failure.
+        }
     }
 
     protected virtual void Dispose(bool disposing)
@@ -155,7 +159,18 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
                 customLogPath = Path.Combine(appEnvironment.ContentRootPath, "MyCustomLogs");
                 if (Directory.Exists(customLogPath))
                 {
-                    Directory.Delete(customLogPath, true);
+                    try
+                    {
+                        Directory.Delete(customLogPath, true);
+                    }
+                    catch (IOException)
+                    {
+                        // Ignore cleanup failures caused by file locks.
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        // Ignore cleanup failures caused by file locks.
+                    }
                 }
                 services.PostConfigure<LoggingOptions>(options =>
                 {
@@ -188,7 +203,18 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
         fileContent.ShouldContain("Integration Test: Information Message");
 
         // Cleanup
-        Directory.Delete(customLogPath, true);
+        try
+        {
+            Directory.Delete(customLogPath, true);
+        }
+        catch (IOException)
+        {
+            // Ignore cleanup failures caused by file locks.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Ignore cleanup failures caused by file locks.
+        }
     }
 
     /// <summary>
@@ -294,7 +320,18 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
         logFiles.ShouldNotBeEmpty("The log file should be created using parameters from the dictionary.");
 
         // Cleanup
-        Directory.Delete(customLogPath, true);
+        try
+        {
+            Directory.Delete(customLogPath, true);
+        }
+        catch (IOException)
+        {
+            // Ignore cleanup failures caused by file locks.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Ignore cleanup failures caused by file locks.
+        }
     }
 }
 
