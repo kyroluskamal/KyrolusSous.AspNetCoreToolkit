@@ -162,7 +162,7 @@ public static class KyrolusFilterExpressionBuilder
             if (normalized is "between")
             {
                 var values = SplitValueList(rawValue);
-                if (!TryBuildBetween(member, memberType, values, caseInsensitive, out var betweenExpr, out var betweenError))
+                if (!TryBuildBetween(member, memberType, values, rawValue, caseInsensitive, out var betweenExpr, out var betweenError))
                 {
                     Error = betweenError;
                     return null;
@@ -433,6 +433,14 @@ public static class KyrolusFilterExpressionBuilder
             return false;
         }
 
+        var hasNull = converted.Any(v => v is null);
+
+        if (hasNull && Nullable.GetUnderlyingType(memberType) is null && memberType.IsValueType)
+        {
+            error = $"Operator 'in' does not support NULL for non-nullable type '{memberType.Name}'.";
+            return false;
+        }
+
         if (memberType == typeof(string) && caseInsensitive)
         {
             var lowered = converted.Select(v => v?.ToString()?.ToLowerInvariant()).ToArray();
@@ -443,10 +451,11 @@ public static class KyrolusFilterExpressionBuilder
             return true;
         }
 
-        var list = Array.CreateInstance(elementType, converted.Count);
-        for (var i = 0; i < converted.Count; i++)
+        var nonNullConverted = converted.Where(v => v is not null).ToList();
+        var list = Array.CreateInstance(elementType, nonNullConverted.Count);
+        for (var i = 0; i < nonNullConverted.Count; i++)
         {
-            list.SetValue(converted[i], i);
+            list.SetValue(nonNullConverted[i], i);
         }
 
         var listExpr = Expression.Constant(list);
@@ -459,7 +468,14 @@ public static class KyrolusFilterExpressionBuilder
             var hasValue = Expression.Property(member, nameof(Nullable<int>.HasValue));
             var value = Expression.Property(member, nameof(Nullable<int>.Value));
             var containsValue = Expression.Call(containsMethod, listExpr, value);
-            expression = Expression.AndAlso(hasValue, containsValue);
+            var nonNullBranch = Expression.AndAlso(hasValue, containsValue);
+            if (hasNull)
+            {
+                var isNull = Expression.Equal(member, Expression.Constant(null, member.Type));
+                expression = Expression.OrElse(isNull, nonNullBranch);
+                return true;
+            }
+            expression = nonNullBranch;
             return true;
         }
 
@@ -467,14 +483,21 @@ public static class KyrolusFilterExpressionBuilder
         return true;
     }
 
-    private static bool TryBuildBetween(Expression member, Type memberType, IReadOnlyList<string?> values, bool caseInsensitive, out Expression expression, out string? error)
+    private static bool TryBuildBetween(Expression member, Type memberType, IReadOnlyList<string?> values, string? rawValue, bool caseInsensitive, out Expression expression, out string? error)
     {
         error = null;
         expression = null!;
         if (values.Count < 2)
         {
-            error = "Between requires two values.";
-            return false;
+            if (TrySplitBetween(rawValue, out var startToken, out var endToken))
+            {
+                values = new List<string?> { startToken, endToken };
+            }
+            else
+            {
+                error = "Between requires two values.";
+                return false;
+            }
         }
 
         var elementType = Nullable.GetUnderlyingType(memberType) ?? memberType;
@@ -679,6 +702,7 @@ public static class KyrolusFilterExpressionBuilder
         if (span.Contains(" in ", StringComparison.OrdinalIgnoreCase)) return true;
         if (span.Contains(" between ", StringComparison.OrdinalIgnoreCase)) return true;
         if (span.Contains(",", StringComparison.Ordinal) || span.Contains("|", StringComparison.Ordinal)) return true;
+        if (span.Contains("..", StringComparison.Ordinal)) return true;
         return false;
     }
 
@@ -716,7 +740,7 @@ public static class KyrolusFilterExpressionBuilder
                 continue;
             }
 
-            if (c == ',')
+            if (c == ',' || c == '|')
             {
                 results.Add(NormalizeValueToken(sb.ToString()));
                 sb.Clear();
@@ -733,6 +757,74 @@ public static class KyrolusFilterExpressionBuilder
 
         return results;
     }
+
+    private static bool TrySplitBetween(string? raw, out string? start, out string? end)
+    {
+        start = null;
+        end = null;
+        if (string.IsNullOrWhiteSpace(raw)) return false;
+
+        var span = raw.AsSpan().Trim();
+        var sb = new StringBuilder();
+        char? quote = null;
+
+        for (int i = 0; i < span.Length; i++)
+        {
+            var c = span[i];
+
+            if (TryHandleQuotedChar(span, ref i, ref quote, sb))
+                continue;
+
+            if (TryStartQuote(c, ref quote))
+                continue;
+
+            if (IsBetweenDelimiter(span, i))
+            {
+                start = NormalizeValueToken(sb.ToString());
+                end = NormalizeValueToken(span.Slice(i + 2).ToString());
+                return true;
+            }
+
+            sb.Append(c);
+        }
+
+        return false;
+    }
+
+    private static bool TryHandleQuotedChar(ReadOnlySpan<char> span, ref int i, ref char? quote, StringBuilder sb)
+    {
+        if (quote is null)
+            return false;
+
+        var c = span[i];
+        if (c == quote)
+        {
+            quote = null;
+            return true;
+        }
+
+        if (c == '\\' && i + 1 < span.Length)
+        {
+            sb.Append(span[i + 1]);
+            i++;
+            return true;
+        }
+
+        sb.Append(c);
+        return true;
+    }
+
+    private static bool TryStartQuote(char c, ref char? quote)
+    {
+        if (c is not ('\'' or '"'))
+            return false;
+
+        quote = c;
+        return true;
+    }
+
+    private static bool IsBetweenDelimiter(ReadOnlySpan<char> span, int i)
+        => span[i] == '.' && i + 1 < span.Length && span[i + 1] == '.';
 
     private static string? NormalizeValueToken(string token)
     {

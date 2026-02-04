@@ -3,7 +3,7 @@ namespace KyrolusSous.Repositories.EF.Abstractions.Interfaces;
 /// <summary>
 /// Soft-delete contract for single key entity.
 /// </summary>
-public interface IKyrolusSingleKeySoftDeleteRepository<TEntity, TKey>
+public interface IKyrolusSingleKeySoftDeleteRepository<TEntity, TKey> : IKyrolusSoftDeleteRepository<TEntity>
     where TEntity : class
     where TKey : IEquatable<TKey>
 {
@@ -31,22 +31,6 @@ public interface IKyrolusSingleKeySoftDeleteRepository<TEntity, TKey>
         IncludeGraph<TEntity>? includeGraph = null, bool? asNoTracking = null,
         bool? useSplitQuery = null,
         CancellationToken cancellationToken = default);
-    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    Task<IReadOnlyList<TEntity>> GetAllIncludingDeletedAsync(
-        Expression<Func<TEntity, bool>>? filter = null,
-        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
-        List<string>? includeProperties = null,
-        IncludeGraph<TEntity>? includeGraph = null,
-        bool? asNoTracking = null,
-        bool? useSplitQuery = null,
-        CancellationToken cancellationToken = default);
-    [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    Task<IReadOnlyList<TEntity>> GetAllIncludingDeletedAsync(
-        Expression<Func<TEntity, bool>>? filter = null,
-        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
-        bool? asNoTracking = null,
-        bool? useSplitQuery = null,
-        CancellationToken cancellationToken = default, params Expression<Func<TEntity, object?>>[] includeExpressions);
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     Task<IReadOnlyList<TEntity>> GetDeletedOnlyAsync(Expression<Func<TEntity, bool>>? filter = null, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
         List<string>? includeProperties = null, IncludeGraph<TEntity>? includeGraph = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default);

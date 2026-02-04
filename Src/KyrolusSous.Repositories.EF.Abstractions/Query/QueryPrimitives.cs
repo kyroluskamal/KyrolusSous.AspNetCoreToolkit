@@ -26,6 +26,7 @@ namespace KyrolusSous.Repositories.EF.Abstractions.Query
         FilterClause[]? Filters = null,
         bool? AsNoTracking = null,
         bool? UseSplitQuery = null,
+        bool? IncludeDeleted = null,
         object? IncludeGraph = null);
 
     public sealed partial record QueryRequest : IParsable<QueryRequest>
@@ -64,5 +65,6 @@ namespace KyrolusSous.Repositories.EF.Abstractions.Query
         Expression<Func<TEntity, object?>>[] Includes,
         bool? AsNoTracking = null,
         bool? UseSplitQuery = null,
+        bool? IncludeDeleted = null,
         IncludeGraph<TEntity>? IncludeGraph = null);
 }

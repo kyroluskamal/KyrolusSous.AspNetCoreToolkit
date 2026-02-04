@@ -432,8 +432,8 @@ namespace KyrolusSous.Repositories.EF.Generator
                             {{{RequiresUnreferencedCode}}}
                             private async Task<IQueryable<{{{T(request.EntityType)}}}>> CalculateQueryAsync(CalculateQueryCommand cmd)
                             {
-                                var effectiveAsNoTracking = cmd.AsNoTracking ?? policy?.AsNoTrackingDefault ?? true;
-                                var effectiveSplit = cmd.UseSplitQuery ?? policy?.UseSplitQueryDefault ?? false;
+                                var effectiveAsNoTracking = cmd.AsNoTracking ?? policy?.AsNoTrackingDefault ?? {{{request.AsNoTrackingDefault.ToString().ToLowerInvariant()}}};
+                                var effectiveSplit = cmd.UseSplitQuery ?? policy?.UseSplitQueryDefault ?? {{{request.SplitQueryDefault.ToString().ToLowerInvariant()}}};
                                 IQueryable<{{{T(request.EntityType)}}}> query = BuildBaseQuery(cmd.IncludeDeleted);
                                 foreach (var inc in DefaultIncludes) query = query.Include(inc);
                                 if (effectiveAsNoTracking)
@@ -1146,7 +1146,7 @@ namespace KyrolusSous.Repositories.EF.Generator
             sb.AppendLine();
         }
 
-        private void PatchAsync(StringBuilder sb, RepositoryRequest request,string keyNamesLiteral, IPropertySymbol? rowVersionProp)
+        private void PatchAsync(StringBuilder sb, RepositoryRequest request, string keyNamesLiteral, IPropertySymbol? rowVersionProp)
         {
             var rowVersionName = rowVersionProp?.Name;
             var skipRowVersion = rowVersionName is null
@@ -2359,7 +2359,7 @@ namespace KyrolusSous.Repositories.EF.Generated
             var orderBy = BuildOrderBy(request);
             var includes = BuildIncludes(request);
             var graph = request?.IncludeGraph as IncludeGraph<{{T(request.EntityType)}}>;
-            return new QueryParts<{{T(request.EntityType)}}>(filter, orderBy, includes, request?.AsNoTracking, request?.UseSplitQuery, graph);
+            return new QueryParts<{{T(request.EntityType)}}>(filter, orderBy, includes, request?.AsNoTracking, request?.UseSplitQuery, request?.IncludeDeleted, graph);
         }
         public Expression<Func<{{T(request.EntityType)}}, bool>>? BuildFilter(QueryRequest? request)
         {
@@ -2597,7 +2597,8 @@ namespace KyrolusSous.Repositories.EF.Generated
         }
 
         private PropertyBuckets CollectPropertyBuckets(RepositoryRequest request)
-        { var system = "System";
+        {
+            var system = "System";
             var allProps = GetEntityProperties(request);
             var stringProps = allProps
                 .Where(p => p.Type.SpecialType == SpecialType.System_String)
@@ -2680,11 +2681,30 @@ namespace KyrolusSous.Repositories.EF.Generated
             var tName = p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var valueAccess = p.IsNullable ? $"e.{p.Name}{ValueSuffix}" : $"e.{p.Name}";
             var guard = p.IsNullable ? $"e.{p.Name}{HasValueSuffix} && " : string.Empty;
+            var nullBlock = p.IsNullable
+                ? $@"
+            if (string.Equals(value, ""null"", StringComparison.OrdinalIgnoreCase))
+            {{
+                if (!IsNullComparableOperator(normalized))
+                    throw new ArgumentException($""Unsupported operator '{{op}}' for '{p.Name}'"");
+                return IsNotEqualsOperator(normalized) ? e => e.{p.Name} != null : e => e.{p.Name} == null;
+            }}
+"
+                : $@"
+            if (string.Equals(value, ""null"", StringComparison.OrdinalIgnoreCase))
+            {{
+                if (!IsNullComparableOperator(normalized))
+                    throw new ArgumentException($""Unsupported operator '{{op}}' for '{p.Name}'"");
+                throw new ArgumentException($""Invalid filter for '{p.Name}': operator '{{op}}' cannot use NULL with non-nullable type '{tName}'."");
+            }}
+";
             return $$"""
         private static Expression<Func<{{T(request.EntityType)}}, bool>>? NumericPredicate_{{p.Name}}(string op, string value)
         {
+            var normalized = op.Trim().ToLowerInvariant();
+{{nullBlock}}
             if (!{{tName}}.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed)) return null;
-            return op.ToLowerInvariant() switch
+            return normalized switch
             {
                 "eq" or "==" or "=" => e => {{guard}}{{valueAccess}} == parsed,
                 "neq" or "!=" or "<>" => e => {{guard}}{{valueAccess}} != parsed,
@@ -2703,9 +2723,27 @@ namespace KyrolusSous.Repositories.EF.Generated
             var tName = p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var valueAccess = p.IsNullable ? $"e.{p.Name}{ValueSuffix}" : $"e.{p.Name}";
             var guard = p.IsNullable ? $"e.{p.Name}{HasValueSuffix} && " : string.Empty;
+            var nullBlock = p.IsNullable
+                ? $@"
+            if (string.Equals(cleaned, ""null"", StringComparison.OrdinalIgnoreCase))
+            {{
+                if (!IsNullComparableOperator(normalized))
+                    throw new ArgumentException($""Unsupported operator '{{op}}' for '{p.Name}'"");
+                return IsNotEqualsOperator(normalized) ? e => e.{p.Name} != null : e => e.{p.Name} == null;
+            }}
+"
+                : $@"
+            if (string.Equals(cleaned, ""null"", StringComparison.OrdinalIgnoreCase))
+            {{
+                if (!IsNullComparableOperator(normalized))
+                    throw new ArgumentException($""Unsupported operator '{{op}}' for '{p.Name}'"");
+                throw new ArgumentException($""Invalid filter for '{p.Name}': operator '{{op}}' cannot use NULL with non-nullable type '{tName}'."");
+            }}
+";
             return $$"""
         private static Expression<Func<{{T(request.EntityType)}}, bool>>? DatePredicate_{{p.Name}}(string op, string value)
         {
+            var normalized = op.Trim().ToLowerInvariant();
             var cleaned = value;
             if (!string.IsNullOrWhiteSpace(cleaned))
             {
@@ -2713,8 +2751,9 @@ namespace KyrolusSous.Repositories.EF.Generated
                 if (cleaned.Length >= 2 && cleaned[0] == '"' && cleaned[^1] == '"')
                     cleaned = cleaned[1..^1];
             }
+{{nullBlock}}
             if (!{{tName}}.TryParse(cleaned, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)) return null;
-            return op.ToLowerInvariant() switch
+            return normalized switch
             {
                 "eq" or "==" or "=" => e => {{guard}}{{valueAccess}} == parsed,
                 "neq" or "!=" or "<>" => e => {{guard}}{{valueAccess}} != parsed,
@@ -2732,11 +2771,30 @@ namespace KyrolusSous.Repositories.EF.Generated
         {
             var valueAccess = p.IsNullable ? $"e.{p.Name}{ValueSuffix}" : $"e.{p.Name}";
             var guard = p.IsNullable ? $"e.{p.Name}{HasValueSuffix} && " : string.Empty;
+            var nullBlock = p.IsNullable
+                ? $@"
+            if (string.Equals(value, ""null"", StringComparison.OrdinalIgnoreCase))
+            {{
+                if (!IsNullComparableOperator(normalized))
+                    throw new ArgumentException($""Unsupported operator '{{op}}' for '{p.Name}'"");
+                return IsNotEqualsOperator(normalized) ? e => e.{p.Name} != null : e => e.{p.Name} == null;
+            }}
+"
+                : $@"
+            if (string.Equals(value, ""null"", StringComparison.OrdinalIgnoreCase))
+            {{
+                if (!IsNullComparableOperator(normalized))
+                    throw new ArgumentException($""Unsupported operator '{{op}}' for '{p.Name}'"");
+                throw new ArgumentException($""Invalid filter for '{p.Name}': operator '{{op}}' cannot use NULL with non-nullable type 'bool'."");
+            }}
+";
             return $$"""
         private static Expression<Func<{{T(request.EntityType)}}, bool>>? BoolPredicate_{{p.Name}}(string op, string value)
         {
+            var normalized = op.Trim().ToLowerInvariant();
+{{nullBlock}}
             if (!bool.TryParse(value, out var parsed)) return null;
-            return op.ToLowerInvariant() switch
+            return normalized switch
             {
                 "eq" or "==" or "=" => e => {{guard}}{{valueAccess}} == parsed,
                 "neq" or "!=" or "<>" => e => {{guard}}{{valueAccess}} != parsed,
@@ -2750,11 +2808,30 @@ namespace KyrolusSous.Repositories.EF.Generated
         {
             var valueAccess = p.IsNullable ? $"e.{p.Name}{ValueSuffix}" : $"e.{p.Name}";
             var guard = p.IsNullable ? $"e.{p.Name}{HasValueSuffix} && " : string.Empty;
+            var nullBlock = p.IsNullable
+                ? $@"
+            if (string.Equals(value, ""null"", StringComparison.OrdinalIgnoreCase))
+            {{
+                if (!IsNullComparableOperator(normalized))
+                    throw new ArgumentException($""Unsupported operator '{{op}}' for '{p.Name}'"");
+                return IsNotEqualsOperator(normalized) ? e => e.{p.Name} != null : e => e.{p.Name} == null;
+            }}
+"
+                : $@"
+            if (string.Equals(value, ""null"", StringComparison.OrdinalIgnoreCase))
+            {{
+                if (!IsNullComparableOperator(normalized))
+                    throw new ArgumentException($""Unsupported operator '{{op}}' for '{p.Name}'"");
+                throw new ArgumentException($""Invalid filter for '{p.Name}': operator '{{op}}' cannot use NULL with non-nullable type 'Guid'."");
+            }}
+";
             return $$"""
         private static Expression<Func<{{T(request.EntityType)}}, bool>>? GuidPredicate_{{p.Name}}(string op, string value)
         {
+            var normalized = op.Trim().ToLowerInvariant();
+{{nullBlock}}
             if (!Guid.TryParse(value, out var parsed)) return null;
-            return op.ToLowerInvariant() switch
+            return normalized switch
             {
                 "eq" or "==" or "=" => e => {{guard}}{{valueAccess}} == parsed,
                 "neq" or "!=" or "<>" => e => {{guard}}{{valueAccess}} != parsed,
@@ -2769,11 +2846,30 @@ namespace KyrolusSous.Repositories.EF.Generated
             var tName = p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var valueAccess = p.IsNullable ? $"e.{p.Name}{ValueSuffix}" : $"e.{p.Name}";
             var guard = p.IsNullable ? $"e.{p.Name}{HasValueSuffix} && " : string.Empty;
+            var nullBlock = p.IsNullable
+                ? $@"
+            if (string.Equals(value, ""null"", StringComparison.OrdinalIgnoreCase))
+            {{
+                if (!IsNullComparableOperator(normalized))
+                    throw new ArgumentException($""Unsupported operator '{{op}}' for '{p.Name}'"");
+                return IsNotEqualsOperator(normalized) ? e => e.{p.Name} != null : e => e.{p.Name} == null;
+            }}
+"
+                : $@"
+            if (string.Equals(value, ""null"", StringComparison.OrdinalIgnoreCase))
+            {{
+                if (!IsNullComparableOperator(normalized))
+                    throw new ArgumentException($""Unsupported operator '{{op}}' for '{p.Name}'"");
+                throw new ArgumentException($""Invalid filter for '{p.Name}': operator '{{op}}' cannot use NULL with non-nullable type '{tName}'."");
+            }}
+";
             return $$"""
         private static Expression<Func<{{T(request.EntityType)}}, bool>>? EnumPredicate_{{p.Name}}(string op, string value)
         {
+            var normalized = op.Trim().ToLowerInvariant();
+{{nullBlock}}
             if (!Enum.TryParse<{{tName}}>(value, true, out var parsed)) return null;
-            return op.ToLowerInvariant() switch
+            return normalized switch
             {
                 "eq" or "==" or "=" => e => {{guard}}{{valueAccess}} == parsed,
                 "neq" or "!=" or "<>" => e => {{guard}}{{valueAccess}} != parsed,

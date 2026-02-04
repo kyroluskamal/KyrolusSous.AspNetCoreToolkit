@@ -48,11 +48,20 @@ public sealed class RuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
 
     private static Expression? GetPredicateForFilter(Expression left, string property, string op, string? value)
     {
+        if (IsNullOperator(op))
+        {
+            if (left.Type.IsValueType && Nullable.GetUnderlyingType(left.Type) is null)
+            {
+                var normalized = NormalizeOperator(op);
+                throw new ArgumentException(
+                    $"Invalid filter for '{property}': operator '{normalized}' is supported only for nullable or reference types, " +
+                    $"but '{property}' is non-nullable '{left.Type.Name}'.");
+            }
+
+            return BuildNullCheck(left, NormalizeOperator(op) == "notnull");
+        }
         if (value is null)
         {
-            if (IsNullOperator(op))
-                return BuildNullCheck(left, NormalizeOperator(op) == "notnull");
-
             if (!IsNullComparableOperator(op))
                 return null;
 
@@ -61,6 +70,7 @@ public sealed class RuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
 
         return BuildPredicate(left, property, op, value);
     }
+
 
     public Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? BuildOrderBy(QueryRequest? request)
     {
@@ -144,69 +154,169 @@ public sealed class RuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
     {
         var op = NormalizeOperator(opRaw);
 
+        if (TryBuildNullOperatorPredicate(left, propertyName, opRaw, op, out var nullExpr))
+            return nullExpr;
+
+        if (TryBuildSetOrRangePredicate(left, op, rawValue, out var setOrRangeExpr))
+            return setOrRangeExpr;
+
+        if (TryBuildAnyAllPredicate(left, op, rawValue, out var anyAllExpr))
+            return anyAllExpr;
+
         var nonNullableType = Nullable.GetUnderlyingType(left.Type) ?? left.Type;
+        if (nonNullableType == typeof(string))
+            return BuildStringPredicate(left, op, rawValue);
 
-        if (IsNullOperator(op))
-        {
-            if (left.Type.IsValueType && Nullable.GetUnderlyingType(left.Type) is null)
-                throw new ArgumentException($"Unsupported operator '{opRaw}' for '{propertyName}'");
+        if (!TryConvertToConstant(left, propertyName, opRaw, rawValue, out var constant))
+            return null;
 
-            return BuildNullCheck(left, op == "notnull");
-        }
+        return BuildDefaultPredicateByType(left, propertyName, opRaw, op, nonNullableType, constant);
+    }
+
+    private static bool TryBuildNullOperatorPredicate(
+    Expression left,
+    string propertyName,
+    string opRaw,
+    string op,
+    out Expression? predicate)
+    {
+        predicate = null;
+
+        if (!IsNullOperator(op))
+            return false;
+
+        if (left.Type.IsValueType && Nullable.GetUnderlyingType(left.Type) is null)
+            throw new ArgumentException($"Unsupported operator '{opRaw}' for '{propertyName}'");
+
+        predicate = BuildNullCheck(left, op == "notnull");
+        return true;
+    }
+
+    private static bool TryBuildSetOrRangePredicate(
+        Expression left,
+        string op,
+        string rawValue,
+        out Expression? predicate)
+    {
+        predicate = null;
 
         if (op == "in")
         {
-            var values = SplitValueList(rawValue);
-            return TryBuildIn(left, left.Type, values, out var inExpr, out _) ? inExpr : null;
+            var values = SplitValueList(rawValue, '|', ',');
+            predicate = TryBuildIn(left, left.Type, values, out var inExpr, out var error) ? inExpr : null;
+            if (error is not null)
+                throw new ArgumentException(error);
+            return true;
         }
 
         if (op == "between")
         {
-            var values = SplitValueList(rawValue);
-            return TryBuildBetween(left, left.Type, values, out var betweenExpr, out _) ? betweenExpr : null;
+            if (TrySplitBetween(rawValue, out var startToken, out var endToken))
+            {
+                var values = new List<string?> { startToken, endToken };
+                predicate = TryBuildBetween(left, left.Type, values, out var betweenExpr, out _) ? betweenExpr : null;
+                return true;
+            }
+
+            var list = SplitValueList(rawValue, '|', ',');
+            predicate = TryBuildBetween(left, left.Type, list, out var betweenExpr2, out _) ? betweenExpr2 : null;
+            return true;
         }
 
-        if (op is "any" or "all")
-        {
-            var values = SplitValueList(rawValue);
-            return TryBuildAnyAll(left, left.Type, values, rawValue, op == "any", out var anyAllExpr, out _) ? anyAllExpr : null;
-        }
+        return false;
+    }
 
-        if (nonNullableType == typeof(string))
-        {
-            return BuildStringPredicate(left, op, rawValue);
-        }
+    private static bool TryBuildAnyAllPredicate(
+        Expression left,
+        string op,
+        string rawValue,
+        out Expression? predicate)
+    {
+        predicate = null;
+
+        if (op is not ("any" or "all"))
+            return false;
+
+        var values = SplitValueList(rawValue);
+        predicate = TryBuildAnyAll(left, left.Type, values, rawValue, op == "any", out var anyAllExpr, out _)
+            ? anyAllExpr
+            : null;
+
+        return true;
+    }
+
+    private static bool TryConvertToConstant(Expression left, string propertyName,
+    string opRaw, string rawValue, out Expression constant)
+    {
+        constant = null!;
 
         if (!TryConvertValue(rawValue, left.Type, out var value))
-            return null;
+            return false;
 
-        Expression constant = Expression.Constant(value, value?.GetType() ?? left.Type);
+        if (value is null)
+        {
+            if (left.Type.IsValueType && Nullable.GetUnderlyingType(left.Type) is null)
+                throw new ArgumentException(
+                    $"Invalid filter for '{propertyName}': operator '{opRaw}' cannot use NULL with non-nullable type '{left.Type.Name}'. " +
+                    $"Make '{propertyName}' nullable (e.g. {left.Type.Name}?) or provide a non-null value.");
+            constant = Expression.Constant(null, left.Type);
+            return true;
+        }
+
+        // ✅ non-null value
+        constant = Expression.Constant(value, value.GetType());
+
         if (constant.Type != left.Type)
             constant = Expression.Convert(constant, left.Type);
 
+        return true;
+    }
+
+    private static Expression? BuildDefaultPredicateByType(
+        Expression left,
+        string propertyName,
+        string opRaw,
+        string op,
+        Type nonNullableType,
+        Expression constant)
+    {
         if (IsNumericType(nonNullableType) || IsDateType(nonNullableType))
-        {
-            if (IsEqualityOperator(op))
-                return BuildEquality(op, left, constant);
-
-            if (TryBuildRelational(op, left, constant, out var predicate))
-                return predicate;
-
-            throw new ArgumentException($"Unsupported operator '{opRaw}' for '{propertyName}'");
-        }
+            return BuildComparablePredicate(left, propertyName, opRaw, op, constant);
 
         if (nonNullableType == typeof(bool) || nonNullableType == typeof(Guid) || nonNullableType.IsEnum)
-        {
-            if (IsEqualityOperator(op))
-                return BuildEquality(op, left, constant);
+            return BuildEqualityOnlyPredicate(left, propertyName, opRaw, op, constant);
 
-            throw new ArgumentException($"Unsupported operator '{opRaw}' for '{propertyName}'");
-        }
+        // fallback: equality only for other types
+        return IsEqualityOperator(op) ? BuildEquality(op, left, constant) : null;
+    }
 
+    private static Expression? BuildComparablePredicate(
+        Expression left,
+        string propertyName,
+        string opRaw,
+        string op,
+        Expression constant)
+    {
         if (IsEqualityOperator(op))
             return BuildEquality(op, left, constant);
 
-        return null;
+        if (TryBuildRelational(op, left, constant, out var predicate))
+            return predicate;
+
+        throw new ArgumentException($"Unsupported operator '{opRaw}' for '{propertyName}'");
+    }
+
+    private static Expression? BuildEqualityOnlyPredicate(
+        Expression left,
+        string propertyName,
+        string opRaw,
+        string op,
+        Expression constant)
+    {
+        if (IsEqualityOperator(op))
+            return BuildEquality(op, left, constant);
+
+        throw new ArgumentException($"Unsupported operator '{opRaw}' for '{propertyName}'");
     }
 
     private static bool TryBuildNullPredicate(Expression left, string opRaw, out Expression predicate)
@@ -315,23 +425,37 @@ public sealed class RuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
             || type == typeof(DateOnly)
             || type == typeof(TimeOnly);
 
-    private static bool TryBuildIn(Expression member, Type memberType, IReadOnlyList<string?> values, out Expression expression, out string? error)
+    private static bool TryBuildIn(
+    Expression member,
+    Type memberType,
+    IReadOnlyList<string?> values,
+    out Expression expression,
+    out string? error)
     {
         error = null;
         expression = null!;
+
         var elementType = Nullable.GetUnderlyingType(memberType) ?? memberType;
+
         if (!TryConvertList(values, elementType, out var converted, out error))
+            return false;
+
+        var hasNull = converted.Any(v => v is null);
+
+        var nonNullConverted = converted.Where(v => v is not null).ToList();
+
+        if (hasNull && Nullable.GetUnderlyingType(memberType) is null && memberType.IsValueType)
         {
+            error = $"Operator 'in' does not support NULL for non-nullable type '{memberType.Name}'.";
             return false;
         }
 
-        var list = Array.CreateInstance(elementType, converted.Count);
-        for (var i = 0; i < converted.Count; i++)
-        {
-            list.SetValue(converted[i], i);
-        }
+        var list = Array.CreateInstance(elementType, nonNullConverted.Count);
+        for (var i = 0; i < nonNullConverted.Count; i++)
+            list.SetValue(nonNullConverted[i], i);
 
         var listExpr = Expression.Constant(list);
+
         var containsMethod = typeof(Enumerable).GetMethods()
             .Single(m => m.Name == nameof(Enumerable.Contains) && m.GetParameters().Length == 2)
             .MakeGenericMethod(elementType);
@@ -340,19 +464,35 @@ public sealed class RuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
         {
             var hasValue = Expression.Property(member, nameof(Nullable<int>.HasValue));
             var value = Expression.Property(member, nameof(Nullable<int>.Value));
-            var containsValue = Expression.Call(containsMethod, listExpr, value);
-            expression = Expression.AndAlso(hasValue, containsValue);
+
+            Expression containsValue = Expression.Call(containsMethod, listExpr, value);
+            Expression nonNullBranch = Expression.AndAlso(hasValue, containsValue);
+
+            if (hasNull)
+            {
+                var isNull = Expression.Equal(member, Expression.Constant(null, member.Type));
+                expression = Expression.OrElse(isNull, nonNullBranch);
+                return true;
+            }
+
+            expression = nonNullBranch;
             return true;
         }
-
         expression = Expression.Call(containsMethod, listExpr, member);
         return true;
     }
 
-    private static bool TryBuildBetween(Expression member, Type memberType, IReadOnlyList<string?> values, out Expression expression, out string? error)
+
+    private static bool TryBuildBetween(
+    Expression member,
+    Type memberType,
+    List<string?> values,
+    out Expression expression,
+    out string? error)
     {
         error = null;
         expression = null!;
+
         if (values.Count < 2)
         {
             error = "Between requires two values.";
@@ -360,7 +500,14 @@ public sealed class RuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
         }
 
         var elementType = Nullable.GetUnderlyingType(memberType) ?? memberType;
-        if (!TryConvertValue(values[0] ?? string.Empty, elementType, out var start) || !TryConvertValue(values[1] ?? string.Empty, elementType, out var end))
+        if (!(IsNumericType(elementType) || IsDateType(elementType) || elementType == typeof(TimeSpan)))
+        {
+            error = $"Between is not supported for type '{elementType.Name}'.";
+            return false;
+        }
+
+        if (!TryConvertValue(values[0] ?? string.Empty, elementType, out var start) ||
+            !TryConvertValue(values[1] ?? string.Empty, elementType, out var end))
         {
             error = $"Value could not be converted to {elementType.Name}.";
             return false;
@@ -368,11 +515,10 @@ public sealed class RuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
 
         var startConst = Expression.Constant(start, elementType);
         var endConst = Expression.Constant(end, elementType);
+
         Expression left = member;
         if (memberType != elementType)
-        {
-            left = Expression.Property(member, nameof(Nullable<int>.Value));
-        }
+            left = Expression.Property(member, nameof(Nullable<>.Value));
 
         var ge = Expression.GreaterThanOrEqual(left, startConst);
         var le = Expression.LessThanOrEqual(left, endConst);
@@ -389,69 +535,136 @@ public sealed class RuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
         return true;
     }
 
+
     private static bool TryBuildAnyAll(
-        Expression member,
-        Type memberType,
-        IReadOnlyList<string?> values,
-        string? rawContent,
-        bool isAny,
-        out Expression expression,
-        out string? error)
+    Expression member,
+    Type memberType,
+    IReadOnlyList<string?> values,
+    string? rawContent,
+    bool isAny,
+    out Expression expression,
+    out string? error)
     {
         error = null;
         expression = null!;
 
         if (!TryGetEnumerableElementType(memberType, out var elementType))
+            return FailAnyAll(isAny, out expression, out error);
+
+        var parameter = Expression.Parameter(elementType, "e");
+
+        if (!TryBuildAnyAllPredicateBody(elementType, values, rawContent, parameter, out var predicateBody, out error))
+            return Fail(out expression);
+
+        var predicate = Expression.Lambda(predicateBody!, parameter);
+        expression = BuildAnyAllCall(member, memberType, elementType, predicate, isAny);
+        return true;
+    }
+
+    private static bool Fail(out Expression expression)
+    {
+        expression = null!;
+        return false;
+    }
+
+    private static bool FailAnyAll(bool isAny, out Expression expression, out string? error)
+    {
+        expression = null!;
+        error = $"Operator '{(isAny ? "any" : "all")}' is only valid for collection properties.";
+        return false;
+    }
+
+    private static bool TryBuildAnyAllPredicateBody(
+        Type elementType,
+        IReadOnlyList<string?> values,
+        string? rawContent,
+        ParameterExpression parameter,
+        out Expression? predicateBody,
+        out string? error)
+    {
+        error = null;
+        predicateBody = null;
+
+        if (ShouldUseNestedFilter(rawContent))
+            return TryBuildNestedPredicateBody(elementType, rawContent!, parameter, out predicateBody, out error);
+
+        return TryBuildContainsPredicateBody(elementType, values, parameter, out predicateBody, out error);
+    }
+
+    private static bool ShouldUseNestedFilter(string? rawContent)
+        => !string.IsNullOrWhiteSpace(rawContent) && LooksLikeFilter(rawContent);
+
+    private static bool TryBuildNestedPredicateBody(
+        Type elementType,
+        string rawContent,
+        ParameterExpression parameter,
+        out Expression? predicateBody,
+        out string? error)
+    {
+        predicateBody = null;
+        error = null;
+
+        if (!TryBuildNestedFilterExpression(elementType, rawContent, out var nested, out var nestedError))
         {
-            error = $"Operator '{(isAny ? "any" : "all")}' is only valid for collection properties.";
+            error = nestedError;
             return false;
         }
 
-        var parameter = Expression.Parameter(elementType, "e");
-        Expression? predicateBody = null;
-
-        if (!string.IsNullOrWhiteSpace(rawContent) && LooksLikeFilter(rawContent))
+        if (nested is null)
         {
-            if (!TryBuildNestedFilterExpression(elementType, rawContent, out var nested, out var nestedError))
-            {
-                error = nestedError;
-                return false;
-            }
-
-            if (nested is null)
-            {
-                error = "Invalid nested filter.";
-                return false;
-            }
-
-            predicateBody = new ReplaceParameterVisitor(nested.Parameters[0], parameter).Visit(nested.Body);
-        }
-        else
-        {
-            if (!TryConvertList(values, elementType, out var converted, out error))
-            {
-                return false;
-            }
-
-            var list = Array.CreateInstance(elementType, converted.Count);
-            for (var i = 0; i < converted.Count; i++)
-            {
-                list.SetValue(converted[i], i);
-            }
-            var listExpr = Expression.Constant(list);
-            predicateBody = Expression.Call(typeof(Enumerable), nameof(Enumerable.Contains), [elementType], listExpr, parameter);
+            error = "Invalid nested filter.";
+            return false;
         }
 
-        var predicate = Expression.Lambda(predicateBody!, parameter);
+        predicateBody = new ReplaceParameterVisitor(nested.Parameters[0], parameter).Visit(nested.Body);
+        return true;
+    }
+
+    private static bool TryBuildContainsPredicateBody(
+        Type elementType,
+        IReadOnlyList<string?> values,
+        ParameterExpression parameter,
+        out Expression? predicateBody,
+        out string? error)
+    {
+        predicateBody = null;
+        error = null;
+
+        if (!TryConvertList(values, elementType, out var converted, out error))
+            return false;
+
+        var list = Array.CreateInstance(elementType, converted.Count);
+        for (var i = 0; i < converted.Count; i++)
+            list.SetValue(converted[i], i);
+
+        var listExpr = Expression.Constant(list);
+
+        predicateBody = Expression.Call(
+            typeof(Enumerable),
+            nameof(Enumerable.Contains),
+            new[] { elementType },
+            listExpr,
+            parameter);
+
+        return true;
+    }
+
+    private static Expression BuildAnyAllCall(
+        Expression member,
+        Type memberType,
+        Type elementType,
+        LambdaExpression predicate,
+        bool isAny)
+    {
         var methodName = isAny ? nameof(Enumerable.Any) : nameof(Enumerable.All);
+
         var method = typeof(Enumerable).GetMethods()
             .Single(m => m.Name == methodName && m.GetParameters().Length == 2)
             .MakeGenericMethod(elementType);
 
         var call = Expression.Call(method, member, predicate);
-        var notNull = Expression.NotEqual(member, Expression.Constant(null, member.Type));
-        expression = Expression.AndAlso(notNull, call);
-        return true;
+        var notNull = Expression.NotEqual(member, Expression.Constant(null, memberType));
+        return Expression.AndAlso(notNull, call);
     }
 
     private static bool TryGetEnumerableElementType(Type type, out Type elementType)
@@ -488,59 +701,134 @@ public sealed class RuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
         if (span.Contains(" in ", StringComparison.OrdinalIgnoreCase)) return true;
         if (span.Contains(" between ", StringComparison.OrdinalIgnoreCase)) return true;
         if (span.Contains(",", StringComparison.Ordinal) || span.Contains("|", StringComparison.Ordinal)) return true;
+        if (span.Contains("..", StringComparison.Ordinal)) return true;
         return false;
     }
-
-    private static List<string?> SplitValueList(string? raw)
+    private static bool TrySplitBetween(string raw, out string? start, out string? end)
     {
-        var results = new List<string?>();
-        if (string.IsNullOrWhiteSpace(raw)) return results;
+        start = null;
+        end = null;
+
+        if (string.IsNullOrWhiteSpace(raw))
+            return false;
 
         var span = raw.AsSpan().Trim();
         var sb = new StringBuilder();
         char? quote = null;
+
+        for (int i = 0; i < span.Length; i++)
+        {
+            var c = span[i];
+
+            // داخل quotes: تعامل مع الإغلاق/الهروب/الإضافة
+            if (TryHandleQuotedChar(span, ref i, ref quote, sb))
+                continue;
+
+            // لو دخلنا quote جديد
+            if (TryStartQuote(c, ref quote))
+                continue;
+
+            // delimiter .. خارج quotes
+            if (IsBetweenDelimiter(span, i))
+            {
+                start = NormalizeValueToken(sb.ToString());
+                end = NormalizeValueToken(span.Slice(i + 2).ToString());
+                return true;
+            }
+
+            sb.Append(c);
+        }
+
+        return false;
+    }
+
+    private static bool TryHandleQuotedChar(ReadOnlySpan<char> span, ref int i, ref char? quote, StringBuilder sb)
+    {
+        if (quote is null)
+            return false;
+
+        var c = span[i];
+
+        if (c == quote)
+        {
+            quote = null;
+            return true;
+        }
+
+        if (c == '\\' && i + 1 < span.Length)
+        {
+            sb.Append(span[i + 1]);
+            i++; // skip escaped char
+            return true;
+        }
+
+        sb.Append(c);
+        return true;
+    }
+
+    private static bool TryStartQuote(char c, ref char? quote)
+    {
+        if (c is not ('\'' or '"'))
+            return false;
+
+        quote = c;
+        return true;
+    }
+
+    private static bool IsBetweenDelimiter(ReadOnlySpan<char> span, int i)
+        => span[i] == '.' && i + 1 < span.Length && span[i + 1] == '.';
+
+    private static List<string?> SplitValueList(string? raw, params char[] separators)
+    {
+        var results = new List<string?>();
+        if (string.IsNullOrWhiteSpace(raw))
+            return results;
+
+        var sep = NormalizeSeparators(separators);
+        var span = raw.AsSpan().Trim();
+
+        var sb = new StringBuilder();
+        char? quote = null;
+
         for (var i = 0; i < span.Length; i++)
         {
             var c = span[i];
-            if (quote is not null)
-            {
-                if (c == quote)
-                {
-                    quote = null;
-                    continue;
-                }
-                if (c == '\\' && i + 1 < span.Length)
-                {
-                    sb.Append(span[i + 1]);
-                    i++;
-                    continue;
-                }
-                sb.Append(c);
-                continue;
-            }
 
-            if (c is '\'' or '"')
-            {
-                quote = c;
+            if (TryHandleQuotedChar(span, ref i, ref quote, sb))
                 continue;
-            }
 
-            if (c == ',')
+            if (TryStartQuote(c, ref quote))
+                continue;
+
+            if (IsSeparator(c, sep))
             {
-                results.Add(NormalizeValueToken(sb.ToString()));
-                sb.Clear();
+                AddToken(results, sb);
                 continue;
             }
 
             sb.Append(c);
         }
 
-        if (sb.Length > 0)
-        {
-            results.Add(NormalizeValueToken(sb.ToString()));
-        }
-
+        AddToken(results, sb);
         return results;
+    }
+
+
+    private static char[] NormalizeSeparators(char[]? separators)
+        => (separators is { Length: > 0 }) ? separators : [','];
+
+    private static bool IsSeparator(char c, char[] separators)
+    {
+        for (int i = 0; i < separators.Length; i++)
+            if (separators[i] == c)
+                return true;
+        return false;
+    }
+
+    private static void AddToken(List<string?> results, StringBuilder sb)
+    {
+        results.Add(NormalizeValueToken(sb.ToString()));
+        sb.Clear();
     }
 
     private static string? NormalizeValueToken(string token)
@@ -634,7 +922,7 @@ public sealed class RuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
 
             if (nonNullable == typeof(DateTime))
             {
-                value = DateTime.Parse(raw, CultureInfo.InvariantCulture);
+                value = DateTime.Parse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
                 return true;
             }
 
