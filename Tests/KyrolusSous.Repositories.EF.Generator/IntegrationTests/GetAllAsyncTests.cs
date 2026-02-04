@@ -458,14 +458,7 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
         // Act
         dbContext.ChangeTracker.Clear();
 
-        await repo.GetAllAsync(
-                    filter: null,
-                    orderBy: null,
-                    includeProperties: null,
-                    includeGraph: null,
-                    asNoTracking: null,
-                    useSplitQuery: null,
-                    cancellationToken: default);
+        await repo.GetAllAsync();
         dbContext.ChangeTracker.Entries().ShouldNotBeEmpty();
     }
 
@@ -729,15 +722,15 @@ public class GetAllAsyncTests(WebApplicationFactory<Program> factory) : KyrolusG
     }
     #endregion
     #region Cache tests
-    [Fact(DisplayName = "GetAllyAsync should be cached if the cache is enabled")]
-    public void TestName()
-    {
-        // Given
+    // [Fact(DisplayName = "GetAllyAsync should be cached if the cache is enabled")]
+    // public void TestName()
+    // {
+    //     // Given
 
-        // When
+    //     // When
 
-        // Then
-    }
+    //     // Then
+    // }
     #endregion
     #region Unhappy Path Tests
     [Fact(DisplayName = "GetAllAsync throws when include string is invalid navigation")]

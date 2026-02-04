@@ -70,8 +70,8 @@ public class KyrolusUnitOfWorkTests
         var result = await uow.SaveChangesAsync();
 
         result.ShouldBe(2);
-        observer.BeforeOps.ShouldBe(["SaveChanges"]);
-        observer.AfterOps.ShouldBe(["SaveChanges"]);
+        observer.BeforeOps.ShouldBe(["SaveChangesAsync"]);
+        observer.AfterOps.ShouldBe(["SaveChangesAsync"]);
         observer.AfterExceptions.TrueForAll(e => e is null).ShouldBeTrue();
     }
 
@@ -84,8 +84,8 @@ public class KyrolusUnitOfWorkTests
         var uow = new KyrolusRuntimeUnitOfWork<FakeDbContext>(ctx, observer: observer);
 
         await Should.ThrowAsync<InvalidOperationException>(() => uow.SaveChangesAsync());
-        observer.BeforeOps.ShouldBe(["SaveChanges"]);
-        observer.AfterOps.ShouldBe(["SaveChanges"]);
+        observer.BeforeOps.ShouldBe(["SaveChangesAsync"]);
+        observer.AfterOps.ShouldBe(["SaveChangesAsync"]);
         observer.AfterExceptions.Single().ShouldNotBeNull();
     }
 
@@ -234,14 +234,14 @@ public class KyrolusUnitOfWorkTests
         Should.Throw<InvalidOperationException>(() => uow.GetRepository<FakeRepo>());
     }
 
-    [Fact(DisplayName = "GetRepository with name returns same instance (name ignored)")]
+    [Fact(DisplayName = "GetRepository with name returns null if the name does not match")]
     public void GetRepository_WithName_ReturnsInstance()
     {
         var uow = new KyrolusRuntimeUnitOfWork<DbContext>(new DbContext(new DbContextOptions<DbContext>()), repositoryFactory: _ => new FakeRepo());
         var repo1 = uow.GetRepository<FakeRepo>("anything");
         var repo2 = uow.GetRepository<FakeRepo>();
 
-        repo1.ShouldNotBeNull();
-        repo1.ShouldBeSameAs(repo2);
+        repo1.ShouldBeNull();
+        repo1.ShouldNotBeSameAs(repo2);
     }
 }
