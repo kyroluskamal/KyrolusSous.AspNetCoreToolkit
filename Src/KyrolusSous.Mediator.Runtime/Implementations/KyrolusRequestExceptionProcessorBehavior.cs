@@ -83,7 +83,9 @@ public sealed class KyrolusRequestExceptionProcessorBehavior<TRequest, TResponse
 
     private static IEnumerable<Type> GetExceptionTypes(Exception exception)
     {
-        for (Type? current = exception.GetType(); current is not null; current = current.BaseType)
+        for (Type? current = exception.GetType();
+             current is not null && typeof(Exception).IsAssignableFrom(current);
+             current = current.BaseType)
         {
             yield return current;
         }

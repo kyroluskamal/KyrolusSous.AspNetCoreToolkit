@@ -1,12 +1,15 @@
 using FluentValidation;
 using FluentValidation.Results;
 using KyrolusSous.Validation.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace KyrolusSous.Validation.FluentValidation;
 
-public sealed class FluentValidationRequestValidator<TRequest>(IValidator<TRequest> validator)
+public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider serviceProvider)
     : IKyrolusRequestValidatorWithContext<TRequest>
 {
+    private readonly IValidator<TRequest>? validator = serviceProvider.GetService<IValidator<TRequest>>();
+
     public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(
         TRequest request,
         CancellationToken cancellationToken = default)
@@ -19,6 +22,11 @@ public sealed class FluentValidationRequestValidator<TRequest>(IValidator<TReque
         KyrolusValidationContext context,
         CancellationToken cancellationToken = default)
     {
+        if (validator is null)
+        {
+            return Array.Empty<KyrolusValidationFailure>();
+        }
+
         var validationContext = context.RuleSets is { Count: > 0 }
             ? ValidationContext<TRequest>.CreateWithOptions(request, options => options.IncludeRuleSets(context.RuleSets.ToArray()))
             : new ValidationContext<TRequest>(request);

@@ -1,3 +1,7 @@
+using System.Text.Json;
+using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Mvc;
+
 namespace KyrolusSous.EndpointKit.Core.BaseKyrolusModule;
 
 public class DefaultRouteMapper<TResponse, TModel, TKey> : IRouteMapper<TResponse, TModel, TKey>
@@ -5,20 +9,30 @@ public class DefaultRouteMapper<TResponse, TModel, TKey> : IRouteMapper<TRespons
     where TModel : class
     where TKey : notnull, IEquatable<TKey>
 {
-    public RouteGroupBuilder MapEndpoints(IEndpointRouteBuilder app, IKyrolusApiConfig<TResponse> config, ICommandQueryHandler<TResponse, TModel, TKey> commandQueryHandler)
+    public RouteGroupBuilder MapEndpoints(IEndpointRouteBuilder app, IKyrolusApiConfig<TResponse> config)
     {
         config.Route ??= typeof(TResponse).Name;
         config.ApiName ??= typeof(TResponse).Name;
         var groupPrefix = BuildGroupPrefix(config);
         var group = app.MapGroup(groupPrefix).WithTags(config.ApiName);
+        var resource = $"{config.Route}s";
         var endpointsToMap = GetEndpointsToMap(config);
-        bool ShouldMap(EndpointNames currentEndpoint) => config.AllEndpointsExcept is not null ?
+        var useExclusions = config.AllEndpointsExcept is not null && config.AllEndpointsExcept.Any();
+        bool ShouldMap(EndpointNames currentEndpoint) => useExclusions ?
             !endpointsToMap.Contains(currentEndpoint) : endpointsToMap.Contains(currentEndpoint)
             || endpointsToMap.Contains(EndpointNames.All);
 
         if (ShouldMap(EndpointNames.GetAll))
         {
-            group.MapGet($"{config.Route}s", commandQueryHandler.HandleGetAllAsync)
+            group.MapGet($"{resource}",
+                ([FromServices] ICommandQueryHandler<TResponse, TModel, TKey> handler,
+                    [FromQuery] string? filter,
+                    [FromQuery] string? includedProps,
+                    [FromQuery] string? includeGraph,
+                    [FromQuery] string? fields,
+                    [FromQuery] bool? cacheable,
+                    [FromQuery] bool? includeDeleted) =>
+                    handler.HandleGetAllAsync(filter, includedProps, includeGraph, fields, cacheable, includeDeleted))
                 .Authorize(Authorize(config, EndpointNames.GetAll))
                 .ApplyOpenApi(config, EndpointNames.GetAll)
                 .ApplyEndpointPolicies(config, EndpointNames.GetAll);
@@ -26,31 +40,53 @@ public class DefaultRouteMapper<TResponse, TModel, TKey> : IRouteMapper<TRespons
 
         if (ShouldMap(EndpointNames.GetById))
         {
-            group.MapGet($"/{config.Route}/{{id}}", commandQueryHandler.HandleGetByIdAsync)
+            group.MapGet($"{resource}/{{id}}",
+                ([FromServices] ICommandQueryHandler<TResponse, TModel, TKey> handler,
+                    [FromRoute] TKey id,
+                    [FromQuery] string? includedProps,
+                    [FromQuery] string? includeGraph,
+                    [FromQuery] string? fields,
+                    [FromQuery] bool? cacheable,
+                    [FromQuery] bool? includeDeleted) =>
+                    handler.HandleGetByIdAsync(id, includedProps, includeGraph, fields, cacheable, includeDeleted))
                 .Authorize(Authorize(config, EndpointNames.GetById))
                 .ApplyOpenApi(config, EndpointNames.GetById)
                 .ApplyEndpointPolicies(config, EndpointNames.GetById);
         }
 
-        if (ShouldMap(EndpointNames.Add))
+        if (ShouldMap(EndpointNames.Add) || ShouldMap(EndpointNames.AddRange))
         {
-            group.MapPost(config.Route, commandQueryHandler.HandleCreateAsync)
+            group.MapPost($"{resource}",
+                async ([FromServices] ICommandQueryHandler<TResponse, TModel, TKey> handler,
+                    [FromServices] IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions> jsonOptions,
+                    [FromBody] JsonElement body,
+                    [FromQuery] bool? cacheable) =>
+                {
+                    var options = jsonOptions.Value.SerializerOptions;
+                    if (body.ValueKind == JsonValueKind.Array)
+                    {
+                        var models = body.Deserialize<IEnumerable<TModel>>(options);
+                        if (models is null) return Results.BadRequest("Invalid payload.");
+                        return await handler.HandleCreateRangeAsync(models, cacheable);
+                    }
+
+                    var model = body.Deserialize<TModel>(options);
+                    if (model is null) return Results.BadRequest("Invalid payload.");
+                    return await handler.HandleCreateAsync(model, cacheable);
+                })
                 .Authorize(Authorize(config, EndpointNames.Add))
                 .ApplyOpenApi(config, EndpointNames.Add)
                 .ApplyEndpointPolicies(config, EndpointNames.Add);
         }
 
-        if (ShouldMap(EndpointNames.AddRange))
-        {
-            group.MapPost($"{config.Route}s", commandQueryHandler.HandleCreateRangeAsync)
-                .Authorize(Authorize(config, EndpointNames.AddRange))
-                .ApplyOpenApi(config, EndpointNames.AddRange)
-                .ApplyEndpointPolicies(config, EndpointNames.AddRange);
-        }
-
         if (ShouldMap(EndpointNames.Update))
         {
-            group.MapPut($"/{config.Route}/{{id}}", commandQueryHandler.HandleUpdateAsync)
+            group.MapPut($"{resource}/{{id}}",
+                ([FromServices] ICommandQueryHandler<TResponse, TModel, TKey> handler,
+                    [FromRoute] TKey id,
+                    [FromBody] TModel model,
+                    [FromQuery] bool? cacheable) =>
+                    handler.HandleUpdateAsync(id, model, cacheable))
                 .Authorize(Authorize(config, EndpointNames.Update))
                 .ApplyOpenApi(config, EndpointNames.Update)
                 .ApplyEndpointPolicies(config, EndpointNames.Update);
@@ -58,7 +94,12 @@ public class DefaultRouteMapper<TResponse, TModel, TKey> : IRouteMapper<TRespons
 
         if (ShouldMap(EndpointNames.Patch))
         {
-            group.MapPatch($"/{config.Route}/{{id}}", commandQueryHandler.HandlePatchAsync)
+            group.MapPatch($"{resource}/{{id}}",
+                ([FromServices] ICommandQueryHandler<TResponse, TModel, TKey> handler,
+                    [FromRoute] TKey id,
+                    [FromBody] Dictionary<string, object> updates,
+                    [FromQuery] bool? cacheable) =>
+                    handler.HandlePatchAsync(id, updates, cacheable))
                 .Authorize(Authorize(config, EndpointNames.Patch))
                 .ApplyOpenApi(config, EndpointNames.Patch)
                 .ApplyEndpointPolicies(config, EndpointNames.Patch);
@@ -66,7 +107,20 @@ public class DefaultRouteMapper<TResponse, TModel, TKey> : IRouteMapper<TRespons
 
         if (ShouldMap(EndpointNames.UpdateRange))
         {
-            group.MapPut($"/{config.Route}s", commandQueryHandler.HandleUpdateRangeAsync)
+            group.MapPut($"{resource}",
+                async ([FromServices] ICommandQueryHandler<TResponse, TModel, TKey> handler,
+                    [FromServices] IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions> jsonOptions,
+                    [FromBody] JsonElement body,
+                    [FromQuery] bool? cacheable) =>
+                {
+                    var options = jsonOptions.Value.SerializerOptions;
+                    if (body.ValueKind != JsonValueKind.Array)
+                        return Results.BadRequest("Bulk update expects an array payload.");
+
+                    var models = body.Deserialize<IEnumerable<TModel>>(options);
+                    if (models is null) return Results.BadRequest("Invalid payload.");
+                    return await handler.HandleUpdateRangeAsync(models, cacheable);
+                })
                 .Authorize(Authorize(config, EndpointNames.UpdateRange))
                 .ApplyOpenApi(config, EndpointNames.UpdateRange)
                 .ApplyEndpointPolicies(config, EndpointNames.UpdateRange);
@@ -74,7 +128,11 @@ public class DefaultRouteMapper<TResponse, TModel, TKey> : IRouteMapper<TRespons
 
         if (ShouldMap(EndpointNames.Delete))
         {
-            group.MapDelete($"/{config.Route}/{{id}}", commandQueryHandler.HandleRemoveAsync)
+            group.MapDelete($"{resource}/{{id}}",
+                ([FromServices] ICommandQueryHandler<TResponse, TModel, TKey> handler,
+                    [FromRoute] TKey id,
+                    [FromQuery] bool? cacheable) =>
+                    handler.HandleRemoveAsync(id, cacheable))
                 .Authorize(Authorize(config, EndpointNames.Delete))
                 .ApplyOpenApi(config, EndpointNames.Delete)
                 .ApplyEndpointPolicies(config, EndpointNames.Delete);
@@ -82,7 +140,21 @@ public class DefaultRouteMapper<TResponse, TModel, TKey> : IRouteMapper<TRespons
 
         if (ShouldMap(EndpointNames.DeleteRange))
         {
-            group.MapDelete($"{config.Route}s", commandQueryHandler.HandleRemoveRangeAsync)
+            group.MapDelete($"{resource}",
+                async ([FromServices] ICommandQueryHandler<TResponse, TModel, TKey> handler,
+                    [FromQuery] TKey[]? ids,
+                    [FromQuery] bool? cacheable) =>
+                {
+                    if (ids is null || ids.Length == 0)
+                        return Results.BadRequest("Bulk delete requires ids query parameter.");
+
+                    foreach (var id in ids)
+                    {
+                        await handler.HandleRemoveAsync(id, cacheable);
+                    }
+
+                    return Results.NoContent();
+                })
                 .Authorize(Authorize(config, EndpointNames.DeleteRange))
                 .ApplyOpenApi(config, EndpointNames.DeleteRange)
                 .ApplyEndpointPolicies(config, EndpointNames.DeleteRange);

@@ -88,7 +88,8 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
                 IncludeGraph: includeGraphValue,
                 AsNoTracking: null,
                 UseSplitQuery: null,
-                TenantId: endpointContext?.TenantId));
+                TenantId: endpointContext?.TenantId,
+                IncludeDeleted: includeDeleted ?? false));
 
         var useProjection = TryBuildProjectionSelector(EndpointNames.GetAll, selectedFields, out var selector);
         if (query is GetAllQuery<TResponse> getAllQuery)
@@ -282,7 +283,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
 
         var keyValues = BuildKeyValues(id);
         IKyrolusCommandBase command = config.RemoveCommand;
-        if (martenConfig?.UseSoftDeleteForDelete == true)
+        if (ShouldUseSoftDeleteForDelete())
         {
             command = new SoftDeleteByIdCommand<TResponse, TKey>(keyValues, cacheable ?? false);
         }
@@ -352,6 +353,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         var command = config.PatchCommand;
         ApplyCacheable(command, cacheable);
         TrySetProperty(command, KeyValuesPropertyName, keyValues);
+        TrySetProperty(command, "Id", id);
         TrySetProperty(command, "Updates", filteredUpdates);
 
         TResponse? result;
@@ -461,7 +463,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
 
         IKyrolusCommandBase command = config.RemoveCommand;
-        if (martenConfig?.UseSoftDeleteForDelete == true)
+        if (ShouldUseSoftDeleteForDelete())
         {
             command = new SoftDeleteByIdCommand<TResponse, TKey>(keyValues, cacheable ?? false);
         }
@@ -561,7 +563,8 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
                 IncludeGraph: includeGraphValue,
                 AsNoTracking: null,
                 UseSplitQuery: null,
-                TenantId: endpointContext?.TenantId));
+                TenantId: endpointContext?.TenantId,
+                IncludeDeleted: true));
 
         var useProjection = TryBuildProjectionSelector(EndpointNames.GetDeleted, selectedFields, out var selector);
         if (query is GetAllQuery<TResponse> getAllQuery)
@@ -682,18 +685,18 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
                 IncludeGraph: includeGraphValue,
                 AsNoTracking: request.AsNoTracking,
                 UseSplitQuery: request.UseSplitQuery,
-                TenantId: endpointContext?.TenantId));
+                TenantId: endpointContext?.TenantId, IncludeDeleted: includeDeleted ?? request.IncludeDeleted));
 
         var useProjection = TryBuildProjectionSelector(EndpointNames.Query, selectedFields, out var selector);
         if (query is GetAllQuery<TResponse> getAllQuery)
         {
-            getAllQuery.IncludeDeleted = includeDeleted ?? false;
+            getAllQuery.IncludeDeleted = includeDeleted ?? request.IncludeDeleted ?? false;
             getAllQuery.DeletedOnly = false;
             if (useProjection) getAllQuery.Selector = selector;
         }
         else
         {
-            TrySetProperty(query, IncludeDeletedPropertyName, includeDeleted ?? false);
+            TrySetProperty(query, IncludeDeletedPropertyName, includeDeleted ?? request.IncludeDeleted ?? false);
             TrySetProperty(query, "DeletedOnly", false);
             if (useProjection) TrySetProperty(query, "Selector", selector);
         }
@@ -1443,7 +1446,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
 
         var keyValues = BuildKeyValues(operation.Id);
         IKyrolusCommandBase command = config.RemoveCommand;
-        if (martenConfig?.UseSoftDeleteForDelete == true)
+        if (ShouldUseSoftDeleteForDelete())
         {
             command = new SoftDeleteByIdCommand<TResponse, TKey>(keyValues, false);
         }
@@ -1599,7 +1602,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         IncludeGraph<TResponse>? IncludeGraph,
         bool? AsNoTracking,
         bool? UseSplitQuery,
-        string? TenantId);
+        string? TenantId, bool? IncludeDeleted);
 
     private bool TryParseBulkPatchChunk(
         IReadOnlyList<KyrolusMartenBulkPatchItem> chunk,
@@ -1870,6 +1873,12 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
     private bool HasContextFilters()
         => !string.IsNullOrWhiteSpace(martenConfig?.TenantPropertyName)
            || !string.IsNullOrWhiteSpace(martenConfig?.ScopePropertyName);
+
+    private bool ShouldUseSoftDeleteForDelete()
+        => martenConfig?.UseSoftDeleteForDelete == true
+           || martenConfig?.EnableSoftDeleteEndpoints == true
+           || (config.Endpoints?.Contains(EndpointNames.GetDeleted) ?? false)
+           || (config.Endpoints?.Contains(EndpointNames.Restore) ?? false);
 
     private bool TryApplyContextValues(TResponse entity, out IResult? errorResult)
     {

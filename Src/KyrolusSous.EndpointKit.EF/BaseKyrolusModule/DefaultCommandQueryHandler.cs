@@ -82,7 +82,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
                 IncludeExpressions: includeExpressions,
                 IncludeGraph: includeGraphValue,
                 AsNoTracking: null,
-                UseSplitQuery: null));
+                UseSplitQuery: null, IncludeDeleted: includeDeleted));
 
         var useProjection = TryBuildProjectionSelector(EndpointNames.GetAll, selectedFields, out var selector);
         if (query is GetAllQuery<TResponse> getAllQuery)
@@ -346,6 +346,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         var command = config.PatchCommand;
         ApplyCacheable(command, cacheable);
         TrySetProperty(command, KeyValuesPropertyName, keyValues);
+        TrySetProperty(command, "Id", id);
         TrySetProperty(command, "Updates", filteredUpdates);
 
         TResponse? result;
@@ -674,18 +675,18 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
                 IncludeExpressions: includeExpressions,
                 IncludeGraph: includeGraphValue,
                 AsNoTracking: request.AsNoTracking,
-                UseSplitQuery: request.UseSplitQuery));
+                UseSplitQuery: request.UseSplitQuery, IncludeDeleted: includeDeleted ?? request.IncludeDeleted));
 
         var useProjection = TryBuildProjectionSelector(EndpointNames.Query, selectedFields, out var selector);
         if (query is GetAllQuery<TResponse> getAllQuery)
         {
-            getAllQuery.IncludeDeleted = includeDeleted ?? false;
+            getAllQuery.IncludeDeleted = includeDeleted ?? request.IncludeDeleted?? false;
             getAllQuery.DeletedOnly = false;
             if (useProjection) getAllQuery.Selector = selector;
         }
         else
         {
-            TrySetProperty(query, IncludeDeletedPropertyName, includeDeleted ?? false);
+            TrySetProperty(query, IncludeDeletedPropertyName, includeDeleted ?? request.IncludeDeleted?? false);
             TrySetProperty(query, "DeletedOnly", false);
             if (useProjection) TrySetProperty(query, "Selector", selector);
         }
@@ -1583,7 +1584,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         Expression<Func<TResponse, object?>>[]? IncludeExpressions,
         IncludeGraph<TResponse>? IncludeGraph,
         bool? AsNoTracking,
-        bool? UseSplitQuery);
+        bool? UseSplitQuery, bool? IncludeDeleted=null);
 
     private bool TryParseBulkPatchChunk(
         IReadOnlyList<KyrolusEfBulkPatchItem> chunk,
@@ -2707,6 +2708,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
             getAll.IncludeGraph = options.IncludeGraph;
             getAll.AsNoTracking = options.AsNoTracking;
             getAll.UseSplitQuery = options.UseSplitQuery;
+            getAll.IncludeDeleted = options.IncludeDeleted ?? false;
             return;
         }
 

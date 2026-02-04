@@ -16,8 +16,7 @@ public class KyrolusModuleBuilder
             serviceProvider =>
             {
                 var routeMapper = serviceProvider.GetRequiredService<IRouteMapper<TResponse, TModel, TKey>>();
-                var commandQueryHandler = serviceProvider.GetRequiredService<ICommandQueryHandler<TResponse, TModel, TKey>>();
-                return ActivatorUtilities.CreateInstance<TModule>(serviceProvider, routeMapper, commandQueryHandler, config);
+                return ActivatorUtilities.CreateInstance<TModule>(serviceProvider, routeMapper, config);
             },
             config);
 

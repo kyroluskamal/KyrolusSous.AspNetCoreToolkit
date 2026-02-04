@@ -37,7 +37,7 @@ public static class KyrolusOpenApiMetadata
 
         if (config.DefaultResponses is { Count: > 0 })
         {
-            return config.DefaultResponses.ToList();
+            return [.. config.DefaultResponses];
         }
 
         return BuildDefaultResponses(config, endpoint, overrideResponseType);

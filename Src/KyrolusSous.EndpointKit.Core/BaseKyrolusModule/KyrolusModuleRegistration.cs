@@ -17,7 +17,8 @@ public class KyrolusModuleRegistration<TResponse, TModel, TKey> : IModuleRegistr
 
     public void AddRoutes(IEndpointRouteBuilder app, IServiceProvider serviceProvider)
     {
-        var module = moduleFactory(serviceProvider);
+        using var scope = serviceProvider.CreateScope();
+        var module = moduleFactory(scope.ServiceProvider);
         module.AddRoutes(app);
     }
 }

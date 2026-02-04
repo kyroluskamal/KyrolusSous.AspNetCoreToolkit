@@ -1,8 +1,7 @@
-using KyrolusSous.CQRS.Abstractions.Models;
 using KyrolusSous.EndpointKit.Core.BaseKyrolusModule;
 using KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Interfaces;
-using KyrolusSous.EndpointKit.Core.Batch;
 using KyrolusSous.EndpointKit.Marten.BaseKyrolusModule.Interfaces;
+using Microsoft.AspNetCore.Mvc;
 
 namespace KyrolusSous.EndpointKit.Marten.BaseKyrolusModule;
 
@@ -15,12 +14,12 @@ public sealed class KyrolusMartenRouteMapper<TResponse, TModel, TKey> : IRouteMa
 
     public RouteGroupBuilder MapEndpoints(
         IEndpointRouteBuilder app,
-        IKyrolusApiConfig<TResponse> config,
-        ICommandQueryHandler<TResponse, TModel, TKey> commandQueryHandler)
+        IKyrolusApiConfig<TResponse> config)
     {
         var martenConfig = config as IKyrolusMartenApiConfig<TResponse>;
         var compositeKeyOnly = martenConfig?.CompositeKeyOnly == true;
         var originalAllEndpointsExcept = config.AllEndpointsExcept ?? Array.Empty<EndpointNames>();
+        var resource = $"{config.Route}s";
         if (compositeKeyOnly)
         {
             var excluded = new HashSet<EndpointNames>(originalAllEndpointsExcept ?? []);
@@ -31,166 +30,25 @@ public sealed class KyrolusMartenRouteMapper<TResponse, TModel, TKey> : IRouteMa
             config.AllEndpointsExcept = excluded.ToArray();
         }
 
-        var group = coreMapper.MapEndpoints(app, config, commandQueryHandler);
+        var group = coreMapper.MapEndpoints(app, config);
         var endpointsToMap = GetEndpointsToMap(config);
-        bool ShouldMap(EndpointNames currentEndpoint) => config.AllEndpointsExcept is not null ?
+        var useExclusions = config.AllEndpointsExcept is not null && config.AllEndpointsExcept.Any();
+        bool ShouldMap(EndpointNames currentEndpoint) => useExclusions ?
             !endpointsToMap.Contains(currentEndpoint) : endpointsToMap.Contains(currentEndpoint)
             || endpointsToMap.Contains(EndpointNames.All);
 
-        if (commandQueryHandler is not IKyrolusMartenCommandQueryHandler<TResponse, TModel, TKey> efHandler)
-        {
-            if (compositeKeyOnly)
-            {
-                config.AllEndpointsExcept = originalAllEndpointsExcept ?? [];
-            }
-            return group;
-        }
-
-        if (martenConfig is { EnableQueryEndpoints: true })
-        {
-            group.MapPost($"/{config.Route}s/query", efHandler.HandleQueryAsync)
-                .Authorize(Authorize(config, EndpointNames.Query))
-                .ApplyOpenApi(config, EndpointNames.Query)
-                .ApplyEndpointPolicies(config, EndpointNames.Query);
-        }
-
-        if (martenConfig is { EnableCountEndpoint: true })
-        {
-            group.MapGet($"/{config.Route}s/$count", efHandler.HandleCountAsync)
-                .Authorize(Authorize(config, EndpointNames.Count))
-                .ApplyOpenApi(config, EndpointNames.Count, typeof(long))
-                .ApplyEndpointPolicies(config, EndpointNames.Count);
-        }
+        // Marten route mapper assumes a Marten command/query handler is registered in DI.
 
         if (martenConfig is { EnableHeadEndpoint: true } && ShouldMap(EndpointNames.GetById))
         {
-            group.MapMethods($"/{config.Route}/{{id}}", ["HEAD"], efHandler.HandleHeadByIdAsync)
+            group.MapMethods($"{resource}/{{id}}", ["HEAD"],
+                    ([FromServices] IKyrolusMartenCommandQueryHandler<TResponse, TModel, TKey> handler,
+                        TKey id,
+                        CancellationToken cancellationToken) =>
+                        handler.HandleHeadByIdAsync(id, cancellationToken))
                 .Authorize(Authorize(config, EndpointNames.Head))
                 .ApplyOpenApi(config, EndpointNames.Head)
                 .ApplyEndpointPolicies(config, EndpointNames.Head);
-        }
-
-        if (martenConfig is { EnablePagedEndpoints: true })
-        {
-            var pagedResponseType = ResolvePagedResponseType(config, EndpointNames.Paged);
-            group.MapGet($"{config.Route}s/paged", efHandler.HandleGetAllPagedAsync)
-                .Authorize(Authorize(config, EndpointNames.Paged))
-                .ApplyOpenApi(config, EndpointNames.Paged, pagedResponseType)
-                .ApplyEndpointPolicies(config, EndpointNames.Paged);
-            group.MapPost($"/{config.Route}s/query/paged", efHandler.HandleQueryPagedAsync)
-                .Authorize(Authorize(config, EndpointNames.QueryPaged))
-                .ApplyOpenApi(config, EndpointNames.QueryPaged, pagedResponseType)
-                .ApplyEndpointPolicies(config, EndpointNames.QueryPaged);
-        }
-
-        if (martenConfig is { EnableSeekEndpoints: true })
-        {
-            var seekResponseType = typeof(KyrolusSeekResult<>).MakeGenericType(ResolveViewModelType(config, EndpointNames.Seek));
-            group.MapGet($"{config.Route}s/seek", efHandler.HandleSeekAsync)
-                .Authorize(Authorize(config, EndpointNames.Seek))
-                .ApplyOpenApi(config, EndpointNames.Seek, seekResponseType)
-                .ApplyEndpointPolicies(config, EndpointNames.Seek);
-            group.MapPost($"/{config.Route}s/query/seek", efHandler.HandleQuerySeekAsync)
-                .Authorize(Authorize(config, EndpointNames.QuerySeek))
-                .ApplyOpenApi(config, EndpointNames.QuerySeek, seekResponseType)
-                .ApplyEndpointPolicies(config, EndpointNames.QuerySeek);
-        }
-
-        if (martenConfig is { EnableCompositeKeyEndpoints: true } && (compositeKeyOnly || ShouldMap(EndpointNames.GetById)))
-        {
-            group.MapGet($"/{config.Route}/by-keys", efHandler.HandleGetByKeysAsync)
-                .Authorize(Authorize(config, EndpointNames.GetById))
-                .ApplyOpenApi(config, EndpointNames.GetById)
-                .ApplyEndpointPolicies(config, EndpointNames.GetById);
-        }
-
-        if (martenConfig is { EnableCompositeKeyEndpoints: true } && (compositeKeyOnly || ShouldMap(EndpointNames.Update)))
-        {
-            group.MapPut($"/{config.Route}/by-keys", efHandler.HandleUpdateByKeysAsync)
-                .Authorize(Authorize(config, EndpointNames.Update))
-                .ApplyOpenApi(config, EndpointNames.Update)
-                .ApplyEndpointPolicies(config, EndpointNames.Update);
-        }
-
-        if (martenConfig is { EnableCompositeKeyEndpoints: true } && (compositeKeyOnly || ShouldMap(EndpointNames.Delete)))
-        {
-            group.MapDelete($"/{config.Route}/by-keys", efHandler.HandleRemoveByKeysAsync)
-                .Authorize(Authorize(config, EndpointNames.Delete))
-                .ApplyOpenApi(config, EndpointNames.Delete)
-                .ApplyEndpointPolicies(config, EndpointNames.Delete);
-        }
-
-        if (martenConfig is { EnableCompositeKeyEndpoints: true } && (compositeKeyOnly || ShouldMap(EndpointNames.Patch)))
-        {
-            group.MapPatch($"/{config.Route}/by-keys", efHandler.HandlePatchByKeysAsync)
-                .Authorize(Authorize(config, EndpointNames.Patch))
-                .ApplyOpenApi(config, EndpointNames.Patch)
-                .ApplyEndpointPolicies(config, EndpointNames.Patch);
-        }
-
-        if (martenConfig is { EnableBulkEndpoints: true } && ShouldMap(EndpointNames.BulkUpdate))
-        {
-            group.MapPost($"/{config.Route}s/bulk/update", efHandler.HandleBulkUpdateAsync)
-                .Authorize(Authorize(config, EndpointNames.BulkUpdate))
-                .ApplyOpenApi(config, EndpointNames.BulkUpdate)
-                .ApplyEndpointPolicies(config, EndpointNames.BulkUpdate);
-        }
-
-        if (martenConfig is { EnableBulkEndpoints: true } && ShouldMap(EndpointNames.BulkDelete))
-        {
-            group.MapPost($"/{config.Route}s/bulk/delete", efHandler.HandleBulkDeleteAsync)
-                .Authorize(Authorize(config, EndpointNames.BulkDelete))
-                .ApplyOpenApi(config, EndpointNames.BulkDelete)
-                .ApplyEndpointPolicies(config, EndpointNames.BulkDelete);
-        }
-
-        if (martenConfig is { EnableBulkEndpoints: true } && ShouldMap(EndpointNames.BulkUpsert))
-        {
-            group.MapPost($"/{config.Route}s/bulk/upsert", efHandler.HandleBulkUpsertAsync)
-                .Authorize(Authorize(config, EndpointNames.BulkUpsert))
-                .ApplyOpenApi(config, EndpointNames.BulkUpsert)
-                .ApplyEndpointPolicies(config, EndpointNames.BulkUpsert);
-        }
-
-        if (martenConfig is { EnableBulkEndpoints: true } && ShouldMap(EndpointNames.BulkPatch))
-        {
-            group.MapPost($"/{config.Route}s/bulk/patch", efHandler.HandleBulkPatchAsync)
-                .Authorize(Authorize(config, EndpointNames.BulkPatch))
-                .ApplyOpenApi(config, EndpointNames.BulkPatch)
-                .ApplyEndpointPolicies(config, EndpointNames.BulkPatch);
-        }
-
-        if (martenConfig is { EnableSoftDeleteEndpoints: true } && ShouldMap(EndpointNames.GetDeleted))
-        {
-            group.MapGet($"/{config.Route}s/deleted", efHandler.HandleGetDeletedAsync)
-                .Authorize(Authorize(config, EndpointNames.GetDeleted))
-                .ApplyOpenApi(config, EndpointNames.GetDeleted)
-                .ApplyEndpointPolicies(config, EndpointNames.GetDeleted);
-        }
-
-        if (martenConfig is { EnableSoftDeleteEndpoints: true } && ShouldMap(EndpointNames.Restore))
-        {
-            group.MapPost($"/{config.Route}/{{id}}/restore", efHandler.HandleRestoreAsync)
-                .Authorize(Authorize(config, EndpointNames.Restore))
-                .ApplyOpenApi(config, EndpointNames.Restore)
-                .ApplyEndpointPolicies(config, EndpointNames.Restore);
-        }
-
-        if (martenConfig is { EnableSoftDeleteEndpoints: true, EnableCompositeKeyEndpoints: true } && (compositeKeyOnly || ShouldMap(EndpointNames.Restore)))
-        {
-            group.MapPost($"/{config.Route}/by-keys/restore", efHandler.HandleRestoreByKeysAsync)
-                .Authorize(Authorize(config, EndpointNames.Restore))
-                .ApplyOpenApi(config, EndpointNames.Restore)
-                .ApplyEndpointPolicies(config, EndpointNames.Restore);
-        }
-
-        if (martenConfig is { BatchOptions.Enabled: true })
-        {
-            var batchResponseType = typeof(KyrolusBatchResponse<,>).MakeGenericType(ResolveViewModelType(config, EndpointNames.Batch), typeof(TKey));
-            group.MapPost($"/{config.Route}s/{martenConfig.BatchOptions.RouteSuffix}", efHandler.HandleBatchAsync)
-                .Authorize(Authorize(config, EndpointNames.Batch))
-                .ApplyOpenApi(config, EndpointNames.Batch, batchResponseType)
-                .ApplyEndpointPolicies(config, EndpointNames.Batch);
         }
 
         if (compositeKeyOnly)
@@ -221,19 +79,6 @@ public sealed class KyrolusMartenRouteMapper<TResponse, TModel, TKey> : IRouteMa
             return endpointConfig.AuthorizationPolicy;
 
         return config.GeneralAuthorizationPolicy;
-    }
-
-    private static Type ResolvePagedResponseType(IKyrolusApiConfig<TResponse> config, EndpointNames endpoint)
-    {
-        var endpointConfig = config.EndpointConfig.FirstOrDefault(e => e.Name == endpoint);
-        var viewModelType = endpointConfig?.ViewModelType ?? config.ViewModelType ?? typeof(TResponse);
-        return typeof(KyrolusPagedResult<>).MakeGenericType(viewModelType);
-    }
-
-    private static Type ResolveViewModelType(IKyrolusApiConfig<TResponse> config, EndpointNames endpoint)
-    {
-        var endpointConfig = config.EndpointConfig.FirstOrDefault(e => e.Name == endpoint);
-        return endpointConfig?.ViewModelType ?? config.ViewModelType ?? typeof(TResponse);
     }
 
     private static IEnumerable<EndpointNames> GetEndpointsToMap(IKyrolusApiConfig<TResponse> config)

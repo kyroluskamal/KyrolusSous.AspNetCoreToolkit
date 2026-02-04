@@ -52,7 +52,7 @@ public static class ServiceCollectionExtensions
         {
             foreach (var iface in GetValidatorInterfaces(type))
             {
-                services.TryAddEnumerable(ServiceDescriptor.Scoped(iface, type));
+                services.TryAddEnumerable(ServiceDescriptor.Transient(iface, type));
             }
         }
     }

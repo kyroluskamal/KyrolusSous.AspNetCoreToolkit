@@ -20,7 +20,7 @@ public static class ExceptionHandlingExtension
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IKyrolusExceptionMapper, KyrolusDefaultExceptionMapper>());
 
         services.TryAddSingleton<IKyrolusErrorResponseWriter, KyrolusJsonErrorResponseWriter>();
-        services.TryAddSingleton<ExceptionHandlingMiddleware>();
+        services.TryAddSingleton<KyrolusExceptionHandlingDependencies>();
         services.TryAddSingleton<KyrolusExceptionTranslator>();
         services.TryAddSingleton<KyrolusExceptionFilter>();
 

@@ -8,7 +8,7 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddKyrolusDataAnnotationsValidation(this IServiceCollection services)
     {
-        services.TryAddEnumerable(ServiceDescriptor.Scoped(typeof(IKyrolusRequestValidator<>), typeof(DataAnnotationsRequestValidator<>)));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IKyrolusRequestValidator<>), typeof(DataAnnotationsRequestValidator<>)));
         return services;
     }
 }
