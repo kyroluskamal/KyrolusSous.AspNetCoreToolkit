@@ -2,26 +2,21 @@
 
 public partial class GetAllIncludingDeletedAsyncTests
 {
-    public sealed record SplitQueryCase(
-        string CaseId,
-        bool? UseSplitQuery,
-        bool? PolicyDefault,
-        int ExpectedCount);
-
-    public static TheoryData<SplitQueryCase> SplitQueryCases => new()
+    public static TheoryData<string, bool?, bool?, int> SplitQueryCases => new()
     {
-        new SplitQueryCase("explicit-true", true, null, 4),
-        new SplitQueryCase("explicit-false", false, null, 1),
-        new SplitQueryCase("policy-true", null, true, 4),
-        new SplitQueryCase("policy-false", null, false, 1),
-        new SplitQueryCase("policy-null", null, null, 1)
+        { "explicit-true", true, null, 4 },
+        { "explicit-false", false, null, 1 },
+        { "policy-true", null, true, 4 },
+        { "policy-false", null, false, 1 },
+        { "policy-null", null, null, 1 }
     };
 
     [Theory(DisplayName = "GetAllIncludingDeletedAsync respects UseSplitQuery resolution")]
     [MemberData(nameof(SplitQueryCases))]
-    public async Task GetAllIncludingDeletedAsync_UseSplitQuery_Works(SplitQueryCase testCase)
+    public async Task GetAllIncludingDeletedAsync_UseSplitQuery_Works(string caseId, bool? useSplitQuery, bool? policyDefault, int expectedCount)
     {
-        var policy = new KyrolusRepositoryPolicy { UseSplitQueryDefault = testCase.PolicyDefault };
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        var policy = new KyrolusRepositoryPolicy { UseSplitQueryDefault = policyDefault };
         var customFactory = WithPolicy(policy);
         using var scope = customFactory.Services.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
@@ -35,10 +30,10 @@ public partial class GetAllIncludingDeletedAsyncTests
             includeProperties: ["Reviews", "OrderLines", "ProductCategories"],
             includeGraph: null,
             asNoTracking: true,
-            useSplitQuery: testCase.UseSplitQuery,
+            useSplitQuery: useSplitQuery,
             cancellationToken: default);
 
-        counter.Count.ShouldBe(testCase.ExpectedCount, $"Expected {testCase.ExpectedCount} SQL commands for case '{testCase.CaseId}', got {counter.Count}");
+        counter.Count.ShouldBe(expectedCount, $"Expected {expectedCount} SQL commands for case '{caseId}', got {counter.Count}");
         items.ShouldNotBeNull();
     }
 }

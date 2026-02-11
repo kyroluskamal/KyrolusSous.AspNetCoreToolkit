@@ -1,33 +1,29 @@
-﻿namespace KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.GetAllAsyncTests;
+namespace KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.GetAllAsyncTests;
 
 public partial class GetAllAsyncTests
 {
+    private static readonly IncludeGraph<Product> ReviewsGraph = new(x => x.Reviews);
 
-    [Fact(DisplayName = "GetAllAsync returns entities with UseSplitQuery true")]
-    public async Task GetAllAsync_UseSplitQuery_true_ReturnsEntitiesWithUseSplitQuery()
+    private sealed record SplitQuerySpec(
+        bool? UseSplitQuery,
+        bool? PolicyDefault,
+        string[]? IncludeProperties,
+        IncludeGraph<Product>? IncludeGraph,
+        int ExpectedCount);
+
+    private static readonly IReadOnlyDictionary<string, SplitQuerySpec> SplitQuerySpecs = BuildSplitQuerySpecs();
+
+    public static TheoryData<string> SplitQueryCases => CaseIdsFrom(SplitQuerySpecs);
+
+    [Theory(DisplayName = "GetAllAsync respects UseSplitQuery resolution")]
+    [MemberData(nameof(SplitQueryCases))]
+    public async Task GetAllAsync_UseSplitQuery_Works(string caseId)
     {
-        // Arrange
-        using var scope = Factory.Services.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
-        // Act
-        counter.Reset();
-        var items = await repo.GetAllAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: ["Reviews", "OrderLines", "ProductCategories"],
-            includeGraph: null,
-            asNoTracking: true,
-            useSplitQuery: true,
-            cancellationToken: default);
-        // Assert
-        counter.Count.ShouldBe(4, $"Expected 4 SQL command, got {counter.Count}");
-        items.ShouldNotBeNull();
-    }
-    [Fact(DisplayName = "GetAllAsync uses a single SQL command when UseSplitQuery is false (even with collection includes), method wins")]
-    public async Task GetAllAsync_UseSplitQuery_False_UsesSingleSqlCommand()
-    {
-        using var scope = Factory.Services.CreateScope();
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        var spec = SplitQuerySpecs[caseId];
+        var policy = new KyrolusRepositoryPolicy { UseSplitQueryDefault = spec.PolicyDefault };
+        var customFactory = WithPolicy(policy);
+        using var scope = customFactory.Services.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
         var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
 
@@ -36,235 +32,40 @@ public partial class GetAllAsyncTests
         var items = await repo.GetAllAsync(
             filter: null,
             orderBy: null,
-            includeProperties: ["Reviews", "OrderLines", "ProductCategories"],
-            includeGraph: null,
+            includeProperties: spec.IncludeProperties?.ToList(),
+            includeGraph: spec.IncludeGraph,
             asNoTracking: true,
-            useSplitQuery: false,
+            useSplitQuery: spec.UseSplitQuery,
             cancellationToken: default);
 
-        counter.Count.ShouldBe(1, $"Expected 1 SQL command when UseSplitQuery=false, got {counter.Count}");
-        items.ShouldNotBeNull();
-    }
-    [Fact(DisplayName = "GetAllAsync uses useSplitQuery = null and policy with UseSplitQueryDefault = true, policy wins")]
-    public async Task GetAllAsync_UseSplitQuery_Null_UsesPolicy_UseSplitQueryDefault_True()
-    {
-        var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = true });
-        using var scope = Customfactory.Services.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
-
-        counter.Reset();
-
-        var items = await repo.GetAllAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: ["Reviews", "OrderLines", "ProductCategories"],
-            includeGraph: null,
-            asNoTracking: true,
-            useSplitQuery: null,
-            cancellationToken: default);
-
-        counter.Count.ShouldBe(4, $"Expected {4} SQL commands when UseSplitQuery=null (policy default), got {counter.Count}");
-        items.ShouldNotBeNull();
-    }
-    [Fact(DisplayName = "GetAllAsync uses useSplitQuery = null and policy with UseSplitQueryDefault == false, policy wins")]
-    public async Task GetAllAsync_UseSplitQuery_Null_UsesPolicy_UseSplitQueryDefault_False()
-    {
-        var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = false });
-        using var scope = Customfactory.Services.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
-
-        counter.Reset();
-
-        var items = await repo.GetAllAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: ["Reviews", "OrderLines", "ProductCategories"],
-            includeGraph: null,
-            asNoTracking: true,
-            useSplitQuery: null,
-            cancellationToken: default);
-
-        counter.Count.ShouldBe(1, $"Expected {1} SQL command when mwthod useSplitQuery = null and policy with UseSplitQueryDefault == false, policy wins, got {counter.Count}");
-        items.ShouldNotBeNull();
-    }
-    [Fact(DisplayName = "GetAllAsync uses useSplitQuery = null and policy.UseSplitQueryDefault = null, defaults to false")]
-    public async Task GetAllAsync_UseSplitQuery_Null_UsesPolicy_UseSplitQueryDefault_Null()
-    {
-        var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = null });
-        using var scope = Customfactory.Services.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
-
-        counter.Reset();
-
-        var items = await repo.GetAllAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: ["Reviews", "OrderLines", "ProductCategories"],
-            includeGraph: null,
-            asNoTracking: true,
-            useSplitQuery: null,
-            cancellationToken: default);
-
-        counter.Count.ShouldBe(1, $"Expected {1} SQL command when useSplitQuery = null and policy.UseSplitQueryDefault = null, defaults to false, got {counter.Count}");
-        items.ShouldNotBeNull();
-    }
-    [Fact(DisplayName = "GetAllAsync uses useSplitQuery = true and policy.UseSplitQueryDefault = true, method wins ")]
-    public async Task GetAllAsync_UseSplitQuery_True_UsesPolicy_UseSplitQueryDefault_True()
-    {
-        // Given
-        var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = true });
-        using var scope = Customfactory.Services.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
-
-        counter.Reset();
-        // When
-        var items = await repo.GetAllAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: ["Reviews", "OrderLines", "ProductCategories"],
-            includeGraph: null,
-            asNoTracking: true,
-            useSplitQuery: true,
-            cancellationToken: default);
-        // Then
-        counter.Count.ShouldBe(4, $"Expected {4} SQL commands when UseSplitQuery=true, got {counter.Count}");
-        items.ShouldNotBeNull();
-    }
-    [Fact(DisplayName = "GetAllAsync uses useSplitQuery = false and policy.UseSplitQueryDefault = true, useSplitQuery wins ")]
-    public async Task GetAllAsync_UseSplitQuery_False_UsesPolicy_UseSplitQueryDefault_True()
-    {
-        // Given
-        var Customfactory = WithPolicy(new KyrolusRepositoryPolicy { UseSplitQueryDefault = true });
-        using var scope = Customfactory.Services.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
-
-        counter.Reset();
-        // When
-        var items = await repo.GetAllAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: ["Reviews"],
-            includeGraph: null,
-            asNoTracking: true,
-            useSplitQuery: false,
-            cancellationToken: default);
-        // Then
-        counter.Count.ShouldBe(1, $"Expected {1} SQL commands when UseSplitQuery=true, got {counter.Count}");
+        counter.Count.ShouldBe(spec.ExpectedCount, $"Expected {spec.ExpectedCount} SQL commands for case '{caseId}', got {counter.Count}");
         items.ShouldNotBeNull();
     }
 
-    [Fact(DisplayName = "GetAllAsync uses UseSplitQuery true with a single collection include, uses two SQL commands")]
-    public async Task GetAllAsync_UseSplitQuery_True_WithSingleCollectionInclude_UsesTwoSqlCommands()
-    {
-        using var scope = Factory.Services.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
+    private static IReadOnlyDictionary<string, SplitQuerySpec> BuildSplitQuerySpecs()
+        => new Dictionary<string, SplitQuerySpec>
+        {
+            ["explicit-true-multi"] = new SplitQuerySpec(true, null,
+                ["Reviews", "OrderLines", "ProductCategories"], null, 4),
+            ["explicit-false-multi"] = new SplitQuerySpec(false, null,
+                ["Reviews", "OrderLines", "ProductCategories"], null, 1),
+            ["policy-true-multi"] = new SplitQuerySpec(null, true,
+                ["Reviews", "OrderLines", "ProductCategories"], null, 4),
+            ["policy-false-multi"] = new SplitQuerySpec(null, false,
+                ["Reviews", "OrderLines", "ProductCategories"], null, 1),
+            ["policy-null-multi"] = new SplitQuerySpec(null, null,
+                ["Reviews", "OrderLines", "ProductCategories"], null, 1),
+            ["explicit-true-single-collection"] = new SplitQuerySpec(true, null,
+                ["Reviews"], null, 2),
+            ["explicit-true-no-includes"] = new SplitQuerySpec(true, null,
+                null, null, 1),
+            ["explicit-true-reference-only"] = new SplitQuerySpec(true, null,
+                ["Store"], null, 1),
+            ["explicit-true-graph-collection"] = new SplitQuerySpec(true, null,
+                ["Store"], ReviewsGraph, 2),
+            ["explicit-false-graph-collection"] = new SplitQuerySpec(false, null,
+                ["Store"], ReviewsGraph, 1)
+        };
 
-        counter.Reset();
-
-        var items = await repo.GetAllAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: ["Reviews"],
-            includeGraph: null,
-            asNoTracking: true,
-            useSplitQuery: true,
-            cancellationToken: default);
-
-        counter.Count.ShouldBe(2, $"Expected 2 SQL commands when UseSplitQuery=true with one collection include, got {counter.Count}");
-        items.ShouldNotBeNull();
-    }
-
-    [Fact(DisplayName = "GetAllAsync uses UseSplitQuery true with no includes, uses a single SQL command")]
-    public async Task GetAllAsync_UseSplitQuery_True_WithNoIncludes_UsesSingleSqlCommand()
-    {
-        using var scope = Factory.Services.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
-
-        counter.Reset();
-
-        var items = await repo.GetAllAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: null,
-            includeGraph: null,
-            asNoTracking: true,
-            useSplitQuery: true,
-            cancellationToken: default);
-
-        counter.Count.ShouldBe(1, $"Expected 1 SQL command when UseSplitQuery=true with no includes, got {counter.Count}");
-        items.ShouldNotBeNull();
-    }
-
-    [Fact(DisplayName = "GetAllAsync uses UseSplitQuery true with reference include only, uses single SQL command")]
-    public async Task GetAllAsync_UseSplitQuery_True_WithReferenceInclude_UsesSingleSqlCommand()
-    {
-        using var scope = Factory.Services.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
-
-        counter.Reset();
-
-        var items = await repo.GetAllAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: ["Store"],
-            includeGraph: null,
-            asNoTracking: true,
-            useSplitQuery: true,
-            cancellationToken: default);
-
-        counter.Count.ShouldBe(1, $"Expected 1 SQL command when UseSplitQuery=true with reference include, got {counter.Count}");
-        items.ShouldNotBeNull();
-    }
-
-    [Fact(DisplayName = "GetAllAsync uses UseSplitQuery true with includeGraph collection and reference include, uses two SQL commands")]
-    public async Task GetAllAsync_UseSplitQuery_True_WithIncludeGraphCollection_UsesTwoSqlCommands()
-    {
-        using var scope = Factory.Services.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
-
-        counter.Reset();
-
-        var items = await repo.GetAllAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: ["Store"],
-            includeGraph: new IncludeGraph<Product>(x => x.Reviews),
-            asNoTracking: true,
-            useSplitQuery: true,
-            cancellationToken: default);
-
-        counter.Count.ShouldBe(2, $"Expected 2 SQL commands when UseSplitQuery=true with one collection include, got {counter.Count}");
-        items.ShouldNotBeNull();
-    }
-
-    [Fact(DisplayName = "GetAllAsync uses UseSplitQuery false with includeGraph collection and reference include, uses single SQL command")]
-    public async Task GetAllAsync_UseSplitQuery_False_WithIncludeGraphCollection_UsesSingleSqlCommand()
-    {
-        using var scope = Factory.Services.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
-
-        counter.Reset();
-
-        var items = await repo.GetAllAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: ["Store"],
-            includeGraph: new IncludeGraph<Product>(x => x.Reviews),
-            asNoTracking: true,
-            useSplitQuery: false,
-            cancellationToken: default);
-
-        counter.Count.ShouldBe(1, $"Expected 1 SQL command when UseSplitQuery=false, got {counter.Count}");
-        items.ShouldNotBeNull();
-    }
+    // CaseIdsFrom is defined in GetAllAsyncTests.Helpers.cs
 }

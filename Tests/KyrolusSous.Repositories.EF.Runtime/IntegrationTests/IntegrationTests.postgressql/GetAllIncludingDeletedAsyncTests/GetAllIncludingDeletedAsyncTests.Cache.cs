@@ -1,124 +1,89 @@
-﻿using Microsoft.EntityFrameworkCore.Metadata.Internal;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 
 namespace KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.GetAllIncludingDeletedAsyncTests;
 
-public enum KeyType { Single, Composite }
-
 public partial class GetAllIncludingDeletedAsyncTests
 {
-    readonly KyrolusRepositoryPolicy Policy = new()
+    private readonly KyrolusRepositoryPolicy Policy = new()
     {
         DefaultCachePolicy = new KyrolusCachePolicy(Enabled: true),
         DefaultCacheReadOperations = KyrolusCacheReadOperations.GetAllIncludingDeletedAsync
     };
+
+    public static TheoryData<string> EntityCases => new()
+    {
+        "product",
+        "review"
+    };
+
     [Theory(DisplayName = "GetAllIncludingDeletedAsync caches results when enabled and allowed")]
-    [InlineData(KeyType.Single)]
-    [InlineData(KeyType.Composite)]
-    public async Task GetAllIncludingDeletedAsync_Caches_WhenEnabled(KeyType keyTYpe)
+    [MemberData(nameof(EntityCases))]
+    public Task GetAllIncludingDeletedAsync_Caches_WhenEnabled(string caseId)
     {
-        if (keyTYpe == KeyType.Single)
-        {
-            await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, repo, sp) =>
-            {
-                var cache = sp?.GetRequiredService<InMemoryCacheProvider>();
-                var counter = sp?.GetRequiredService<CommandCounterInterceptor>();
-                await AssertCachingWorks<Product>(cache!, counter!, async ()
-                =>
-                {
-                    return await repo.GetAllIncludingDeletedAsync();
-                });
-            }, null, Policy);
-            await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, repo, sp) =>
-            {
-                var cache = sp?.GetRequiredService<InMemoryCacheProvider>();
-                var counter = sp?.GetRequiredService<CommandCounterInterceptor>();
-                await AssertCachingWorks<Product>(cache!, counter!, async ()
-                =>
-                {
-                    return await repo.GetAllIncludingDeletedAsync(null, null, null, null, default, null);
-                });
-            }, null, Policy);
-        }
-        else
-        {
-            await WithSoftDeletedAsync_CompositeKey<Review>(DataSeeder.ReviewLapTopKey, async (_, reviews, _, repo, sp) =>
-            {
-                var cache = sp?.GetRequiredService<InMemoryCacheProvider>();
-                var counter = sp?.GetRequiredService<CommandCounterInterceptor>();
-                await AssertCachingWorks(cache!, counter!, async () =>
-                {
-                    return await repo.GetAllIncludingDeletedAsync(null, null, null, null, default, null);
-                });
-            }, null, Policy);
-        }
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        return caseId == "product"
+            ? AssertCacheEnabledForProduct()
+            : AssertCacheEnabledForReview();
     }
+
     [Theory(DisplayName = "GetAllIncludingDeletedAsync does not cache when filter is provided")]
-    [InlineData(KeyType.Single)]
-    [InlineData(KeyType.Composite)]
-    public async Task GetAllIncludingDeletedAsync_DoesNotCache_WithFilter(KeyType keyType)
+    [MemberData(nameof(EntityCases))]
+    public Task GetAllIncludingDeletedAsync_DoesNotCache_WithFilter(string caseId)
     {
-        await TestNoCacheSingleKey(keyType, repo => repo.GetAllIncludingDeletedAsync(p => p.Price > 0m));
-        await TestNoCacheSingleKey(keyType, repo => repo.GetAllIncludingDeletedAsync(p => p.Price > 0m, null, null, null, default, null));
-        await TestNoCacheCompositeKey(keyType, repo => repo.GetAllIncludingDeletedAsync(p => p.Rating > 0));
-        await TestNoCacheCompositeKey(keyType, repo => repo.GetAllIncludingDeletedAsync(p => p.Rating > 0, null, null, null, default, null));
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        return caseId == "product"
+            ? AssertNoCacheWithFilterProduct()
+            : AssertNoCacheWithFilterReview();
     }
+
     [Theory(DisplayName = "GetAllIncludingDeletedAsync does not cache when includes are provided")]
-    [InlineData(KeyType.Single)]
-    [InlineData(KeyType.Composite)]
-    public async Task GetAllIncludingDeletedAsync_DoesNotCache_WithIncludes(KeyType keyType)
+    [MemberData(nameof(EntityCases))]
+    public Task GetAllIncludingDeletedAsync_DoesNotCache_WithIncludes(string caseId)
     {
-        await TestNoCacheSingleKey(keyType, repo => repo.GetAllIncludingDeletedAsync(includeProperties: [nameof(Product.Reviews)]));
-        await TestNoCacheCompositeKey(keyType, repo => repo.GetAllIncludingDeletedAsync(includeProperties: [nameof(Review.Product)]));
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        return caseId == "product"
+            ? AssertNoCacheWithIncludesProduct()
+            : AssertNoCacheWithIncludesReview();
     }
+
     [Theory(DisplayName = "GetAllIncludingDeletedAsync does not cache when orderBy is provided")]
-    [InlineData(KeyType.Single)]
-    [InlineData(KeyType.Composite)]
-    public async Task GetAllIncludingDeletedAsync_DoesNotCache_WithOrderBy(KeyType keyType)
+    [MemberData(nameof(EntityCases))]
+    public Task GetAllIncludingDeletedAsync_DoesNotCache_WithOrderBy(string caseId)
     {
-        await TestNoCacheSingleKey(keyType, repo => repo.GetAllIncludingDeletedAsync(orderBy: q => q.OrderBy(p => p.Price)));
-        await TestNoCacheSingleKey(keyType, repo => repo.GetAllIncludingDeletedAsync(null, orderBy: q => q.OrderBy(p => p.Price), null, null, default, null));
-        await TestNoCacheCompositeKey(keyType, repo => repo.GetAllIncludingDeletedAsync(orderBy: q => q.OrderBy(p => p.Rating)));
-        await TestNoCacheCompositeKey(keyType, repo => repo.GetAllIncludingDeletedAsync(null, orderBy: q => q.OrderBy(p => p.Rating), null, null, default, null));
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        return caseId == "product"
+            ? AssertNoCacheWithOrderByProduct()
+            : AssertNoCacheWithOrderByReview();
     }
+
     [Theory(DisplayName = "GetAllIncludingDeletedAsync does not cache when includeGraph is provided")]
-    [InlineData(KeyType.Single)]
-    [InlineData(KeyType.Composite)]
-    public async Task GetAllIncludingDeletedAsync_DoesNotCache_WithIncludeGraph(KeyType keyType)
+    [MemberData(nameof(EntityCases))]
+    public Task GetAllIncludingDeletedAsync_DoesNotCache_WithIncludeGraph(string caseId)
     {
-        await TestNoCacheSingleKey(keyType, repo => repo.GetAllIncludingDeletedAsync(includeGraph: new IncludeGraph<Product>(x => x.Reviews)));
-        await TestNoCacheCompositeKey(keyType, repo => repo.GetAllIncludingDeletedAsync(includeGraph: new IncludeGraph<Review>(x => x.Product)));
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        return caseId == "product"
+            ? AssertNoCacheWithIncludeGraphProduct()
+            : AssertNoCacheWithIncludeGraphReview();
     }
+
     [Theory(DisplayName = "GetAllIncludingDeletedAsync does not cache when includeExpressions are provided")]
-    [InlineData(KeyType.Single)]
-    [InlineData(KeyType.Composite)]
-    public async Task GetAllIncludingDeletedAsync_DoesNotCache_WithIncludeExpressions(KeyType keyType)
+    [MemberData(nameof(EntityCases))]
+    public Task GetAllIncludingDeletedAsync_DoesNotCache_WithIncludeExpressions(string caseId)
     {
-        await TestNoCacheSingleKey(keyType, repo => repo.GetAllIncludingDeletedAsync(includeExpressions: p => p.Reviews));
-        await TestNoCacheCompositeKey(keyType, repo => repo.GetAllIncludingDeletedAsync(includeExpressions: p => p.Product));
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        return caseId == "product"
+            ? AssertNoCacheWithIncludeExpressionsProduct()
+            : AssertNoCacheWithIncludeExpressionsReview();
     }
 
     [Theory(DisplayName = "GetAllIncludingDeletedAsync does not cache when read operations are not allowed")]
-    [InlineData(KeyType.Single)]
-    [InlineData(KeyType.Composite)]
-    public async Task GetAllIncludingDeletedAsync_DoesNotCache_WhenReadOpsDisallow(KeyType keyType)
+    [MemberData(nameof(EntityCases))]
+    public Task GetAllIncludingDeletedAsync_DoesNotCache_WhenReadOpsDisallow(string caseId)
     {
-        var policy = new KyrolusRepositoryPolicy
-        {
-            DefaultCachePolicy = new KyrolusCachePolicy(Enabled: true),
-            DefaultCacheReadOperations = KyrolusCacheReadOperations.None
-        };
-        if (keyType == KeyType.Single)
-            await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, repo, sp) =>
-            {
-                var cache = sp?.GetRequiredService<InMemoryCacheProvider>();
-                await AssertCachingNotWorks(cache!, async () => await repo.GetAllIncludingDeletedAsync());
-            }, null, policy);
-        else
-            await WithSoftDeletedAsync_CompositeKey<Review>(DataSeeder.ReviewLapTopKey, async (_, reviews, _, repo, sp) =>
-            {
-                var cache = sp?.GetRequiredService<InMemoryCacheProvider>();
-                await AssertCachingNotWorks(cache!, async () => await repo.GetAllIncludingDeletedAsync());
-            }, null, policy);
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        return caseId == "product"
+            ? AssertNoCacheWhenReadOpsDisallowProduct()
+            : AssertNoCacheWhenReadOpsDisallowReview();
     }
 
     [Fact(DisplayName = "GetAllIncludingDeletedAsync cache key varies by tenant scope")]
@@ -153,11 +118,127 @@ public partial class GetAllIncludingDeletedAsyncTests
         itemsB.Count.ShouldBe(3);
         cache.Count.ShouldBe(2);
     }
+
+    private async Task AssertCacheEnabledForProduct()
+    {
+        await WithProductSoftDeleted(async (repo, sp) =>
+        {
+            var cache = sp.GetRequiredService<InMemoryCacheProvider>();
+            var counter = sp.GetRequiredService<CommandCounterInterceptor>();
+            await AssertCachingWorks(cache, counter, async () => await repo.GetAllIncludingDeletedAsync());
+        }, policy: Policy);
+
+        await WithProductSoftDeleted(async (repo, sp) =>
+        {
+            var cache = sp.GetRequiredService<InMemoryCacheProvider>();
+            var counter = sp.GetRequiredService<CommandCounterInterceptor>();
+            await AssertCachingWorks(cache, counter, async () =>
+                await repo.GetAllIncludingDeletedAsync(null, null, null, null, default, null));
+        }, policy: Policy);
+    }
+
+    private Task AssertCacheEnabledForReview()
+        => WithReviewSoftDeleted(async (repo, sp) =>
+        {
+            var cache = sp.GetRequiredService<InMemoryCacheProvider>();
+            var counter = sp.GetRequiredService<CommandCounterInterceptor>();
+            await AssertCachingWorks(cache, counter, async () =>
+                await repo.GetAllIncludingDeletedAsync(null, null, null, null, default, null));
+        }, policy: Policy);
+
+    private async Task AssertNoCacheWithFilterProduct()
+    {
+        await AssertNoCacheProduct(repo => repo.GetAllIncludingDeletedAsync(p => p.Price > 0m));
+        await AssertNoCacheProduct(repo => repo.GetAllIncludingDeletedAsync(p => p.Price > 0m, null, null, null, default, null));
+    }
+
+    private async Task AssertNoCacheWithFilterReview()
+    {
+        await AssertNoCacheReview(repo => repo.GetAllIncludingDeletedAsync(p => p.Rating > 0));
+        await AssertNoCacheReview(repo => repo.GetAllIncludingDeletedAsync(p => p.Rating > 0, null, null, null, default, null));
+    }
+
+    private Task AssertNoCacheWithIncludesProduct()
+        => AssertNoCacheProduct(repo => repo.GetAllIncludingDeletedAsync(includeProperties: [nameof(Product.Reviews)]));
+
+    private Task AssertNoCacheWithIncludesReview()
+        => AssertNoCacheReview(repo => repo.GetAllIncludingDeletedAsync(includeProperties: [nameof(Review.Product)]));
+
+    private async Task AssertNoCacheWithOrderByProduct()
+    {
+        await AssertNoCacheProduct(repo => repo.GetAllIncludingDeletedAsync(orderBy: q => q.OrderBy(p => p.Price)));
+        await AssertNoCacheProduct(repo => repo.GetAllIncludingDeletedAsync(null, orderBy: q => q.OrderBy(p => p.Price), null, null, default, null));
+    }
+
+    private async Task AssertNoCacheWithOrderByReview()
+    {
+        await AssertNoCacheReview(repo => repo.GetAllIncludingDeletedAsync(orderBy: q => q.OrderBy(p => p.Rating)));
+        await AssertNoCacheReview(repo => repo.GetAllIncludingDeletedAsync(null, orderBy: q => q.OrderBy(p => p.Rating), null, null, default, null));
+    }
+
+    private Task AssertNoCacheWithIncludeGraphProduct()
+        => AssertNoCacheProduct(repo => repo.GetAllIncludingDeletedAsync(includeGraph: new IncludeGraph<Product>(x => x.Reviews)));
+
+    private Task AssertNoCacheWithIncludeGraphReview()
+        => AssertNoCacheReview(repo => repo.GetAllIncludingDeletedAsync(includeGraph: new IncludeGraph<Review>(x => x.Product)));
+
+    private Task AssertNoCacheWithIncludeExpressionsProduct()
+        => AssertNoCacheProduct(repo => repo.GetAllIncludingDeletedAsync(includeExpressions: p => p.Reviews));
+
+    private Task AssertNoCacheWithIncludeExpressionsReview()
+        => AssertNoCacheReview(repo => repo.GetAllIncludingDeletedAsync(includeExpressions: p => p.Product));
+
+    private Task AssertNoCacheWhenReadOpsDisallowProduct()
+    {
+        var policy = new KyrolusRepositoryPolicy
+        {
+            DefaultCachePolicy = new KyrolusCachePolicy(Enabled: true),
+            DefaultCacheReadOperations = KyrolusCacheReadOperations.None
+        };
+
+        return WithProductSoftDeleted(async (repo, sp) =>
+        {
+            var cache = sp.GetRequiredService<InMemoryCacheProvider>();
+            await AssertCachingNotWorks(cache, async () => await repo.GetAllIncludingDeletedAsync());
+        }, policy: policy);
+    }
+
+    private Task AssertNoCacheWhenReadOpsDisallowReview()
+    {
+        var policy = new KyrolusRepositoryPolicy
+        {
+            DefaultCachePolicy = new KyrolusCachePolicy(Enabled: true),
+            DefaultCacheReadOperations = KyrolusCacheReadOperations.None
+        };
+
+        return WithReviewSoftDeleted(async (repo, sp) =>
+        {
+            var cache = sp.GetRequiredService<InMemoryCacheProvider>();
+            await AssertCachingNotWorks(cache, async () => await repo.GetAllIncludingDeletedAsync());
+        }, policy: policy);
+    }
+
+    private async Task AssertNoCacheProduct(
+        Func<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>, Task<IReadOnlyList<Product>>> act)
+        => await WithProductSoftDeleted(async (repo, sp) =>
+        {
+            var cache = sp.GetRequiredService<InMemoryCacheProvider>();
+            await AssertCachingNotWorks(cache, async () => await act(repo));
+        }, policy: Policy);
+
+    private async Task AssertNoCacheReview(
+        Func<KyrolusCompositeKeySoftDeleteRepositoryAsync<ApplicationDbContext, Review>, Task<IReadOnlyList<Review>>> act)
+        => await WithReviewSoftDeleted(async (repo, sp) =>
+        {
+            var cache = sp.GetRequiredService<InMemoryCacheProvider>();
+            await AssertCachingNotWorks(cache, async () => await act(repo));
+        }, policy: Policy);
+
     private static async Task AssertCachingWorks<TEntity>(
-    InMemoryCacheProvider cache,
-    CommandCounterInterceptor counter,
-    Func<Task<IReadOnlyList<TEntity>?>> act,
-    int expectedCount = 3)
+        InMemoryCacheProvider cache,
+        CommandCounterInterceptor counter,
+        Func<Task<IReadOnlyList<TEntity>?>> act,
+        int expectedCount = 3)
     {
         counter.Reset();
         var first = await act();
@@ -173,10 +254,11 @@ public partial class GetAllIncludingDeletedAsyncTests
         cache.Count.ShouldBe(1);
         counter.Count.ShouldBe(0);
     }
+
     private static async Task AssertCachingNotWorks<TEntity>(
-    InMemoryCacheProvider cache,
-    Func<Task<IReadOnlyList<TEntity>?>> act,
-    int expectedCount = 3)
+        InMemoryCacheProvider cache,
+        Func<Task<IReadOnlyList<TEntity>?>> act,
+        int expectedCount = 3)
     {
         cache.Clear();
         cache.Count.ShouldBe(0);
@@ -184,26 +266,5 @@ public partial class GetAllIncludingDeletedAsyncTests
         items.ShouldNotBeNull();
         items.Count.ShouldBe(expectedCount);
         cache.Count.ShouldBe(0);
-    }
-
-    private async Task TestNoCacheSingleKey(KeyType keyType, Func<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>, Task<IReadOnlyList<Product>>> act)
-    {
-        if (keyType == KeyType.Single)
-            await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, repo, sp) =>
-            {
-                var cache = sp?.GetRequiredService<InMemoryCacheProvider>();
-                await AssertCachingNotWorks(cache!, async () => { return await act(repo); });
-
-            }, null, Policy);
-    }
-    private async Task TestNoCacheCompositeKey(KeyType keyType, Func<KyrolusCompositeKeySoftDeleteRepositoryAsync<ApplicationDbContext, Review>, Task<IReadOnlyList<Review>>> act)
-    {
-        if (keyType == KeyType.Composite)
-            await WithSoftDeletedAsync_CompositeKey<Review>(DataSeeder.ReviewLapTopKey, async (_, reviews, _, repo, sp) =>
-            {
-                var cache = sp?.GetRequiredService<InMemoryCacheProvider>();
-                await AssertCachingNotWorks(cache!, async () =>
-                await act(repo));
-            }, null, Policy);
     }
 }

@@ -2,34 +2,15 @@
 
 public partial class GetAllIncludingDeletedAsyncTests
 {
-    public sealed record IncludePolicyCase(
-        string CaseId,
+    private sealed record IncludePolicySpec(
         KyrolusDefaultIncludeMode? Mode,
         string[]? IncludeProperties,
         bool? ExpectStore,
         bool? ExpectReviews);
 
-    public static TheoryData<IncludePolicyCase> IncludePolicyCases => new()
-    {
-        new IncludePolicyCase(
-            "default",
-            null,
-            null,
-            ExpectStore: true,
-            ExpectReviews: null),
-        new IncludePolicyCase(
-            "merge",
-            KyrolusDefaultIncludeMode.Merge,
-            [nameof(Product.Reviews)],
-            ExpectStore: true,
-            ExpectReviews: true),
-        new IncludePolicyCase(
-            "replace",
-            KyrolusDefaultIncludeMode.Replace,
-            [nameof(Product.Reviews)],
-            ExpectStore: false,
-            ExpectReviews: true)
-    };
+    private static readonly IReadOnlyDictionary<string, IncludePolicySpec> IncludePolicySpecs = BuildIncludePolicySpecs();
+
+    public static TheoryData<string> IncludePolicyCases => CaseIdsFrom(IncludePolicySpecs);
 
     [Fact(DisplayName = "GetAllIncludingDeletedAsync returns entities with includes")]
     public async Task GetAllIncludingDeletedAsync_Includes_Works()
@@ -97,11 +78,13 @@ public partial class GetAllIncludingDeletedAsyncTests
 
     [Theory(DisplayName = "GetAllIncludingDeletedAsync applies default include policy")]
     [MemberData(nameof(IncludePolicyCases))]
-    public async Task GetAllIncludingDeletedAsync_DefaultIncludes_Policy_Works(IncludePolicyCase testCase)
+    public async Task GetAllIncludingDeletedAsync_DefaultIncludes_Policy_Works(string caseId)
     {
-        var policy = testCase.Mode is null
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        var spec = IncludePolicySpecs[caseId];
+        var policy = spec.Mode is null
             ? new KyrolusRepositoryPolicy().SetDefaultIncludeProperties<Product>("Store")
-            : new KyrolusRepositoryPolicy { DefaultIncludeMode = testCase.Mode.Value }
+            : new KyrolusRepositoryPolicy { DefaultIncludeMode = spec.Mode.Value }
                 .SetDefaultIncludeProperties<Product>("Store");
 
         var customFactory = WithPolicy(policy);
@@ -111,16 +94,38 @@ public partial class GetAllIncludingDeletedAsyncTests
         var items = await repo.GetAllIncludingDeletedAsync(
             filter: null,
             orderBy: null,
-            includeProperties: testCase.IncludeProperties?.ToList(),
+            includeProperties: spec.IncludeProperties?.ToList(),
             includeGraph: null,
             asNoTracking: true,
             useSplitQuery: true,
             cancellationToken: default);
 
         items.Count.ShouldBe(3);
-        if (testCase.ExpectStore is not null)
-            items.All(p => (p.Store is not null) == testCase.ExpectStore.Value).ShouldBeTrue();
-        if (testCase.ExpectReviews is not null)
-            items.All(p => (p.Reviews is not null) == testCase.ExpectReviews.Value).ShouldBeTrue();
+        if (spec.ExpectStore is not null)
+            items.All(p => (p.Store is not null) == spec.ExpectStore.Value).ShouldBeTrue();
+        if (spec.ExpectReviews is not null)
+            items.All(p => (p.Reviews is not null) == spec.ExpectReviews.Value).ShouldBeTrue();
     }
+
+    private static IReadOnlyDictionary<string, IncludePolicySpec> BuildIncludePolicySpecs()
+        => new Dictionary<string, IncludePolicySpec>
+        {
+            ["default"] = new IncludePolicySpec(
+                null,
+                null,
+                ExpectStore: true,
+                ExpectReviews: null),
+            ["merge"] = new IncludePolicySpec(
+                KyrolusDefaultIncludeMode.Merge,
+                [nameof(Product.Reviews)],
+                ExpectStore: true,
+                ExpectReviews: true),
+            ["replace"] = new IncludePolicySpec(
+                KyrolusDefaultIncludeMode.Replace,
+                [nameof(Product.Reviews)],
+                ExpectStore: false,
+                ExpectReviews: true)
+        };
+
+    // CaseIdsFrom is defined in GetAllIncludingDeletedAsyncTests.Helpers.cs
 }

@@ -2,108 +2,40 @@
 
 public partial class GetAllAsyncTests
 {
-    [Fact(DisplayName = "GetAllAsync returns entities with AsNoTracking = true")]
-    public async Task GetAllAsync_AsNoTracking_ReturnsEntitiesWithAsNoTracking()
+    public static TheoryData<string, bool?, bool?, bool> AsNoTrackingCases => new()
     {
-        // Arrange
-        using var scope = Factory.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        dbContext.ChangeTracker.Clear();
-        // Act
-        await repo.GetAllAsync(
-                    filter: null,
-                    orderBy: null,
-                    includeProperties: null,
-                    includeGraph: null,
-                    asNoTracking: true,
-                    useSplitQuery: null,
-                    cancellationToken: default);
-        // Assert
-        dbContext.ChangeTracker.Entries().ShouldBeEmpty();
-    }
-    [Fact(DisplayName = "GetAllAsync returns entities with AsNoTracking = false")]
-    public async Task GetAllAsync_AsNoTrackingFalse_ReturnsEntitiesWithAsNoTrackingFalse()
-    {
-        // Arrange
-        using var scope = Factory.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
+        { "explicit-true", true, null, true },
+        { "explicit-false", false, null, false },
+        { "policy-true", null, true, true },
+        { "policy-false", null, false, false },
+        { "policy-null", null, null, true }
+    };
 
-        // Act
-        dbContext.ChangeTracker.Clear();
-
-        await repo.GetAllAsync(
-                    filter: null,
-                    orderBy: null,
-                    includeProperties: null,
-                    includeGraph: null,
-                    asNoTracking: false,
-                    useSplitQuery: null,
-                    cancellationToken: default);
-        dbContext.ChangeTracker.Entries().ShouldNotBeEmpty();
-    }
-    [Fact(DisplayName = "GetAllAsync returns entities with AsNoTracking = null and Policy.AsNoTrackingDefault == true")]
-    public async Task GetAllAsync_AsNoTracking_Null_AsNoTrackingDefaultFromPolicy_true()
+    [Theory(DisplayName = "GetAllAsync respects AsNoTracking resolution")]
+    [MemberData(nameof(AsNoTrackingCases))]
+    public async Task GetAllAsync_AsNoTracking_Works(string caseId, bool? input, bool? policyDefault, bool expectNoTracking)
     {
-        // Arrange
-        var customFactory = WithPolicy(new KyrolusRepositoryPolicy { AsNoTrackingDefault = true });
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        var policy = new KyrolusRepositoryPolicy { AsNoTrackingDefault = policyDefault };
+        var customFactory = WithPolicy(policy);
         using var scope = customFactory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        // Act
+
         dbContext.ChangeTracker.Clear();
 
         await repo.GetAllAsync(
-                    filter: null,
-                    orderBy: null,
-                    includeProperties: null,
-                    includeGraph: null,
-                    asNoTracking: null,
-                    useSplitQuery: null,
-                    cancellationToken: default);
-        dbContext.ChangeTracker.Entries().ShouldBeEmpty();
-    }
-    [Fact(DisplayName = "GetAllAsync returns entities with AsNoTracking = null and Policy.AsNoTrackingDefault == false")]
-    public async Task GetAllAsync_AsNoTracking_Null_AsNoTrackingDefaultFromPolicy_false()
-    {
-        // Arrange
-        var customFactory = WithPolicy(new KyrolusRepositoryPolicy { AsNoTrackingDefault = false });
-        using var scope = customFactory.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        // Act
-        dbContext.ChangeTracker.Clear();
+            filter: null,
+            orderBy: null,
+            includeProperties: null,
+            includeGraph: null,
+            asNoTracking: input,
+            useSplitQuery: null,
+            cancellationToken: default);
 
-        await repo.GetAllAsync(
-                    filter: null,
-                    orderBy: null,
-                    includeProperties: null,
-                    includeGraph: null,
-                    asNoTracking: null,
-                    useSplitQuery: null,
-                    cancellationToken: default);
-        dbContext.ChangeTracker.Entries().ShouldNotBeEmpty();
-    }
-    [Fact(DisplayName = "GetAllAsync uses default AsNoTracking when asNoTracking = null and Policy.AsNoTrackingDefault == null")]
-    public async Task GetAllAsync_AsNoTracking_Null_AsNoTrackingDefault_Null_UsesDefaultPolicy()
-    {
-        // Arrange
-        var customFactory = WithPolicy(new KyrolusRepositoryPolicy { AsNoTrackingDefault = null });
-        using var scope = customFactory.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        // Act
-        dbContext.ChangeTracker.Clear();
-
-        await repo.GetAllAsync(
-                    filter: null,
-                    orderBy: null,
-                    includeProperties: null,
-                    includeGraph: null,
-                    asNoTracking: null,
-                    useSplitQuery: null,
-                    cancellationToken: default);
-        dbContext.ChangeTracker.Entries().ShouldBeEmpty();
+        if (expectNoTracking)
+            dbContext.ChangeTracker.Entries().ShouldBeEmpty();
+        else
+            dbContext.ChangeTracker.Entries().ShouldNotBeEmpty();
     }
 }

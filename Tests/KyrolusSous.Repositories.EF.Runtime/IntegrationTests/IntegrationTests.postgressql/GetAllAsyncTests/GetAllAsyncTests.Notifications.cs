@@ -2,41 +2,49 @@
 
 public partial class GetAllAsyncTests
 {
-    [Fact(DisplayName = "GetAllAsync Should record Event before and After execution")]
-    public async Task GetAllAsync_ShouldRecordEventBeforeAndAfterExecution()
+    public static TheoryData<string, bool, bool> ObserverCases => new()
     {
-        // Given
-        using var scope = Factory.Services.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        var observer = scope.ServiceProvider.GetRequiredService<TestRepositoryObserver>();
-        observer.Reset();
-        // When
-        await repo.GetAllAsync();
-        // Then
-        var beforeEvent = observer.Events.Count(e => e.Stage == ObserverState.Before && e.Operation == "GetAllAsync");
-        beforeEvent.ShouldBe(1);
-        var afterEvent = observer.Events.Count(e => e.Stage == ObserverState.After && e.Operation == "GetAllAsync");
-        afterEvent.ShouldBe(1);
-    }
+        { "success", false, false },
+        { "exception", true, true }
+    };
 
-    [Fact(DisplayName = "GetAllAsync Should notify after finishing with exception if there was an error")]
-    public async Task ShouldNotifyAfterFinishingWithException()
+    [Theory(DisplayName = "GetAllAsync records observer events")]
+    [MemberData(nameof(ObserverCases))]
+    public async Task GetAllAsync_Observer_Events(string caseId, bool shouldThrow, bool expectExceptionAfter)
     {
+        caseId.ShouldNotBeNullOrWhiteSpace();
         using var scope = Factory.Services.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
         var observer = scope.ServiceProvider.GetRequiredService<TestRepositoryObserver>();
         observer.Reset();
-        await Should.ThrowAsync<InvalidOperationException>(async () =>
+
+        if (shouldThrow)
         {
-            await repo.GetAllAsync(
-                filter: null,
-                orderBy: null,
-                includeProperties: ["NotARealNavigation"],
-                includeGraph: null,
-                asNoTracking: true,
-                useSplitQuery: true,
-                cancellationToken: default);
-        });
-        observer.Events.Count(e => e.Stage == ObserverState.After && e.Operation == "GetAllAsync" && e.Exception is not null).ShouldBe(1);
+            await Should.ThrowAsync<InvalidOperationException>(async () =>
+            {
+                await repo.GetAllAsync(
+                    filter: null,
+                    orderBy: null,
+                    includeProperties: ["NotARealNavigation"],
+                    includeGraph: null,
+                    asNoTracking: true,
+                    useSplitQuery: true,
+                    cancellationToken: default);
+            });
+        }
+        else
+        {
+            await repo.GetAllAsync();
+        }
+
+        observer.Events.Count(e => e.Stage == ObserverState.Before && e.Operation == "GetAllAsync").ShouldBe(1);
+        var afterEvents = observer.Events
+            .Where(e => e.Stage == ObserverState.After && e.Operation == "GetAllAsync")
+            .ToList();
+        afterEvents.Count.ShouldBe(1);
+        if (expectExceptionAfter)
+            afterEvents[0].Exception.ShouldNotBeNull();
+        else
+            afterEvents[0].Exception.ShouldBeNull();
     }
 }

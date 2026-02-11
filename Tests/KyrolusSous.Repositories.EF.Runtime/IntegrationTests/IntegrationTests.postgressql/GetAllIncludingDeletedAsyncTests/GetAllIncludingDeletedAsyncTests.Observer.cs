@@ -2,24 +2,23 @@
 
 public partial class GetAllIncludingDeletedAsyncTests
 {
-    public sealed record ObserverCase(string CaseId, bool ShouldThrow, bool ExpectExceptionAfter);
-
-    public static TheoryData<ObserverCase> ObserverCases =>
-    [
-        new ObserverCase("success", false, false),
-        new ObserverCase("exception", true, true)
-    ];
+    public static TheoryData<string, bool, bool> ObserverCases => new()
+    {
+        { "success", false, false },
+        { "exception", true, true }
+    };
 
     [Theory(DisplayName = "GetAllIncludingDeletedAsync records observer events")]
     [MemberData(nameof(ObserverCases))]
-    public async Task GetAllIncludingDeletedAsync_Observer_Events(ObserverCase testCase)
+    public async Task GetAllIncludingDeletedAsync_Observer_Events(string caseId, bool shouldThrow, bool expectExceptionAfter)
     {
+        caseId.ShouldNotBeNullOrWhiteSpace();
         using var scope = Factory.Services.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
         var observer = scope.ServiceProvider.GetRequiredService<TestRepositoryObserver>();
         observer.Reset();
 
-        if (testCase.ShouldThrow)
+        if (shouldThrow)
         {
             await Should.ThrowAsync<InvalidOperationException>(async () =>
             {
@@ -43,7 +42,7 @@ public partial class GetAllIncludingDeletedAsyncTests
             .Where(e => e.Stage == ObserverState.After && e.Operation == "GetAllIncludingDeletedAsync")
             .ToList();
         afterEvents.Count.ShouldBe(1);
-        if (testCase.ExpectExceptionAfter)
+        if (expectExceptionAfter)
             afterEvents[0].Exception.ShouldNotBeNull();
         else
             afterEvents[0].Exception.ShouldBeNull();

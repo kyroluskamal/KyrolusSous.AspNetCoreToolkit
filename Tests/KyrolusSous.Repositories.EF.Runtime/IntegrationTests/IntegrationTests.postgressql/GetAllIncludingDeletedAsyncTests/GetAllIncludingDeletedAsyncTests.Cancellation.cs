@@ -1,31 +1,30 @@
-﻿namespace KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.GetAllIncludingDeletedAsyncTests;
+namespace KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.GetAllIncludingDeletedAsyncTests;
 
 public partial class GetAllIncludingDeletedAsyncTests
 {
-    public sealed record CancellationCase(KeyType KeyType, string IncludeProperty);
-
-    public static TheoryData<CancellationCase> CancellationCases => new()
-    {
-        new CancellationCase(KeyType.Single, nameof(Product.Reviews)),
-        new CancellationCase(KeyType.Composite, nameof(Review.Product))
-    };
+    public static TheoryData<string> CancellationCases =>
+    [
+        "product",
+        "review"
+    ];
 
     [Theory(DisplayName = "GetAllIncludingDeletedAsync respects cancellation token")]
     [MemberData(nameof(CancellationCases))]
-    public async Task GetAllIncludingDeletedAsync_CanceledToken_ThrowsOperationCanceled(CancellationCase testCase)
+    public async Task GetAllIncludingDeletedAsync_CanceledToken_ThrowsOperationCanceled(string caseId)
     {
+        caseId.ShouldNotBeNullOrWhiteSpace();
         using var scope = Factory.Services.CreateScope();
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        if (testCase.KeyType == KeyType.Single)
+        if (caseId == "product")
         {
             var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
 
             await Should.ThrowAsync<OperationCanceledException>(async () =>
             {
                 await repo.GetAllIncludingDeletedAsync(
-                    includeProperties: [testCase.IncludeProperty],
+                    includeProperties: [nameof(Product.Reviews)],
                     asNoTracking: true,
                     useSplitQuery: true,
                     cancellationToken: cts.Token);
@@ -46,7 +45,7 @@ public partial class GetAllIncludingDeletedAsyncTests
         await Should.ThrowAsync<OperationCanceledException>(async () =>
         {
             await compositeRepo.GetAllIncludingDeletedAsync(
-                includeProperties: [testCase.IncludeProperty],
+                includeProperties: [nameof(Review.Product)],
                 asNoTracking: true,
                 useSplitQuery: true,
                 cancellationToken: cts.Token);

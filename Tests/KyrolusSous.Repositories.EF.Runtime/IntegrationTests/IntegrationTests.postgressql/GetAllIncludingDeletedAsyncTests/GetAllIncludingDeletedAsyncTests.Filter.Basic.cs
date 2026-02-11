@@ -1,135 +1,232 @@
-﻿
 namespace KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.GetAllIncludingDeletedAsyncTests;
 
 public partial class GetAllIncludingDeletedAsync_Filter(WebApplicationFactory<Program> factory) : KyrolusRuntimePSFixture(factory)
 {
+    private static readonly IReadOnlyDictionary<string, EntitySpec> NoFilterSpecs = new Dictionary<string, EntitySpec>
+    {
+        ["product"] = new(EntityKind.Product, null, p => p.Count.ShouldBe(3), null),
+        ["review"] = new(EntityKind.Review, null, null, r => r.Count.ShouldBe(3))
+    };
+
+    public static TheoryData<string> NoFilterCases => CaseIdsFrom(NoFilterSpecs);
+
     [Theory(DisplayName = "GetAllIncludingDeletedAsync returns all entities with no filters")]
-    [InlineData(KeyType.Single)]
-    [InlineData(KeyType.Composite)]
-    public async Task GetAllIncludingDeletedAsync_NoFilter_ReturnsAll(KeyType keyType)
+    [MemberData(nameof(NoFilterCases))]
+    public Task GetAllIncludingDeletedAsync_NoFilter_ReturnsAll(string caseId)
     {
-        await TestSingleKey(keyType, (p) => p.Count.ShouldBe(3));
-        await TestCompositeKey(keyType, (r) => r.Count.ShouldBe(3));
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        return RunEntityCase(NoFilterSpecs, caseId);
     }
+
+    private static readonly IReadOnlyDictionary<string, EntitySpec> OrderingSpecs = new Dictionary<string, EntitySpec>
+    {
+        ["product"] = new(EntityKind.Product,
+            new QueryRequest(OrderBy: [new OrderClause(nameof(Product.StockQuantity))]),
+            p => p.Select(x => x.StockQuantity).ShouldBeInOrder(),
+            null),
+        ["review"] = new(EntityKind.Review,
+            new QueryRequest(OrderBy: [new OrderClause(nameof(Review.Rating))]),
+            null,
+            r => r.Select(x => x.Rating).ShouldBeInOrder())
+    };
+
+    public static TheoryData<string> OrderingCases => CaseIdsFrom(OrderingSpecs);
+
     [Theory(DisplayName = "GetAllIncludingDeletedAsync returns entities with Assencding ordering")]
-    [InlineData(KeyType.Single)]
-    [InlineData(KeyType.Composite)]
-    public async Task GetAllIncludingDeletedAsync_Ordering_Works(KeyType keyType)
+    [MemberData(nameof(OrderingCases))]
+    public Task GetAllIncludingDeletedAsync_Ordering_Works(string caseId)
     {
-        await TestSingleKey(keyType, (p) => p.Select(p => p.StockQuantity).ShouldBeInOrder(), new QueryRequest(OrderBy: [new OrderClause(nameof(Product.StockQuantity))]));
-        await TestCompositeKey(keyType, (r) => r.Select(r => r.Rating).ShouldBeInOrder(), new QueryRequest(OrderBy: [new OrderClause(nameof(Review.Rating))]));
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        return RunEntityCase(OrderingSpecs, caseId);
     }
+
+    private static readonly IReadOnlyDictionary<string, EntitySpec> DescOrderingSpecs = new Dictionary<string, EntitySpec>
+    {
+        ["product"] = new(EntityKind.Product,
+            new QueryRequest(OrderBy: [new OrderClause(nameof(Product.StockQuantity), true)]),
+            p => p.Select(x => x.StockQuantity).ShouldBeInOrder(SortDirection.Descending),
+            null),
+        ["review"] = new(EntityKind.Review,
+            new QueryRequest(OrderBy: [new OrderClause(nameof(Review.Rating), true)]),
+            null,
+            r => r.Select(x => x.Rating).ShouldBeInOrder(SortDirection.Descending))
+    };
+
+    public static TheoryData<string> DescOrderingCases => CaseIdsFrom(DescOrderingSpecs);
+
     [Theory(DisplayName = "GetAllIncludingDeletedAsync returns entities with descending ordering")]
-    [InlineData(KeyType.Single)]
-    [InlineData(KeyType.Composite)]
-    public async Task GetAllIncludingDeletedAsync_DescendingOrdering_Works(KeyType keyType)
+    [MemberData(nameof(DescOrderingCases))]
+    public Task GetAllIncludingDeletedAsync_DescendingOrdering_Works(string caseId)
     {
-        await TestSingleKey(keyType, (p) => p.Select(p => p.StockQuantity).ShouldBeInOrder(SortDirection.Descending),
-            new QueryRequest(OrderBy: [new OrderClause(nameof(Product.StockQuantity), true)]));
-        await TestCompositeKey(keyType, (r) => r.Select(r => r.Rating).ShouldBeInOrder(SortDirection.Descending),
-            new QueryRequest(OrderBy: [new OrderClause(nameof(Review.Rating), true)]));
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        return RunEntityCase(DescOrderingSpecs, caseId);
     }
+
+    private static readonly IReadOnlyDictionary<string, EntitySpec> MultiOrderBySpecs = new Dictionary<string, EntitySpec>
+    {
+        ["product"] = new(EntityKind.Product,
+            new QueryRequest(OrderBy: [new OrderClause(nameof(Product.Price)), new OrderClause(nameof(Product.StockQuantity), true)]),
+            p => p.ShouldBe([.. p.OrderBy(x => x.Price).ThenByDescending(x => x.StockQuantity)]),
+            null),
+        ["review"] = new(EntityKind.Review,
+            new QueryRequest(OrderBy: [new OrderClause(nameof(Review.Rating)), new OrderClause(nameof(Review.CreatedAt), true)]),
+            null,
+            r => r.ShouldBe([.. r.OrderBy(x => x.Rating).ThenByDescending(x => x.CreatedAt)]))
+    };
+
+    public static TheoryData<string> MultiOrderByCases => CaseIdsFrom(MultiOrderBySpecs);
+
     [Theory(DisplayName = "GetAllIncludingDeletedAsync uses more that one OrderBy clause")]
-    [InlineData(KeyType.Single)]
-    [InlineData(KeyType.Composite)]
-    public async Task GetAllIncludingDeletedAsync_MultipleOrderBy_ReturnsEntitiesWithMultipleOrderBy(KeyType keyType)
+    [MemberData(nameof(MultiOrderByCases))]
+    public Task GetAllIncludingDeletedAsync_MultipleOrderBy_ReturnsEntitiesWithMultipleOrderBy(string caseId)
     {
-        await TestSingleKey(keyType, (p) => p.ShouldBe([.. p.OrderBy(p => p.Price).ThenByDescending(p => p.StockQuantity)])
-        , new QueryRequest(OrderBy: [new OrderClause(nameof(Product.Price)), new OrderClause(nameof(Product.StockQuantity), true)]));
-        await TestCompositeKey(keyType, (r) => r.ShouldBe([.. r.OrderBy(r => r.Rating).ThenByDescending(r => r.CreatedAt)])
-        , new QueryRequest(OrderBy: [new OrderClause(nameof(Review.Rating)), new OrderClause(nameof(Review.CreatedAt), true)]));
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        return RunEntityCase(MultiOrderBySpecs, caseId);
     }
-    [Theory(DisplayName = "GetAllIncludingDeletedAsync returns entities with gt Filter, ordering and Include Properties")]
-    [InlineData(KeyType.Single)]
-    [InlineData(KeyType.Composite)]
-    public async Task GetAllIncludingDeletedAsync_FilteringOrderingDefaultIncludeProperties_ReturnsEntitiesWithFilteringOrderingAndDefaultIncludeProperties(KeyType keyType)
+
+    private static readonly IReadOnlyDictionary<string, EntitySpec> FilterOrderIncludeSpecs = new Dictionary<string, EntitySpec>
     {
-        await TestSingleKey(keyType, p =>
-        {
-            p.Count.ShouldBe(2);
-            p.All(p => p.StockQuantity > 25).ShouldBeTrue();
-            p.Select(p => p.StockQuantity).ShouldBeInOrder();
-            p[0].ProductCategories.ShouldNotBeNull();
-            p[1].ProductCategories.ShouldNotBeNull();
-            p[0].OrderLines.ShouldNotBeNull();
-            p[1].OrderLines.ShouldNotBeNull();
-            p[0].Reviews.ShouldNotBeNull(); p[1].Reviews.ShouldNotBeNull();
-        }, new QueryRequest(Filters: [new FilterClause(nameof(Product.StockQuantity), "gt", "25")],
-                        OrderBy: [new OrderClause(nameof(Product.StockQuantity))],
-                        Includes: [nameof(Product.Reviews), "", nameof(Product.OrderLines), nameof(Product.ProductCategories)],
-                        UseSplitQuery: true, AsNoTracking: true));
-        await TestCompositeKey(keyType, r =>
-        {
-            r.Count.ShouldBe(1);
-            r.All(r => r.Rating > 4).ShouldBeTrue();
-            r.Select(r => r.Rating).ShouldBeInOrder();
-            r[0].Product.ShouldNotBeNull();
-            r[0].Customer.ShouldNotBeNull();
-        }, new QueryRequest(Filters: [new FilterClause(nameof(Review.Rating), "gt", "4")],
-                        OrderBy: [new OrderClause(nameof(Review.Rating))],
-                        Includes: [nameof(Review.Product), nameof(Review.Customer)],
-                        UseSplitQuery: true, AsNoTracking: true));
-    }
-    [Theory(DisplayName = "GetAllIncludingDeletedAsync returns entities with gt Filter that results in no entities")]
-    [InlineData(KeyType.Single)]
-    [InlineData(KeyType.Composite)]
-    public async Task GetAllIncludingDeletedAsync_Filtering_ReturnsNoEntities(KeyType keyType)
-    {
-        await TestSingleKey(keyType, p => p.Count.ShouldBe(0), new QueryRequest(Filters: [new FilterClause(nameof(Product.StockQuantity), "gt", "1000")]));
-        await TestCompositeKey(keyType, r => r.Count.ShouldBe(0), new QueryRequest(Filters: [new FilterClause(nameof(Review.Rating), "gt", "10")]));
-    }
-    [Theory(DisplayName = "GetAllIncludingDeletedAsync should use multiple filters (gt and lt)")]
-    [InlineData(KeyType.Single)]
-    [InlineData(KeyType.Composite)]
-    public async Task GetAllIncludingDeletedAsync_MultipleFilters_ReturnsEntitiesWithMultipleFilters(KeyType keyType)
-    {
-        await TestSingleKey(keyType, p =>
-        {
-            p.Count.ShouldBe(1);
-            p[0].StockQuantity.ShouldBeGreaterThan(25);
-            p[0].Price.ShouldBeLessThan(50);
-        }, new QueryRequest(Filters: [new FilterClause(nameof(Product.StockQuantity), "gt", "25"), new FilterClause(nameof(Product.Price), "lt", 50.ToString())]));
-        await TestCompositeKey(keyType, r =>
-        {
-            r.Count.ShouldBe(1);
-            r[0].Rating.ShouldBeGreaterThan(4);
-        }, new QueryRequest(Filters: [new FilterClause(nameof(Review.Rating), "gt", "4")]));
-    }
-    [Theory(DisplayName = "GetAllIncludingDeletedAsync should use multiple filters (> and <)")]
-    [InlineData(KeyType.Single)]
-    [InlineData(KeyType.Composite)]
-    public async Task GetAllIncludingDeletedAsync_MultipleFilters__ReturnsEntitiesWithMultipleFilters(KeyType keyType)
-    {
-        await TestSingleKey(keyType, p =>
-        {
-            p.Count.ShouldBe(1);
-            p[0].StockQuantity.ShouldBeGreaterThan(25);
-            p[0].Price.ShouldBeLessThan(50);
-        }, new QueryRequest(Filters: [new FilterClause(nameof(Product.StockQuantity), ">", 25.ToString()), new FilterClause(nameof(Product.Price), "<", 50.ToString())]));
-        await TestCompositeKey(keyType, r =>
-        {
-            r.Count.ShouldBe(1);
-            r[0].Rating.ShouldBe(4);
-        }, new QueryRequest(Filters: [new FilterClause(nameof(Review.Rating), ">", "3"), new FilterClause(nameof(Review.Rating), "<", "5")]));
-    }
-    private Task TestSingleKey(KeyType keyType, Action<List<Product>> assert, QueryRequest? request = null)
-    {
-        if (keyType == KeyType.Single)
-            return WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
-                        {
-                            products.ShouldNotBeNull();
-                            assert(products);
-                        }, request);
-        return Task.CompletedTask;
-    }
-    private Task TestCompositeKey(KeyType keyType, Action<List<Review>> Assert, QueryRequest? request = null)
-    {
-        if (keyType == KeyType.Composite)
-            return WithSoftDeletedAsync_CompositeKey<Review>(DataSeeder.ReviewLapTopKey, async (_, reviews, _, _, _) =>
+        ["product"] = new(EntityKind.Product,
+            new QueryRequest(
+                Filters: [new FilterClause(nameof(Product.StockQuantity), "gt", "25")],
+                OrderBy: [new OrderClause(nameof(Product.StockQuantity))],
+                Includes: [nameof(Product.Reviews), "", nameof(Product.OrderLines), nameof(Product.ProductCategories)],
+                UseSplitQuery: true,
+                AsNoTracking: true),
+            p =>
             {
-                reviews.ShouldNotBeNull();
-                Assert(reviews);
-            }, request);
-        return Task.CompletedTask;
+                p.Count.ShouldBe(2);
+                p.All(x => x.StockQuantity > 25).ShouldBeTrue();
+                p.Select(x => x.StockQuantity).ShouldBeInOrder();
+                p[0].ProductCategories.ShouldNotBeNull();
+                p[1].ProductCategories.ShouldNotBeNull();
+                p[0].OrderLines.ShouldNotBeNull();
+                p[1].OrderLines.ShouldNotBeNull();
+                p[0].Reviews.ShouldNotBeNull();
+                p[1].Reviews.ShouldNotBeNull();
+            },
+            null),
+        ["review"] = new(EntityKind.Review,
+            new QueryRequest(
+                Filters: [new FilterClause(nameof(Review.Rating), "gt", "4")],
+                OrderBy: [new OrderClause(nameof(Review.Rating))],
+                Includes: [nameof(Review.Product), nameof(Review.Customer)],
+                UseSplitQuery: true,
+                AsNoTracking: true),
+            null,
+            r =>
+            {
+                r.Count.ShouldBe(1);
+                r.All(x => x.Rating > 4).ShouldBeTrue();
+                r.Select(x => x.Rating).ShouldBeInOrder();
+                r[0].Product.ShouldNotBeNull();
+                r[0].Customer.ShouldNotBeNull();
+            })
+    };
+
+    public static TheoryData<string> FilterOrderIncludeCases => CaseIdsFrom(FilterOrderIncludeSpecs);
+
+    [Theory(DisplayName = "GetAllIncludingDeletedAsync returns entities with gt Filter, ordering and Include Properties")]
+    [MemberData(nameof(FilterOrderIncludeCases))]
+    public Task GetAllIncludingDeletedAsync_FilteringOrderingDefaultIncludeProperties_ReturnsEntitiesWithFilteringOrderingAndDefaultIncludeProperties(string caseId)
+    {
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        return RunEntityCase(FilterOrderIncludeSpecs, caseId);
+    }
+
+    private static readonly IReadOnlyDictionary<string, EntitySpec> FilteringEmptySpecs = new Dictionary<string, EntitySpec>
+    {
+        ["product"] = new(EntityKind.Product,
+            new QueryRequest(Filters: [new FilterClause(nameof(Product.StockQuantity), "gt", "1000")]),
+            p => p.Count.ShouldBe(0),
+            null),
+        ["review"] = new(EntityKind.Review,
+            new QueryRequest(Filters: [new FilterClause(nameof(Review.Rating), "gt", "10")]),
+            null,
+            r => r.Count.ShouldBe(0))
+    };
+
+    public static TheoryData<string> FilteringEmptyCases => CaseIdsFrom(FilteringEmptySpecs);
+
+    [Theory(DisplayName = "GetAllIncludingDeletedAsync returns entities with gt Filter that results in no entities")]
+    [MemberData(nameof(FilteringEmptyCases))]
+    public Task GetAllIncludingDeletedAsync_Filtering_ReturnsNoEntities(string caseId)
+    {
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        return RunEntityCase(FilteringEmptySpecs, caseId);
+    }
+
+    private static readonly IReadOnlyDictionary<string, EntitySpec> MultiFilterSpecs = new Dictionary<string, EntitySpec>
+    {
+        ["product"] = new(EntityKind.Product,
+            new QueryRequest(Filters:
+            [
+                new FilterClause(nameof(Product.StockQuantity), "gt", "25"),
+                new FilterClause(nameof(Product.Price), "lt", 50.ToString())
+            ]),
+            p =>
+            {
+                p.Count.ShouldBe(1);
+                p[0].StockQuantity.ShouldBeGreaterThan(25);
+                p[0].Price.ShouldBeLessThan(50);
+            },
+            null),
+        ["review"] = new(EntityKind.Review,
+            new QueryRequest(Filters: [new FilterClause(nameof(Review.Rating), "gt", "4")]),
+            null,
+            r =>
+            {
+                r.Count.ShouldBe(1);
+                r[0].Rating.ShouldBeGreaterThan(4);
+            })
+    };
+
+    public static TheoryData<string> MultiFilterCases => CaseIdsFrom(MultiFilterSpecs);
+
+    [Theory(DisplayName = "GetAllIncludingDeletedAsync should use multiple filters (gt and lt)")]
+    [MemberData(nameof(MultiFilterCases))]
+    public Task GetAllIncludingDeletedAsync_MultipleFilters_ReturnsEntitiesWithMultipleFilters(string caseId)
+    {
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        return RunEntityCase(MultiFilterSpecs, caseId);
+    }
+
+    private static readonly IReadOnlyDictionary<string, EntitySpec> MultiFilterSymbolSpecs = new Dictionary<string, EntitySpec>
+    {
+        ["product"] = new(EntityKind.Product,
+            new QueryRequest(Filters:
+            [
+                new FilterClause(nameof(Product.StockQuantity), ">", 25.ToString()),
+                new FilterClause(nameof(Product.Price), "<", 50.ToString())
+            ]),
+            p =>
+            {
+                p.Count.ShouldBe(1);
+                p[0].StockQuantity.ShouldBeGreaterThan(25);
+                p[0].Price.ShouldBeLessThan(50);
+            },
+            null),
+        ["review"] = new(EntityKind.Review,
+            new QueryRequest(Filters:
+            [
+                new FilterClause(nameof(Review.Rating), ">", "3"),
+                new FilterClause(nameof(Review.Rating), "<", "5")
+            ]),
+            null,
+            r =>
+            {
+                r.Count.ShouldBe(1);
+                r[0].Rating.ShouldBe(4);
+            })
+    };
+
+    public static TheoryData<string> MultiFilterSymbolCases => CaseIdsFrom(MultiFilterSymbolSpecs);
+
+    [Theory(DisplayName = "GetAllIncludingDeletedAsync should use multiple filters (> and <)")]
+    [MemberData(nameof(MultiFilterSymbolCases))]
+    public Task GetAllIncludingDeletedAsync_MultipleFilters__ReturnsEntitiesWithMultipleFilters(string caseId)
+    {
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        return RunEntityCase(MultiFilterSymbolSpecs, caseId);
     }
 }

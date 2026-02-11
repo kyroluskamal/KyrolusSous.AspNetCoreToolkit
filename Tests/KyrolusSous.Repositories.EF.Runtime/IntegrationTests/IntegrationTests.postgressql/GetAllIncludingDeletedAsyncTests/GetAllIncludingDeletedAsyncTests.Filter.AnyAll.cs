@@ -2,12 +2,11 @@
 
 public partial class GetAllIncludingDeletedAsync_Filter
 {
-    public enum CaseId { Any_Electronics, All_Books }
-    public static TheoryData<CaseId> CollectionNavCases => [CaseId.Any_Electronics, CaseId.All_Books];
-    private static readonly IReadOnlyDictionary<CaseId, CaseSpec> Specs =
-    new Dictionary<CaseId, CaseSpec>
+    public static TheoryData<string> CollectionNavCases => new() { "any-electronics", "all-books" };
+    private static readonly IReadOnlyDictionary<string, CaseSpec> Specs =
+    new Dictionary<string, CaseSpec>
     {
-        [CaseId.Any_Electronics] = new CaseSpec(
+        ["any-electronics"] = new CaseSpec(
             Op: "any",
             CategoryId: DataSeeder.categoryElectronicsId,
             ExpectedCount: 2,
@@ -18,7 +17,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
                 ).ShouldBeTrue();
             }),
 
-        [CaseId.All_Books] = new CaseSpec(
+        ["all-books"] = new CaseSpec(
             Op: "all",
             CategoryId: DataSeeder.categoryBooksId,
             ExpectedCount: 1,
@@ -37,23 +36,20 @@ public partial class GetAllIncludingDeletedAsync_Filter
 
     [Theory(DisplayName = "GetAllIncludingDeletedAsync supports any/all operator for collection navigation")]
     [MemberData(nameof(CollectionNavCases))]
-    public async Task GetAllIncludingDeletedAsync_AnyAll_Operator_Works(CaseId caseId)
+    public async Task GetAllIncludingDeletedAsync_AnyAll_Operator_Works(string caseId)
     {
+        caseId.ShouldNotBeNullOrWhiteSpace();
+        Specs.ContainsKey(caseId).ShouldBeTrue();
         var spec = Specs[caseId];
         var request = new QueryRequest(
                                         Filters: [new FilterClause(nameof(Product.ProductCategories), spec.Op, $"{nameof(ProductCategory.CategoryId)} = {spec.CategoryId}")],
                                         Includes: [nameof(Product.ProductCategories)]
                                     );
 
-        await WithSoftDeletedAsync_SingleKey<Product>(
-            DataSeeder.productLaptopId,
-            async (_, products, _, _, _) =>
-            {
-                products.ShouldNotBeNull();
-                products.Count.ShouldBe(spec.ExpectedCount);
-                spec.Assert(products);
-            },
-            request
-        );
+        await AssertProducts(request, products =>
+        {
+            products.Count.ShouldBe(spec.ExpectedCount);
+            spec.Assert(products);
+        });
     }
 }

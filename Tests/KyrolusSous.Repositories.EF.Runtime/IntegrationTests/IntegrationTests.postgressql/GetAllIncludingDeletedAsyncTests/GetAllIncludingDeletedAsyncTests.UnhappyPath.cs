@@ -2,16 +2,14 @@
 
 public partial class GetAllIncludingDeletedAsyncTests
 {
-    public sealed record InvalidFilterCase(string Property, string Operator, string? Value);
-
-    public static TheoryData<InvalidFilterCase> InvalidFilterCases => new()
+    public static TheoryData<string, string, string?> InvalidFilterCases => new()
     {
-        new InvalidFilterCase("NotARealProperty", "eq", "1"),
-        new InvalidFilterCase("Name", "", "x"),
-        new InvalidFilterCase("StockQuantity", "eq", "NotANumber"),
-        new InvalidFilterCase("Id", "eq", "NotAGuid"),
-        new InvalidFilterCase("CreatedAt", "eq", "NotADateTimeOffset"),
-        new InvalidFilterCase("IsActive", "eq", "NotABool")
+        { "NotARealProperty", "eq", "1" },
+        { "Name", "", "x" },
+        { "StockQuantity", "eq", "NotANumber" },
+        { "Id", "eq", "NotAGuid" },
+        { "CreatedAt", "eq", "NotADateTimeOffset" },
+        { "IsActive", "eq", "NotABool" }
     };
 
     public static TheoryData<string?> InvalidOrderByCases => new()
@@ -39,14 +37,14 @@ public partial class GetAllIncludingDeletedAsyncTests
 
     [Theory(DisplayName = "GetAllIncludingDeletedAsync invalid filters throw from QueryHelper")]
     [MemberData(nameof(InvalidFilterCases))]
-    public void GetAllIncludingDeletedAsync_InvalidFilters_Throw(InvalidFilterCase testCase)
+    public void GetAllIncludingDeletedAsync_InvalidFilters_Throw(string property, string op, string? value)
     {
         using var scope = Factory.Services.CreateScope();
         var helper = scope.ServiceProvider.GetRequiredService<IQueryHelper<Product>>();
 
         Should.Throw<ArgumentException>(() =>
         {
-            helper.Build(new QueryRequest(Filters: [new FilterClause(testCase.Property, testCase.Operator, testCase.Value)]));
+            helper.Build(new QueryRequest(Filters: [new FilterClause(property, op, value)]));
         });
     }
 
