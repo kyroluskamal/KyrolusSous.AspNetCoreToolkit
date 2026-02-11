@@ -2,6 +2,35 @@
 
 public partial class GetAllIncludingDeletedAsyncTests
 {
+    public sealed record IncludePolicyCase(
+        string CaseId,
+        KyrolusDefaultIncludeMode? Mode,
+        string[]? IncludeProperties,
+        bool? ExpectStore,
+        bool? ExpectReviews);
+
+    public static TheoryData<IncludePolicyCase> IncludePolicyCases => new()
+    {
+        new IncludePolicyCase(
+            "default",
+            null,
+            null,
+            ExpectStore: true,
+            ExpectReviews: null),
+        new IncludePolicyCase(
+            "merge",
+            KyrolusDefaultIncludeMode.Merge,
+            [nameof(Product.Reviews)],
+            ExpectStore: true,
+            ExpectReviews: true),
+        new IncludePolicyCase(
+            "replace",
+            KyrolusDefaultIncludeMode.Replace,
+            [nameof(Product.Reviews)],
+            ExpectStore: false,
+            ExpectReviews: true)
+    };
+
     [Fact(DisplayName = "GetAllIncludingDeletedAsync returns entities with includes")]
     public async Task GetAllIncludingDeletedAsync_Includes_Works()
     {
@@ -66,68 +95,32 @@ public partial class GetAllIncludingDeletedAsyncTests
         items.All(p => p.Reviews is not null).ShouldBeTrue();
     }
 
-    [Fact(DisplayName = "GetAllIncludingDeletedAsync applies default includes from policy")]
-    public async Task GetAllIncludingDeletedAsync_DefaultIncludes_Applied()
+    [Theory(DisplayName = "GetAllIncludingDeletedAsync applies default include policy")]
+    [MemberData(nameof(IncludePolicyCases))]
+    public async Task GetAllIncludingDeletedAsync_DefaultIncludes_Policy_Works(IncludePolicyCase testCase)
     {
-        var policy = new KyrolusRepositoryPolicy()
-            .SetDefaultIncludeProperties<Product>("Store");
+        var policy = testCase.Mode is null
+            ? new KyrolusRepositoryPolicy().SetDefaultIncludeProperties<Product>("Store")
+            : new KyrolusRepositoryPolicy { DefaultIncludeMode = testCase.Mode.Value }
+                .SetDefaultIncludeProperties<Product>("Store");
 
         var customFactory = WithPolicy(policy);
         using var scope = customFactory.Services.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
 
-        var items = await repo.GetAllIncludingDeletedAsync(asNoTracking: true);
+        var items = await repo.GetAllIncludingDeletedAsync(
+            filter: null,
+            orderBy: null,
+            includeProperties: testCase.IncludeProperties?.ToList(),
+            includeGraph: null,
+            asNoTracking: true,
+            useSplitQuery: true,
+            cancellationToken: default);
+
         items.Count.ShouldBe(3);
-        items.All(p => p.Store is not null).ShouldBeTrue();
-    }
-
-    [Fact(DisplayName = "GetAllIncludingDeletedAsync merges default includes with explicit includes when mode is Merge")]
-    public async Task GetAllIncludingDeletedAsync_DefaultIncludes_Merge_Works()
-    {
-        var policy = new KyrolusRepositoryPolicy
-        {
-            DefaultIncludeMode = KyrolusDefaultIncludeMode.Merge
-        }.SetDefaultIncludeProperties<Product>("Store");
-
-        var customFactory = WithPolicy(policy);
-        using var scope = customFactory.Services.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-
-        var items = await repo.GetAllIncludingDeletedAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: ["Reviews"],
-            includeGraph: null,
-            asNoTracking: true,
-            useSplitQuery: true,
-            cancellationToken: default);
-
-        items.All(p => p.Store is not null).ShouldBeTrue();
-        items.All(p => p.Reviews is not null).ShouldBeTrue();
-    }
-
-    [Fact(DisplayName = "GetAllIncludingDeletedAsync ignores default includes when mode is Replace and explicit includes exist")]
-    public async Task GetAllIncludingDeletedAsync_DefaultIncludes_Replace_Works()
-    {
-        var policy = new KyrolusRepositoryPolicy
-        {
-            DefaultIncludeMode = KyrolusDefaultIncludeMode.Replace
-        }.SetDefaultIncludeProperties<Product>("Store");
-
-        var customFactory = WithPolicy(policy);
-        using var scope = customFactory.Services.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-
-        var items = await repo.GetAllIncludingDeletedAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: ["Reviews"],
-            includeGraph: null,
-            asNoTracking: true,
-            useSplitQuery: true,
-            cancellationToken: default);
-
-        items.All(p => p.Store is null).ShouldBeTrue();
-        items.All(p => p.Reviews is not null).ShouldBeTrue();
+        if (testCase.ExpectStore is not null)
+            items.All(p => (p.Store is not null) == testCase.ExpectStore.Value).ShouldBeTrue();
+        if (testCase.ExpectReviews is not null)
+            items.All(p => (p.Reviews is not null) == testCase.ExpectReviews.Value).ShouldBeTrue();
     }
 }

@@ -126,6 +126,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
             DateTimeOffset.Parse("2025-03-01T00:00:00Z", CultureInfo.InvariantCulture)
         };
         var expectedDiscontinuedAt = new DateTime(2025, 12, 31, 0, 0, 0, DateTimeKind.Utc);
+        var expectedFinishedAt = TimeSpan.FromDays(1);
 
         yield return new BetweenCaseSpec(
             KeyType.Single,
@@ -235,6 +236,28 @@ public partial class GetAllIncludingDeletedAsync_Filter
             AssertReviews: reviews =>
             {
                 reviews.All(r => r.DiscontinuedAt == expectedDiscontinuedAt).ShouldBeTrue();
+            });
+
+        yield return new BetweenCaseSpec(
+            KeyType.Single,
+            nameof(Product.FinishedAt),
+            "0.12:00:00",
+            "1.12:00:00",
+            ExpectedCount: 2,
+            AssertProducts: products =>
+            {
+                products.All(p => p.FinishedAt == expectedFinishedAt).ShouldBeTrue();
+            });
+
+        yield return new BetweenCaseSpec(
+            KeyType.Composite,
+            nameof(Review.FinishedAt),
+            "0.12:00:00",
+            "1.12:00:00",
+            ExpectedCount: 2,
+            AssertReviews: reviews =>
+            {
+                reviews.All(r => r.FinishedAt == expectedFinishedAt).ShouldBeTrue();
             });
     }
 }

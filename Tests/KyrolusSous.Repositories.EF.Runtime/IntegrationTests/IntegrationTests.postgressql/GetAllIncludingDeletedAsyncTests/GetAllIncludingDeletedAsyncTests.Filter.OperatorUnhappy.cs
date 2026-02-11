@@ -12,6 +12,9 @@ public partial class GetAllIncludingDeletedAsync_Filter
     {
         new InvalidOperatorCase(nameof(Product.StockQuantity), "eq", "NotANumber"),
         new InvalidOperatorCase(nameof(Product.StockQuantity), "neq", "NotANumber"),
+        new InvalidOperatorCase(nameof(Product.StockQuantity), "eq", "null", "cannot use NULL"),
+        new InvalidOperatorCase(nameof(Product.StockQuantity), "=", "null", "cannot use NULL"),
+        new InvalidOperatorCase(nameof(Product.StockQuantity), "==", "null", "cannot use NULL"),
         new InvalidOperatorCase(nameof(Product.Name), "gt", "Alpha"),
         new InvalidOperatorCase(nameof(Product.Name), "gte", "Alpha"),
         new InvalidOperatorCase(nameof(Product.Name), "lt", "Alpha"),
@@ -23,6 +26,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
         new InvalidOperatorCase(nameof(Product.StockQuantity), "notnull", null, "supported only for nullable"),
         new InvalidOperatorCase(nameof(Product.StockQuantity), "in", "null,25", "does not support NULL"),
         new InvalidOperatorCase(nameof(Product.Id), "in", "NotAGuid", "could not be converted"),
+        new InvalidOperatorCase(nameof(Product.FinishedAt), "gt", "1.00:00:00", "Invalid filter"),
         new InvalidOperatorCase(nameof(Product.Name), "any", "A"),
         new InvalidOperatorCase(nameof(Product.Name), "all", "A")
     };
@@ -31,6 +35,9 @@ public partial class GetAllIncludingDeletedAsync_Filter
     {
         new InvalidOperatorCase(nameof(Review.Rating), "eq", "NotANumber"),
         new InvalidOperatorCase(nameof(Review.Rating), "neq", "NotANumber"),
+        new InvalidOperatorCase(nameof(Review.Rating), "eq", "null", "cannot use NULL"),
+        new InvalidOperatorCase(nameof(Review.Rating), "=", "null", "cannot use NULL"),
+        new InvalidOperatorCase(nameof(Review.Rating), "==", "null", "cannot use NULL"),
         new InvalidOperatorCase(nameof(Review.Comment), "gt", "Alpha"),
         new InvalidOperatorCase(nameof(Review.Comment), "gte", "Alpha"),
         new InvalidOperatorCase(nameof(Review.Comment), "lt", "Alpha"),
@@ -42,6 +49,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
         new InvalidOperatorCase(nameof(Review.Rating), "notnull", null, "supported only for nullable"),
         new InvalidOperatorCase(nameof(Review.Rating), "in", "null,3", "does not support NULL"),
         new InvalidOperatorCase(nameof(Review.ProductId), "in", "NotAGuid", "could not be converted"),
+        new InvalidOperatorCase(nameof(Review.FinishedAt), "gt", "1.00:00:00", "Invalid filter"),
         new InvalidOperatorCase(nameof(Review.Comment), "any", "A"),
         new InvalidOperatorCase(nameof(Review.Comment), "all", "A")
     };
