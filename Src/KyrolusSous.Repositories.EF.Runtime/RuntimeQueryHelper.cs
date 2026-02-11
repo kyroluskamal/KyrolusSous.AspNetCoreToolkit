@@ -545,9 +545,6 @@ public sealed class RuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
     out Expression expression,
     out string? error)
     {
-        error = null;
-        expression = null!;
-
         if (!TryGetEnumerableElementType(memberType, out var elementType))
             return FailAnyAll(isAny, out expression, out error);
 
@@ -642,7 +639,7 @@ public sealed class RuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
         predicateBody = Expression.Call(
             typeof(Enumerable),
             nameof(Enumerable.Contains),
-            new[] { elementType },
+            [elementType],
             listExpr,
             parameter);
 

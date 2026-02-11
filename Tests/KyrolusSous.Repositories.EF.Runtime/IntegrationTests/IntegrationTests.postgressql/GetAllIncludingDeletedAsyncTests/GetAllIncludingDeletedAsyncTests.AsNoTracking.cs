@@ -2,106 +2,57 @@
 
 public partial class GetAllIncludingDeletedAsyncTests
 {
-    [Fact(DisplayName = "GetAllIncludingDeletedAsync respects AsNoTracking")]
-    public async Task GetAllIncludingDeletedAsync_AsNoTracking_Works()
+    public static TheoryData<KeyType, bool?, bool?, bool> CasesByKeyType
     {
-        using var scope = Factory.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        dbContext.ChangeTracker.Clear();
+        get
+        {
+            var data = new TheoryData<KeyType, bool?, bool?, bool>();
 
-        await repo.GetAllIncludingDeletedAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: null,
-            includeGraph: null,
-            asNoTracking: true,
-            useSplitQuery: null,
-            cancellationToken: default);
+            (bool? input, bool? policy, bool expected)[] baseCases =
+            [
+                (true,  null,  true),
+                (false, true,  false),
+                (null,  true,  true),
+                (null,  false, false),
+                (null,  null,  true),
+            ];
 
-        dbContext.ChangeTracker.Entries().ShouldBeEmpty();
+            foreach (var keyType in new[] { KeyType.Single, KeyType.Composite })
+                foreach (var (input, policy, expected) in baseCases)
+                    data.Add(keyType, input, policy, expected);
+            return data;
+        }
     }
 
-    [Fact(DisplayName = "GetAllIncludingDeletedAsync respects AsNoTracking = false")]
-    public async Task GetAllIncludingDeletedAsync_AsNoTrackingFalse_Works()
+    [Theory(DisplayName = "GetAllIncludingDeletedAsync respects AsNoTracking resolution (input > policy > default) -- SingleKey")]
+    [MemberData(nameof(CasesByKeyType))]
+    public async Task GetAllIncludingDeletedAsync_AsNoTracking_Works_SingleKey(KeyType keyType, bool? input, bool? policy, bool expected)
     {
-        using var scope = Factory.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        dbContext.ChangeTracker.Clear();
-
-        await repo.GetAllIncludingDeletedAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: null,
-            includeGraph: null,
-            asNoTracking: false,
-            useSplitQuery: null,
-            cancellationToken: default);
-
-        dbContext.ChangeTracker.Entries().ShouldNotBeEmpty();
+        var finalPolicy = policy is not null ? new KyrolusRepositoryPolicy { AsNoTrackingDefault = policy } : null;
+        var queryRequest = new QueryRequest(AsNoTracking: input);
+        if (keyType == KeyType.Single)
+            await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, repo, sp) =>
+            {
+                var db = sp?.GetRequiredService<ApplicationDbContext>()!;
+                db.ChangeTracker.Clear();
+                await repo.GetAllIncludingDeletedAsync(asNoTracking: input);
+                AssertAsNoTracking(expected, sp?.GetRequiredService<ApplicationDbContext>()!);
+            }, queryRequest, finalPolicy);
+        else
+            await WithSoftDeletedAsync_CompositeKey<Review>(DataSeeder.ReviewLapTopKey, async (_, products, _, repo, sp) =>
+            {
+                var db = sp?.GetRequiredService<ApplicationDbContext>()!;
+                db.ChangeTracker.Clear();
+                await repo.GetAllIncludingDeletedAsync(asNoTracking: input);
+                AssertAsNoTracking(expected, sp?.GetRequiredService<ApplicationDbContext>()!);
+            }, queryRequest, finalPolicy);
     }
 
-    [Fact(DisplayName = "GetAllIncludingDeletedAsync uses AsNoTrackingDefault from policy when asNoTracking is null")]
-    public async Task GetAllIncludingDeletedAsync_AsNoTracking_Null_UsesPolicyDefaultTrue()
+    private static void AssertAsNoTracking(bool expected, ApplicationDbContext dbContext)
     {
-        var customFactory = WithPolicy(new KyrolusRepositoryPolicy { AsNoTrackingDefault = true });
-        using var scope = customFactory.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        dbContext.ChangeTracker.Clear();
-
-        await repo.GetAllIncludingDeletedAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: null,
-            includeGraph: null,
-            asNoTracking: null,
-            useSplitQuery: null,
-            cancellationToken: default);
-
-        dbContext.ChangeTracker.Entries().ShouldBeEmpty();
-    }
-
-    [Fact(DisplayName = "GetAllIncludingDeletedAsync uses AsNoTrackingDefault=false from policy when asNoTracking is null")]
-    public async Task GetAllIncludingDeletedAsync_AsNoTracking_Null_UsesPolicyDefaultFalse()
-    {
-        var customFactory = WithPolicy(new KyrolusRepositoryPolicy { AsNoTrackingDefault = false });
-        using var scope = customFactory.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        dbContext.ChangeTracker.Clear();
-
-        await repo.GetAllIncludingDeletedAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: null,
-            includeGraph: null,
-            asNoTracking: null,
-            useSplitQuery: null,
-            cancellationToken: default);
-
-        dbContext.ChangeTracker.Entries().ShouldNotBeEmpty();
-    }
-
-    [Fact(DisplayName = "GetAllIncludingDeletedAsync defaults AsNoTracking to true when policy default is null")]
-    public async Task GetAllIncludingDeletedAsync_AsNoTracking_Null_UsesDefaultWhenPolicyNull()
-    {
-        var customFactory = WithPolicy(new KyrolusRepositoryPolicy { AsNoTrackingDefault = null });
-        using var scope = customFactory.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        dbContext.ChangeTracker.Clear();
-
-        await repo.GetAllIncludingDeletedAsync(
-            filter: null,
-            orderBy: null,
-            includeProperties: null,
-            includeGraph: null,
-            asNoTracking: null,
-            useSplitQuery: null,
-            cancellationToken: default);
-
-        dbContext.ChangeTracker.Entries().ShouldBeEmpty();
+        if (expected)
+            dbContext.ChangeTracker.Entries().ShouldBeEmpty();
+        else
+            dbContext.ChangeTracker.Entries().ShouldNotBeEmpty();
     }
 }

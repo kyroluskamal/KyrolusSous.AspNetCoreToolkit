@@ -88,7 +88,7 @@ public static class EntityApi
                 if (!isComposite && keys.Length == 1)
                 {
                     // allow single-key usage if user prefers query param style
-                    if (Repo(uow) is not IKyrolusSingleKeyRepositoryAsync<ApplicationDbContext, TEntity, TKey> repoSingle) return Results.BadRequest("Single-key endpoint requires single-key repo.");
+                    if (Repo(uow) is not IKyrolusSingleKeyRepositoryAsync<ApplicationDbContext, TEntity, TKey>  repoSingle ) return Results.BadRequest("Single-key endpoint requires single-key repo.");
                     var partsSingle = helper.Build(request ?? new QueryRequest());
                     var includePropertiesSingle = request?.Includes is { Length: > 0 }
                         ? new List<string>(request.Includes)

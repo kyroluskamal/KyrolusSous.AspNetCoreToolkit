@@ -9,6 +9,6 @@ public partial class GetAllAsyncTests(WebApplicationFactory<Program> factory) : 
         // Assert
         response.EnsureSuccessStatusCode();
         reviews.ShouldNotBeNull();
-        reviews.ShouldHaveSingleItem();
+        reviews.Count.ShouldBe(3);
     }
 }

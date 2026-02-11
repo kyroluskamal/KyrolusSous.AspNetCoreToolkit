@@ -7,7 +7,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("!=")]
     [InlineData("<>")]
     public async Task GetAllIncludingDeletedAsync_BoolProperty_Neq_Operator_Works(string op)
-        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
         {
             products.ShouldNotBeNull();
             products.Count.ShouldBe(3);
@@ -18,7 +18,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("!=")]
     [InlineData("<>")]
     public async Task GetAllIncludingDeletedAsync_NumericProperty_NotEq_Operator_Works(string op)
-       => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+       => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
            {
                products.ShouldNotBeNull();
                products.Count.ShouldBe(2);
@@ -29,7 +29,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("!=")]
     [InlineData("<>")]
     public async Task GetAllIncludingDeletedAsync_GuidProperty_Neq_Operator_Works(string op)
-=> await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+=> await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
 {
     products.ShouldNotBeNull();
     products.Count.ShouldBe(2);
@@ -40,7 +40,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("!=")]
     [InlineData("<>")]
     public async Task GetAllIncludingDeletedAsync_StringProperty_Neq_Operator_Works(string op)
-     => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+     => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
      {
          products.ShouldNotBeNull();
          products.Count.ShouldBe(2);

@@ -7,7 +7,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("=")]
     [InlineData("==")]
     public async Task GetAllIncludingDeletedAsync_NumericProperty_Eq_Operator_Works(string op)
-    => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+    => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
         {
             products.ShouldNotBeNull();
             products.Count.ShouldBe(1);
@@ -19,7 +19,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("=")]
     [InlineData("==")]
     public async Task GetAllIncludingDeletedAsync_BoolProperty_Eq_Operator_Works(string op)
-    => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+    => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
     {
         products.ShouldNotBeNull();
         products.Count.ShouldBe(0);
@@ -29,7 +29,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("=")]
     [InlineData("==")]
     public async Task GetAllIncludingDeletedAsync_DateTimeOffsetProperty_Eq_Operator_Works(string op)
-=> await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+=> await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
 {
     products.ShouldNotBeNull();
     products.Count.ShouldBe(1);
@@ -40,7 +40,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("=")]
     [InlineData("==")]
     public async Task GetAllIncludingDeletedAsync_StringProperty_Eq_Operator_Works(string op)
-=> await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+=> await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
 {
     products.ShouldNotBeNull();
     products.Count.ShouldBe(1);
@@ -51,7 +51,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("=")]
     [InlineData("==")]
     public async Task GetAllIncludingDeletedAsync_DecimalProperty_Eq_Operator_Works(string op)
-=> await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+=> await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
 {
     products.ShouldNotBeNull();
     products.Count.ShouldBe(1);
@@ -63,7 +63,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("==")]
     [InlineData("isnull")]
     public async Task GetAllIncludingDeletedAsync_Nullable_DecimalProperty_Eq_Operator_Works(string op)
-    => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+    => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
     {
         products.ShouldNotBeNull();
         products.Count.ShouldBe(1);
@@ -76,7 +76,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("==")]
     [InlineData("isnull")]
     public async Task GetAllIncludingDeletedAsync_Nullable_IntProperty_Eq_Operator_Works(string op)
-    => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+    => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
     {
         products.ShouldNotBeNull();
         products.Count.ShouldBe(1);
@@ -88,7 +88,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("==")]
     [InlineData("isnull")]
     public async Task GetAllIncludingDeletedAsync_Throw_NonNullable_IntProperty_Eq_Operator_Works(string op)
-    => await WithSoftDeletedAsync_CompositeKey<Review>(ReviewKey, async (_, _, contents, _) =>
+    => await WithSoftDeletedAsync_CompositeKey<Review>(DataSeeder.ReviewLapTopKey, async (_, _, contents, _, _) =>
     {
         contents.ShouldNotBeNull();
         contents.ShouldContain($"Invalid filter for 'Rating': operator '{op}' ");
@@ -98,7 +98,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("=")]
     [InlineData("==")]
     public async Task GetAllIncludingDeletedAsync_GuidProperty_Eq_Operator_Works(string op)
-    => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+    => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
     {
         products.ShouldNotBeNull();
         products.Count.ShouldBe(1);

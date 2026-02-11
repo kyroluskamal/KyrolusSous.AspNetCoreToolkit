@@ -4,7 +4,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
 {
     [Fact(DisplayName = "GetAllIncludingDeletedAsync supports eq operator for DateOnly properties")]
     public async Task GetAllIncludingDeletedAsync_DateOnly_Eq_Operator_Works()
-        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
         {
             products.ShouldNotBeNull();
             products.Count.ShouldBe(1);
@@ -13,7 +13,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
 
     [Fact(DisplayName = "GetAllIncludingDeletedAsync supports eq operator for TimeOnly properties")]
     public async Task GetAllIncludingDeletedAsync_TimeOnly_Eq_Operator_Works()
-        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
         {
             products.ShouldNotBeNull();
             products.Count.ShouldBe(1);
@@ -22,7 +22,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
 
     [Fact(DisplayName = "GetAllIncludingDeletedAsync supports gt operator for DateOnly properties")]
     public async Task GetAllIncludingDeletedAsync_DateOnly_Gt_Operator_Works()
-        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
         {
             products.ShouldNotBeNull();
             products.Count.ShouldBe(2);
@@ -31,7 +31,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
 
     [Fact(DisplayName = "GetAllIncludingDeletedAsync supports eq operator for DateTime properties")]
     public async Task GetAllIncludingDeletedAsync_DateTime_Eq_Operator_Works()
-        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (response, products, content, _) =>
+        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (response, products, content, _, _) =>
         {
             response.IsSuccessStatusCode.ShouldBeTrue(content);
             products.ShouldNotBeNull();

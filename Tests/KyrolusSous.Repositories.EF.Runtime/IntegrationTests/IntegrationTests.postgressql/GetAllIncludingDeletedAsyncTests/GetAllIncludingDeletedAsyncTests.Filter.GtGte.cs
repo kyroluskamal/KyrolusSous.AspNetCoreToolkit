@@ -6,7 +6,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("gte")]
     [InlineData(">=")]
     public async Task GetAllIncludingDeletedAsync_NumericProperty_Gte_Operator_Works(string op)
-     => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+     => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
          {
              products.ShouldNotBeNull();
              products.Count.ShouldBe(2);
@@ -17,7 +17,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("gt")]
     [InlineData(">")]
     public async Task GetAllIncludingDeletedAsync_DateTimeOffsetProperty_Gt_Operator_Works(string op)
-=> await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+=> await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
 {
     products.ShouldNotBeNull();
     products.Count.ShouldBe(2);
@@ -28,7 +28,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("gte")]
     [InlineData(">=")]
     public async Task GetAllIncludingDeletedAsync_DateTimeOffsetProperty_Gte_Operator_Works(string op)
-     => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+     => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
      {
          products.ShouldNotBeNull();
          products.Count.ShouldBe(2);

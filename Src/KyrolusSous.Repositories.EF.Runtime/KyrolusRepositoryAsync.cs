@@ -60,7 +60,7 @@ public class KyrolusRepositoryAsync<
             bool? AsNoTracking,
             bool? UseSplitQuery,
             CancellationToken CancellationToken, bool DeletedOnly = false, bool IncludeDeleted = false,
-            params Expression<Func<TEntity, object?>>[] IncludeExpressions);
+            params Expression<Func<TEntity, object?>>[]? IncludeExpressions);
     protected record GetByIdCommand(
         string OperationName,
         bool CachePredicate,

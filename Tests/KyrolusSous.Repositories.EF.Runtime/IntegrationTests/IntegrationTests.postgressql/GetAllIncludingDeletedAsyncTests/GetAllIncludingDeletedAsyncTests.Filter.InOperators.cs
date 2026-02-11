@@ -4,7 +4,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
 {
     [Fact(DisplayName = "GetAllIncludingDeletedAsync supports in operator for numeric values")]
     public async Task GetAllIncludingDeletedAsync_In_Operator_Numeric_Works()
-        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
         {
             products.ShouldNotBeNull();
             products.Select(p => p.StockQuantity).OrderBy(x => x).ShouldBe([25, 50]);
@@ -12,7 +12,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
 
     [Fact(DisplayName = "GetAllIncludingDeletedAsync supports in operator for string values")]
     public async Task GetAllIncludingDeletedAsync_In_Operator_String_Works()
-        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
         {
             products.ShouldNotBeNull();
             products.Select(p => p.Name).OrderBy(x => x).ShouldBe(["Clean Code", "Laptop Pro 15"]);
@@ -20,7 +20,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
 
     [Fact(DisplayName = "GetAllIncludingDeletedAsync supports in operator for nullable decimal values")]
     public async Task GetAllIncludingDeletedAsync_In_Operator_NullableDecimal_Works()
-        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
         {
             products.ShouldNotBeNull();
             products.Count.ShouldBe(2);
@@ -30,7 +30,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
 
     [Fact(DisplayName = "GetAllIncludingDeletedAsync supports in operator for nullable int values")]
     public async Task GetAllIncludingDeletedAsync_In_Operator_NullableInt_Works()
-        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
         {
             products.ShouldNotBeNull();
             products.Count.ShouldBe(2);
@@ -40,7 +40,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
 
     [Fact(DisplayName = "GetAllIncludingDeletedAsync supports in operator for Guid values")]
     public async Task GetAllIncludingDeletedAsync_In_Operator_Guid_Works()
-        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
         {
             products.ShouldNotBeNull();
             var expected = new[] { DataSeeder.productHeadphonesId, DataSeeder.productLaptopId }

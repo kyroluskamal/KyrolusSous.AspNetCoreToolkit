@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql;
 
@@ -21,11 +22,18 @@ public class KyrolusRuntimePSFixture(WebApplicationFactory<Program> factory) : I
         return Task.CompletedTask;
     }
 
-    public Task DisposeAsync()
+    public async Task DisposeAsync()
     {
-        _client.Dispose();
-        _factory.Dispose();
-        return Task.CompletedTask;
+        try
+        {
+            _client?.Dispose();
+            if (_factory is not null)
+                await _factory.DisposeAsync();
+        }
+        finally
+        {
+            await DropDatabaseAsync();
+        }
     }
     public WebApplicationFactory<Program> WithPolicy(KyrolusRepositoryPolicy? policy = null)
         => factory.WithWebHostBuilder(builder =>
@@ -64,6 +72,34 @@ public class KyrolusRuntimePSFixture(WebApplicationFactory<Program> factory) : I
                     services.AddSingleton(policy ?? KyrolusRepositoryPolicy.Default);
             });
         });
+
+    private async Task DropDatabaseAsync()
+    {
+        var adminConnectionString = "Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=postgres";
+        try
+        {
+            NpgsqlConnection.ClearAllPools();
+            await using var conn = new NpgsqlConnection(adminConnectionString);
+            await conn.OpenAsync();
+
+            await using (var terminateCmd = new NpgsqlCommand(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = @db;",
+                conn))
+            {
+                terminateCmd.Parameters.AddWithValue("db", _databaseName);
+                await terminateCmd.ExecuteNonQueryAsync();
+            }
+
+            await using var dropCmd = new NpgsqlCommand(
+                $"DROP DATABASE IF EXISTS \"{_databaseName}\";",
+                conn);
+            await dropCmd.ExecuteNonQueryAsync();
+        }
+        catch
+        {
+            // Best-effort cleanup; tests should not fail because cleanup failed.
+        }
+    }
 
     public async Task<(HttpResponseMessage response, List<TEntity>? items, string? content)> ArrangeAndActUseingHttpForListAsync<TEntity>(QueryRequest? queyrequest = null)
     {
@@ -114,14 +150,16 @@ public class KyrolusRuntimePSFixture(WebApplicationFactory<Program> factory) : I
     }
     public async Task WithSoftDeletedAsync_SingleKey<TEntity>(
     Guid id,
-    Func<HttpResponseMessage, List<TEntity>?, string?, KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, TEntity, Guid>, Task> testBody, QueryRequest? queyrequest = null)
+    Func<HttpResponseMessage, List<TEntity>?, string?, KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, TEntity, Guid>, IServiceProvider?, Task> testBody, QueryRequest? queyrequest = null, KyrolusRepositoryPolicy? policy = null)
     where TEntity : class
     {
         var qRequest = queyrequest is null ? new QueryRequest { IncludeDeleted = true } : queyrequest with { IncludeDeleted = true };
-        await using var scope = Factory.Services.CreateAsyncScope();
-        var repo = scope.ServiceProvider
-            .GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, TEntity, Guid>>();
-        var uow = scope.ServiceProvider.GetRequiredService<IKyrolusUnitOfWork>();
+        var cutomfactory = policy is null ? Factory : WithPolicy(policy);
+        await using var scope = cutomfactory.Services.CreateAsyncScope();
+        var sp = scope.ServiceProvider;
+        var db = sp.GetRequiredService<ApplicationDbContext>();
+        var repo = sp.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, TEntity, Guid>>();
+        var uow = sp.GetRequiredService<IKyrolusUnitOfWork>();
 
         bool deleted = false;
         try
@@ -130,8 +168,9 @@ public class KyrolusRuntimePSFixture(WebApplicationFactory<Program> factory) : I
             deleted.ShouldBeTrue();
             var result = await uow.SaveChangesAsync();
             result.ShouldBeGreaterThan(0);
+            db.ChangeTracker.Clear();
             var (response, items, content) = await ArrangeAndActUseingHttpForListAsync<TEntity>(qRequest);
-            await testBody(response, items!, content, repo);
+            await testBody(response, items!, content, repo, sp);
         }
         finally
         {
@@ -145,14 +184,16 @@ public class KyrolusRuntimePSFixture(WebApplicationFactory<Program> factory) : I
     }
     public async Task WithSoftDeletedAsync_CompositeKey<TEntity>(
     object[] keyValues,
-    Func<HttpResponseMessage, List<TEntity>?, string?, KyrolusCompositeKeySoftDeleteRepositoryAsync<ApplicationDbContext, TEntity>, Task> testBody, QueryRequest? queyrequest = null)
+    Func<HttpResponseMessage, List<TEntity>?, string?, KyrolusCompositeKeySoftDeleteRepositoryAsync<ApplicationDbContext, TEntity>, IServiceProvider?, Task> testBody, QueryRequest? queyrequest = null, KyrolusRepositoryPolicy? policy = null)
     where TEntity : class
     {
         var qRequest = queyrequest is null ? new QueryRequest { IncludeDeleted = true } : queyrequest with { IncludeDeleted = true };
-        await using var scope = Factory.Services.CreateAsyncScope();
-        var repo = scope.ServiceProvider
-            .GetRequiredService<KyrolusCompositeKeySoftDeleteRepositoryAsync<ApplicationDbContext, TEntity>>();
-        var uow = scope.ServiceProvider.GetRequiredService<IKyrolusUnitOfWork>();
+        var cutomfactory = policy is null ? Factory : WithPolicy(policy);
+
+        await using var scope = cutomfactory.Services.CreateAsyncScope();
+        var sp = scope.ServiceProvider;
+        var repo = sp.GetRequiredService<KyrolusCompositeKeySoftDeleteRepositoryAsync<ApplicationDbContext, TEntity>>();
+        var uow = sp.GetRequiredService<IKyrolusUnitOfWork>();
 
         bool deleted = false;
         try
@@ -162,7 +203,7 @@ public class KyrolusRuntimePSFixture(WebApplicationFactory<Program> factory) : I
             var result = await uow.SaveChangesAsync();
             result.ShouldBeGreaterThan(0);
             var (response, items, content) = await ArrangeAndActUseingHttpForListAsync<TEntity>(qRequest);
-            await testBody(response, items!, content, repo);
+            await testBody(response, items!, content, repo, sp);
         }
         finally
         {

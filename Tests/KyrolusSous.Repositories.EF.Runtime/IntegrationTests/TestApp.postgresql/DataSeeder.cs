@@ -3,6 +3,7 @@ namespace KyrolusSous.Repositories.EF.Runtime.TestApp;
 
 public static class DataSeeder
 {
+
     public readonly static Guid tenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     public readonly static Guid storeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     public readonly static Guid storeId2 = Guid.Parse("22222222-2222-2222-2222-222222222223");
@@ -24,13 +25,11 @@ public static class DataSeeder
     public readonly static Guid customerJaneId = Guid.Parse("77777777-7777-7777-7777-777777777772");
 
     public readonly static Guid orderId = Guid.Parse("88888888-8888-8888-8888-888888888881");
+    public static readonly object[] ReviewLapTopKey = [productLaptopId, customerJaneId];
 
     public static async Task SeedAsync(ApplicationDbContext db, CancellationToken ct = default)
     {
-        if (await db.Tenants.AnyAsync(ct))
-        {
-            return;
-        }
+        if (await db.Tenants.AnyAsync(ct)) return;
 
         var now = DateTimeOffset.UtcNow;
         var tenant = new Tenant()
@@ -79,7 +78,7 @@ public static class DataSeeder
             StoreId = storeId,
             Name = "Electronics",
             Slug = "electronics",
-            CreatedAt = DateTimeOffset.Parse("2025-01-01T00:00:00Z", CultureInfo.InvariantCulture),
+            CreatedAt = DateTimeOffset.Parse("2025-01-01T00:05:00Z", CultureInfo.InvariantCulture),
             UpdatedAt = now
         };
 
@@ -103,13 +102,13 @@ public static class DataSeeder
             StockQuantity = 25,
             AddedAt = new TimeOnly(10, 30),
             AddedIn = new DateOnly(2024, 6, 15),
+            FinishedAt = TimeSpan.FromDays(1),
             IsActive = true,
             Weight = null,
             Count = 10,
             RowVersion = [0],
             DiscontinuedAt = new DateTime(2025, 12, 31, 0, 0, 0, DateTimeKind.Utc),
             CreatedAt = DateTimeOffset.Parse("2024-06-01T00:00:00Z", CultureInfo.InvariantCulture),
-            UpdatedAt = now
         };
 
         var productHeadphones = new Product
@@ -122,13 +121,14 @@ public static class DataSeeder
             StockQuantity = 80,
             AddedAt = new TimeOnly(14, 0),
             AddedIn = new DateOnly(2024, 8, 5),
+            UpdatedAt = DateTimeOffset.Parse("2024-08-01T00:00:00Z", CultureInfo.InvariantCulture),
+            FinishedAt = TimeSpan.FromDays(2),
             IsActive = true,
             RowVersion = [0],
             Weight = 0.25m,
             Count = 5,
             DiscontinuedAt = new DateTime(2025, 12, 31, 0, 0, 0, DateTimeKind.Utc),
             CreatedAt = DateTimeOffset.Parse("2024-08-01T00:00:00Z", CultureInfo.InvariantCulture),
-            UpdatedAt = now
         };
 
         var productBook = new Product
@@ -142,12 +142,13 @@ public static class DataSeeder
             IsActive = true,
             AddedIn = new DateOnly(2025, 1, 1),
             AddedAt = new TimeOnly(9, 0),
+            UpdatedAt = DateTimeOffset.Parse("2025-01-01T00:00:00Z", CultureInfo.InvariantCulture),
+            FinishedAt = TimeSpan.FromDays(1),
             RowVersion = [0],
             Weight = 0.5m,
             Count = null,
             DiscontinuedAt = new DateTime(2025, 12, 31, 0, 0, 0, DateTimeKind.Utc),
             CreatedAt = DateTimeOffset.Parse("2025-01-01T00:00:00Z", CultureInfo.InvariantCulture),
-            UpdatedAt = now
         };
 
         var productCategories = new[]
@@ -240,13 +241,43 @@ public static class DataSeeder
             PaidAt = now
         };
 
-        var review = new Review
+        var reviewLaptop = new Review
         {
             ProductId = productLaptopId,
             CustomerId = customerJaneId,
             Rating = 5,
             Comment = "Great laptop, fast shipping.",
-            CreatedAt = now
+            CreatedAt = DateTimeOffset.Parse("2025-01-01T00:00:00Z", CultureInfo.InvariantCulture),
+            AddedIn = new DateOnly(2024, 6, 15),
+            AddedAt = new TimeOnly(10, 30),
+            FinishedAt = TimeSpan.FromDays(1),
+            DiscontinuedAt = new DateTime(2025, 12, 31, 0, 0, 0, DateTimeKind.Utc)
+        };
+
+        var reviewHeadphones = new Review
+        {
+            ProductId = productHeadphonesId,
+            CustomerId = customerJohnId,
+            Rating = 3,
+            Comment = "Good sound, a bit tight.",
+            CreatedAt = DateTimeOffset.Parse("2025-02-01T00:00:00Z", CultureInfo.InvariantCulture),
+            AddedIn = new DateOnly(2024, 8, 5),
+            AddedAt = new TimeOnly(14, 0),
+            FinishedAt = TimeSpan.FromDays(2),
+            DiscontinuedAt = new DateTime(2025, 12, 31, 0, 0, 0, DateTimeKind.Utc)
+        };
+
+        var reviewBook = new Review
+        {
+            ProductId = productBookId,
+            CustomerId = customerJaneId,
+            Rating = 4,
+            Comment = "Solid read, clear concepts.",
+            CreatedAt = DateTimeOffset.Parse("2025-03-01T00:00:00Z", CultureInfo.InvariantCulture),
+            AddedIn = new DateOnly(2025, 1, 1),
+            AddedAt = new TimeOnly(9, 0),
+            FinishedAt = TimeSpan.FromDays(1),
+            DiscontinuedAt = new DateTime(2025, 12, 31, 0, 0, 0, DateTimeKind.Utc)
         };
 
         db.Tenants.Add(tenant);
@@ -261,7 +292,7 @@ public static class DataSeeder
         db.Orders.Add(order);
         db.OrderLines.AddRange(orderLines);
         db.Payments.Add(payment);
-        db.Reviews.Add(review);
+        db.Reviews.AddRange(reviewLaptop, reviewHeadphones, reviewBook);
 
         await db.SaveChangesAsync(ct);
     }

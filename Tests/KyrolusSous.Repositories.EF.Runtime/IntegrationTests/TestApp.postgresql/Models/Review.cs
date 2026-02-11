@@ -11,6 +11,10 @@ public class Review
     public Guid CustomerId { get; set; }
     public virtual Customer? Customer { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+    public DateOnly AddedIn { get; set; }
+    public TimeOnly? AddedAt { get; set; }
+    public TimeSpan FinishedAt { get; set; }
+    public DateTime? DiscontinuedAt { get; set; }
 }
 
 

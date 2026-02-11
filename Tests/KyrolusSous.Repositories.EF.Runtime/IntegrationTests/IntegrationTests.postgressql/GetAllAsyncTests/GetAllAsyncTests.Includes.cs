@@ -8,9 +8,9 @@ public partial class GetAllAsyncTests
         var (_, reviews, _) = await ArrangeAndActUseingHttpForListAsync<Review>(
             new QueryRequest(Includes: ["Product", "Customer"]));
         reviews.ShouldNotBeNull();
-        reviews.ShouldHaveSingleItem();
-        reviews[0].Product.ShouldNotBeNull();
-        reviews[0].Customer.ShouldNotBeNull();
+        reviews.Count.ShouldBe(3);
+        reviews.All(r => r.Product is not null).ShouldBeTrue();
+        reviews.All(r => r.Customer is not null).ShouldBeTrue();
     }
     [Fact(DisplayName = "GetAllAsync returns entities with multiple Includes")]
     public async Task GetAllAsync_MultipleIncludeGraphs_ReturnsEntitiesWithMultipleIncludeGraphs()
@@ -45,10 +45,10 @@ public partial class GetAllAsyncTests
         result.First().Reviews.ShouldNotBeNull();
         result.ToArray()[1].ShouldNotBeNull();
         result.ToArray()[1].Store.ShouldNotBeNull();
-        result.ToArray()[1].Reviews.Count.ShouldBe(0);
         result.ToArray()[2].ShouldNotBeNull();
         result.ToArray()[2].Store.ShouldNotBeNull();
-        result.ToArray()[1].Reviews.Count.ShouldBe(0);
+        result.All(p => p.Reviews is not null).ShouldBeTrue();
+        result.All(p => p.Reviews!.Count == 1).ShouldBeTrue();
     }
     [Fact(DisplayName = "GetAllAsync ignores blank include strings and still applies valid includes")]
     public async Task GetAllAsync_BlankIncludeStrings_AreIgnored()

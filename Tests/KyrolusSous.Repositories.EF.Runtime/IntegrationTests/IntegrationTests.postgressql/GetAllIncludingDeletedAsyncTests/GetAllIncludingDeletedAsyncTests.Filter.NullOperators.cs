@@ -4,7 +4,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
 {
     [Fact(DisplayName = "GetAllIncludingDeletedAsync supports isnull operator for nullable properties")]
     public async Task GetAllIncludingDeletedAsync_IsNull_Operator_Works()
-        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
         {
             products.ShouldNotBeNull();
             products.Count.ShouldBe(1);
@@ -13,7 +13,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
 
     [Fact(DisplayName = "GetAllIncludingDeletedAsync supports notnull operator for nullable properties")]
     public async Task GetAllIncludingDeletedAsync_NotNull_Operator_Works()
-        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
         {
             products.ShouldNotBeNull();
             products.Count.ShouldBe(2);
@@ -22,7 +22,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
 
     [Fact(DisplayName = "GetAllIncludingDeletedAsync supports notnull operator for reference navigation")]
     public async Task GetAllIncludingDeletedAsync_NotNull_Operator_Reference_Works()
-        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+        => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
         {
             products.ShouldNotBeNull();
             products.Count.ShouldBe(3);

@@ -6,7 +6,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("lte")]
     [InlineData("<=")]
     public async Task GetAllIncludingDeletedAsync_NumericProperty_Lte_Operator_Works(string op)
-    => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+    => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
         {
             products?.Count.ShouldBe(2);
             products?[1].StockQuantity.ShouldBeLessThanOrEqualTo(25);
@@ -17,7 +17,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("lt")]
     [InlineData("<")]
     public async Task GetAllIncludingDeletedAsync_DateTimeOffsetProperty_Lt_Operator_Works(string op)
-=> await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+=> await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
 {
     products.ShouldNotBeNull();
     products.Count.ShouldBe(1);
@@ -27,7 +27,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
     [InlineData("lte")]
     [InlineData("<=")]
     public async Task GetAllIncludingDeletedAsync_DateTimeOffsetProperty_Lte_Operator_Works(string op)
-    => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _) =>
+    => await WithSoftDeletedAsync_SingleKey<Product>(DataSeeder.productLaptopId, async (_, products, _, _, _) =>
     {
         products.ShouldNotBeNull();
         products.Count.ShouldBe(2);

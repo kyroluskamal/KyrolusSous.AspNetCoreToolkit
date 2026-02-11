@@ -9,7 +9,8 @@ public class Product : AuditableSoftDeletableEntity
     public required string Sku { get; set; }
     public decimal Price { get; set; }
     public DateOnly AddedIn { get; set; }
-    public TimeOnly? AddedAt { get; set; }
+    public TimeOnly? AddedAt { get; set; }   
+    public TimeSpan FinishedAt { get; set; }
     public DateTime? DiscontinuedAt { get; set; }
     public int StockQuantity { get; set; }
     public decimal? Weight { get; set; }

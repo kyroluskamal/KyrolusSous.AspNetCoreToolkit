@@ -30,7 +30,7 @@ public class KyrolusSingleKeySoftDeleteRepositoryAsync<TDbContext, TEntity, TKey
                     includeProperties is not { Count: > 0 } && includeGraph is not { Includes.Count: > 0 }
                     , filter, orderBy, includeProperties, includeGraph, asNoTracking, useSplitQuery, cancellationToken, false, true)).ConfigureAwait(false);
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    public async Task<IReadOnlyList<TEntity>> GetAllIncludingDeletedAsync(Expression<Func<TEntity, bool>>? filter = null, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default, params Expression<Func<TEntity, object?>>[] includeExpressions)
+    public async Task<IReadOnlyList<TEntity>> GetAllIncludingDeletedAsync(Expression<Func<TEntity, bool>>? filter = null, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default, params Expression<Func<TEntity, object?>>[]? includeExpressions)
         => await GetAllInternalAsync(new GetAllCommand(nameof(GetAllIncludingDeletedAsync),
                     includeExpressions is not { Length: > 0 }
                     , filter, orderBy, null, null, asNoTracking, useSplitQuery, cancellationToken, false, true, includeExpressions)).ConfigureAwait(false);

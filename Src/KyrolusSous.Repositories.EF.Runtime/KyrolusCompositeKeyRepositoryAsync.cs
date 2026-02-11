@@ -23,7 +23,15 @@ public class KyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity>(
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<TEntity?> GetByIdAsync(object?[] keyValues,
         List<string>? includeProperties = null, IncludeGraph<TEntity>? includeGraph = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default)
-    => GetByIdInternalAsync(new GetByIdCommand(nameof(GetByIdAsync), includeProperties is not { Count: > 0 } && includeGraph is not { Includes.Count: > 0 }, keyValues, includeProperties, includeGraph, asNoTracking, useSplitQuery, false, cancellationToken));
+    => GetByIdInternalAsync(new GetByIdCommand(nameof(GetByIdAsync), 
+    includeProperties is not { Count: > 0 } && includeGraph is not { Includes.Count: > 0 },
+    keyValues, 
+    includeProperties, 
+    includeGraph, 
+    asNoTracking, 
+    useSplitQuery, 
+    false, 
+    cancellationToken));
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<TEntity?> GetByIdAsync(object?[] keyValues, bool? asNoTracking = null,
         bool? useSplitQuery = null, CancellationToken cancellationToken = default,params Expression<Func<TEntity, object?>>[] includeExpressions)

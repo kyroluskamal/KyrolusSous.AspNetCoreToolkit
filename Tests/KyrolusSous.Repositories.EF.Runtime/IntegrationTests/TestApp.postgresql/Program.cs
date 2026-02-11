@@ -46,7 +46,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapEntity<Category, KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Category, Guid>, Guid, Guid>();
 app.MapEntity<Product, KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>, Guid, Guid>();
-app.MapEntity<Review, KyrolusCompositeKeyRepositoryAsync<ApplicationDbContext, Review>, Guid, object?>();
+app.MapEntity<Review, KyrolusCompositeKeySoftDeleteRepositoryAsync<ApplicationDbContext, Review>, Guid, object?>();
 app.MapEntity<Customer, KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Customer, Guid>, Guid, Guid>();
 app.MapEntity<Order, KyrolusSingleKeyRepositoryAsync<ApplicationDbContext, Order, Guid>, Guid, Guid>();
 app.MapEntity<OrderLine, KyrolusCompositeKeyRepositoryAsync<ApplicationDbContext, OrderLine>, Guid, object?>();
