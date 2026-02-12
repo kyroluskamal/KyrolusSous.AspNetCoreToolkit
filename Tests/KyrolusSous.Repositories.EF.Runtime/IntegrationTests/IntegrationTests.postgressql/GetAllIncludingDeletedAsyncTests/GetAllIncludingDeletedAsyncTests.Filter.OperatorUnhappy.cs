@@ -8,18 +8,18 @@ public partial class GetAllIncludingDeletedAsync_Filter
         string? Value,
         string? MessageContains);
 
-    private static readonly IReadOnlyDictionary<string, InvalidOperatorSpec> InvalidProductOperatorSpecs = BuildInvalidProductOperatorSpecs();
-    private static readonly IReadOnlyDictionary<string, InvalidOperatorSpec> InvalidReviewOperatorSpecs = BuildInvalidReviewOperatorSpecs();
+    private static readonly IReadOnlyDictionary<string, InvalidOperatorSpec> InvalidSingleKeyOperatorSpecs = BuildInvalidSingleKeyOperatorSpecs();
+    private static readonly IReadOnlyDictionary<string, InvalidOperatorSpec> InvalidCompositeKeyOperatorSpecs = BuildInvalidCompositeKeyOperatorSpecs();
 
-    public static TheoryData<string> OperatorInvalidProductCases => CaseIdsFrom(InvalidProductOperatorSpecs);
-    public static TheoryData<string> OperatorInvalidReviewCases => CaseIdsFrom(InvalidReviewOperatorSpecs);
+    public static TheoryData<string> InvalidSingleKeyOperatorCases => CaseIdsFrom(InvalidSingleKeyOperatorSpecs);
+    public static TheoryData<string> InvalidCompositeKeyOperatorCases => CaseIdsFrom(InvalidCompositeKeyOperatorSpecs);
 
-    [Theory(DisplayName = "GetAllIncludingDeletedAsync rejects invalid operators for products")]
-    [MemberData(nameof(OperatorInvalidProductCases))]
-    public async Task GetAllIncludingDeletedAsync_InvalidOperators_ReturnError_ForProducts(string caseId)
+    [Theory(DisplayName = "GetAllIncludingDeletedAsync rejects invalid operators for single-key entities")]
+    [MemberData(nameof(InvalidSingleKeyOperatorCases))]
+    public async Task GetAllIncludingDeletedAsync_InvalidOperators_ReturnError_ForSingleKey(string caseId)
     {
         caseId.ShouldNotBeNullOrWhiteSpace();
-        var spec = InvalidProductOperatorSpecs[caseId];
+        var spec = InvalidSingleKeyOperatorSpecs[caseId];
         var request = new QueryRequest(
             Filters: [new FilterClause(spec.Property, spec.Operator, spec.Value)],
             IncludeDeleted: true);
@@ -31,12 +31,12 @@ public partial class GetAllIncludingDeletedAsync_Filter
             content.ShouldContain(spec.MessageContains);
     }
 
-    [Theory(DisplayName = "GetAllIncludingDeletedAsync rejects invalid operators for reviews")]
-    [MemberData(nameof(OperatorInvalidReviewCases))]
-    public async Task GetAllIncludingDeletedAsync_InvalidOperators_ReturnError_ForReviews(string caseId)
+    [Theory(DisplayName = "GetAllIncludingDeletedAsync rejects invalid operators for composite-key entities")]
+    [MemberData(nameof(InvalidCompositeKeyOperatorCases))]
+    public async Task GetAllIncludingDeletedAsync_InvalidOperators_ReturnError_ForCompositeKey(string caseId)
     {
         caseId.ShouldNotBeNullOrWhiteSpace();
-        var spec = InvalidReviewOperatorSpecs[caseId];
+        var spec = InvalidCompositeKeyOperatorSpecs[caseId];
         var request = new QueryRequest(
             Filters: [new FilterClause(spec.Property, spec.Operator, spec.Value)],
             IncludeDeleted: true);
@@ -48,7 +48,7 @@ public partial class GetAllIncludingDeletedAsync_Filter
             content.ShouldContain(spec.MessageContains);
     }
 
-    private static IReadOnlyDictionary<string, InvalidOperatorSpec> BuildInvalidProductOperatorSpecs()
+    private static IReadOnlyDictionary<string, InvalidOperatorSpec> BuildInvalidSingleKeyOperatorSpecs()
         => new Dictionary<string, InvalidOperatorSpec>
         {
             ["stockquantity-eq-notnumber"] = new InvalidOperatorSpec(nameof(Product.StockQuantity), "eq", "NotANumber", null),
@@ -67,12 +67,17 @@ public partial class GetAllIncludingDeletedAsync_Filter
             ["stockquantity-notnull"] = new InvalidOperatorSpec(nameof(Product.StockQuantity), "notnull", null, "supported only for nullable"),
             ["stockquantity-in-null"] = new InvalidOperatorSpec(nameof(Product.StockQuantity), "in", "null,25", "does not support NULL"),
             ["id-in-notguid"] = new InvalidOperatorSpec(nameof(Product.Id), "in", "NotAGuid", "could not be converted"),
+            ["id-contains"] = new InvalidOperatorSpec(nameof(Product.Id), "contains", DataSeeder.productLaptopId.ToString(), "Unsupported operator"),
+            ["id-between"] = new InvalidOperatorSpec(nameof(Product.Id), "between", $"{DataSeeder.productLaptopId}..{DataSeeder.productHeadphonesId}", "Invalid filter"),
             ["finishedat-gt"] = new InvalidOperatorSpec(nameof(Product.FinishedAt), "gt", "1.00:00:00", "Invalid filter"),
+            ["isactive-between"] = new InvalidOperatorSpec(nameof(Product.IsActive), "between", "true,false", "Invalid filter"),
             ["name-any"] = new InvalidOperatorSpec(nameof(Product.Name), "any", "A", null),
-            ["name-all"] = new InvalidOperatorSpec(nameof(Product.Name), "all", "A", null)
+            ["name-all"] = new InvalidOperatorSpec(nameof(Product.Name), "all", "A", null),
+            ["stockquantity-in-invalid"] = new InvalidOperatorSpec(nameof(Product.StockQuantity), "in", "NotANumber", "could not be converted"),
+            ["stockquantity-between-invalid"] = new InvalidOperatorSpec(nameof(Product.StockQuantity), "between", "NotANumber..20", "Invalid filter")
         };
 
-    private static IReadOnlyDictionary<string, InvalidOperatorSpec> BuildInvalidReviewOperatorSpecs()
+    private static IReadOnlyDictionary<string, InvalidOperatorSpec> BuildInvalidCompositeKeyOperatorSpecs()
         => new Dictionary<string, InvalidOperatorSpec>
         {
             ["rating-eq-notnumber"] = new InvalidOperatorSpec(nameof(Review.Rating), "eq", "NotANumber", null),
@@ -91,8 +96,11 @@ public partial class GetAllIncludingDeletedAsync_Filter
             ["rating-notnull"] = new InvalidOperatorSpec(nameof(Review.Rating), "notnull", null, "supported only for nullable"),
             ["rating-in-null"] = new InvalidOperatorSpec(nameof(Review.Rating), "in", "null,3", "does not support NULL"),
             ["productid-in-notguid"] = new InvalidOperatorSpec(nameof(Review.ProductId), "in", "NotAGuid", "could not be converted"),
+            ["productid-contains"] = new InvalidOperatorSpec(nameof(Review.ProductId), "contains", DataSeeder.productLaptopId.ToString(), "Unsupported operator"),
+            ["productid-between"] = new InvalidOperatorSpec(nameof(Review.ProductId), "between", $"{DataSeeder.productLaptopId}..{DataSeeder.productHeadphonesId}", "Invalid filter"),
             ["finishedat-gt"] = new InvalidOperatorSpec(nameof(Review.FinishedAt), "gt", "1.00:00:00", "Invalid filter"),
             ["comment-any"] = new InvalidOperatorSpec(nameof(Review.Comment), "any", "A", null),
-            ["comment-all"] = new InvalidOperatorSpec(nameof(Review.Comment), "all", "A", null)
+            ["comment-all"] = new InvalidOperatorSpec(nameof(Review.Comment), "all", "A", null),
+            ["rating-between-invalid"] = new InvalidOperatorSpec(nameof(Review.Rating), "between", "NotANumber..5", "Invalid filter")
         };
 }

@@ -170,7 +170,57 @@ public partial class GetAllAsyncTests
             ["invalid-between"] = new InvalidQuerySpec(
                 new QueryRequest(Filters: [new FilterClause("Name", "between", "A..Z")]),
                 HttpStatusCode.InternalServerError,
-                "Invalid filter: property='Name', operator='between', value='A..Z'")
+                "Invalid filter: property='Name', operator='between', value='A..Z'"),
+
+            ["string-relational-gt"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Name", "gt", "Alpha")]),
+                HttpStatusCode.InternalServerError,
+                "Invalid filter: property='Name', operator='gt', value='Alpha'"),
+
+            ["guid-contains"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Id", "contains", "66666666-6666-6666-6666-666666666661")]),
+                HttpStatusCode.InternalServerError,
+                "Unsupported operator 'contains'"),
+
+            ["bool-between"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("IsActive", "between", "true,false")]),
+                HttpStatusCode.InternalServerError,
+                "Invalid filter"),
+
+            ["timespan-relational-gt"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("FinishedAt", "gt", "1.00:00:00")]),
+                HttpStatusCode.InternalServerError,
+                "Invalid filter"),
+
+            ["in-stockquantity-invalid"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("StockQuantity", "in", "NotANumber")]),
+                HttpStatusCode.InternalServerError,
+                "could not be converted"),
+
+            ["between-stockquantity-invalid"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("StockQuantity", "between", "NotANumber..20")]),
+                HttpStatusCode.InternalServerError,
+                "Invalid filter"),
+
+            ["between-guid-invalid"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Id", "between", "66666666-6666-6666-6666-666666666661..66666666-6666-6666-6666-666666666662")]),
+                HttpStatusCode.InternalServerError,
+                "Invalid filter"),
+
+            ["in-null-nonnullable"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("StockQuantity", "in", "null,25")]),
+                HttpStatusCode.InternalServerError,
+                "does not support NULL"),
+
+            ["any-noncollection"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Name", "any", "A")]),
+                HttpStatusCode.InternalServerError,
+                "Invalid filter"),
+
+            ["all-noncollection"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Name", "all", "A")]),
+                HttpStatusCode.InternalServerError,
+                "Invalid filter")
         };
 
     // CaseIdsFrom is defined in GetAllAsyncTests.Helpers.cs
