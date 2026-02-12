@@ -57,15 +57,16 @@ public partial class AddAsyncTests
         await Should.ThrowAsync<OperationCanceledException>(async () => await uow.SaveChangesAsync(cts.Token));
     }
 
-    public static TheoryData<string, bool> DuplicateCases => new()
+    public static TheoryData<string, bool, bool> DuplicateCases => new()
     {
-        { "single-key", false },
-        { "composite-key", true }
+        { "single-key-primary-key", false, false },
+        { "single-key-unique-sku", false, true },
+        { "composite-key-primary-key", true, false }
     };
 
     [Theory(DisplayName = "AddAsync duplicate keys fail on SaveChanges")]
     [MemberData(nameof(DuplicateCases))]
-    public async Task AddAsync_Duplicate_ThrowsDbUpdateException(string caseId, bool compositeKey)
+    public async Task AddAsync_Duplicate_ThrowsDbUpdateException(string caseId, bool compositeKey, bool uniqueSkuOnly)
     {
         caseId.ShouldNotBeNullOrWhiteSpace();
         using var scope = Factory.Services.CreateScope();
@@ -86,10 +87,15 @@ public partial class AddAsyncTests
         }
 
         var singleRepo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
-        var duplicateProduct = CreateValidProduct(
-            id: DataSeeder.productLaptopId,
-            sku: "LP-15",
-            name: "Duplicate PK Product");
+        var duplicateProduct = uniqueSkuOnly
+            ? CreateValidProduct(
+                id: Guid.NewGuid(),
+                sku: "LP-15",
+                name: "Duplicate Unique SKU Product")
+            : CreateValidProduct(
+                id: DataSeeder.productLaptopId,
+                sku: "LP-15",
+                name: "Duplicate PK Product");
 
         await singleRepo.AddAsync(duplicateProduct);
         await Should.ThrowAsync<DbUpdateException>(async () => await uow.SaveChangesAsync());

@@ -82,6 +82,29 @@ public partial class AddAsyncTests
                 }, JsonOptions),
                 ExpectedStatus: HttpStatusCode.InternalServerError),
 
+            ["product-null-sku"] = new(
+                Route: "product",
+                BuildPayload: () => JsonSerializer.Serialize(new
+                {
+                    Id = Guid.NewGuid(),
+                    StoreId = DataSeeder.storeId,
+                    Name = "Valid name",
+                    Sku = (string?)null,
+                    Price = 10m,
+                    AddedIn = new DateOnly(2026, 1, 1),
+                    AddedAt = (TimeOnly?)null,
+                    FinishedAt = TimeSpan.FromHours(1),
+                    DiscontinuedAt = (DateTime?)null,
+                    StockQuantity = 1,
+                    Weight = (decimal?)null,
+                    Count = (int?)null,
+                    IsActive = true,
+                    RowVersion = new byte[] { 0 },
+                    IsDeleted = false,
+                    DeletedAt = (DateTimeOffset?)null
+                }, JsonOptions),
+                ExpectedStatus: HttpStatusCode.InternalServerError),
+
             ["review-duplicate-composite-key"] = new(
                 Route: "review",
                 BuildPayload: () => JsonSerializer.Serialize(
@@ -103,10 +126,24 @@ public partial class AddAsyncTests
                     JsonOptions),
                 ExpectedStatus: HttpStatusCode.InternalServerError),
 
+            ["review-invalid-customer"] = new(
+                Route: "review",
+                BuildPayload: () => JsonSerializer.Serialize(
+                    CreateValidReview(
+                        productId: DataSeeder.productLaptopId,
+                        customerId: Guid.NewGuid(),
+                        rating: 3),
+                    JsonOptions),
+                ExpectedStatus: HttpStatusCode.InternalServerError),
+
+            ["null-body"] = new(
+                Route: "product",
+                BuildPayload: static () => "null",
+                ExpectedStatus: HttpStatusCode.BadRequest),
+
             ["malformed-json"] = new(
                 Route: "product",
                 BuildPayload: static () => "{ this is not valid json }",
                 ExpectedStatus: HttpStatusCode.BadRequest)
         };
 }
-
