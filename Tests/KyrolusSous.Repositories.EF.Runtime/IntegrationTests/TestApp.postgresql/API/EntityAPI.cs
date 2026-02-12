@@ -132,7 +132,7 @@ public static class EntityApi
             });
 
             group.MapPost("/add-range", async (
-                IEnumerable<TEntity> entities,
+                List<TEntity> entities,
                 IKyrolusUnitOfWork uow,
                 CancellationToken ct) =>
             {

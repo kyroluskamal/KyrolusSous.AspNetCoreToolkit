@@ -196,12 +196,13 @@ public class KyrolusRepositoryAsync<
     public async Task<IEnumerable<TEntity>> AddRangeAsync(IEnumerable<TEntity> entities, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(entities);
-        ArgumentOutOfRangeException.ThrowIfLessThan(entities.Count(), 1);
-        return await ExecuteWithNotificationsAsync(nameof(AddRangeAsync), entities, async ct =>
+        var entityList = entities as IList<TEntity> ?? [.. entities];
+        ArgumentOutOfRangeException.ThrowIfLessThan(entityList.Count, 1);
+        return await ExecuteWithNotificationsAsync(nameof(AddRangeAsync), entityList, async ct =>
     {
-        await set.AddRangeAsync(entities, ct).ConfigureAwait(false);
-        await InvalidateCachesAsync(entities, ct).ConfigureAwait(false);
-        return entities;
+        await set.AddRangeAsync(entityList, ct).ConfigureAwait(false);
+        await InvalidateCachesAsync(entityList, ct).ConfigureAwait(false);
+        return entityList;
     }, e => e, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
 
@@ -1241,14 +1242,19 @@ public class KyrolusRepositoryAsync<
 
     private void UpdateEntityProperties(TEntity source, TEntity target)
     {
-        var changedProps = db.Entry(source).Properties
-            .Where(p => !Equals(p.CurrentValue, p.OriginalValue));
-
+        var sourceEntry = db.Entry(source);
         var targetEntry = db.Entry(target);
-        foreach (var prop in changedProps)
+        foreach (var targetProp in targetEntry.Properties)
         {
-            var targetProp = targetEntry.Property(prop.Metadata.Name);
-            targetProp.CurrentValue = prop.CurrentValue;
+            var property = targetProp.Metadata;
+            if (property.IsPrimaryKey() || property.IsShadowProperty())
+                continue;
+
+            var sourceProp = sourceEntry.Property(property.Name);
+            if (Equals(targetProp.CurrentValue, sourceProp.CurrentValue))
+                continue;
+
+            targetProp.CurrentValue = sourceProp.CurrentValue;
             targetProp.IsModified = true;
         }
     }
