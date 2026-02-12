@@ -710,6 +710,50 @@ public sealed class RuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
             return false;
 
         var span = raw.AsSpan().Trim();
+        char? quote = null;
+
+        for (int i = 0; i < span.Length; i++)
+        {
+            var c = span[i];
+
+            if (quote is not null)
+            {
+                if (c == '\\' && i + 1 < span.Length)
+                {
+                    i++; // skip escaped character
+                    continue;
+                }
+
+                if (c == quote)
+                    quote = null;
+
+                continue;
+            }
+
+            if (TryStartQuote(c, ref quote))
+                continue;
+
+            if (!IsBetweenDelimiter(span, i))
+                continue;
+
+            if (!TryNormalizeBetweenToken(span.Slice(0, i), out start) ||
+                !TryNormalizeBetweenToken(span.Slice(i + 2), out end))
+            {
+                start = null;
+                end = null;
+                return false;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryNormalizeBetweenToken(ReadOnlySpan<char> tokenSpan, out string? token)
+    {
+        token = null;
+        var span = tokenSpan.Trim();
         var sb = new StringBuilder();
         char? quote = null;
 
@@ -717,26 +761,20 @@ public sealed class RuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
         {
             var c = span[i];
 
-            // داخل quotes: تعامل مع الإغلاق/الهروب/الإضافة
             if (TryHandleQuotedChar(span, ref i, ref quote, sb))
                 continue;
 
-            // لو دخلنا quote جديد
             if (TryStartQuote(c, ref quote))
                 continue;
-
-            // delimiter .. خارج quotes
-            if (IsBetweenDelimiter(span, i))
-            {
-                start = NormalizeValueToken(sb.ToString());
-                end = NormalizeValueToken(span.Slice(i + 2).ToString());
-                return true;
-            }
 
             sb.Append(c);
         }
 
-        return false;
+        if (quote is not null)
+            return false;
+
+        token = NormalizeValueToken(sb.ToString());
+        return true;
     }
 
     private static bool TryHandleQuotedChar(ReadOnlySpan<char> span, ref int i, ref char? quote, StringBuilder sb)
