@@ -534,15 +534,23 @@ public class KyrolusRepositoryAsync<
         ArgumentException.ThrowIfKeyValuesIsNotValid(keyValues, keyPropertyNames.Length);
 
         return ExecuteWithNotificationsAsync(operationName, (keyValues, isSoftDelete), async ct =>
-            await ConcurrencyHelper.ExecuteWithConcurrencyRetryAsync(
-            async () =>
-            {
-                await RemoveInternalAsync(keyValues, isSoftDelete, cancellationToken).ConfigureAwait(false);
-                return true;
-            },
-            policy,
-            async ex => await ConcurrencyHelper.BuildConcurrencyInfoAsync(ex, rowVersionProperty, cancellationToken).ConfigureAwait(false),
-            cancellationToken),
+        {
+            var removeResult = await ConcurrencyHelper.ExecuteWithConcurrencyRetryAsync(
+                async () =>
+                {
+                    await RemoveInternalAsync(keyValues, isSoftDelete, ct).ConfigureAwait(false);
+                    return true;
+                },
+                policy,
+                async ex => await ConcurrencyHelper.BuildConcurrencyInfoAsync(ex, rowVersionProperty, ct).ConfigureAwait(false),
+                ct).ConfigureAwait(false);
+
+            if (removeResult.Status == KyrolusRepositoryOperationStatus.Failed &&
+                removeResult.Exception is KeyNotFoundException)
+                return RepositoryOperationResult<bool>.NotFound();
+
+            return removeResult;
+        },
         e => new { KeyValues = keyValues, IsSoftDelete = isSoftDelete }, ex => new { Exception = ex.Message }, cancellationToken);
     }
     #endregion

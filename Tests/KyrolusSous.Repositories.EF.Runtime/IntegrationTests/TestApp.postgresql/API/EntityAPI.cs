@@ -202,12 +202,19 @@ public static class EntityApi
             });
 
             group.MapDelete("/remove-range", async (
-                IEnumerable<TEntity> entities,
+                [FromBody] IEnumerable<TEntity>? entities,
                 IKyrolusUnitOfWork uow,
                 [FromQuery] bool softDelete,
                 CancellationToken ct) =>
             {
-                await Repo(uow).RemoveRangeAsync(entities, ct);
+                if (entities is null)
+                    return Results.BadRequest("Request body is required.");
+
+                var entityList = entities as IList<TEntity> ?? entities.ToList();
+                if (entityList.Count == 0)
+                    return Results.BadRequest("At least one entity is required.");
+
+                await Repo(uow).RemoveRangeAsync(entityList, ct);
                 await uow.SaveChangesAsync(ct);
                 return Results.NoContent();
             });
