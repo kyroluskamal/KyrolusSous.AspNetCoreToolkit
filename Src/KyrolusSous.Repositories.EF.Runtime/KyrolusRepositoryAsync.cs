@@ -38,7 +38,7 @@ public class KyrolusRepositoryAsync<
     protected readonly IKyrolusRepositoryPolicyProvider? policyProvider;
     private Task? policyInitTask;
     protected static readonly ConcurrentDictionary<Type, Func<TDbContext, TKey, IAsyncEnumerable<TEntity>>> CompiledById = new();
-    private static readonly ConcurrentDictionary<(Type Type, bool SoftDelete, string SoftDeleteProperty, string DefaultIncludesKey), Func<TDbContext, Expression<Func<TEntity, bool>>, bool, bool, IAsyncEnumerable<TEntity>>> CompiledGetAllFiltered = new();
+    private static readonly ConcurrentDictionary<(Type Type, bool SoftDelete, string SoftDeleteProperty, string DefaultIncludesKey, string FilterFingerprint, bool AsNoTracking, bool UseSplitQuery), Func<TDbContext, IAsyncEnumerable<TEntity>>> CompiledGetAllFiltered = new();
     protected sealed record MaterializeByIdCommand
     (
         object?[]? KeyValues,
@@ -145,15 +145,22 @@ public class KyrolusRepositoryAsync<
         var useSoftDelete = softDeleteEnabled && !string.IsNullOrWhiteSpace(softDeleteProperty);
         var defaultIncludeProperties = policyDefaultIncludeProperties;
         var defaultIncludesKey = GetDefaultIncludesKey();
+        var filterFingerprint = KyrolusExpressionFingerprint.Build(filter);
         if (globalQueryFilter is not null)
         {
             var items = await GetAllAsync(filter, null, asNoTracking, useSplitQuery, cancellationToken).ConfigureAwait(false);
             return [.. items];
         }
 
-        var filteredKey = (typeof(TEntity), useSoftDelete, softDeleteProperty, defaultIncludesKey);
+        var filteredKey = (typeof(TEntity), useSoftDelete, softDeleteProperty, defaultIncludesKey, filterFingerprint, requestedNoTracking, requestedSplit);
         var filteredDel = CompiledGetAllFiltered.GetOrAdd(filteredKey, _ =>
-            BuildCompiledGetAllFiltered(useSoftDelete, softDeleteProperty, defaultIncludeProperties));
+            BuildCompiledGetAllFiltered(
+                useSoftDelete,
+                softDeleteProperty,
+                defaultIncludeProperties,
+                filter,
+                requestedNoTracking,
+                requestedSplit));
 
         return await ExecuteWithNotificationsAsync(nameof(GetAllCompiledAsync), filter, async (ct) =>
         {
@@ -166,14 +173,14 @@ public class KyrolusRepositoryAsync<
                     cacheKey,
                     async innerCt =>
                     {
-                        var asyncQuery = filteredDel(db, filter, requestedNoTracking, requestedSplit);
+                        var asyncQuery = filteredDel(db);
                         return await asyncQuery.ToListAsync(innerCt).ConfigureAwait(false);
                     },
                     options, ct).ConfigureAwait(false) ?? [];
 
             }
 
-            var asyncQueryFallback = filteredDel(db, filter, requestedNoTracking, requestedSplit);
+            var asyncQueryFallback = filteredDel(db);
             return await asyncQueryFallback.ToListAsync(cancellationToken).ConfigureAwait(false);
         }, (e) => new { filter, e.Count }, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
@@ -1031,72 +1038,100 @@ public class KyrolusRepositoryAsync<
     }
 
 
-    private static Func<TDbContext, Expression<Func<TEntity, bool>>, bool, bool, IAsyncEnumerable<TEntity>> BuildCompiledGetAllFiltered(
+    private static Func<TDbContext, IAsyncEnumerable<TEntity>> BuildCompiledGetAllFiltered(
         bool useSoftDelete,
         string softDeleteProperty,
-        string[] defaultIncludeProperties)
+        string[] defaultIncludeProperties,
+        Expression<Func<TEntity, bool>> filter,
+        bool asNoTracking,
+        bool useSplitQuery)
     {
-        var ctxParam = Expression.Parameter(typeof(TDbContext), "ctx");
-        var filterParam = Expression.Parameter(typeof(Expression<Func<TEntity, bool>>), "filter");
-        var noTrackParam = Expression.Parameter(typeof(bool), "noTrack");
-        var splitParam = Expression.Parameter(typeof(bool), "split");
-
-        var setMethod = typeof(DbContext).GetMethods();
-        var setGeneric = setMethod.Single(m => m.Name == nameof(DbContext.Set) && m.IsGenericMethod && m.GetParameters().Length == 0)
-            .MakeGenericMethod(typeof(TEntity));
-        Expression query = Expression.Call(ctxParam, setGeneric);
-
-        if (useSoftDelete)
+        var stage = "init";
+        try
         {
-            var entityParam = Expression.Parameter(typeof(TEntity), "e");
-            var efPropertyMethod = typeof(Microsoft.EntityFrameworkCore.EF).GetMethod(nameof(Microsoft.EntityFrameworkCore.EF.Property))!
-                .MakeGenericMethod(typeof(bool));
-            var propAccess = Expression.Call(efPropertyMethod, entityParam, Expression.Constant(softDeleteProperty));
-            var predicate = Expression.Lambda<Func<TEntity, bool>>(Expression.Not(propAccess), entityParam);
-            var whereMethod = typeof(Queryable).GetMethods()
-                .Single(m => m.Name == nameof(Queryable.Where) && m.GetParameters().Length == 2)
-                .MakeGenericMethod(typeof(TEntity));
-            query = Expression.Call(whereMethod, query, predicate);
-        }
+            var ctxParam = Expression.Parameter(typeof(TDbContext), "ctx");
 
-        if (defaultIncludeProperties.Length > 0)
-        {
-            var includeStringMethod = typeof(EntityFrameworkQueryableExtensions).GetMethods()
-                .Single(m => m.Name == nameof(EntityFrameworkQueryableExtensions.Include)
-                    && m.GetParameters().Length == 2
-                    && m.GetParameters()[1].ParameterType == typeof(string))
+            var setMethod = typeof(DbContext).GetMethods();
+            var setGeneric = setMethod.Single(m => m.Name == nameof(DbContext.Set) && m.IsGenericMethod && m.GetParameters().Length == 0)
                 .MakeGenericMethod(typeof(TEntity));
+            Expression query = Expression.Call(ctxParam, setGeneric);
 
-            foreach (var includeProperty in defaultIncludeProperties)
+            if (useSoftDelete)
             {
-                if (string.IsNullOrWhiteSpace(includeProperty)) continue;
-                query = Expression.Call(includeStringMethod, query, Expression.Constant(includeProperty));
+                stage = "soft-delete";
+                var entityParam = Expression.Parameter(typeof(TEntity), "e");
+                var efPropertyMethod = typeof(Microsoft.EntityFrameworkCore.EF).GetMethod(nameof(Microsoft.EntityFrameworkCore.EF.Property))!
+                    .MakeGenericMethod(typeof(bool));
+                var propAccess = Expression.Call(efPropertyMethod, entityParam, Expression.Constant(softDeleteProperty));
+                var predicate = Expression.Lambda<Func<TEntity, bool>>(Expression.Not(propAccess), entityParam);
+                var whereMethod = GetQueryableWhereMethod()
+                    .MakeGenericMethod(typeof(TEntity));
+                query = Expression.Call(whereMethod, query, Expression.Quote(predicate));
             }
+
+            if (defaultIncludeProperties.Length > 0)
+            {
+                stage = "default-includes";
+                var includeStringMethod = typeof(EntityFrameworkQueryableExtensions).GetMethods()
+                    .Single(m => m.Name == nameof(EntityFrameworkQueryableExtensions.Include)
+                        && m.GetParameters().Length == 2
+                        && m.GetParameters()[1].ParameterType == typeof(string))
+                    .MakeGenericMethod(typeof(TEntity));
+
+                foreach (var includeProperty in defaultIncludeProperties)
+                {
+                    if (string.IsNullOrWhiteSpace(includeProperty)) continue;
+                    query = Expression.Call(includeStringMethod, query, Expression.Constant(includeProperty));
+                }
+            }
+
+            var filterWhere = GetQueryableWhereMethod()
+                .MakeGenericMethod(typeof(TEntity));
+            stage = "filter";
+            var filterExpr = Expression.Quote(filter);
+            query = Expression.Call(filterWhere, query, filterExpr);
+
+            stage = "tracking-options";
+            var asQueryable = query.Type == typeof(IQueryable<TEntity>)
+                ? query
+                : Expression.Convert(query, typeof(IQueryable<TEntity>));
+
+            if (asNoTracking)
+            {
+                var asNoTrackingMethod = typeof(EntityFrameworkQueryableExtensions).GetMethods()
+                    .Single(m => m.Name == nameof(EntityFrameworkQueryableExtensions.AsNoTracking) && m.GetParameters().Length == 1)
+                    .MakeGenericMethod(typeof(TEntity));
+                asQueryable = Expression.Call(asNoTrackingMethod, asQueryable);
+            }
+
+            if (useSplitQuery)
+            {
+                var asSplitMethod = typeof(RelationalQueryableExtensions).GetMethods()
+                    .Single(m => m.Name == nameof(RelationalQueryableExtensions.AsSplitQuery) && m.GetParameters().Length == 1)
+                    .MakeGenericMethod(typeof(TEntity));
+                asQueryable = Expression.Call(asSplitMethod, asQueryable);
+            }
+
+            var lambda = Expression.Lambda<Func<TDbContext, IQueryable<TEntity>>>(
+                asQueryable,
+                ctxParam);
+            stage = "compile";
+            return Microsoft.EntityFrameworkCore.EF.CompileAsyncQuery(lambda);
         }
-
-        var filterWhere = typeof(Queryable).GetMethods()
-            .Single(m => m.Name == nameof(Queryable.Where) && m.GetParameters().Length == 2)
-            .MakeGenericMethod(typeof(TEntity));
-        query = Expression.Call(filterWhere, query, filterParam);
-
-        var asNoTrackingMethod = typeof(EntityFrameworkQueryableExtensions).GetMethods()
-            .Single(m => m.Name == nameof(EntityFrameworkQueryableExtensions.AsNoTracking) && m.GetParameters().Length == 1)
-            .MakeGenericMethod(typeof(TEntity));
-        var asSplitMethod = typeof(RelationalQueryableExtensions).GetMethods()
-            .Single(m => m.Name == nameof(RelationalQueryableExtensions.AsSplitQuery) && m.GetParameters().Length == 1)
-            .MakeGenericMethod(typeof(TEntity));
-
-        query = Expression.Condition(noTrackParam, Expression.Call(asNoTrackingMethod, query), query);
-        query = Expression.Condition(splitParam, Expression.Call(asSplitMethod, query), query);
-
-        var lambda = Expression.Lambda<Func<TDbContext, Expression<Func<TEntity, bool>>, bool, bool, IQueryable<TEntity>>>(
-            query,
-            ctxParam,
-            filterParam,
-            noTrackParam,
-            splitParam);
-        return Microsoft.EntityFrameworkCore.EF.CompileAsyncQuery(lambda);
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to build compiled GetAll query at stage '{stage}'.", ex);
+        }
     }
+
+    private static System.Reflection.MethodInfo GetQueryableWhereMethod()
+        => typeof(Queryable).GetMethods()
+            .Single(m => m.Name == nameof(Queryable.Where)
+                && m.GetParameters().Length == 2
+                && m.GetParameters()[1].ParameterType.IsGenericType
+                && m.GetParameters()[1].ParameterType.GetGenericTypeDefinition() == typeof(Expression<>)
+                && m.GetParameters()[1].ParameterType.GetGenericArguments()[0].IsGenericType
+                && m.GetParameters()[1].ParameterType.GetGenericArguments()[0].GetGenericTypeDefinition() == typeof(Func<,>));
 
     private string GetDefaultIncludesKey()
     {
@@ -1203,21 +1238,22 @@ public class KyrolusRepositoryAsync<
     {
         await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         Exception? exception = null;
+        TResult? result = default;
         await NotifyBeforeAsync(operationName, beforePayload, cancellationToken).ConfigureAwait(false);
         var sw = Stopwatch.StartNew();
         try
         {
-            var result = await action(cancellationToken).ConfigureAwait(false);
+            result = await action(cancellationToken).ConfigureAwait(false);
             return result;
         }
         catch (Exception ex)
         {
             exception = ex;
-            throw exception;
+            throw;
         }
         finally
         {
-            sw.Stop(); object? afterPayload = null;
+            sw.Stop(); object? afterPayload;
             if (exception is not null)
             {
                 afterPayload = errorPayloadFactory is null
@@ -1227,7 +1263,7 @@ public class KyrolusRepositoryAsync<
             }
             else if (successPayloadFactory is not null)
             {
-                afterPayload = successPayloadFactory;
+                afterPayload = successPayloadFactory(result!);
             }
             else
             {
