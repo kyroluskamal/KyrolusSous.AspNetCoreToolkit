@@ -74,7 +74,10 @@ public partial class GetAllIncludingDeletedAsync_Filter
             ["name-any"] = new InvalidOperatorSpec(nameof(Product.Name), "any", "A", null),
             ["name-all"] = new InvalidOperatorSpec(nameof(Product.Name), "all", "A", null),
             ["stockquantity-in-invalid"] = new InvalidOperatorSpec(nameof(Product.StockQuantity), "in", "NotANumber", "could not be converted"),
-            ["stockquantity-between-invalid"] = new InvalidOperatorSpec(nameof(Product.StockQuantity), "between", "NotANumber..20", "Invalid filter")
+            ["stockquantity-between-invalid"] = new InvalidOperatorSpec(nameof(Product.StockQuantity), "between", "NotANumber..20", "Invalid filter"),
+            ["stockquantity-between-malformed-quote-start"] = new InvalidOperatorSpec(nameof(Product.StockQuantity), "between", "\"10..20", "Invalid filter"),
+            ["stockquantity-between-malformed-quote-end"] = new InvalidOperatorSpec(nameof(Product.StockQuantity), "between", "10..\"20", "Invalid filter"),
+            ["stockquantity-between-malformed-escape"] = new InvalidOperatorSpec(nameof(Product.StockQuantity), "between", "\"10\\\"..\"20\"", "Invalid filter")
         };
 
     private static IReadOnlyDictionary<string, InvalidOperatorSpec> BuildInvalidCompositeKeyOperatorSpecs()
@@ -101,6 +104,9 @@ public partial class GetAllIncludingDeletedAsync_Filter
             ["finishedat-gt"] = new InvalidOperatorSpec(nameof(Review.FinishedAt), "gt", "1.00:00:00", "Invalid filter"),
             ["comment-any"] = new InvalidOperatorSpec(nameof(Review.Comment), "any", "A", null),
             ["comment-all"] = new InvalidOperatorSpec(nameof(Review.Comment), "all", "A", null),
-            ["rating-between-invalid"] = new InvalidOperatorSpec(nameof(Review.Rating), "between", "NotANumber..5", "Invalid filter")
+            ["rating-between-invalid"] = new InvalidOperatorSpec(nameof(Review.Rating), "between", "NotANumber..5", "Invalid filter"),
+            ["rating-between-malformed-quote-start"] = new InvalidOperatorSpec(nameof(Review.Rating), "between", "\"3..5", "Invalid filter"),
+            ["rating-between-malformed-quote-end"] = new InvalidOperatorSpec(nameof(Review.Rating), "between", "3..\"5", "Invalid filter"),
+            ["rating-between-malformed-escape"] = new InvalidOperatorSpec(nameof(Review.Rating), "between", "\"3\\\"..\"5\"", "Invalid filter")
         };
 }

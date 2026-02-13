@@ -172,6 +172,21 @@ public partial class GetAllAsyncTests
                 HttpStatusCode.InternalServerError,
                 "Invalid filter: property='Name', operator='between', value='A..Z'"),
 
+            ["between-malformed-quote-start"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Price", "between", "\"100..300")]),
+                HttpStatusCode.InternalServerError,
+                "Invalid filter"),
+
+            ["between-malformed-quote-end"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Price", "between", "100..\"300")]),
+                HttpStatusCode.InternalServerError,
+                "Invalid filter"),
+
+            ["between-malformed-escape"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Price", "between", "\"100\\\"..\"300\"")]),
+                HttpStatusCode.InternalServerError,
+                "Invalid filter"),
+
             ["string-relational-gt"] = new InvalidQuerySpec(
                 new QueryRequest(Filters: [new FilterClause("Name", "gt", "Alpha")]),
                 HttpStatusCode.InternalServerError,

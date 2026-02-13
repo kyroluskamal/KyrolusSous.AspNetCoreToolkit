@@ -710,45 +710,58 @@ public sealed class RuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
             return false;
 
         var span = raw.AsSpan().Trim();
-        char? quote = null;
+        if (!TryFindBetweenDelimiter(span, out var delimiterIndex))
+            return false;
 
-        for (int i = 0; i < span.Length; i++)
+        return TryNormalizeBetweenToken(span.Slice(0, delimiterIndex), out start)
+            && TryNormalizeBetweenToken(span.Slice(delimiterIndex + 2), out end);
+    }
+
+    private static bool TryFindBetweenDelimiter(ReadOnlySpan<char> span, out int delimiterIndex)
+    {
+        delimiterIndex = -1;
+        char? quote = null;
+        var index = 0;
+
+        while (index < span.Length)
         {
-            var c = span[i];
+            var c = span[index];
 
             if (quote is not null)
             {
-                if (c == '\\' && i + 1 < span.Length)
+                if (c == '\\')
                 {
-                    i++; // skip escaped character
+                    index = AdvanceEscapedIndex(span, index);
                     continue;
                 }
 
                 if (c == quote)
                     quote = null;
 
+                index++;
                 continue;
             }
 
             if (TryStartQuote(c, ref quote))
-                continue;
-
-            if (!IsBetweenDelimiter(span, i))
-                continue;
-
-            if (!TryNormalizeBetweenToken(span.Slice(0, i), out start) ||
-                !TryNormalizeBetweenToken(span.Slice(i + 2), out end))
             {
-                start = null;
-                end = null;
-                return false;
+                index++;
+                continue;
             }
 
-            return true;
+            if (IsBetweenDelimiter(span, index))
+            {
+                delimiterIndex = index;
+                return true;
+            }
+
+            index++;
         }
 
         return false;
     }
+
+    private static int AdvanceEscapedIndex(ReadOnlySpan<char> span, int index)
+        => index + (index + 1 < span.Length ? 2 : 1);
 
     private static bool TryNormalizeBetweenToken(ReadOnlySpan<char> tokenSpan, out string? token)
     {
