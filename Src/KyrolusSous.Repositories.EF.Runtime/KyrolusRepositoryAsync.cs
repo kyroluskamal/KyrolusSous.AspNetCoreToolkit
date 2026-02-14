@@ -37,7 +37,7 @@ public class KyrolusRepositoryAsync<
     protected KyrolusDefaultIncludeMode defaultIncludeMode;
     protected readonly IKyrolusRepositoryPolicyProvider? policyProvider;
     private Task? policyInitTask;
-    protected static readonly ConcurrentDictionary<Type, Func<TDbContext, TKey, IAsyncEnumerable<TEntity>>> CompiledById = new();
+    protected static readonly ConcurrentDictionary<(Type Type, bool SoftDelete, string SoftDeleteProperty, string DefaultIncludesKey, bool AsNoTracking, bool UseSplitQuery, string KeyName), Func<TDbContext, TKey, IAsyncEnumerable<TEntity>>> CompiledById = new();
     private static readonly ConcurrentDictionary<(Type Type, bool SoftDelete, string SoftDeleteProperty, string DefaultIncludesKey, string FilterFingerprint, bool AsNoTracking, bool UseSplitQuery), Func<TDbContext, IAsyncEnumerable<TEntity>>> CompiledGetAllFiltered = new();
     protected sealed record MaterializeByIdCommand
     (
@@ -1046,7 +1046,6 @@ public class KyrolusRepositoryAsync<
         bool asNoTracking,
         bool useSplitQuery)
     {
-        var stage = "init";
         try
         {
             var ctxParam = Expression.Parameter(typeof(TDbContext), "ctx");
@@ -1058,7 +1057,6 @@ public class KyrolusRepositoryAsync<
 
             if (useSoftDelete)
             {
-                stage = "soft-delete";
                 var entityParam = Expression.Parameter(typeof(TEntity), "e");
                 var efPropertyMethod = typeof(Microsoft.EntityFrameworkCore.EF).GetMethod(nameof(Microsoft.EntityFrameworkCore.EF.Property))!
                     .MakeGenericMethod(typeof(bool));
@@ -1071,7 +1069,6 @@ public class KyrolusRepositoryAsync<
 
             if (defaultIncludeProperties.Length > 0)
             {
-                stage = "default-includes";
                 var includeStringMethod = typeof(EntityFrameworkQueryableExtensions).GetMethods()
                     .Single(m => m.Name == nameof(EntityFrameworkQueryableExtensions.Include)
                         && m.GetParameters().Length == 2
@@ -1087,11 +1084,9 @@ public class KyrolusRepositoryAsync<
 
             var filterWhere = GetQueryableWhereMethod()
                 .MakeGenericMethod(typeof(TEntity));
-            stage = "filter";
             var filterExpr = Expression.Quote(filter);
             query = Expression.Call(filterWhere, query, filterExpr);
 
-            stage = "tracking-options";
             var asQueryable = query.Type == typeof(IQueryable<TEntity>)
                 ? query
                 : Expression.Convert(query, typeof(IQueryable<TEntity>));
@@ -1115,12 +1110,11 @@ public class KyrolusRepositoryAsync<
             var lambda = Expression.Lambda<Func<TDbContext, IQueryable<TEntity>>>(
                 asQueryable,
                 ctxParam);
-            stage = "compile";
             return Microsoft.EntityFrameworkCore.EF.CompileAsyncQuery(lambda);
         }
         catch (Exception ex)
         {
-            throw new InvalidOperationException($"Failed to build compiled GetAll query at stage '{stage}'.", ex);
+            throw new InvalidOperationException("Failed to build compiled GetAll query.", ex);
         }
     }
 
@@ -1237,39 +1231,26 @@ public class KyrolusRepositoryAsync<
             Func<Exception, object?>? errorPayloadFactory = null, CancellationToken cancellationToken = default)
     {
         await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
-        Exception? exception = null;
-        TResult? result = default;
         await NotifyBeforeAsync(operationName, beforePayload, cancellationToken).ConfigureAwait(false);
         var sw = Stopwatch.StartNew();
         try
         {
-            result = await action(cancellationToken).ConfigureAwait(false);
+            var result = await action(cancellationToken).ConfigureAwait(false);
+            sw.Stop();
+            var afterPayload = successPayloadFactory is null
+                ? beforePayload
+                : successPayloadFactory(result);
+            await NotifyAfterAsync(operationName, afterPayload, null, sw.Elapsed, cancellationToken).ConfigureAwait(false);
             return result;
         }
         catch (Exception ex)
         {
-            exception = ex;
+            sw.Stop();
+            var afterPayload = errorPayloadFactory is null
+                ? beforePayload
+                : errorPayloadFactory(ex);
+            await NotifyAfterAsync(operationName, afterPayload, ex, sw.Elapsed, cancellationToken).ConfigureAwait(false);
             throw;
-        }
-        finally
-        {
-            sw.Stop(); object? afterPayload;
-            if (exception is not null)
-            {
-                afterPayload = errorPayloadFactory is null
-                    ? beforePayload
-                    : errorPayloadFactory(exception);
-
-            }
-            else if (successPayloadFactory is not null)
-            {
-                afterPayload = successPayloadFactory(result!);
-            }
-            else
-            {
-                afterPayload = beforePayload;
-            }
-            await NotifyAfterAsync(operationName, afterPayload, exception, sw.Elapsed, cancellationToken).ConfigureAwait(false);
         }
     }
     private string[] GetPrimaryKeyNames()
