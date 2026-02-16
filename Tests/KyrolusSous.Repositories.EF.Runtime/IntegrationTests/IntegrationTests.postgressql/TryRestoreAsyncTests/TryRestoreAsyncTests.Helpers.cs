@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.TryRestoreAsyncTests;
 
 public partial class TryRestoreAsyncTests
@@ -11,6 +13,33 @@ public partial class TryRestoreAsyncTests
         foreach (var key in specs.Keys)
             data.Add(key);
         return data;
+    }
+
+    protected async Task<(HttpResponseMessage Response, string Content)> PostRawAsync(
+        string route,
+        string? payload = null,
+        string mediaType = "application/json")
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, route);
+        if (payload is not null)
+            request.Content = new StringContent(payload, Encoding.UTF8, mediaType);
+
+        var response = await _client.SendAsync(request);
+        var content = await response.Content.ReadAsStringAsync();
+        return (response, content);
+    }
+
+    protected Task<(HttpResponseMessage Response, string Content)> PostSingleTryRestoreAsync<TEntity>(Guid id)
+    {
+        var route = $"/api/{typeof(TEntity).Name.ToLowerInvariant()}/{id}/try-restore";
+        return PostRawAsync(route);
+    }
+
+    protected Task<(HttpResponseMessage Response, string Content)> PostCompositeTryRestoreAsync<TEntity>(object?[] keys)
+    {
+        var keysQuery = string.Join("&", keys.Select(x => $"keys={Uri.EscapeDataString(x?.ToString() ?? string.Empty)}"));
+        var route = $"/api/{typeof(TEntity).Name.ToLowerInvariant()}/try-restore/by-id?{keysQuery}";
+        return PostRawAsync(route);
     }
 
     protected static Product CreateValidProduct(
