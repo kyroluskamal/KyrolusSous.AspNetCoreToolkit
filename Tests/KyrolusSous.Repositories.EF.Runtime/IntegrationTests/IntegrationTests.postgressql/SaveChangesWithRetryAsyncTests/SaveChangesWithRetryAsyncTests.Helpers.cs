@@ -110,4 +110,7 @@ public partial class SaveChangesWithRetryAsyncTests
         return await db.Reviews.IgnoreQueryFilters().AsNoTracking()
             .SingleOrDefaultAsync(x => x.ProductId == productId && x.CustomerId == customerId);
     }
+
+    protected TestRepositoryObserver GetObserver()
+        => Factory.Services.GetRequiredService<TestRepositoryObserver>();
 }
