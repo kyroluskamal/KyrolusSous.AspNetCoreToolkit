@@ -262,6 +262,30 @@ public partial class GetAllAsyncTests
             products => products.Select(p => p.Name).OrderBy(x => x).ShouldBe(["Clean Code", "Laptop Pro 15"]));
         AddCase(data, "all-reviews", nameof(Product.Reviews), "all", "Rating >= 4", 2,
             products => products.Select(p => p.Name).OrderBy(x => x).ShouldBe(["Clean Code", "Laptop Pro 15"]));
+        AddCase(data, "any-reviews-in-parentheses", nameof(Product.Reviews), "any", "Rating in (4,5)", 2,
+            products => products.Select(p => p.Name).OrderBy(x => x).ShouldBe(["Clean Code", "Laptop Pro 15"]));
+        AddCase(data, "any-reviews-in-braces", nameof(Product.Reviews), "any", "Rating in {4,5}", 2,
+            products => products.Select(p => p.Name).OrderBy(x => x).ShouldBe(["Clean Code", "Laptop Pro 15"]));
+        AddCase(data, "any-reviews-in-brackets", nameof(Product.Reviews), "any", "Rating in [4,5]", 2,
+            products => products.Select(p => p.Name).OrderBy(x => x).ShouldBe(["Clean Code", "Laptop Pro 15"]));
+        AddCase(data, "any-reviews-or-pipe", nameof(Product.Reviews), "any", "Rating == 5 | Rating == 3", 2,
+            products => products.Select(p => p.Name).OrderBy(x => x).ShouldBe(["Laptop Pro 15", "Noise Cancelling Headphones"]));
+        AddCase(data, "any-reviews-and-comma", nameof(Product.Reviews), "any", "Rating >= 4, Rating <= 5", 2,
+            products => products.Select(p => p.Name).OrderBy(x => x).ShouldBe(["Clean Code", "Laptop Pro 15"]));
+        AddCase(data, "any-reviews-parenthesized", nameof(Product.Reviews), "any", "(Rating >= 4)", 2,
+            products => products.Select(p => p.Name).OrderBy(x => x).ShouldBe(["Clean Code", "Laptop Pro 15"]));
+        AddCase(data, "any-reviews-between-dateonly", nameof(Product.Reviews), "any", "AddedIn between 2024-06-01..2024-12-31", 2,
+            products => products.Select(p => p.Name).OrderBy(x => x).ShouldBe(["Laptop Pro 15", "Noise Cancelling Headphones"]));
+        AddCase(data, "any-reviews-comment-contains", nameof(Product.Reviews), "any", "Comment contains sound", 1,
+            products => products.Single().Name.ShouldBe("Noise Cancelling Headphones"));
+        AddCase(data, "any-reviews-comment-quoted", nameof(Product.Reviews), "any", "Comment == \"Good sound, a bit tight.\"", 1,
+            products => products.Single().Name.ShouldBe("Noise Cancelling Headphones"));
+        AddCase(data, "all-reviews-neq-angle", nameof(Product.Reviews), "all", "Rating <> 3", 2,
+            products => products.Select(p => p.Name).OrderBy(x => x).ShouldBe(["Clean Code", "Laptop Pro 15"]));
+        AddCase(data, "all-reviews-or-pipe", nameof(Product.Reviews), "all", "Rating == 5 | Rating == 4", 2,
+            products => products.Select(p => p.Name).OrderBy(x => x).ShouldBe(["Clean Code", "Laptop Pro 15"]));
+        AddCase(data, "all-reviews-trailing-space-value", nameof(Product.Reviews), "all", "Rating==5  ", 1,
+            products => products.Single().Name.ShouldBe("Laptop Pro 15"));
 
         AddCase(data, "store-notnull", nameof(Product.Store), "notnull", null, 3,
             products => products.Count.ShouldBe(3));

@@ -235,7 +235,82 @@ public partial class GetAllAsyncTests
             ["all-noncollection"] = new InvalidQuerySpec(
                 new QueryRequest(Filters: [new FilterClause("Name", "all", "A")]),
                 HttpStatusCode.InternalServerError,
-                "Invalid filter")
+                "Invalid filter"),
+
+            ["nested-rating-isnull"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Reviews", "any", "Rating isnull")]),
+                HttpStatusCode.InternalServerError,
+                "Invalid filter"),
+
+            ["nested-rating-null-relational"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Reviews", "any", "Rating > null")]),
+                HttpStatusCode.InternalServerError,
+                "Invalid filter"),
+
+            ["nested-rating-invalid-conversion"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Reviews", "any", "Rating==NotANumber")]),
+                HttpStatusCode.InternalServerError,
+                "Invalid filter"),
+
+            ["nested-rating-in-invalid"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Reviews", "any", "Rating in [5,bad]")]),
+                HttpStatusCode.InternalServerError,
+                "Invalid filter"),
+
+            ["nested-rating-in-empty-token"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Reviews", "any", "Rating in [5,,4]")]),
+                HttpStatusCode.InternalServerError,
+                "Invalid filter"),
+
+            ["nested-empty-property-segments"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Reviews", "any", ".==1")]),
+                HttpStatusCode.InternalServerError,
+                "Invalid filter"),
+
+            ["nested-contains-on-numeric"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Reviews", "any", "Rating contains 5")]),
+                HttpStatusCode.InternalServerError,
+                "TargetInvocationException"),
+
+            ["nested-missing-closing-parenthesis"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Reviews", "any", "(Rating == 5")]),
+                HttpStatusCode.InternalServerError,
+                "Exception"),
+
+            ["nested-missing-closing-quote"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Reviews", "any", "Comment == \"Good sound")]),
+                HttpStatusCode.InternalServerError,
+                "Exception"),
+
+            ["nested-value-required"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Reviews", "any", "Rating ==")]),
+                HttpStatusCode.InternalServerError,
+                "Exception"),
+
+            ["nested-operator-required"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Reviews", "any", "Rating")]),
+                HttpStatusCode.InternalServerError,
+                "Exception"),
+
+            ["nested-property-required"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Reviews", "any", "== 5")]),
+                HttpStatusCode.InternalServerError,
+                "Exception"),
+
+            ["nested-missing-closing-bracket"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Reviews", "any", "Rating in [4,5")]),
+                HttpStatusCode.InternalServerError,
+                "Exception"),
+
+            ["nested-between-missing-end"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Reviews", "any", "AddedIn between 2024-06-01..")]),
+                HttpStatusCode.InternalServerError,
+                "Exception"),
+
+            ["nested-between-timespan-unsupported"] = new InvalidQuerySpec(
+                new QueryRequest(Filters: [new FilterClause("Reviews", "any", "FinishedAt between 1.00:00:00..1.00:00:00")]),
+                HttpStatusCode.InternalServerError,
+                "Exception")
         };
 
     // CaseIdsFrom is defined in GetAllAsyncTests.Helpers.cs

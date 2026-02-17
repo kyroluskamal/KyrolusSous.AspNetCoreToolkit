@@ -24,6 +24,15 @@ EOF
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+to_tool_path() {
+  local path="$1"
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$path"
+  else
+    printf '%s' "$path"
+  fi
+}
+
 TARGET=""
 FILTER=""
 CONFIGURATION="Debug"
@@ -132,13 +141,19 @@ if [[ -n "$TRX_SOURCE" ]]; then
 fi
 
 if command -v reportgenerator >/dev/null 2>&1; then
-  reports_arg="$(printf '%s;' "${COVERAGE_FILES[@]}")"
+  reports_arg=""
+  for coverage_file in "${COVERAGE_FILES[@]}"; do
+    tool_path="$(to_tool_path "$coverage_file")"
+    reports_arg+="${tool_path};"
+  done
   reports_arg="${reports_arg%;}"
+
+  targetdir_arg="$(to_tool_path "$NORMALIZED_DIR")"
 
   echo "Generating merged Cobertura + HTML report..."
   reportgenerator \
     "-reports:$reports_arg" \
-    "-targetdir:$NORMALIZED_DIR" \
+    "-targetdir:$targetdir_arg" \
     "-reporttypes:Cobertura;HtmlInline"
 
   if [[ -f "$NORMALIZED_DIR/Cobertura.xml" ]]; then
