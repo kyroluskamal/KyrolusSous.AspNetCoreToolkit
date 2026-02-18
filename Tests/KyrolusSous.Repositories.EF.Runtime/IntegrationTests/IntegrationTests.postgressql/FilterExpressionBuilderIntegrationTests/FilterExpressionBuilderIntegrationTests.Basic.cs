@@ -4,67 +4,6 @@ namespace KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.Filte
 
 public sealed class FilterExpressionBuilderIntegrationTests(WebApplicationFactory<Program> factory) : KyrolusRuntimePSFixture(factory)
 {
-    private enum ProbeStatus
-    {
-        Draft = 1,
-        Published = 2
-    }
-
-    private sealed class ProbeChild
-    {
-        public int Score { get; init; }
-        public string? Label { get; init; }
-    }
-
-    private sealed class ProbeEntity
-    {
-        public string Name { get; init; } = string.Empty;
-        public string[]? Tags { get; init; }
-        public int[]? Scores { get; init; }
-        public List<ProbeChild>? Children { get; init; }
-        public DateOnly Day { get; init; }
-        public TimeOnly Time { get; init; }
-        public ProbeStatus Status { get; init; }
-        public int? Optional { get; init; }
-    }
-
-    private static readonly IReadOnlyList<ProbeEntity> Probes =
-    [
-        new ProbeEntity
-        {
-            Name = "Alpha",
-            Tags = ["HELLO", "API"],
-            Scores = [5, 5],
-            Children = [new ProbeChild { Score = 5, Label = "Top" }],
-            Day = new DateOnly(2024, 06, 15),
-            Time = new TimeOnly(10, 30),
-            Status = ProbeStatus.Published,
-            Optional = 10
-        },
-        new ProbeEntity
-        {
-            Name = "Beta",
-            Tags = ["world"],
-            Scores = [3, 5],
-            Children = [new ProbeChild { Score = 3, Label = "Mid" }],
-            Day = new DateOnly(2024, 08, 05),
-            Time = new TimeOnly(14, 00),
-            Status = ProbeStatus.Draft,
-            Optional = null
-        },
-        new ProbeEntity
-        {
-            Name = "Gamma",
-            Tags = null,
-            Scores = null,
-            Children = null,
-            Day = new DateOnly(2025, 01, 01),
-            Time = new TimeOnly(09, 00),
-            Status = ProbeStatus.Published,
-            Optional = 5
-        }
-    ];
-
     public static TheoryData<string, string, bool, int, string[]?> ProductSuccessCases => new()
     {
         { "string-eq-case-insensitive", "Name == \"clean code\"", true, 1, ["Clean Code"] },
@@ -76,46 +15,40 @@ public sealed class FilterExpressionBuilderIntegrationTests(WebApplicationFactor
         { "any-nested-filter", "Reviews any (Rating >= 4)", false, 2, ["Clean Code", "Laptop Pro 15"] },
         { "all-nested-filter", "Reviews all (Rating >= 4)", false, 2, ["Clean Code", "Laptop Pro 15"] },
         { "or-with-parenthesis", "(Name == \"Clean Code\") | (Name == \"Laptop Pro 15\")", false, 2, ["Clean Code", "Laptop Pro 15"] },
-        { "and-with-comma", "Price >= 100,Price <= 300", false, 1, ["Noise Cancelling Headphones"] }
+        { "and-with-comma", "Price >= 100,Price <= 300", false, 1, ["Noise Cancelling Headphones"] },
+        { "dateonly-eq", "AddedIn == 2024-06-15", false, 1, ["Laptop Pro 15"] },
+        { "timeonly-eq", "AddedAt == 10:30", false, 1, ["Laptop Pro 15"] },
+        { "nullable-isnull", "Count isnull", false, 1, ["Clean Code"] },
+        { "nullable-notnull", "Count notnull", false, 2, ["Laptop Pro 15", "Noise Cancelling Headphones"] }
     };
 
-    public static TheoryData<string, string, bool, int> ProbeSuccessCases => new()
+    public static TheoryData<string, string, bool, int> PaymentSuccessCases => new()
     {
-        { "string-in-case-insensitive-on-probe", "Name in [\"alpha\",\"beta\"]", true, 2 },
-        { "array-any-string-case-insensitive", "Tags any hello", true, 1 },
-        { "array-all-int-list", "Scores all 5", false, 1 },
-        { "array-any-int-list", "Scores any 3", false, 1 },
-        { "children-any-filter", "Children any (Score >= 5)", false, 1 },
-        { "children-all-filter", "Children all (Score >= 3)", false, 2 },
-        { "enum-parse-success", "Status == Published", false, 2 },
-        { "dateonly-parse-success", "Day == 2024-06-15", false, 1 },
-        { "timeonly-parse-success", "Time == 10:30", false, 1 },
-        { "nullable-null-check", "Optional isnull", false, 1 },
-        { "nullable-not-null-check", "Optional notnull", false, 2 }
+        { "enum-parse-success", "Status == Paid", false, 1 },
+        { "enum-parse-case-insensitive", "Status == paid", true, 1 }
     };
 
-    public static TheoryData<string, string, bool, string> InvalidFilterCases => new()
+    public static TheoryData<string, string, bool, string> ProductInvalidFilterCases => new()
     {
         { "parse-or-trailing", "Name == \"Alpha\" |", false, "Property name is required" },
         { "parse-and-trailing", "Name == \"Alpha\",", false, "Property name is required" },
         { "unsupported-operator", "Name has code", false, "not supported" },
-        { "null-op-on-nonnullable", "Day isnull", false, "does not allow null values" },
-        { "null-literal-on-nonnullable", "Day == null", false, "does not allow null values" },
+        { "null-op-on-nonnullable", "AddedIn isnull", false, "does not allow null values" },
+        { "null-literal-on-nonnullable", "AddedIn == null", false, "does not allow null values" },
         { "null-with-invalid-operator", "Name contains null", false, "does not allow null values" },
-        { "between-requires-two-values", "Optional between 100", false, "Between requires two values" },
-        { "between-invalid-conversion", "Optional between bad..200", false, "could not be converted" },
+        { "between-requires-two-values", "Count between 100", false, "Between requires two values" },
+        { "between-invalid-conversion", "Count between bad..200", false, "could not be converted" },
         { "missing-closing-bracket", "Name in [a,b", false, "Missing closing bracket" },
         { "missing-closing-quote", "Name == \"abc", false, "Missing closing quote" },
         { "member-access-missing-property", "NotFound == 1", false, "was not found" },
         { "any-on-non-collection", "Name any value", false, "only valid for collection properties" },
-        { "nested-invalid-filter", "Children any (Score == bad)", false, "could not be converted" },
-        { "in-nonnullable-with-null", "Day in [null,2024-06-15]", false, "does not support NULL" },
-        { "enum-invalid-value", "Status == Unknown", false, "could not be converted" },
-        { "dateonly-invalid-value", "Day == 2024-99-99", false, "could not be converted" },
-        { "timeonly-invalid-value", "Time == 99:99", false, "could not be converted" }
+        { "nested-invalid-filter", "Reviews any (Rating == bad)", false, "could not be converted" },
+        { "in-nonnullable-with-null", "AddedIn in [null,2024-06-15]", false, "does not support NULL" },
+        { "dateonly-invalid-value", "AddedIn == 2024-99-99", false, "could not be converted" },
+        { "timeonly-invalid-value", "AddedAt == 99:99", false, "could not be converted" }
     };
 
-    [Theory(DisplayName = "FilterExpressionBuilder builds product expression for supported filters")]
+    [Theory(DisplayName = "FilterExpressionBuilder builds product expression and applies it on real PostgreSQL query")]
     [MemberData(nameof(ProductSuccessCases))]
     public async Task FilterExpressionBuilder_Product_SupportedFilters_Work(
         string caseId,
@@ -133,28 +66,30 @@ public sealed class FilterExpressionBuilderIntegrationTests(WebApplicationFactor
 
         items.Count.ShouldBe(expectedCount);
         if (expectedNames is not null)
-            items.Select(item => item.Name).ToArray().ShouldBe(expectedNames.OrderBy(n => n).ToArray());
+            items.Select(item => item.Name).ToArray().ShouldBe(expectedNames.OrderBy(static n => n).ToArray());
     }
 
-    [Theory(DisplayName = "FilterExpressionBuilder builds probe expression for collection and conversion scenarios")]
-    [MemberData(nameof(ProbeSuccessCases))]
-    public void FilterExpressionBuilder_Probe_SupportedFilters_Work(
+    [Theory(DisplayName = "FilterExpressionBuilder builds payment expression and applies enum filters on real PostgreSQL query")]
+    [MemberData(nameof(PaymentSuccessCases))]
+    public async Task FilterExpressionBuilder_Payment_SupportedFilters_Work(
         string caseId,
         string filter,
         bool caseInsensitive,
         int expectedCount)
     {
         caseId.ShouldNotBeNullOrWhiteSpace();
-        var expression = BuildValidExpression<ProbeEntity>(filter, caseInsensitive);
-        var predicate = expression.Compile();
+        var expression = BuildValidExpression<Payment>(filter, caseInsensitive);
 
-        var matched = Probes.Where(predicate).ToList();
-        matched.Count.ShouldBe(expectedCount);
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var items = await db.Payments.AsNoTracking().Where(expression).ToListAsync();
+
+        items.Count.ShouldBe(expectedCount);
     }
 
-    [Theory(DisplayName = "FilterExpressionBuilder returns validation errors for invalid filter syntax and values")]
-    [MemberData(nameof(InvalidFilterCases))]
-    public void FilterExpressionBuilder_InvalidFilters_ReturnError(
+    [Theory(DisplayName = "FilterExpressionBuilder returns validation errors for invalid product filter syntax and values")]
+    [MemberData(nameof(ProductInvalidFilterCases))]
+    public void FilterExpressionBuilder_Product_InvalidFilters_ReturnError(
         string caseId,
         string filter,
         bool caseInsensitive,
@@ -162,7 +97,7 @@ public sealed class FilterExpressionBuilderIntegrationTests(WebApplicationFactor
     {
         caseId.ShouldNotBeNullOrWhiteSpace();
 
-        var ok = KyrolusFilterExpressionBuilder.TryBuildFilterExpression<ProbeEntity>(
+        var ok = KyrolusFilterExpressionBuilder.TryBuildFilterExpression<Product>(
             filter,
             caseInsensitive,
             out var expression,
@@ -174,10 +109,10 @@ public sealed class FilterExpressionBuilderIntegrationTests(WebApplicationFactor
         error.ShouldContain(expectedErrorContains);
     }
 
-    [Fact(DisplayName = "FilterExpressionBuilder returns true with null expression for blank filter text")]
+    [Fact(DisplayName = "FilterExpressionBuilder returns true with null expression for blank product filter text")]
     public void FilterExpressionBuilder_BlankFilter_ReturnsTrueWithNullExpression()
     {
-        var ok = KyrolusFilterExpressionBuilder.TryBuildFilterExpression<ProbeEntity>(
+        var ok = KyrolusFilterExpressionBuilder.TryBuildFilterExpression<Product>(
             "   ",
             caseInsensitive: false,
             out var expression,
@@ -188,13 +123,13 @@ public sealed class FilterExpressionBuilderIntegrationTests(WebApplicationFactor
         error.ShouldBeNull();
     }
 
-    [Fact(DisplayName = "FilterExpressionBuilder throws when string operators are used on non-string members")]
+    [Fact(DisplayName = "FilterExpressionBuilder throws when string operators are used on non-string product members")]
     public void FilterExpressionBuilder_StringOperatorOnNonString_ThrowsArgumentException()
     {
         Should.Throw<ArgumentException>(() =>
         {
-            _ = KyrolusFilterExpressionBuilder.TryBuildFilterExpression<ProbeEntity>(
-                "Optional contains 1",
+            _ = KyrolusFilterExpressionBuilder.TryBuildFilterExpression<Product>(
+                "Count contains 1",
                 caseInsensitive: false,
                 out _,
                 out _);

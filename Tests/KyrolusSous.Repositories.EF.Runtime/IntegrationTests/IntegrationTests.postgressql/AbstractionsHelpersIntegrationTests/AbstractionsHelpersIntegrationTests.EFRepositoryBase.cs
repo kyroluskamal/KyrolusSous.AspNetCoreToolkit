@@ -4,22 +4,9 @@ namespace KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.Abstr
 
 public sealed class AbstractionsHelpersIntegrationTests_EFRepositoryBase(WebApplicationFactory<Program> factory) : KyrolusRuntimePSFixture(factory)
 {
-    private enum ProbeStatus
+    private sealed class NameLike
     {
-        Draft = 1,
-        Published = 2
-    }
-
-    private sealed class ConversionProbe
-    {
-        public Guid Id { get; set; }
-        public DateTimeOffset CreatedAt { get; set; }
-        public DateTime DueAt { get; set; }
-        public TimeSpan Duration { get; set; }
-        public required string Name { get; set; }
-        public int Count { get; set; }
-        public int? OptionalCount { get; set; }
-        public ProbeStatus Status { get; set; }
+        public override string ToString() => "Laptop Pro 15";
     }
 
     public static TheoryData<string, string, KyrolusCacheReadOperations> MapReadOperationCases => new()
@@ -97,81 +84,62 @@ public sealed class AbstractionsHelpersIntegrationTests_EFRepositoryBase(WebAppl
                 [nameof(Product.Id), nameof(Product.Name)]));
     }
 
-    [Fact(DisplayName = "EFRepositoryBase GetPrimaryKeyFromKeyValues converts known scalar values and finds matching probe")]
-    public void GetPrimaryKeyFromKeyValues_ConvertsKnownTypes_AndMatches()
+    [Fact(DisplayName = "EFRepositoryBase GetPrimaryKeyFromKeyValues converts known scalar values and matches seeded product")]
+    public async Task GetPrimaryKeyFromKeyValues_ConvertsKnownTypes_AndMatchesSeededProduct()
     {
-        var id = Guid.NewGuid();
-        var createdAt = DateTimeOffset.Parse("2025-01-01T00:00:00Z", CultureInfo.InvariantCulture);
-        var dueAt = DateTime.Parse("2025-12-31T00:00:00Z", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
-        var probe = new ConversionProbe
-        {
-            Id = id,
-            CreatedAt = createdAt,
-            DueAt = dueAt,
-            Duration = TimeSpan.FromDays(1),
-            Name = "12345",
-            Count = 50,
-            OptionalCount = null,
-            Status = ProbeStatus.Published
-        };
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        var predicate = KyrolusEFRepositoryBase<ConversionProbe>.GetPrimaryKeyFromKeyValues(
+        var predicate = KyrolusEFRepositoryBase<Product>.GetPrimaryKeyFromKeyValues(
             [
-                id.ToString(),
-                "2025-01-01T00:00:00Z",
+                DataSeeder.productLaptopId.ToString(),
+                "2024-06-01T00:00:00Z",
                 "2025-12-31T00:00:00Z",
                 "1.00:00:00",
-                12345,
-                "50",
+                new NameLike(),
+                "25",
+                "10",
                 null,
-                "Published"
+                "true"
             ],
             [
-                nameof(ConversionProbe.Id),
-                nameof(ConversionProbe.CreatedAt),
-                nameof(ConversionProbe.DueAt),
-                nameof(ConversionProbe.Duration),
-                nameof(ConversionProbe.Name),
-                nameof(ConversionProbe.Count),
-                nameof(ConversionProbe.OptionalCount),
-                nameof(ConversionProbe.Status)
+                nameof(Product.Id),
+                nameof(Product.CreatedAt),
+                nameof(Product.DiscontinuedAt),
+                nameof(Product.FinishedAt),
+                nameof(Product.Name),
+                nameof(Product.StockQuantity),
+                nameof(Product.Count),
+                nameof(Product.Weight),
+                nameof(Product.IsActive)
             ]);
 
-        var matched = new[] { probe }.AsQueryable().Where(predicate).Single();
-        matched.Id.ShouldBe(id);
-        matched.Status.ShouldBe(ProbeStatus.Published);
+        var matched = await db.Products.AsNoTracking().Where(predicate).SingleAsync();
+        matched.Id.ShouldBe(DataSeeder.productLaptopId);
+        matched.Name.ShouldBe("Laptop Pro 15");
     }
 
-    [Fact(DisplayName = "EFRepositoryBase GetPrimaryKeyFromKeyValues converts enum using numeric value")]
-    public void GetPrimaryKeyFromKeyValues_EnumNumericConversion_Works()
+    [Fact(DisplayName = "EFRepositoryBase GetPrimaryKeyFromKeyValues converts enum using numeric value on real payment query")]
+    public async Task GetPrimaryKeyFromKeyValues_EnumNumericConversion_Works()
     {
-        var probe = new ConversionProbe
-        {
-            Id = Guid.NewGuid(),
-            CreatedAt = DateTimeOffset.UtcNow,
-            DueAt = DateTime.UtcNow,
-            Duration = TimeSpan.FromHours(2),
-            Name = "enum-probe",
-            Count = 1,
-            OptionalCount = 2,
-            Status = ProbeStatus.Published
-        };
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        var predicate = KyrolusEFRepositoryBase<ConversionProbe>.GetPrimaryKeyFromKeyValues(
-            [2],
-            [nameof(ConversionProbe.Status)]);
+        var predicate = KyrolusEFRepositoryBase<Payment>.GetPrimaryKeyFromKeyValues(
+            [1],
+            [nameof(Payment.Status)]);
 
-        var matched = new[] { probe }.AsQueryable().Where(predicate).Single();
-        matched.Status.ShouldBe(ProbeStatus.Published);
+        var matched = await db.Payments.AsNoTracking().SingleAsync(predicate);
+        matched.Status.ShouldBe(PaymentStatus.Paid);
     }
 
     [Fact(DisplayName = "EFRepositoryBase GetPrimaryKeyFromKeyValues throws when conversion cannot map to target type")]
     public void GetPrimaryKeyFromKeyValues_InvalidConvertibleValue_Throws()
     {
         Should.Throw<InvalidCastException>(() =>
-            KyrolusEFRepositoryBase<ConversionProbe>.GetPrimaryKeyFromKeyValues(
+            KyrolusEFRepositoryBase<Product>.GetPrimaryKeyFromKeyValues(
                 ["not-a-guid"],
-                [nameof(ConversionProbe.Id)]));
+                [nameof(Product.Id)]));
     }
 
     [Fact(DisplayName = "EFRepositoryBase BuildKeyPredicateFromEntity builds a combined predicate for real entity query")]
@@ -190,15 +158,11 @@ public sealed class AbstractionsHelpersIntegrationTests_EFRepositoryBase(WebAppl
     }
 
     [Fact(DisplayName = "EFRepositoryBase BuildKeyPredicateFromEntity throws when provided property name does not exist")]
-    public void BuildKeyPredicateFromEntity_InvalidProperty_Throws()
+    public async Task BuildKeyPredicateFromEntity_InvalidProperty_Throws()
     {
-        var source = new Product
-        {
-            Id = Guid.NewGuid(),
-            Name = "InvalidProp",
-            Sku = "INV-PROP",
-            StoreId = Guid.NewGuid()
-        };
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var source = await db.Products.AsNoTracking().SingleAsync(p => p.Id == DataSeeder.productLaptopId);
 
         Should.Throw<ArgumentException>(() =>
             KyrolusEFRepositoryBase<Product>.BuildKeyPredicateFromEntity(source, ["NotAProperty"]));
