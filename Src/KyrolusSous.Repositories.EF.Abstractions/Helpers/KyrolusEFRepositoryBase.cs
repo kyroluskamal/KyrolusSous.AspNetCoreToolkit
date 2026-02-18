@@ -112,12 +112,6 @@ public class KyrolusEFRepositoryBase<TEntity>
 
     private static bool TryConvertGuid(object value, out object? result)
     {
-        if (value is Guid g)
-        {
-            result = g;
-            return true;
-        }
-
         if (value is string s && Guid.TryParse(s, out var parsed))
         {
             result = parsed;
@@ -130,12 +124,6 @@ public class KyrolusEFRepositoryBase<TEntity>
 
     private static bool TryConvertDateTimeOffset(object value, out object? result)
     {
-        if (value is DateTimeOffset dto)
-        {
-            result = dto;
-            return true;
-        }
-
         if (value is string s && DateTimeOffset.TryParse(
                 s,
                 CultureInfo.InvariantCulture,
@@ -152,12 +140,6 @@ public class KyrolusEFRepositoryBase<TEntity>
 
     private static bool TryConvertDateTime(object value, out object? result)
     {
-        if (value is DateTime dt)
-        {
-            result = dt;
-            return true;
-        }
-
         if (value is string s && DateTime.TryParse(
                 s,
                 CultureInfo.InvariantCulture,
@@ -174,12 +156,6 @@ public class KyrolusEFRepositoryBase<TEntity>
 
     private static bool TryConvertTimeSpan(object value, out object? result)
     {
-        if (value is TimeSpan ts)
-        {
-            result = ts;
-            return true;
-        }
-
         if (value is string s && TimeSpan.TryParse(s, CultureInfo.InvariantCulture, out var parsed))
         {
             result = parsed;

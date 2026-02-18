@@ -75,6 +75,27 @@ public class ObservabilityAndIncludeGraphTests(WebApplicationFactory<Program> fa
         response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
     }
 
+    [Fact(DisplayName = "Telemetry services wiring works when OTLP exporter is enabled for tracing and metrics")]
+    public async Task TelemetryObserver_OtlpExporterEnabled_WiresSuccessfully()
+    {
+        var customFactory = WithObserverServices(services =>
+        {
+            services.AddKyrolusRepositoryTelemetryObserver();
+            services.AddKyrolusRepositoryOpenTelemetry(
+                serviceName: "kyrolus.tests.otlp",
+                enableOtlpExporter: true,
+                enableConsoleExporter: false);
+        });
+
+        using var scope = customFactory.Services.CreateScope();
+        var observer = scope.ServiceProvider.GetRequiredService<IKyrolusRepositoryObserver>();
+        observer.ShouldBeOfType<KyrolusRepositoryTelemetryObserver>();
+
+        using var client = customFactory.CreateClient();
+        var response = await client.GetAsync("/api/product");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
     [Fact(DisplayName = "Sample observer can be registered and requests still succeed")]
     public async Task SampleObserver_CanBeWired_WithSuccessfulRequest()
     {
