@@ -1651,11 +1651,6 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
 
         if (filteredUpdates.Count == 0)
         {
-            if (martenConfig?.StrictPatchValidation == true)
-            {
-                errorResult = BuildBadRequest("No patch fields are allowed.");
-                return false;
-            }
             skip = true;
             return true;
         }

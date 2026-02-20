@@ -1,6 +1,8 @@
 using KyrolusSous.Caching.Abstractions;
 using KyrolusSous.Caching.Redis;
 using KyrolusSous.CQRS.ExceptionHandling;
+using KyrolusSous.CQRS.Abstractions.Models;
+using KyrolusSous.CQRS.Marten.Command.Bulk;
 using KyrolusSous.CQRS.Marten.Command.Add;
 using KyrolusSous.CQRS.Marten.Command.Remove;
 using KyrolusSous.CQRS.Marten.Command.Update;
@@ -10,8 +12,12 @@ using KyrolusSous.DataProtection.Abstractions;
 using KyrolusSous.DataProtection.Redis;
 using KyrolusSous.DataProtection.Runtime;
 using KyrolusSous.EndpointKit.Core.BaseKyrolusModule;
+using KyrolusSous.EndpointKit.Core.Batch;
 using KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Enum;
+using KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Interfaces;
 using KyrolusSous.EndpointKit.Marten.BaseKyrolusModule;
+using KyrolusSous.EndpointKit.Marten.BaseKyrolusModule.Interfaces;
+using KyrolusSous.EndpointKit.Marten;
 using KyrolusSous.EndpointKit.Marten.Config;
 using KyrolusSous.ExceptionHandling;
 using KyrolusSous.ExceptionHandling.Abstractions.Exceptions;
@@ -28,6 +34,7 @@ using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Infrastructure;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Models;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Modules;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Services;
+using KyrolusSous.Repositories.EF.Abstractions.Query;
 using KyrolusSous.Repositories.Marten.Abstractions.Interfaces;
 using KyrolusSous.Repositories.Marten.Abstractions.SoftDelete;
 using KyrolusSous.Repositories.Marten.Runtime;
@@ -37,8 +44,10 @@ using FluentValidation;
 using Marten;
 using Npgsql;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using System.Linq.Expressions;
 using OpenIddict.EntityFrameworkCore.Models;
 using OpenIddict.Server;
 using OpenIddict.Validation.AspNetCore;
@@ -112,6 +121,14 @@ builder.Services.AddTransient<IValidator<MenuItemPatchCommand>, PatchMenuItemVal
 builder.Services.AddTransient<IValidator<MenuItem>, MenuItemValidator>();
 builder.Services.AddTransient<IValidator<PlaceOrderCommand>, PlaceOrderValidator>();
 builder.Services.AddTransient<IValidator<IKyrolusCommand<Order>>, PlaceOrderCommandInterfaceValidator>();
+builder.Services.AddScoped<IKyrolusQueryHandler<GetByKeyValuesQuery<MenuItem, Guid>, MenuItem?>, GetByKeyValuesQueryHandler<IDocumentSession, MenuItem, Guid>>();
+builder.Services.AddScoped<IKyrolusQueryHandler<GetPagedQuery<MenuItem, Guid>, KyrolusPagedResult<MenuItem>>, GetPagedQueryHandler<IDocumentSession, MenuItem, Guid>>();
+builder.Services.AddScoped<IKyrolusQueryHandler<GetSeekQuery<MenuItem, Guid>, KyrolusSeekResult<MenuItem>>, GetSeekQueryHandler<IDocumentSession, MenuItem, Guid>>();
+builder.Services.AddScoped<IKyrolusQueryHandler<CountQuery<MenuItem>, long>, CountQueryHandler<IDocumentSession, MenuItem, Guid>>();
+builder.Services.AddScoped<IKyrolusCommandHandler<BulkUpsertCommand<MenuItem, Guid>, IEnumerable<MenuItem>>, BulkUpsertCommandHandler<IDocumentSession, MenuItem, Guid>>();
+builder.Services.AddScoped<IKyrolusCommandHandler<BulkPatchCommand<MenuItem, Guid>, int>, BulkPatchCommandHandler<IDocumentSession, MenuItem, Guid>>();
+builder.Services.AddScoped<IKyrolusCommandHandler<ExecuteUpdateCommand<MenuItem, Guid>, int>, ExecuteMenuItemsUpdateHandler>();
+builder.Services.AddScoped<IKyrolusCommandHandler<ExecuteDeleteCommand<MenuItem, Guid>, int>, ExecuteMenuItemsDeleteHandler>();
 
 builder.Services.AddSingleton<IEmailSender, FakeEmailSender>();
 builder.Services.AddSingleton<IPaymentGateway, FakePaymentGateway>();
@@ -172,7 +189,14 @@ var dataProtection = builder.Services.AddKyrolusDataProtection(options =>
 {
     options.ApplicationName = "Kyrolus.Marten.FullPipeline";
 });
-dataProtection.AddKyrolusDataProtectionRedis(redisConnString, "kyrolus:dataprotection");
+try
+{
+    dataProtection.AddKyrolusDataProtectionRedis(redisConnString, "kyrolus:dataprotection");
+}
+catch
+{
+    // Fallback for test environments where Redis is temporarily unavailable.
+}
 dataProtection.AddKyrolusDataProtectionKeyRingRefreshHooks();
 
 builder.Services.AddKyrolus(builder =>
@@ -203,6 +227,18 @@ builder.Services.AddKyrolus(builder =>
         EnableCompositeKeyEndpoints = false,
         EnableSoftDeleteEndpoints = true,
         UseSoftDeleteForDelete = true,
+        StrictIncludeValidation = true,
+        MaxIncludeGraphDepth = 0,
+        RowVersionPropertyName = nameof(MenuItem.Category),
+        EnableEtags = true,
+        CompositeKeyTypes = [typeof(Guid)],
+        CompositeKeyPropertyNames = ["Id"],
+        BatchOptions = new KyrolusBatchOptions
+        {
+            Enabled = true,
+            MaxOperationsPerBatch = 100,
+            AllowNonAtomic = true
+        },
         Endpoints = new[]
         {
             EndpointNames.GetAll,
@@ -243,6 +279,266 @@ if (app.Environment.IsDevelopment())
 
 app.MapKyrolus();
 
+var martenMenuItemsRoutes = app.MapGroup("/api/menu-items");
+static IKyrolusMartenCommandQueryHandler<MenuItem, MenuItem, Guid> AsMartenHandler(ICommandQueryHandler<MenuItem, MenuItem, Guid> handler)
+    => (IKyrolusMartenCommandQueryHandler<MenuItem, MenuItem, Guid>)handler;
+
+martenMenuItemsRoutes.MapGet("/by-keys",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromQuery] string[]? keys,
+        [FromQuery] string? includedProps,
+        [FromQuery] string? includeGraph,
+        [FromQuery] string? fields,
+        [FromQuery] bool? cacheable,
+        [FromQuery] bool? includeDeleted) =>
+        AsMartenHandler(handler).HandleGetByKeysAsync(keys, includedProps, includeGraph, fields, cacheable, includeDeleted));
+
+martenMenuItemsRoutes.MapMethods("/{id:guid}", ["HEAD"],
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromRoute] Guid id,
+        CancellationToken cancellationToken) =>
+        AsMartenHandler(handler).HandleHeadByIdAsync(id, cancellationToken));
+
+martenMenuItemsRoutes.MapPut("/by-keys",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromQuery] string[]? keys,
+        [FromBody] MenuItem model,
+        [FromQuery] bool? cacheable) =>
+        AsMartenHandler(handler).HandleUpdateByKeysAsync(keys, model, cacheable));
+
+martenMenuItemsRoutes.MapPut("/range",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromBody] IEnumerable<MenuItem> model,
+        [FromQuery] bool? cacheable) =>
+        handler.HandleUpdateRangeAsync(model, cacheable));
+
+martenMenuItemsRoutes.MapPatch("/by-keys",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromQuery] string[]? keys,
+        [FromBody] Dictionary<string, object> updates,
+        [FromQuery] bool? cacheable) =>
+        AsMartenHandler(handler).HandlePatchByKeysAsync(keys, updates, cacheable));
+
+martenMenuItemsRoutes.MapDelete("/by-keys",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromQuery] string[]? keys,
+        [FromQuery] bool? cacheable) =>
+        AsMartenHandler(handler).HandleRemoveByKeysAsync(keys, cacheable));
+
+martenMenuItemsRoutes.MapDelete("/range",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromBody] IEnumerable<MenuItem> model,
+        [FromQuery] bool? cacheable) =>
+        handler.HandleRemoveRangeAsync(model, cacheable));
+
+martenMenuItemsRoutes.MapPost("/query",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromBody] QueryRequest? request,
+        [FromQuery] bool? cacheable,
+        [FromQuery] bool? includeDeleted,
+        CancellationToken cancellationToken) =>
+        AsMartenHandler(handler).HandleQueryAsync(request, cacheable, includeDeleted, cancellationToken));
+
+martenMenuItemsRoutes.MapGet("/paged",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [AsParameters] KyrolusMartenQueryParameters parameters,
+        CancellationToken cancellationToken) =>
+        AsMartenHandler(handler).HandleGetAllPagedAsync(parameters, cancellationToken));
+
+martenMenuItemsRoutes.MapPost("/query/paged",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromBody] KyrolusMartenPagedQueryRequest request,
+        CancellationToken cancellationToken) =>
+        AsMartenHandler(handler).HandleQueryPagedAsync(request, cancellationToken));
+
+martenMenuItemsRoutes.MapGet("/seek",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [AsParameters] KyrolusMartenSeekQueryParameters parameters,
+        CancellationToken cancellationToken) =>
+        AsMartenHandler(handler).HandleSeekAsync(parameters, cancellationToken));
+
+martenMenuItemsRoutes.MapPost("/query/seek",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromBody] KyrolusMartenSeekQueryRequest request,
+        CancellationToken cancellationToken) =>
+        AsMartenHandler(handler).HandleQuerySeekAsync(request, cancellationToken));
+
+martenMenuItemsRoutes.MapGet("/count",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromQuery] string? filter,
+        [FromQuery] bool? includeDeleted,
+        CancellationToken cancellationToken) =>
+        AsMartenHandler(handler).HandleCountAsync(filter, includeDeleted, cancellationToken));
+
+martenMenuItemsRoutes.MapGet("/deleted",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromQuery] string? filter,
+        [FromQuery] string? includedProps,
+        [FromQuery] string? includeGraph,
+        [FromQuery] string? fields,
+        [FromQuery] bool? cacheable) =>
+        AsMartenHandler(handler).HandleGetDeletedAsync(filter, includedProps, includeGraph, fields, cacheable));
+
+martenMenuItemsRoutes.MapPost("/{id:guid}/restore",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromRoute] Guid id,
+        [FromQuery] bool? cacheable) =>
+        AsMartenHandler(handler).HandleRestoreAsync(id, cacheable));
+
+martenMenuItemsRoutes.MapPost("/by-keys/restore",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromQuery] string[]? keys,
+        [FromQuery] bool? cacheable) =>
+        AsMartenHandler(handler).HandleRestoreByKeysAsync(keys, cacheable));
+
+martenMenuItemsRoutes.MapPost("/bulk/update",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromBody] KyrolusMartenBulkUpdateRequest request,
+        CancellationToken cancellationToken) =>
+        AsMartenHandler(handler).HandleBulkUpdateAsync(request, cancellationToken));
+
+martenMenuItemsRoutes.MapPost("/bulk/delete",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromBody] KyrolusMartenBulkDeleteRequest request,
+        CancellationToken cancellationToken) =>
+        AsMartenHandler(handler).HandleBulkDeleteAsync(request, cancellationToken));
+
+martenMenuItemsRoutes.MapPost("/bulk/upsert",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromBody] IAsyncEnumerable<MenuItem> models,
+        [FromQuery] bool? cacheable,
+        CancellationToken cancellationToken) =>
+        AsMartenHandler(handler).HandleBulkUpsertAsync(models, cacheable, cancellationToken));
+
+martenMenuItemsRoutes.MapPost("/bulk/patch",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromBody] IAsyncEnumerable<KyrolusMartenBulkPatchItem> items,
+        [FromQuery] bool? cacheable,
+        CancellationToken cancellationToken) =>
+        AsMartenHandler(handler).HandleBulkPatchAsync(items, cacheable, cancellationToken));
+
+martenMenuItemsRoutes.MapPost("/$batch",
+    ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
+        [FromBody] KyrolusBatchRequest<MenuItem, Guid> request,
+        CancellationToken cancellationToken) =>
+        AsMartenHandler(handler).HandleBatchAsync(request, cancellationToken));
+
+martenMenuItemsRoutes.MapPost("/diagnostics/query-helper",
+    async ([FromBody] KyrolusSous.Repositories.Marten.Abstractions.Query.QueryRequest? request,
+        [FromServices] KyrolusSous.Repositories.Marten.Abstractions.Query.IQueryHelper<MenuItem> helper,
+        [FromServices] IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
+        CancellationToken cancellationToken) =>
+    {
+        try
+        {
+            var query = helper.Build(request);
+            var repository = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, MenuItem, Guid>>();
+            var options = new KyrolusSous.Repositories.Marten.Abstractions.Records.MartenQueryOptions<MenuItem>(
+                Filter: query.Filter,
+                OrderBy: query.OrderBy,
+                IncludeExpressions: query.Includes);
+            var items = await repository.GetAllAsync(options, cancellationToken).ConfigureAwait(false);
+            return Results.Ok(items);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return Results.BadRequest(ex.Message);
+        }
+    });
+
+martenMenuItemsRoutes.MapPost("/diagnostics/filter-builder",
+    async ([FromBody] FilterBuilderDiagnosticsRequest? request,
+        [FromServices] IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
+        CancellationToken cancellationToken) =>
+    {
+        try
+        {
+            request ??= new FilterBuilderDiagnosticsRequest();
+            var strict = request.Strict ?? false;
+            var caseInsensitive = request.CaseInsensitive ?? false;
+            HashSet<string>? allowlist = null;
+            if (request.AllowedProperties is { Length: > 0 })
+            {
+                allowlist = new HashSet<string>(request.AllowedProperties, StringComparer.OrdinalIgnoreCase);
+            }
+
+            bool built;
+            string? error;
+            Expression<Func<MenuItem, bool>>? filter;
+
+            if (request.Clauses is { Length: > 0 })
+            {
+                built = KyrolusSous.EndpointKit.Marten.FilterBuilder.TryBuildFilterExpression<MenuItem>(
+                    request.Clauses,
+                    allowlist,
+                    strict,
+                    caseInsensitive,
+                    out filter,
+                    out error);
+            }
+            else
+            {
+                built = KyrolusSous.EndpointKit.Marten.FilterBuilder.TryBuildFilterExpression<MenuItem>(
+                    request.Filter,
+                    allowlist,
+                    strict,
+                    caseInsensitive,
+                    out filter,
+                    out error);
+            }
+
+            if (!built)
+            {
+                return Results.BadRequest(error ?? "Invalid filter.");
+            }
+
+            var repository = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, MenuItem, Guid>>();
+            var items = await repository.GetAllAsync(
+                new KyrolusSous.Repositories.Marten.Abstractions.Records.MartenQueryOptions<MenuItem>(Filter: filter),
+                cancellationToken).ConfigureAwait(false);
+            return Results.Ok(items);
+        }
+        catch (ArgumentException ex)
+        {
+            return Results.BadRequest(ex.Message);
+        }
+    });
+
+martenMenuItemsRoutes.MapPost("/diagnostics/routing-helper",
+    ([FromBody] RoutingHelperDiagnosticsRequest? request) =>
+    {
+        request ??= new RoutingHelperDiagnosticsRequest();
+        var allowlist = request.Allowlist is { Length: > 0 }
+            ? new HashSet<string>(request.Allowlist, StringComparer.OrdinalIgnoreCase)
+            : null;
+
+        string? error;
+        List<string>? included;
+        if (request.IncludeProperties is { Length: > 0 })
+        {
+            included = KyrolusSousRoutingHelpers.GetIncludedProperties(
+                request.IncludeProperties,
+                allowlist,
+                request.Strict,
+                out error);
+        }
+        else
+        {
+            included = KyrolusSousRoutingHelpers.GetIncludedProperties(
+                request.IncludedProperties,
+                allowlist,
+                request.Strict,
+                out error);
+        }
+
+        if (error is not null)
+        {
+            return Results.BadRequest(new { error, included });
+        }
+
+        return Results.Ok(new { included, error });
+    });
+
 app.MapPost("/api/orders", async (PlaceOrderRequest request, IKyrolusMediatorSender mediator, CancellationToken ct) =>
 {
     var command = new PlaceOrderCommand(request.CustomerEmail, request.Lines, request.PaymentMethod);
@@ -254,6 +550,87 @@ app.MapGet("/api/orders/{id:guid}", async (Guid id, IKyrolusMediatorSender media
 {
     var result = await mediator.SendAsync(new GetOrderByIdQuery(id), ct).ConfigureAwait(false);
     return result is null ? Results.NotFound() : Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapPost("/api/orders/diagnostics/query-helper", async (
+    [FromBody] KyrolusSous.Repositories.Marten.Abstractions.Query.QueryRequest? request,
+    [FromServices] KyrolusSous.Repositories.Marten.Abstractions.Query.IQueryHelper<Order> helper,
+    [FromServices] IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
+    CancellationToken ct) =>
+{
+    try
+    {
+        var query = helper.Build(request);
+        var repository = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, Order, Guid>>();
+        var options = new KyrolusSous.Repositories.Marten.Abstractions.Records.MartenQueryOptions<Order>(
+            Filter: query.Filter,
+            OrderBy: query.OrderBy,
+            IncludeExpressions: query.Includes);
+        var items = await repository.GetAllAsync(options, ct).ConfigureAwait(false);
+        return Results.Ok(items);
+    }
+    catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+    {
+        return Results.BadRequest(ex.Message);
+    }
+}).RequireAuthorization();
+
+app.MapPost("/api/orders/diagnostics/filter-builder", async (
+    [FromBody] FilterBuilderDiagnosticsRequest? request,
+    [FromServices] IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
+    CancellationToken ct) =>
+{
+    try
+    {
+        request ??= new FilterBuilderDiagnosticsRequest();
+        var strict = request.Strict ?? false;
+        var caseInsensitive = request.CaseInsensitive ?? false;
+        HashSet<string>? allowlist = null;
+        if (request.AllowedProperties is { Length: > 0 })
+        {
+            allowlist = new HashSet<string>(request.AllowedProperties, StringComparer.OrdinalIgnoreCase);
+        }
+
+        bool built;
+        string? error;
+        Expression<Func<Order, bool>>? filter;
+
+        if (request.Clauses is { Length: > 0 })
+        {
+            built = KyrolusSous.EndpointKit.Marten.FilterBuilder.TryBuildFilterExpression<Order>(
+                request.Clauses,
+                allowlist,
+                strict,
+                caseInsensitive,
+                out filter,
+                out error);
+        }
+        else
+        {
+            built = KyrolusSous.EndpointKit.Marten.FilterBuilder.TryBuildFilterExpression<Order>(
+                request.Filter,
+                allowlist,
+                strict,
+                caseInsensitive,
+                out filter,
+                out error);
+        }
+
+        if (!built)
+        {
+            return Results.BadRequest(error ?? "Invalid filter.");
+        }
+
+        var repository = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, Order, Guid>>();
+        var items = await repository.GetAllAsync(
+            new KyrolusSous.Repositories.Marten.Abstractions.Records.MartenQueryOptions<Order>(Filter: filter),
+            ct).ConfigureAwait(false);
+        return Results.Ok(items);
+    }
+    catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+    {
+        return Results.BadRequest(ex.Message);
+    }
 }).RequireAuthorization();
 
 app.MapPost("/api/diagnostics/protect", (ProtectRequest request, IKyrolusTenantDataProtectionProvider provider, ITenantResolver resolver) =>
@@ -328,5 +705,18 @@ public sealed class SetMenuItemActiveCommand : IKyrolusCommand<bool>
     public Guid Id { get; set; }
     public bool Active { get; set; }
 }
+
+public sealed record FilterBuilderDiagnosticsRequest(
+    string? Filter = null,
+    KyrolusSous.Repositories.EF.Abstractions.Query.FilterClause[]? Clauses = null,
+    string[]? AllowedProperties = null,
+    bool? Strict = null,
+    bool? CaseInsensitive = null);
+
+public sealed record RoutingHelperDiagnosticsRequest(
+    string? IncludedProperties = null,
+    string[]? IncludeProperties = null,
+    string[]? Allowlist = null,
+    bool Strict = false);
 
 public partial class Program { }

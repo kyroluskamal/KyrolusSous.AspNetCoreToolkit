@@ -1,5 +1,6 @@
 using KyrolusSous.Caching.Abstractions;
 using KyrolusSous.CQRS.Marten.Command.Add;
+using KyrolusSous.CQRS.Marten.Command.Bulk;
 using KyrolusSous.CQRS.Marten.Command.Remove;
 using KyrolusSous.CQRS.Marten.Command.SoftDelete;
 using KyrolusSous.CQRS.Marten.Command.Update;
@@ -302,5 +303,43 @@ public sealed class GetMenuItemByIdHandler(
         var repo = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, MenuItem, Guid>>();
         var entityResult = await repo.GetByIdAsync(query.Id, opts, cancellationToken).ConfigureAwait(false);
         return entityResult?.Entity;
+    }
+}
+
+public sealed class ExecuteMenuItemsUpdateHandler(
+    IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork)
+    : IKyrolusCommandHandler<ExecuteUpdateCommand<MenuItem, Guid>, int>
+{
+    public async Task<int> Handle(ExecuteUpdateCommand<MenuItem, Guid> command, CancellationToken cancellationToken)
+    {
+        if (command.Filter is null || command.Updates.Count == 0)
+        {
+            return 0;
+        }
+
+        var repo = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, MenuItem, Guid>>();
+        var affected = await repo.PatchWhereAsync(command.Filter, command.Updates, tenantId: null, cancellationToken)
+            .ConfigureAwait(false);
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return affected;
+    }
+}
+
+public sealed class ExecuteMenuItemsDeleteHandler(
+    IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork)
+    : IKyrolusCommandHandler<ExecuteDeleteCommand<MenuItem, Guid>, int>
+{
+    public async Task<int> Handle(ExecuteDeleteCommand<MenuItem, Guid> command, CancellationToken cancellationToken)
+    {
+        if (command.Filter is null)
+        {
+            return 0;
+        }
+
+        var repo = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, MenuItem, Guid>>();
+        var affected = await repo.DeleteWhereAsync(command.Filter, tenantId: null, cancellationToken)
+            .ConfigureAwait(false);
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return affected;
     }
 }
