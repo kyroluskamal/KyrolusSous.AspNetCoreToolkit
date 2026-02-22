@@ -5,17 +5,17 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class MenuItemEndpointsTests : IClassFixture<TestAppFactory>
+public sealed class CrudEndpointContractIntegrationTests : IClassFixture<TestAppFactory>
 {
     private readonly TestAppFactory factory;
 
-    public MenuItemEndpointsTests(TestAppFactory factory)
+    public CrudEndpointContractIntegrationTests(TestAppFactory factory)
     {
         this.factory = factory;
     }
 
-    [Fact(DisplayName = "MenuItems - create invalid returns 400")]
-    public async Task Create_menu_item_invalid_returns_bad_request()
+    [Fact(DisplayName = "CRUD endpoints - create invalid returns 400")]
+    public async Task Create_invalid_payload_returns_bad_request()
     {
         using var client = factory.CreateClientWithTenant("tenant-alpha");
         var item = new MenuItem
@@ -30,8 +30,8 @@ public sealed class MenuItemEndpointsTests : IClassFixture<TestAppFactory>
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest, body);
     }
 
-    [Fact(DisplayName = "MenuItems - create/update/delete/restore flow")]
-    public async Task Create_update_delete_restore_menu_item_flow()
+    [Fact(DisplayName = "CRUD endpoints - create/update/delete/restore flow")]
+    public async Task Create_update_delete_restore_flow()
     {
         using var client = factory.CreateClientWithTenant("tenant-alpha");
         var item = new MenuItem
@@ -86,7 +86,7 @@ public sealed class MenuItemEndpointsTests : IClassFixture<TestAppFactory>
         restoredGet.IsSuccessStatusCode.ShouldBeTrue(restoredBody);
     }
 
-    [Fact(DisplayName = "MenuItems - query endpoint returns items")]
+    [Fact(DisplayName = "CRUD endpoints - query endpoint returns items")]
     public async Task Query_endpoint_returns_items()
     {
         using var client = factory.CreateClientWithTenant("tenant-alpha");
@@ -105,15 +105,15 @@ public sealed class MenuItemEndpointsTests : IClassFixture<TestAppFactory>
         items!.Count.ShouldBeGreaterThan(0);
     }
 
-    [Fact(DisplayName = "MenuItems - get missing item returns 404")]
-    public async Task Get_missing_menu_item_returns_not_found()
+    [Fact(DisplayName = "CRUD endpoints - get missing item returns 404")]
+    public async Task Get_missing_resource_returns_not_found()
     {
         using var client = factory.CreateClientWithTenant("tenant-alpha");
         var response = await client.GetAsync($"/api/menu-items/{Guid.NewGuid()}");
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
-    [Fact(DisplayName = "MenuItems - patch with empty body returns 400")]
+    [Fact(DisplayName = "CRUD endpoints - patch with empty body returns 400")]
     public async Task Patch_with_empty_body_returns_bad_request()
     {
         using var client = factory.CreateClientWithTenant("tenant-alpha");
@@ -131,7 +131,7 @@ public sealed class MenuItemEndpointsTests : IClassFixture<TestAppFactory>
         patchResponse.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
-    [Fact(DisplayName = "MenuItems - patch cannot update tenant id")]
+    [Fact(DisplayName = "CRUD endpoints - patch cannot update tenant id")]
     public async Task Patch_cannot_update_tenant_id()
     {
         using var client = factory.CreateClientWithTenant("tenant-alpha");
@@ -151,7 +151,7 @@ public sealed class MenuItemEndpointsTests : IClassFixture<TestAppFactory>
         patchResponse.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
-    [Fact(DisplayName = "MenuItems - get all returns empty list for new tenant")]
+    [Fact(DisplayName = "CRUD endpoints - get all returns empty list for new tenant")]
     public async Task Get_all_returns_empty_for_new_tenant()
     {
         using var client = factory.CreateClientWithTenant("tenant-empty-list");
@@ -163,7 +163,7 @@ public sealed class MenuItemEndpointsTests : IClassFixture<TestAppFactory>
         items!.Count.ShouldBe(0);
     }
 
-    [Fact(DisplayName = "MenuItems - filter by name returns matching items")]
+    [Fact(DisplayName = "CRUD endpoints - filter by name returns matching items")]
     public async Task Filter_by_name_returns_matching_items()
     {
         using var client = factory.CreateClientWithTenant("tenant-filter");
@@ -189,7 +189,7 @@ public sealed class MenuItemEndpointsTests : IClassFixture<TestAppFactory>
         items!.ShouldContain(x => x.Name == "Filtered A");
     }
 
-    [Fact(DisplayName = "MenuItems - invalid filter returns 400")]
+    [Fact(DisplayName = "CRUD endpoints - invalid filter returns 400")]
     public async Task Invalid_filter_returns_bad_request()
     {
         using var client = factory.CreateClientWithTenant("tenant-filter-invalid");
@@ -198,7 +198,7 @@ public sealed class MenuItemEndpointsTests : IClassFixture<TestAppFactory>
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
-    [Fact(DisplayName = "MenuItems - create with empty category returns 400")]
+    [Fact(DisplayName = "CRUD endpoints - create with empty category returns 400")]
     public async Task Create_with_empty_category_returns_bad_request()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-empty-category"));
@@ -213,7 +213,7 @@ public sealed class MenuItemEndpointsTests : IClassFixture<TestAppFactory>
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
-    [Fact(DisplayName = "MenuItems - update with negative price returns 400")]
+    [Fact(DisplayName = "CRUD endpoints - update with negative price returns 400")]
     public async Task Update_with_negative_price_returns_bad_request()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-negative-price"));
@@ -232,7 +232,7 @@ public sealed class MenuItemEndpointsTests : IClassFixture<TestAppFactory>
         updateResponse.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
-    [Fact(DisplayName = "MenuItems - restore clears IsDeleted flag")]
+    [Fact(DisplayName = "CRUD endpoints - restore clears IsDeleted flag")]
     public async Task Restore_clears_is_deleted_flag()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-restore"));

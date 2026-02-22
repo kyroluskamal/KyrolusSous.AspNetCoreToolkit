@@ -9,9 +9,9 @@ namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
 public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
 {
-    [Theory(DisplayName = "Marten query helper menu-items - supports filter operators")]
-    [MemberData(nameof(MenuItemFilterCases))]
-    public async Task Menu_items_query_helper_supports_filter_operators(QueryHelperFilter filter, int expectedCount)
+    [Theory(DisplayName = "Marten query helper - supports scalar filter operators")]
+    [MemberData(nameof(ScalarFilterCases))]
+    public async Task Query_helper_supports_scalar_filter_operators(QueryHelperFilter filter, int expectedCount)
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("marten-helper-menu-filter"));
         await SeedMenuItemsAsync(client);
@@ -26,9 +26,9 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         items!.Count.ShouldBe(expectedCount, body);
     }
 
-    [Theory(DisplayName = "Marten query helper menu-items - invalid filters return 400")]
-    [MemberData(nameof(InvalidMenuItemFilterCases))]
-    public async Task Menu_items_query_helper_invalid_filters_return_bad_request(QueryHelperFilter filter)
+    [Theory(DisplayName = "Marten query helper - invalid scalar filters return 400")]
+    [MemberData(nameof(InvalidScalarFilterCases))]
+    public async Task Query_helper_invalid_scalar_filters_return_bad_request(QueryHelperFilter filter)
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("marten-helper-menu-invalid"));
         await SeedMenuItemsAsync(client);
@@ -38,8 +38,8 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
-    [Fact(DisplayName = "Marten query helper menu-items - supports multi-column ordering")]
-    public async Task Menu_items_query_helper_supports_multi_column_ordering()
+    [Fact(DisplayName = "Marten query helper - supports multi-column ordering")]
+    public async Task Query_helper_supports_multi_column_ordering()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("marten-helper-menu-order"));
         await SeedMenuItemsAsync(client);
@@ -65,10 +65,10 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         mainItems[0].Price.ShouldBeGreaterThan(mainItems[1].Price);
     }
 
-    [Theory(DisplayName = "Marten query helper orders - supports any/all nested filters")]
+    [Theory(DisplayName = "Marten query helper - supports any/all nested filters")]
     [InlineData("any", 1)]
     [InlineData("all", 0)]
-    public async Task Orders_query_helper_supports_any_all_nested_filters(string op, int expectedCount)
+    public async Task Query_helper_supports_any_all_nested_filters(string op, int expectedCount)
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("marten-helper-orders-anyall"));
         var token = await client.GetAccessTokenAsync("admin", "admin123");
@@ -101,7 +101,7 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         orders!.Count.ShouldBe(expectedCount, body);
     }
 
-    public static IEnumerable<object[]> MenuItemFilterCases()
+    public static IEnumerable<object[]> ScalarFilterCases()
     {
         yield return [new QueryHelperFilter("Category", "eq", "Main"), 2];
         yield return [new QueryHelperFilter("Price", "gt", "20"), 2];
@@ -114,7 +114,7 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return [new QueryHelperFilter("Name", "endswith", "a"), 3];
     }
 
-    public static IEnumerable<object[]> InvalidMenuItemFilterCases()
+    public static IEnumerable<object[]> InvalidScalarFilterCases()
     {
         yield return [new QueryHelperFilter("Unknown", "eq", "x")];
         yield return [new QueryHelperFilter("Name", "any", "x")];

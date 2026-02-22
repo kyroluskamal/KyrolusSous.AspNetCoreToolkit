@@ -8,16 +8,16 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class OrderWorkflowTests : IClassFixture<TestAppFactory>
+public sealed class PlaceOrderWorkflowIntegrationTests : IClassFixture<TestAppFactory>
 {
     private readonly TestAppFactory factory;
 
-    public OrderWorkflowTests(TestAppFactory factory)
+    public PlaceOrderWorkflowIntegrationTests(TestAppFactory factory)
     {
         this.factory = factory;
     }
 
-    [Fact(DisplayName = "Orders - successful payment triggers email and gateway")]
+    [Fact(DisplayName = "PlaceOrder workflow - successful payment triggers email and gateway")]
     public async Task Place_order_sends_payment_and_email()
     {
         using var client = factory.CreateClientWithTenant("tenant-alpha");
@@ -52,7 +52,7 @@ public sealed class OrderWorkflowTests : IClassFixture<TestAppFactory>
         paymentGateway!.Requests.Count.ShouldBeGreaterThan(0);
     }
 
-    [Fact(DisplayName = "Orders - failed payment returns 502")]
+    [Fact(DisplayName = "PlaceOrder workflow - failed payment returns 502")]
     public async Task Failed_payment_returns_bad_gateway()
     {
         using var client = factory.CreateClientWithTenant("tenant-alpha");
@@ -77,7 +77,7 @@ public sealed class OrderWorkflowTests : IClassFixture<TestAppFactory>
         response.StatusCode.ShouldBe(HttpStatusCode.BadGateway);
     }
 
-    [Fact(DisplayName = "Orders - failed payment does not send email (current behavior)")]
+    [Fact(DisplayName = "PlaceOrder workflow - failed payment does not send email (current behavior)")]
     public async Task Failed_payment_does_not_send_email()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("orders-fail-email"));
@@ -107,7 +107,7 @@ public sealed class OrderWorkflowTests : IClassFixture<TestAppFactory>
         emailSender.Messages.Count.ShouldBe(beforeCount);
     }
 
-    [Fact(DisplayName = "Orders - total equals sum of line items")]
+    [Fact(DisplayName = "PlaceOrder workflow - total equals sum of line items")]
     public async Task Order_total_equals_sum_of_lines()
     {
         var tenant = TestHelpers.NewTenantId("orders-total");
@@ -131,7 +131,7 @@ public sealed class OrderWorkflowTests : IClassFixture<TestAppFactory>
         order.TenantId.ShouldBe(tenant);
     }
 
-    [Fact(DisplayName = "Orders - endpoint requires authentication")]
+    [Fact(DisplayName = "PlaceOrder workflow - endpoint requires authentication")]
     public async Task Orders_endpoint_requires_authentication()
     {
         using var client = factory.CreateClientWithTenant("tenant-alpha");
@@ -152,7 +152,7 @@ public sealed class OrderWorkflowTests : IClassFixture<TestAppFactory>
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
-    [Fact(DisplayName = "Orders - invalid email returns server error (current behavior)")]
+    [Fact(DisplayName = "PlaceOrder workflow - invalid email returns server error (current behavior)")]
     public async Task Invalid_email_returns_bad_request()
     {
         using var client = factory.CreateClientWithTenant("tenant-alpha");
@@ -176,7 +176,7 @@ public sealed class OrderWorkflowTests : IClassFixture<TestAppFactory>
         response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
     }
 
-    [Fact(DisplayName = "Orders - empty lines returns server error (current behavior)")]
+    [Fact(DisplayName = "PlaceOrder workflow - empty lines returns server error (current behavior)")]
     public async Task Empty_lines_returns_bad_request()
     {
         using var client = factory.CreateClientWithTenant("tenant-alpha");
@@ -188,7 +188,7 @@ public sealed class OrderWorkflowTests : IClassFixture<TestAppFactory>
         response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
     }
 
-    [Fact(DisplayName = "Orders - invalid line quantity returns server error (current behavior)")]
+    [Fact(DisplayName = "PlaceOrder workflow - invalid line quantity returns server error (current behavior)")]
     public async Task Invalid_line_quantity_returns_server_error()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("orders-invalid-line"));
@@ -212,7 +212,7 @@ public sealed class OrderWorkflowTests : IClassFixture<TestAppFactory>
         response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
     }
 
-    [Fact(DisplayName = "Orders - get by id returns 404 when not found")]
+    [Fact(DisplayName = "PlaceOrder workflow - get by id returns 404 when not found")]
     public async Task Get_order_by_id_returns_not_found()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("orders-not-found"));

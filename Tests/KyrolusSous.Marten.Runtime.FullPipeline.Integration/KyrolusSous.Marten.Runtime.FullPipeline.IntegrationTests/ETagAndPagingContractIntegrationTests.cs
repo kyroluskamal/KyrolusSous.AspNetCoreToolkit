@@ -7,9 +7,9 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class MenuItemEtagAndPagingIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
+public sealed class ETagAndPagingContractIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
 {
-    [Fact(DisplayName = "MenuItems etag - get by id returns ETag and If-None-Match returns 304")]
+    [Fact(DisplayName = "ETag handling - get by id returns ETag and If-None-Match returns 304")]
     public async Task Get_by_id_returns_etag_and_if_none_match_returns_not_modified()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-etag-not-modified"));
@@ -27,7 +27,7 @@ public sealed class MenuItemEtagAndPagingIntegrationTests(TestAppFactory factory
         notModifiedResponse.Headers.ETag.ShouldNotBeNull();
     }
 
-    [Theory(DisplayName = "MenuItems etag - patch endpoint validates If-Match")]
+    [Theory(DisplayName = "ETag handling - patch endpoint validates If-Match")]
     [InlineData("\"stale-etag-value\"", HttpStatusCode.Conflict)]
     [InlineData(null, HttpStatusCode.OK)]
     public async Task Patch_endpoint_validates_if_match(string? forcedIfMatch, HttpStatusCode expectedStatus)
@@ -50,7 +50,7 @@ public sealed class MenuItemEtagAndPagingIntegrationTests(TestAppFactory factory
         patchResponse.StatusCode.ShouldBe(expectedStatus, patchBody);
     }
 
-    [Theory(DisplayName = "MenuItems includeGraph - disabled include graph returns 400")]
+    [Theory(DisplayName = "IncludeGraph validation - disabled include graph returns 400")]
     [InlineData("/api/menu-items/{0}?includeGraph=Category")]
     [InlineData("/api/menu-items/by-keys?keys={0}&includeGraph=Category")]
     public async Task Include_graph_when_disabled_returns_bad_request(string pathTemplate)
@@ -64,7 +64,7 @@ public sealed class MenuItemEtagAndPagingIntegrationTests(TestAppFactory factory
         body.ShouldContain("IncludeGraph is not enabled.");
     }
 
-    [Fact(DisplayName = "MenuItems paged - includeDeleted true uses fallback and includes soft-deleted")]
+    [Fact(DisplayName = "Paged endpoint - includeDeleted true uses fallback and includes soft-deleted")]
     public async Task Paged_include_deleted_returns_soft_deleted_items()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-paged-include-deleted"));
@@ -83,7 +83,7 @@ public sealed class MenuItemEtagAndPagingIntegrationTests(TestAppFactory factory
         payload.Items.ShouldContain(x => x.Id == keep.Id && !x.IsDeleted);
     }
 
-    [Fact(DisplayName = "MenuItems query paged - includeDeleted false executes standard paged query path")]
+    [Fact(DisplayName = "Paged query endpoint - includeDeleted false executes standard paged query path")]
     public async Task Query_paged_without_include_deleted_executes_standard_path()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-query-paged-standard"));
@@ -111,7 +111,7 @@ public sealed class MenuItemEtagAndPagingIntegrationTests(TestAppFactory factory
         payload.Items[0].Category.ShouldBe("Main");
     }
 
-    [Fact(DisplayName = "MenuItems query - includeGraph array payload returns bad request when feature is disabled")]
+    [Fact(DisplayName = "Query endpoint - includeGraph array payload returns bad request when feature is disabled")]
     public async Task Query_with_include_graph_array_returns_bad_request_when_disabled()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-query-include-graph-array"));

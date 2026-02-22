@@ -8,9 +8,9 @@ namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
 public sealed class FilterBuilderDiagnosticsIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
 {
-    [Theory(DisplayName = "Marten filter builder menu-items - string mode scenarios")]
-    [MemberData(nameof(MenuItemStringModeCases))]
-    public async Task Menu_items_filter_builder_string_mode_scenarios(
+    [Theory(DisplayName = "Marten filter builder - string mode scenarios")]
+    [MemberData(nameof(StringModeCases))]
+    public async Task Filter_builder_string_mode_scenarios(
         FilterBuilderRequest request,
         HttpStatusCode expectedStatus,
         int? expectedCount)
@@ -32,9 +32,9 @@ public sealed class FilterBuilderDiagnosticsIntegrationTests(TestAppFactory fact
         items!.Count.ShouldBe(expectedCount.Value, body);
     }
 
-    [Theory(DisplayName = "Marten filter builder menu-items - clauses mode scenarios")]
-    [MemberData(nameof(MenuItemClausesModeCases))]
-    public async Task Menu_items_filter_builder_clauses_mode_scenarios(
+    [Theory(DisplayName = "Marten filter builder - clauses mode scenarios")]
+    [MemberData(nameof(ClausesModeCases))]
+    public async Task Filter_builder_clauses_mode_scenarios(
         FilterBuilderRequest request,
         HttpStatusCode expectedStatus,
         int? expectedCount)
@@ -56,9 +56,9 @@ public sealed class FilterBuilderDiagnosticsIntegrationTests(TestAppFactory fact
         items!.Count.ShouldBe(expectedCount.Value, body);
     }
 
-    [Theory(DisplayName = "Marten filter builder orders - any/all scenarios")]
-    [MemberData(nameof(OrderFilterCases))]
-    public async Task Orders_filter_builder_any_all_scenarios(
+    [Theory(DisplayName = "Marten filter builder - any/all scenarios")]
+    [MemberData(nameof(AnyAllFilterCases))]
+    public async Task Filter_builder_any_all_scenarios(
         FilterBuilderRequest request,
         HttpStatusCode expectedStatus,
         int? expectedCount)
@@ -94,7 +94,7 @@ public sealed class FilterBuilderDiagnosticsIntegrationTests(TestAppFactory fact
         orders!.Count.ShouldBe(expectedCount.Value, body);
     }
 
-    public static IEnumerable<object[]> MenuItemStringModeCases()
+    public static IEnumerable<object[]> StringModeCases()
     {
         yield return [new FilterBuilderRequest(Filter: "Name==\"alpha\"", CaseInsensitive: true), HttpStatusCode.OK, 1];
         yield return [new FilterBuilderRequest(Filter: "Name in [alpha,beta]", CaseInsensitive: true), HttpStatusCode.OK, 2];
@@ -107,7 +107,7 @@ public sealed class FilterBuilderDiagnosticsIntegrationTests(TestAppFactory fact
         yield return [new FilterBuilderRequest(Filter: "Price contains 1"), HttpStatusCode.BadRequest, (int?)null];
     }
 
-    public static IEnumerable<object[]> MenuItemClausesModeCases()
+    public static IEnumerable<object[]> ClausesModeCases()
     {
         yield return
         [
@@ -186,7 +186,7 @@ public sealed class FilterBuilderDiagnosticsIntegrationTests(TestAppFactory fact
         ];
     }
 
-    public static IEnumerable<object[]> OrderFilterCases()
+    public static IEnumerable<object[]> AnyAllFilterCases()
     {
         yield return [new FilterBuilderRequest(Filter: "CustomerEmail==\"two@local.test\""), HttpStatusCode.OK, 1];
         yield return [new FilterBuilderRequest(Filter: "Lines any Quantity>1"), HttpStatusCode.BadRequest, (int?)null];

@@ -8,8 +8,8 @@ public sealed class MultiTenantIsolationTests(TestAppFactory factory) : IClassFi
 {
     private readonly TestAppFactory factory = factory;
 
-    [Fact(DisplayName = "Multi-tenant - tenants do not see each other's items")]
-    public async Task Tenants_do_not_see_each_other_items()
+    [Fact(DisplayName = "Multi-tenant - tenants do not see each other's records")]
+    public async Task Tenants_do_not_see_each_other_records()
     {
         using var clientA = factory.CreateClientWithTenant("tenant-alpha");
         using var clientB = factory.CreateClientWithTenant("tenant-beta");
@@ -39,8 +39,8 @@ public sealed class MultiTenantIsolationTests(TestAppFactory factory) : IClassFi
         itemsB.ShouldNotContain(x => x.Name == "Alpha Item");
     }
 
-    [Fact(DisplayName = "Multi-tenant - cannot access item by id from another tenant")]
-    public async Task Tenant_cannot_access_other_tenant_item_by_id()
+    [Fact(DisplayName = "Multi-tenant - cannot access resource by id from another tenant")]
+    public async Task Tenant_cannot_access_other_tenant_resource_by_id()
     {
         using var clientA = factory.CreateClientWithTenant("tenant-alpha");
         using var clientB = factory.CreateClientWithTenant("tenant-beta");

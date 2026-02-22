@@ -1,7 +1,9 @@
 using KyrolusSous.Caching.Abstractions;
+using KyrolusSous.Caching.Redis;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Infrastructure;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Models;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 
@@ -9,8 +11,8 @@ namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
 public sealed class CacheIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
 {
-    [Fact(DisplayName = "Cache - get all menu items stores cache entry")]
-    public async Task Menu_items_get_all_is_cached()
+    [Fact(DisplayName = "Cache - get-all endpoint stores cache entry")]
+    public async Task Get_all_endpoint_is_cached()
     {
         const string tenant = "tenant-cache";
         using var client = factory.CreateClientWithTenant(tenant);
@@ -29,11 +31,25 @@ public sealed class CacheIntegrationTests(TestAppFactory factory) : IClassFixtur
         cached.ShouldBeTrue();
     }
 
-    [Fact(DisplayName = "Cache - get menu item by id stores cache entry")]
-    public async Task Menu_items_get_by_id_is_cached()
+    [Fact(DisplayName = "Cache - get-by-id endpoint stores cache entry")]
+    public async Task Get_by_id_endpoint_is_cached()
     {
-        const string tenant = "tenant-cache-by-id";
-        using var client = factory.CreateClientWithTenant(tenant);
+        var keyPrefix = $"kyrolus:fullpipeline:getbyid:{Guid.NewGuid():N}";
+        using var isolatedFactory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddSingleton(new KyrolusRedisCacheOptions
+                {
+                    KeyPrefix = keyPrefix,
+                    EnableGracefulFallback = true
+                });
+            });
+        });
+
+        var tenant = TestHelpers.NewTenantId("isolated-get-by-id");
+        using var client = isolatedFactory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Tenant-Id", tenant);
         var createResponse = await client.PostAsJsonAsync("/api/menu-items", new MenuItem
         {
             Name = "Cached By Id",
@@ -43,17 +59,29 @@ public sealed class CacheIntegrationTests(TestAppFactory factory) : IClassFixtur
         createResponse.EnsureSuccessStatusCode();
         var created = await createResponse.Content.ReadFromJsonAsync<MenuItem>();
         created.ShouldNotBeNull();
+        var cache = isolatedFactory.Services.GetRequiredService<ICacheProvider>();
+        var cacheKey = CacheKeys.MenuItemById(tenant, created!.Id);
+        var cached = false;
 
-        var response = await client.GetAsync($"/api/menu-items/{created!.Id}");
-        response.EnsureSuccessStatusCode();
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var response = await client.GetAsync($"/api/menu-items/{created.Id}");
+            response.EnsureSuccessStatusCode();
 
-        var cache = factory.Services.GetRequiredService<ICacheProvider>();
-        var cached = await cache.ExistsAsync(CacheKeys.MenuItemById(tenant, created.Id));
+            cached = await cache.ExistsAsync(cacheKey);
+            if (cached)
+            {
+                break;
+            }
+
+            await Task.Delay(75);
+        }
+
         cached.ShouldBeTrue();
     }
 
     [Fact(DisplayName = "Cache - includeDeleted does not cache get-all results")]
-    public async Task Menu_items_include_deleted_does_not_cache()
+    public async Task Include_deleted_query_does_not_cache_collection_entry()
     {
         const string tenant = "tenant-cache-include-deleted";
         using var client = factory.CreateClientWithTenant(tenant);
@@ -73,7 +101,7 @@ public sealed class CacheIntegrationTests(TestAppFactory factory) : IClassFixtur
     }
 
     [Fact(DisplayName = "Cache - by-id cache is tenant scoped")]
-    public async Task Menu_item_by_id_cache_is_tenant_scoped()
+    public async Task By_id_cache_is_tenant_scoped()
     {
         const string tenantA = "tenant-cache-a";
         const string tenantB = "tenant-cache-b";

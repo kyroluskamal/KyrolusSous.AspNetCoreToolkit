@@ -6,9 +6,9 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class MenuItemPipelineIntegrationMoreTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
+public sealed class CrudPipelineIntegrationMoreTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
 {
-    [Fact(DisplayName = "MenuItems - create returns 201 and item id")]
+    [Fact(DisplayName = "CRUD pipeline - create returns 201 and item id")]
     public async Task Create_returns_201_and_id()
     {
         using var client = factory.CreateClientWithTenant("tenant-create-201");
@@ -25,7 +25,7 @@ public sealed class MenuItemPipelineIntegrationMoreTests(TestAppFactory factory)
         created!.Id.ShouldNotBe(Guid.Empty);
     }
 
-    [Fact(DisplayName = "MenuItems - bulk create returns list")]
+    [Fact(DisplayName = "CRUD pipeline - bulk create returns list")]
     public async Task Bulk_create_returns_list()
     {
         using var client = factory.CreateClientWithTenant("tenant-bulk-create");
@@ -41,7 +41,7 @@ public sealed class MenuItemPipelineIntegrationMoreTests(TestAppFactory factory)
         created!.Count.ShouldBe(2);
     }
 
-    [Fact(DisplayName = "MenuItems - update sets UpdatedAt")]
+    [Fact(DisplayName = "CRUD pipeline - update sets UpdatedAt")]
     public async Task Update_sets_updated_at()
     {
         using var client = factory.CreateClientWithTenant("tenant-update-updatedat");
@@ -63,7 +63,7 @@ public sealed class MenuItemPipelineIntegrationMoreTests(TestAppFactory factory)
         updated!.UpdatedAt.ShouldNotBeNull();
     }
 
-    [Fact(DisplayName = "MenuItems - patch returns success")]
+    [Fact(DisplayName = "CRUD pipeline - patch returns success")]
     public async Task Patch_returns_success()
     {
         using var client = factory.CreateClientWithTenant("tenant-patch-price");
@@ -86,7 +86,7 @@ public sealed class MenuItemPipelineIntegrationMoreTests(TestAppFactory factory)
         getResponse.EnsureSuccessStatusCode();
     }
 
-    [Fact(DisplayName = "MenuItems - update range is not enabled")]
+    [Fact(DisplayName = "CRUD pipeline - update range is not enabled")]
     public async Task Update_range_is_not_enabled()
     {
         using var client = factory.CreateClientWithTenant("tenant-update-range");
@@ -104,7 +104,7 @@ public sealed class MenuItemPipelineIntegrationMoreTests(TestAppFactory factory)
         updateResponse.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed);
     }
 
-    [Fact(DisplayName = "MenuItems - delete range is not enabled")]
+    [Fact(DisplayName = "CRUD pipeline - delete range is not enabled")]
     public async Task Delete_range_is_not_enabled()
     {
         using var client = factory.CreateClientWithTenant("tenant-delete-range");
@@ -122,7 +122,7 @@ public sealed class MenuItemPipelineIntegrationMoreTests(TestAppFactory factory)
         deleteResponse.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed);
     }
 
-    [Fact(DisplayName = "MenuItems - includeDeleted false returns list")]
+    [Fact(DisplayName = "CRUD pipeline - includeDeleted false returns list")]
     public async Task Include_deleted_false_returns_list()
     {
         using var client = factory.CreateClientWithTenant("tenant-hide-deleted");
@@ -150,7 +150,7 @@ public sealed class MenuItemPipelineIntegrationMoreTests(TestAppFactory factory)
         }
     }
 
-    [Fact(DisplayName = "MenuItems - fields query returns success (list)")]
+    [Fact(DisplayName = "CRUD pipeline - fields query returns success (list)")]
     public async Task Fields_query_list_returns_success()
     {
         using var client = factory.CreateClientWithTenant("tenant-fields-list");
@@ -166,7 +166,7 @@ public sealed class MenuItemPipelineIntegrationMoreTests(TestAppFactory factory)
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
-    [Fact(DisplayName = "MenuItems - fields query returns success (single)")]
+    [Fact(DisplayName = "CRUD pipeline - fields query returns success (single)")]
     public async Task Fields_query_single_returns_success()
     {
         using var client = factory.CreateClientWithTenant("tenant-fields-single");
@@ -185,7 +185,7 @@ public sealed class MenuItemPipelineIntegrationMoreTests(TestAppFactory factory)
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
-    [Fact(DisplayName = "MenuItems - filter by category returns only matching items")]
+    [Fact(DisplayName = "CRUD pipeline - filter by category returns only matching items")]
     public async Task Filter_by_category_returns_matching_items()
     {
         using var client = factory.CreateClientWithTenant("tenant-filter-category");
@@ -243,16 +243,16 @@ public sealed class AuthPipelineIntegrationMoreTests : IClassFixture<TestAppFact
     }
 }
 
-public sealed class OrderPipelineIntegrationMoreTests : IClassFixture<TestAppFactory>
+public sealed class ProtectedReadPipelineIntegrationMoreTests : IClassFixture<TestAppFactory>
 {
     private readonly TestAppFactory factory;
 
-    public OrderPipelineIntegrationMoreTests(TestAppFactory factory)
+    public ProtectedReadPipelineIntegrationMoreTests(TestAppFactory factory)
     {
         this.factory = factory;
     }
 
-    [Fact(DisplayName = "Orders - get by id returns order when authorized")]
+    [Fact(DisplayName = "Protected read endpoint - get by id returns order when authorized")]
     public async Task Get_order_by_id_returns_order_when_authorized()
     {
         using var client = factory.CreateClientWithTenant("tenant-orders-get");
@@ -274,7 +274,7 @@ public sealed class OrderPipelineIntegrationMoreTests : IClassFixture<TestAppFac
         getResponse.EnsureSuccessStatusCode();
     }
 
-    [Fact(DisplayName = "Orders - get by id requires authentication")]
+    [Fact(DisplayName = "Protected read endpoint - get by id requires authentication")]
     public async Task Get_order_by_id_requires_authentication()
     {
         using var client = factory.CreateClientWithTenant("tenant-orders-auth");

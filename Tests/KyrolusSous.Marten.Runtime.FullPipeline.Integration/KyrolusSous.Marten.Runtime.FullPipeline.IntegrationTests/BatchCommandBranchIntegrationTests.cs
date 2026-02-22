@@ -15,9 +15,9 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class MenuItemBatchBranchIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
+public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
 {
-    [Fact(DisplayName = "MenuItems batch - operation not allowed marks next operation as skipped")]
+    [Fact(DisplayName = "Batch endpoint - operation not allowed marks next operation as skipped")]
     public async Task Batch_operation_not_allowed_marks_next_operation_as_skipped()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-batch-not-allowed"));
@@ -54,7 +54,7 @@ public sealed class MenuItemBatchBranchIntegrationTests(TestAppFactory factory) 
         all!.ShouldNotContain(x => x.Name == "ShouldNotCreate");
     }
 
-    [Fact(DisplayName = "MenuItems batch - no operations returns bad request")]
+    [Fact(DisplayName = "Batch endpoint - no operations returns bad request")]
     public async Task Batch_no_operations_returns_bad_request()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-batch-empty"));
@@ -73,7 +73,7 @@ public sealed class MenuItemBatchBranchIntegrationTests(TestAppFactory factory) 
         body.ShouldContain("No operations provided.");
     }
 
-    [Fact(DisplayName = "MenuItems batch - too many operations returns bad request")]
+    [Fact(DisplayName = "Batch endpoint - too many operations returns bad request")]
     public async Task Batch_too_many_operations_returns_bad_request()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-batch-max"));
@@ -106,7 +106,7 @@ public sealed class MenuItemBatchBranchIntegrationTests(TestAppFactory factory) 
         body.ShouldContain("Too many operations.");
     }
 
-    [Fact(DisplayName = "MenuItems batch - disabled option returns bad request")]
+    [Fact(DisplayName = "Batch endpoint - disabled option returns bad request")]
     public async Task Batch_disabled_option_returns_bad_request()
     {
         using var disabledFactory = factory.WithWebHostBuilder(builder =>
@@ -148,7 +148,7 @@ public sealed class MenuItemBatchBranchIntegrationTests(TestAppFactory factory) 
         body.ShouldContain("Batch operations are not enabled for this endpoint.");
     }
 
-    [Fact(DisplayName = "MenuItems batch - unknown operation branch executes when operation is explicitly allowed")]
+    [Fact(DisplayName = "Batch endpoint - unknown operation branch executes when operation is explicitly allowed")]
     public async Task Batch_unknown_operation_branch_executes_when_operation_is_explicitly_allowed()
     {
         using var customFactory = factory.WithWebHostBuilder(builder =>
@@ -200,7 +200,7 @@ public sealed class MenuItemBatchBranchIntegrationTests(TestAppFactory factory) 
         all!.ShouldContain(x => x.Name == marker);
     }
 
-    [Theory(DisplayName = "MenuItems batch - require tenant causes context error for mutating operations")]
+    [Theory(DisplayName = "Batch endpoint - require tenant causes context error for mutating operations")]
     [InlineData(KyrolusBatchOperationType.Create)]
     [InlineData(KyrolusBatchOperationType.Update)]
     [InlineData(KyrolusBatchOperationType.Upsert)]
@@ -248,7 +248,7 @@ public sealed class MenuItemBatchBranchIntegrationTests(TestAppFactory factory) 
         body.ShouldContain("\"code\":\"internal_error\"");
     }
 
-    [Fact(DisplayName = "MenuItems batch - update with invalid key property triggers id error branch")]
+    [Fact(DisplayName = "Batch endpoint - update with invalid key property triggers id error branch")]
     public async Task Batch_update_with_invalid_key_property_triggers_id_error_branch()
     {
         using var customFactory = factory.WithWebHostBuilder(builder =>
@@ -298,7 +298,7 @@ public sealed class MenuItemBatchBranchIntegrationTests(TestAppFactory factory) 
         all!.ShouldNotContain(x => x.Name == marker);
     }
 
-    [Fact(DisplayName = "MenuItems batch - custom key-values patch command executes patch success branch")]
+    [Fact(DisplayName = "Batch endpoint - custom key-values patch command executes patch success branch")]
     public async Task Batch_custom_key_values_patch_command_executes_patch_success_branch()
     {
         using var customFactory = factory.WithWebHostBuilder(builder =>
@@ -348,7 +348,7 @@ public sealed class MenuItemBatchBranchIntegrationTests(TestAppFactory factory) 
         updated.Price.ShouldBe(77);
     }
 
-    [Theory(DisplayName = "MenuItems bulk patch - disallowed fields follow strict validation mode")]
+    [Theory(DisplayName = "Bulk patch endpoint - disallowed fields follow strict validation mode")]
     [InlineData(true, HttpStatusCode.BadRequest)]
     [InlineData(false, HttpStatusCode.OK)]
     public async Task Bulk_patch_disallowed_fields_follow_strict_validation_mode(
@@ -395,7 +395,7 @@ public sealed class MenuItemBatchBranchIntegrationTests(TestAppFactory factory) 
         unchanged!.Name.ShouldBe(beforeName);
     }
 
-    [Theory(DisplayName = "MenuItems bulk patch - missing or empty updates returns bad request")]
+    [Theory(DisplayName = "Bulk patch endpoint - missing or empty updates returns bad request")]
     [InlineData("missing")]
     [InlineData("null")]
     [InlineData("empty")]
@@ -418,7 +418,7 @@ public sealed class MenuItemBatchBranchIntegrationTests(TestAppFactory factory) 
         body.ShouldContain("Updates are required.");
     }
 
-    [Fact(DisplayName = "MenuItems bulk patch - keys array path updates target entity")]
+    [Fact(DisplayName = "Bulk patch endpoint - keys array path updates target entity")]
     public async Task Bulk_patch_keys_array_path_updates_target_entity()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-bulk-patch-keys-array"));
@@ -443,7 +443,7 @@ public sealed class MenuItemBatchBranchIntegrationTests(TestAppFactory factory) 
         current.ShouldNotBeNull();
     }
 
-    [Theory(DisplayName = "MenuItems bulk patch - missing key values returns bad request")]
+    [Theory(DisplayName = "Bulk patch endpoint - missing key values returns bad request")]
     [InlineData(true)]
     [InlineData(false)]
     public async Task Bulk_patch_missing_key_values_returns_bad_request(bool useEmptyKeysArray)
@@ -464,7 +464,7 @@ public sealed class MenuItemBatchBranchIntegrationTests(TestAppFactory factory) 
         body.ShouldContain("Composite key is required.");
     }
 
-    [Theory(DisplayName = "MenuItems batch - continueOnError flags control next operation execution")]
+    [Theory(DisplayName = "Batch endpoint - continueOnError flags control next operation execution")]
     [InlineData(true, false, true)]
     [InlineData(false, true, true)]
     [InlineData(false, false, false)]
@@ -513,7 +513,7 @@ public sealed class MenuItemBatchBranchIntegrationTests(TestAppFactory factory) 
         all!.Any(x => x.Name == marker).ShouldBe(shouldCreate);
     }
 
-    [Theory(DisplayName = "MenuItems batch - precondition failures return expected error code")]
+    [Theory(DisplayName = "Batch endpoint - precondition failures return expected error code")]
     [MemberData(nameof(PreconditionFailureCases))]
     public async Task Batch_precondition_failures_return_expected_error_code(
         KyrolusBatchOperationType operation,
@@ -545,7 +545,7 @@ public sealed class MenuItemBatchBranchIntegrationTests(TestAppFactory factory) 
         body.ShouldContain("\"code\":\"internal_error\"");
     }
 
-    [Fact(DisplayName = "MenuItems batch - patch for missing entity returns internal error result")]
+    [Fact(DisplayName = "Batch endpoint - patch for missing entity returns internal error result")]
     public async Task Batch_patch_missing_entity_returns_internal_error_result()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-batch-patch-missing"));
@@ -573,7 +573,7 @@ public sealed class MenuItemBatchBranchIntegrationTests(TestAppFactory factory) 
         body.ShouldContain("\"code\":\"internal_error\"");
     }
 
-    [Theory(DisplayName = "MenuItems batch - single operation success paths execute")]
+    [Theory(DisplayName = "Batch endpoint - single operation success paths execute")]
     [MemberData(nameof(SuccessPathCases))]
     public async Task Batch_single_operation_success_paths_execute(
         KyrolusBatchOperationType operation,
@@ -667,7 +667,7 @@ public sealed class MenuItemBatchBranchIntegrationTests(TestAppFactory factory) 
         }
     }
 
-    [Fact(DisplayName = "MenuItems batch - upsert with empty id creates entity through create-new branch")]
+    [Fact(DisplayName = "Batch endpoint - upsert with empty id creates entity through create-new branch")]
     public async Task Batch_upsert_with_empty_id_creates_entity_through_create_new_branch()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-batch-upsert-empty-id"));
