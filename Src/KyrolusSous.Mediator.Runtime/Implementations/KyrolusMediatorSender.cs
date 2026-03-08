@@ -1,3 +1,7 @@
+using System.Collections.Concurrent;
+using System.Reflection;
+using System.Runtime.ExceptionServices;
+
 namespace KyrolusSous.Mediator.Runtime.Implementations
 {
     /// <summary>
@@ -13,6 +17,21 @@ namespace KyrolusSous.Mediator.Runtime.Implementations
     /// <exception cref="ArgumentNullException">Thrown if serviceProvider or generatedDispatcher is null.</exception>
     public sealed class KyrolusMediatorSender(IServiceProvider serviceProvider, IGeneratedDispatcher generatedDispatcher) : IKyrolusMediatorSender // Not partial anymore
     {
+        private static readonly MethodInfo s_buildRequestPipelineMethod =
+            typeof(KyrolusMediatorSender).GetMethod(
+                nameof(BuildPipelineAndExecuteCoreAsync),
+                BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Could not locate request pipeline builder.");
+
+        private static readonly MethodInfo s_buildStreamPipelineMethod =
+            typeof(KyrolusMediatorSender).GetMethod(
+                nameof(BuildStreamPipelineAndExecuteCore),
+                BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Could not locate stream pipeline builder.");
+
+        private static readonly ConcurrentDictionary<(Type RequestType, Type ResponseType), MethodInfo> s_requestPipelineMethodCache = new();
+        private static readonly ConcurrentDictionary<(Type RequestType, Type ResponseType), MethodInfo> s_streamPipelineMethodCache = new();
+
         private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         private readonly IGeneratedDispatcher _generatedDispatcher = generatedDispatcher ?? throw new ArgumentNullException(nameof(generatedDispatcher)); // Inject the INTERNAL interface
 
@@ -22,8 +41,7 @@ namespace KyrolusSous.Mediator.Runtime.Implementations
         public Task<TResponse> SendAsync<TResponse>(IKyrolusQuery<TResponse> query, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(query);
-            // Execute pipeline, which will eventually call the dispatcher interface
-            return BuildPipelineAndExecuteAsync<IKyrolusQuery<TResponse>, TResponse>(query, cancellationToken);
+            return BuildConcretePipelineAndExecuteAsync<TResponse>(query, cancellationToken);
         }
 
         /// <inheritdoc />
@@ -46,30 +64,28 @@ namespace KyrolusSous.Mediator.Runtime.Implementations
                 return SendCommandAsUnitAsync<TResponse>(command, cancellationToken);
             }
 
-            return BuildPipelineAndExecuteAsync<IKyrolusRequest<TResponse>, TResponse>(request, cancellationToken);
+            return BuildConcretePipelineAndExecuteAsync<TResponse>(request, cancellationToken);
         }
 
         /// <inheritdoc />
         public async Task SendAsync(IKyrolusCommand command, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(command);
-            // Execute pipeline, which will eventually call the dispatcher interface (expecting Unit)
-            await BuildPipelineAndExecuteAsync<IKyrolusCommand, Unit>(command, cancellationToken);
+            await BuildConcretePipelineAndExecuteAsync<Unit>(command, cancellationToken).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
         public Task<TResponse> SendAsync<TResponse>(IKyrolusCommand<TResponse> command, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(command);
-            // Execute pipeline, which will eventually call the dispatcher interface
-            return BuildPipelineAndExecuteAsync<IKyrolusCommand<TResponse>, TResponse>(command, cancellationToken);
+            return BuildConcretePipelineAndExecuteAsync<TResponse>(command, cancellationToken);
         }
 
         /// <inheritdoc />
         public IAsyncEnumerable<TResponse> StreamAsync<TResponse>(IKyrolusStreamRequest<TResponse> request, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(request);
-            return BuildStreamPipelineAndExecute<IKyrolusStreamRequest<TResponse>, TResponse>(request, cancellationToken);
+            return BuildConcreteStreamPipelineAndExecute<TResponse>(request, cancellationToken);
         }
 
         private async Task<TResponse> SendCommandAsUnitAsync<TResponse>(IKyrolusCommand command, CancellationToken cancellationToken)
@@ -83,7 +99,25 @@ namespace KyrolusSous.Mediator.Runtime.Implementations
         /// <summary>
         /// Builds and executes the request pipeline, including behaviors.
         /// </summary>
-        private Task<TResponse> BuildPipelineAndExecuteAsync<TRequest, TResponse>(TRequest request, CancellationToken cancellationToken)
+        private Task<TResponse> BuildConcretePipelineAndExecuteAsync<TResponse>(object request, CancellationToken cancellationToken)
+        {
+            var requestType = request.GetType();
+            var pipelineMethod = s_requestPipelineMethodCache.GetOrAdd(
+                (requestType, typeof(TResponse)),
+                static key => s_buildRequestPipelineMethod.MakeGenericMethod(key.RequestType, key.ResponseType));
+
+            try
+            {
+                return (Task<TResponse>)pipelineMethod.Invoke(this, [request, cancellationToken])!;
+            }
+            catch (TargetInvocationException exception) when (exception.InnerException is not null)
+            {
+                ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
+                throw;
+            }
+        }
+
+        private Task<TResponse> BuildPipelineAndExecuteCoreAsync<TRequest, TResponse>(TRequest request, CancellationToken cancellationToken)
         {
             // 1. Resolve Behaviors
             var behaviorInterfaceType = typeof(IKyrolusPipelineBehavior<,>).MakeGenericType(typeof(TRequest), typeof(TResponse));
@@ -131,7 +165,25 @@ namespace KyrolusSous.Mediator.Runtime.Implementations
             return pipeline();
         }
 
-        private IAsyncEnumerable<TResponse> BuildStreamPipelineAndExecute<TRequest, TResponse>(TRequest request, CancellationToken cancellationToken)
+        private IAsyncEnumerable<TResponse> BuildConcreteStreamPipelineAndExecute<TResponse>(object request, CancellationToken cancellationToken)
+        {
+            var requestType = request.GetType();
+            var pipelineMethod = s_streamPipelineMethodCache.GetOrAdd(
+                (requestType, typeof(TResponse)),
+                static key => s_buildStreamPipelineMethod.MakeGenericMethod(key.RequestType, key.ResponseType));
+
+            try
+            {
+                return (IAsyncEnumerable<TResponse>)pipelineMethod.Invoke(this, [request, cancellationToken])!;
+            }
+            catch (TargetInvocationException exception) when (exception.InnerException is not null)
+            {
+                ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
+                throw;
+            }
+        }
+
+        private IAsyncEnumerable<TResponse> BuildStreamPipelineAndExecuteCore<TRequest, TResponse>(TRequest request, CancellationToken cancellationToken)
         {
             var behaviorInterfaceType = typeof(IKyrolusStreamPipelineBehavior<,>).MakeGenericType(typeof(TRequest), typeof(TResponse));
             var behaviors = _serviceProvider.GetServices(behaviorInterfaceType)

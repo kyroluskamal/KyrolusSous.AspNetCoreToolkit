@@ -5,7 +5,6 @@
     <ProjectReference Include="..\KyrolusSous.Caching.Abstractions\KyrolusSous.Caching.Abstractions.csproj" />
     <ProjectReference Include="..\KyrolusSous.ExceptionHandling\KyrolusSous.ExceptionHandling.csproj" />
     <ProjectReference Include="..\KyrolusSous.ExceptionHandling.ProblemDetails\KyrolusSous.ExceptionHandling.ProblemDetails.csproj" />
-    <ProjectReference Include="..\KyrolusSous.Repositories.EF.Abstractions\KyrolusSous.Repositories.EF.Abstractions.csproj" />
     <ProjectReference Include="..\KyrolusSous.Repositories.Marten.Abstractions\KyrolusSous.Repositories.Marten.Abstractions.csproj" />
     <ProjectReference Include="..\KyrolusSous.Validation.Abstractions\KyrolusSous.Validation.Abstractions.csproj" />
   </ItemGroup>

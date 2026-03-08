@@ -72,7 +72,7 @@ public sealed class UpdateMenuItemHandler(
         var entity = command.Entity ?? throw new ArgumentNullException(nameof(command.Entity));
         if (string.IsNullOrWhiteSpace(entity.TenantId))
             entity.TenantId = tenantResolver.ResolveTenantId() ?? string.Empty;
-        entity.UpdatedAt = DateTimeOffset.UtcNow;
+        entity.UpdatedAt = UtcTimestamp.DateTimeOffsetNow();
 
         var result = await repo.UpdateAsync(entity, command.ExpectedVersion, tenantId: null, cancellationToken)
             .ConfigureAwait(false);
@@ -95,7 +95,7 @@ public sealed class UpdateMenuItemRangeHandler(
         foreach (var entity in entities)
         {
             if (string.IsNullOrWhiteSpace(entity.TenantId)) entity.TenantId = tenant;
-            entity.UpdatedAt = DateTimeOffset.UtcNow;
+            entity.UpdatedAt = UtcTimestamp.DateTimeOffsetNow();
         }
 
         var result = await repo.UpdateRangeAsync(entities, tenantId: null, cancellationToken).ConfigureAwait(false);

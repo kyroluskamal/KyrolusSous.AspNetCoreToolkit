@@ -9,6 +9,7 @@ using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Models;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Infrastructure;
 using KyrolusSous.Repositories.Marten.Abstractions.Interfaces;
 using Marten;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
@@ -46,8 +47,8 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
 
         var response = await client.PostAsJsonAsync("/api/menu-items/$batch", request);
         var body = await response.Content.ReadAsStringAsync();
-        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError, body);
-        body.ShouldContain("\"code\":\"internal_error\"");
+        response.StatusCode.ShouldNotBe(HttpStatusCode.InternalServerError, body);
+        body.ShouldNotContain("\"code\":\"internal_error\"");
 
         var all = await client.GetFromJsonAsync<List<MenuItem>>("/api/menu-items");
         all.ShouldNotBeNull();
@@ -192,8 +193,8 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
 
         var response = await client.PostAsJsonAsync("/api/menu-items/$batch", request);
         var body = await response.Content.ReadAsStringAsync();
-        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError, body);
-        body.ShouldContain("\"code\":\"internal_error\"");
+        response.StatusCode.ShouldNotBe(HttpStatusCode.InternalServerError, body);
+        body.ShouldNotContain("\"code\":\"internal_error\"");
 
         var all = await client.GetFromJsonAsync<List<MenuItem>>("/api/menu-items");
         all.ShouldNotBeNull();
@@ -244,8 +245,8 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
 
         var response = await client.PostAsJsonAsync("/api/menu-items/$batch", request);
         var body = await response.Content.ReadAsStringAsync();
-        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError, body);
-        body.ShouldContain("\"code\":\"internal_error\"");
+        response.StatusCode.ShouldNotBe(HttpStatusCode.InternalServerError, body);
+        body.ShouldNotContain("\"code\":\"internal_error\"");
     }
 
     [Fact(DisplayName = "Batch endpoint - update with invalid key property triggers id error branch")]
@@ -290,8 +291,8 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
 
         var response = await client.PostAsJsonAsync("/api/menu-items/$batch", request);
         var body = await response.Content.ReadAsStringAsync();
-        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError, body);
-        body.ShouldContain("\"code\":\"internal_error\"");
+        response.StatusCode.ShouldNotBe(HttpStatusCode.InternalServerError, body);
+        body.ShouldNotContain("\"code\":\"internal_error\"");
 
         var all = await client.GetFromJsonAsync<List<MenuItem>>("/api/menu-items");
         all.ShouldNotBeNull();
@@ -339,8 +340,8 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
 
         var response = await client.PostAsJsonAsync("/api/menu-items/$batch", request);
         var body = await response.Content.ReadAsStringAsync();
-        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError, body);
-        body.ShouldContain("\"code\":\"internal_error\"");
+        response.StatusCode.ShouldNotBe(HttpStatusCode.InternalServerError, body);
+        body.ShouldNotContain("\"code\":\"internal_error\"");
 
         var updated = await client.GetFromJsonAsync<MenuItem>($"/api/menu-items/{existing.Id}?includeDeleted=true");
         updated.ShouldNotBeNull();
@@ -505,8 +506,8 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
 
         var response = await client.PostAsJsonAsync("/api/menu-items/$batch", request);
         var body = await response.Content.ReadAsStringAsync();
-        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError, body);
-        body.ShouldContain("\"code\":\"internal_error\"");
+        response.StatusCode.ShouldNotBe(HttpStatusCode.InternalServerError, body);
+        body.ShouldNotContain("\"code\":\"internal_error\"");
 
         var all = await client.GetFromJsonAsync<List<MenuItem>>("/api/menu-items");
         all.ShouldNotBeNull();
@@ -518,7 +519,8 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
     public async Task Batch_precondition_failures_return_expected_error_code(
         KyrolusBatchOperationType operation,
         Guid id,
-        MenuItem? data)
+        MenuItem? data,
+        string expectedErrorCode)
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-batch-preconditions"));
 
@@ -541,8 +543,58 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
 
         var response = await client.PostAsJsonAsync("/api/menu-items/$batch", request);
         var body = await response.Content.ReadAsStringAsync();
-        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError, body);
-        body.ShouldContain("\"code\":\"internal_error\"");
+        response.StatusCode.ShouldNotBe(HttpStatusCode.InternalServerError, body);
+        response.StatusCode.ShouldBe(HttpStatusCode.MultiStatus, body);
+
+        var payload = await response.Content.ReadFromJsonAsync<KyrolusBatchResponse<MenuItem, Guid>>();
+        payload.ShouldNotBeNull();
+        payload!.Success.ShouldBeFalse();
+        payload.FailureCount.ShouldBe(1);
+        payload.Results.Count.ShouldBe(1);
+
+        var errorCode = NormalizeErrorCode(payload.Results[0].Error?.Code);
+        errorCode.ShouldBe(expectedErrorCode);
+    }
+
+    [Theory(DisplayName = "Batch endpoint - keyed operations reject empty guid id with missing_id")]
+    [MemberData(nameof(GuidEmptyIdCases))]
+    public async Task Batch_keyed_operations_reject_empty_guid_id_with_missing_id(
+        KyrolusBatchOperationType operation,
+        MenuItem? data)
+    {
+        using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId($"menuitem-batch-empty-guid-{operation}"));
+
+        var request = new KyrolusBatchRequest<MenuItem, Guid>
+        {
+            Atomic = true,
+            ContinueOnError = false,
+            ReturnData = false,
+            Operations =
+            [
+                new KyrolusBatchOperation<MenuItem, Guid>
+                {
+                    OperationId = "op-empty-id",
+                    Operation = operation,
+                    Id = Guid.Empty,
+                    Data = data
+                }
+            ]
+        };
+
+        var response = await client.PostAsJsonAsync("/api/menu-items/$batch", request);
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.ShouldBe(HttpStatusCode.MultiStatus, body);
+
+        var payload = await response.Content.ReadFromJsonAsync<KyrolusBatchResponse<MenuItem, Guid>>();
+        payload.ShouldNotBeNull();
+        payload!.Success.ShouldBeFalse();
+        payload.FailureCount.ShouldBe(1);
+        payload.Results.Count.ShouldBe(1);
+
+        var operationResult = payload.Results[0];
+        operationResult.Success.ShouldBeFalse();
+        operationResult.Status.ShouldBe((int)HttpStatusCode.BadRequest);
+        NormalizeErrorCode(operationResult.Error?.Code).ShouldBe("MISSING_ID");
     }
 
     [Fact(DisplayName = "Batch endpoint - patch for missing entity returns internal error result")]
@@ -569,8 +621,19 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
 
         var response = await client.PostAsJsonAsync("/api/menu-items/$batch", request);
         var body = await response.Content.ReadAsStringAsync();
-        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError, body);
-        body.ShouldContain("\"code\":\"internal_error\"");
+        response.StatusCode.ShouldNotBe(HttpStatusCode.InternalServerError, body);
+        response.StatusCode.ShouldBe(HttpStatusCode.MultiStatus, body);
+
+        var payload = await response.Content.ReadFromJsonAsync<KyrolusBatchResponse<MenuItem, Guid>>();
+        payload.ShouldNotBeNull();
+        payload!.Success.ShouldBeFalse();
+        payload.FailureCount.ShouldBe(1);
+        payload.Results.Count.ShouldBe(1);
+
+        var operationResult = payload.Results[0];
+        operationResult.Success.ShouldBeFalse();
+        operationResult.Status.ShouldBe(StatusCodes.Status500InternalServerError);
+        NormalizeErrorCode(operationResult.Error?.Code).ShouldBe("INTERNAL_ERROR");
     }
 
     [Theory(DisplayName = "Batch endpoint - single operation success paths execute")]
@@ -624,8 +687,8 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
 
         var response = await client.PostAsJsonAsync("/api/menu-items/$batch", request);
         var body = await response.Content.ReadAsStringAsync();
-        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError, body);
-        body.ShouldContain("\"code\":\"internal_error\"");
+        response.StatusCode.ShouldNotBe(HttpStatusCode.InternalServerError, body);
+        body.ShouldNotContain("\"code\":\"internal_error\"");
 
         if (operation == KyrolusBatchOperationType.Delete && seeded is not null)
         {
@@ -698,8 +761,8 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
 
         var response = await client.PostAsJsonAsync("/api/menu-items/$batch", request);
         var body = await response.Content.ReadAsStringAsync();
-        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError, body);
-        body.ShouldContain("\"code\":\"internal_error\"");
+        response.StatusCode.ShouldNotBe(HttpStatusCode.InternalServerError, body);
+        body.ShouldNotContain("\"code\":\"internal_error\"");
 
         var all = await client.GetFromJsonAsync<List<MenuItem>>("/api/menu-items");
         all.ShouldNotBeNull();
@@ -709,11 +772,18 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
 
     public static IEnumerable<object[]> PreconditionFailureCases()
     {
-        yield return [KyrolusBatchOperationType.Create, Guid.NewGuid(), (MenuItem?)null!];
-        yield return [KyrolusBatchOperationType.Update, Guid.NewGuid(), (MenuItem?)null!];
-        yield return [KyrolusBatchOperationType.Patch, Guid.NewGuid(), (MenuItem?)null!];
-        yield return [KyrolusBatchOperationType.Upsert, Guid.NewGuid(), (MenuItem?)null!];
-        yield return [KyrolusBatchOperationType.Create, Guid.NewGuid(), InvalidModel()];
+        yield return [KyrolusBatchOperationType.Create, Guid.NewGuid(), (MenuItem?)null!, "MISSING_DATA"];
+        yield return [KyrolusBatchOperationType.Update, Guid.NewGuid(), (MenuItem?)null!, "MISSING_DATA"];
+        yield return [KyrolusBatchOperationType.Patch, Guid.NewGuid(), (MenuItem?)null!, "MISSING_DATA"];
+        yield return [KyrolusBatchOperationType.Upsert, Guid.NewGuid(), (MenuItem?)null!, "MISSING_DATA"];
+        yield return [KyrolusBatchOperationType.Create, Guid.NewGuid(), InvalidModel(), "VALIDATION_ERROR"];
+    }
+
+    public static IEnumerable<object[]> GuidEmptyIdCases()
+    {
+        yield return [KyrolusBatchOperationType.Update, ValidModel("Update-Empty-Id")];
+        yield return [KyrolusBatchOperationType.Patch, ValidModel("Patch-Empty-Id")];
+        yield return [KyrolusBatchOperationType.Delete, (MenuItem?)null];
     }
 
     public static IEnumerable<object[]> SuccessPathCases()
@@ -736,6 +806,20 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
             Category = string.Empty,
             Price = 0
         };
+
+    private static MenuItem ValidModel(string name)
+        => new()
+        {
+            Name = name,
+            Category = "Main",
+            Price = 10
+        };
+
+    private static string NormalizeErrorCode(string? code)
+        => (code ?? string.Empty)
+            .Trim()
+            .Replace('-', '_')
+            .ToUpperInvariant();
 
     private static async Task<MenuItem> CreateMenuItemAsync(HttpClient client, string name, string category, decimal price)
     {
@@ -795,3 +879,8 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
         }
     }
 }
+
+
+
+
+

@@ -70,7 +70,7 @@ public sealed class DataProtectionTests(TestAppFactory factory) : IClassFixture<
     public async Task Missing_tenant_header_uses_default()
     {
         using var client = factory.CreateClient();
-        var token = await client.GetAccessTokenAsync("admin", "admin123");
+        var token = await client.GetAccessTokenAsync("no-tenant", "notenant123");
         client.SetBearerToken(token);
 
         var response = await client.PostAsJsonAsync("/api/diagnostics/protect", new ProtectRequest("default-secret"));

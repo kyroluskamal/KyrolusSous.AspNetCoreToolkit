@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Linq.Expressions;
@@ -7,12 +7,11 @@ using KyrolusSous.EndpointKit.Core.BaseKyrolusModule;
 using KyrolusSous.EndpointKit.Core.Batch;
 using KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Enum;
 using KyrolusSous.EndpointKit.Marten.BaseKyrolusModule.Authorization;
-using KyrolusSous.EndpointKit.Marten.BaseKyrolusModule;
 using KyrolusSous.EndpointKit.Marten.BaseKyrolusModule.Interfaces;
 using KyrolusSous.Mediator.Abstractions.Interfaces;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Models;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Services;
-using KyrolusSous.Repositories.EF.Abstractions.Query;
+using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Contracts;
 using KyrolusSous.Repositories.Marten.Abstractions.Interfaces;
 using KyrolusSous.Repositories.Marten.Abstractions.Records;
 using Marten;
@@ -27,7 +26,7 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
 {
     [Theory(DisplayName = "DefaultCommandQueryHandler marten query - supports clause operators")]
     [MemberData(nameof(FilterClauseCases))]
-    public async Task Query_endpoint_supports_clause_operators(FilterClause clause, int expectedCount)
+    public async Task Query_endpoint_supports_clause_operators(TestFilterClause clause, int expectedCount)
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-query-clause"));
 
@@ -39,7 +38,7 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         var updateResponse = await client.PutAsJsonAsync($"/api/menu-items/{updated.Id}", updated);
         updateResponse.EnsureSuccessStatusCode();
 
-        var request = new QueryRequest(Filters: [clause]);
+        var request = new TestQueryRequest(Filters: [clause]);
         var response = await client.PostAsJsonAsync("/api/menu-items/query", request);
         var body = await response.Content.ReadAsStringAsync();
         response.StatusCode.ShouldBe(HttpStatusCode.OK, body);
@@ -58,7 +57,7 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         await CreateMenuItemAsync(client, "High", "Main", 50);
         await CreateMenuItemAsync(client, "Mid", "Main", 25);
 
-        var request = new QueryRequest(OrderBy: [new OrderClause("Price", Desc: true)]);
+        var request = new TestQueryRequest(OrderBy: [new TestOrderClause("Price", Desc: true)]);
         var response = await client.PostAsJsonAsync("/api/menu-items/query", request);
         var body = await response.Content.ReadAsStringAsync();
         response.StatusCode.ShouldBe(HttpStatusCode.OK, body);
@@ -75,7 +74,7 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-query-invalid"));
 
-        var request = new QueryRequest(Filters: [new FilterClause("Unknown", "eq", "x")]);
+        var request = new TestQueryRequest(Filters: [new TestFilterClause("Unknown", "eq", "x")]);
         var response = await client.PostAsJsonAsync("/api/menu-items/query", request);
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
@@ -131,7 +130,10 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         client.DefaultRequestHeaders.Add("X-Tenant-Id", TestHelpers.NewTenantId("menuitem-query-include-graph-enabled"));
         await CreateMenuItemAsync(client, "Graph-Enabled", "Main", 9);
 
-        var request = new QueryRequest(IncludeGraph: includeGraphPayload);
+        var request = new
+        {
+            IncludeGraph = includeGraphPayload
+        };
         var response = await client.PostAsJsonAsync("/api/menu-items/query", request);
         var body = await response.Content.ReadAsStringAsync();
         response.StatusCode.ShouldBe(HttpStatusCode.OK, body);
@@ -170,7 +172,7 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         getAllItems.Select(x => x.Name).ShouldContain(activeName);
         getAllItems.All(x => x.Price == 0).ShouldBeTrue();
 
-        var queryResponse = await client.PostAsJsonAsync("/api/menu-items/query?includeDeleted=true", new QueryRequest(Fields: ["Name"]));
+        var queryResponse = await client.PostAsJsonAsync("/api/menu-items/query?includeDeleted=true", new TestQueryRequest(Fields: ["Name"]));
         var queryBody = await queryResponse.Content.ReadAsStringAsync();
         queryResponse.StatusCode.ShouldBe(HttpStatusCode.OK, queryBody);
         var queryItems = await queryResponse.Content.ReadFromJsonAsync<List<MenuItem>>();
@@ -265,8 +267,8 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         var deleteResponse = await client.DeleteAsync($"/api/menu-items/{item.Id}");
         deleteResponse.EnsureSuccessStatusCode();
 
-        var request = new KyrolusMartenPagedQueryRequest(
-            Request: new QueryRequest(),
+        var request = new TestPagedQueryRequest(
+            Request: new TestQueryRequest(),
             PageNumber: 1,
             PageSize: 20,
             Cacheable: false,
@@ -421,8 +423,8 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         includeDeletedCount.ShouldBeGreaterThanOrEqualTo(activeCount);
     }
 
-    [Fact(DisplayName = "DefaultCommandQueryHandler marten by-keys - get works and patch-by-keys returns not found (current behavior)")]
-    public async Task By_keys_get_works_and_patch_by_keys_returns_not_found()
+    [Fact(DisplayName = "DefaultCommandQueryHandler marten by-keys - patch updates the matching item when single-key Id is propagated")]
+    public async Task By_keys_get_works_and_patch_by_keys_updates_matching_item()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-bykeys"));
 
@@ -438,13 +440,14 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         var patchResponse = await client.PatchAsJsonAsync(
             $"/api/menu-items/by-keys?keys={item.Id}",
             new Dictionary<string, object> { ["price"] = 123 });
-        patchResponse.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        var patchBody = await patchResponse.Content.ReadAsStringAsync();
+        patchResponse.StatusCode.ShouldBe(HttpStatusCode.OK, patchBody);
 
         var verifyResponse = await client.GetAsync($"/api/menu-items/{item.Id}");
         verifyResponse.EnsureSuccessStatusCode();
         var verified = await verifyResponse.Content.ReadFromJsonAsync<MenuItem>();
         verified.ShouldNotBeNull();
-        verified!.Price.ShouldBe(11);
+        verified!.Price.ShouldBe(123);
     }
 
     [Fact(DisplayName = "DefaultCommandQueryHandler marten by-keys - missing keys returns 400")]
@@ -785,10 +788,10 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         await CreateMenuItemAsync(client, "SeekQ-Main-2", "Main", 20);
         await CreateMenuItemAsync(client, "SeekQ-Drink-1", "Drinks", 30);
 
-        var request = new KyrolusMartenSeekQueryRequest(
-            Request: new QueryRequest(
-                Filters: [new FilterClause("Category", "eq", "Main")],
-                OrderBy: [new OrderClause("Price", Desc: false)]),
+        var request = new TestSeekQueryRequest(
+            Request: new TestQueryRequest(
+                Filters: [new TestFilterClause("Category", "eq", "Main")],
+                OrderBy: [new TestOrderClause("Price", Desc: false)]),
             PageSize: 1,
             IncludeTotalCount: true);
 
@@ -887,10 +890,12 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         await CreateMenuItemAsync(client, "Bulk-Main-2", "Main", 20);
         await CreateMenuItemAsync(client, "Bulk-Drink-1", "Drinks", 30);
 
-        var bulkUpdate = new KyrolusMartenBulkUpdateRequest(
-            Request: new QueryRequest(Filters: [new FilterClause("Category", "eq", "Main")]),
-            Updates: new Dictionary<string, object> { ["Price"] = 77m },
-            Cacheable: false);
+        var bulkUpdate = new
+        {
+            Request = new TestQueryRequest(Filters: [new TestFilterClause("Category", "eq", "Main")]),
+            Updates = new Dictionary<string, object> { ["Price"] = 77m },
+            Cacheable = false
+        };
         var updateResponse = await client.PostAsJsonAsync("/api/menu-items/bulk/update", bulkUpdate);
         var updateBody = await updateResponse.Content.ReadAsStringAsync();
         updateResponse.StatusCode.ShouldBe(HttpStatusCode.OK, updateBody);
@@ -901,9 +906,11 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         allAfterUpdate.ShouldNotBeNull();
         allAfterUpdate!.Where(x => x.Category == "Main").All(x => x.Price == 77).ShouldBeTrue();
 
-        var bulkDelete = new KyrolusMartenBulkDeleteRequest(
-            Request: new QueryRequest(Filters: [new FilterClause("Category", "eq", "Drinks")]),
-            Cacheable: false);
+        var bulkDelete = new
+        {
+            Request = new TestQueryRequest(Filters: [new TestFilterClause("Category", "eq", "Drinks")]),
+            Cacheable = false
+        };
         var deleteResponse = await client.PostAsJsonAsync("/api/menu-items/bulk/delete", bulkDelete);
         var deleteBody = await deleteResponse.Content.ReadAsStringAsync();
         deleteResponse.StatusCode.ShouldBe(HttpStatusCode.OK, deleteBody);
@@ -916,10 +923,12 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-bulk-update-empty"));
 
-        var request = new KyrolusMartenBulkUpdateRequest(
-            Request: new QueryRequest(Filters: [new FilterClause("Category", "eq", "Main")]),
-            Updates: new Dictionary<string, object>(),
-            Cacheable: false);
+        var request = new
+        {
+            Request = new TestQueryRequest(Filters: [new TestFilterClause("Category", "eq", "Main")]),
+            Updates = new Dictionary<string, object>(),
+            Cacheable = false
+        };
 
         var response = await client.PostAsJsonAsync("/api/menu-items/bulk/update", request);
         var body = await response.Content.ReadAsStringAsync();
@@ -945,10 +954,12 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
 
         await CreateMenuItemAsync(client, "Bulk-Filtered-1", "Main", 10);
 
-        var request = new KyrolusMartenBulkUpdateRequest(
-            Request: new QueryRequest(Filters: [new FilterClause("Category", "eq", "Main")]),
-            Updates: new Dictionary<string, object> { ["Name"] = "Ignored" },
-            Cacheable: false);
+        var request = new
+        {
+            Request = new TestQueryRequest(Filters: [new TestFilterClause("Category", "eq", "Main")]),
+            Updates = new Dictionary<string, object> { ["Name"] = "Ignored" },
+            Cacheable = false
+        };
 
         var response = await client.PostAsJsonAsync("/api/menu-items/bulk/update", request);
         var body = await response.Content.ReadAsStringAsync();
@@ -1068,7 +1079,7 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         deleted!.IsDeleted.ShouldBeTrue();
     }
 
-    [Fact(DisplayName = "DefaultCommandQueryHandler marten delete - batch delete evaluates null endpoints fallback branch")]
+    [Fact(DisplayName = "DefaultCommandQueryHandler marten delete - batch delete with null endpoints fallback executes successfully")]
     public async Task Batch_delete_evaluates_null_endpoints_fallback_branch()
     {
         using var customFactory = factory.WithWebHostBuilder(builder =>
@@ -1119,12 +1130,17 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
 
         var deleteResponse = await client.PostAsJsonAsync("/api/menu-items/$batch", batchRequest);
         var deleteBody = await deleteResponse.Content.ReadAsStringAsync();
-        deleteResponse.StatusCode.ShouldBe(HttpStatusCode.InternalServerError, deleteBody);
-        deleteBody.ShouldContain("\"code\":\"internal_error\"");
+        deleteResponse.StatusCode.ShouldBe(HttpStatusCode.OK, deleteBody);
+        deleteBody.ShouldContain("\"success\":true");
+
+        var verifyResponse = await client.GetAsync($"/api/menu-items/{targetId}?includeDeleted=true");
+        (verifyResponse.StatusCode == HttpStatusCode.NotFound
+            || verifyResponse.StatusCode == HttpStatusCode.MethodNotAllowed)
+            .ShouldBeTrue();
     }
 
-    [Fact(DisplayName = "DefaultCommandQueryHandler marten batch - enabled batch executes operations but returns 500 (current behavior)")]
-    public async Task Batch_endpoint_enabled_executes_operations_but_returns_internal_server_error_current_behavior()
+    [Fact(DisplayName = "DefaultCommandQueryHandler marten batch - enabled batch executes operations and returns success")]
+    public async Task Batch_endpoint_enabled_executes_operations_and_returns_success()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-batch-enabled"));
 
@@ -1155,8 +1171,8 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
 
         var response = await client.PostAsJsonAsync("/api/menu-items/$batch", request);
         var body = await response.Content.ReadAsStringAsync();
-        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError, body);
-        body.ShouldContain("InvalidOperationException");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, body);
+        body.ShouldContain("\"success\":true");
 
         var verifyExisting = await client.GetFromJsonAsync<MenuItem>($"/api/menu-items/{existing.Id}");
         verifyExisting.ShouldNotBeNull();
@@ -1167,8 +1183,8 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         all!.ShouldContain(x => x.Name == "Batch Created");
     }
 
-    [Fact(DisplayName = "DefaultCommandQueryHandler marten batch - continueOnError executes valid ops but returns 500 (current behavior)")]
-    public async Task Batch_endpoint_continue_on_error_executes_valid_ops_but_returns_internal_server_error_current_behavior()
+    [Fact(DisplayName = "DefaultCommandQueryHandler marten batch - continueOnError executes valid ops and returns multi-status")]
+    public async Task Batch_endpoint_continue_on_error_executes_valid_ops_and_returns_multi_status()
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-batch-multistatus"));
         const string validName = "Batch Valid";
@@ -1197,8 +1213,8 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
 
         var response = await client.PostAsJsonAsync("/api/menu-items/$batch", request);
         var body = await response.Content.ReadAsStringAsync();
-        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError, body);
-        body.ShouldContain("InvalidOperationException");
+        response.StatusCode.ShouldBe(HttpStatusCode.MultiStatus, body);
+        body.ShouldContain("MISSING_DATA");
 
         var all = await client.GetFromJsonAsync<List<MenuItem>>("/api/menu-items");
         all.ShouldNotBeNull();
@@ -1669,9 +1685,9 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         await CreateMenuItemAsync(client, "QueryPaged-Branch-3", "Main", 12);
 
         var query = includeProjectionFields
-            ? new QueryRequest(Fields: ["Name"])
-            : new QueryRequest();
-        var request = new KyrolusMartenPagedQueryRequest(
+            ? new TestQueryRequest(Fields: ["Name"])
+            : new TestQueryRequest();
+        var request = new TestPagedQueryRequest(
             Request: query,
             PageNumber: 1,
             PageSize: 2,
@@ -2059,12 +2075,12 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
 
     public static IEnumerable<object[]> FilterClauseCases()
     {
-        yield return [new FilterClause("Category", "eq", "Main"), 2];
-        yield return [new FilterClause("Price", "gt", "20"), 2];
-        yield return [new FilterClause("Price", "between", "10,30"), 2];
-        yield return [new FilterClause("Category", "in", "Main,Drinks"), 3];
-        yield return [new FilterClause("UpdatedAt", "notnull", null), 1];
-        yield return [new FilterClause("UpdatedAt", "isnull", null), 2];
+        yield return [new TestFilterClause("Category", "eq", "Main"), 2];
+        yield return [new TestFilterClause("Price", "gt", "20"), 2];
+        yield return [new TestFilterClause("Price", "between", "10,30"), 2];
+        yield return [new TestFilterClause("Category", "in", "Main,Drinks"), 3];
+        yield return [new TestFilterClause("UpdatedAt", "notnull", null), 1];
+        yield return [new TestFilterClause("UpdatedAt", "isnull", null), 2];
     }
 
     public static IEnumerable<object[]> IncludeGraphPayloadCases()
@@ -2306,7 +2322,7 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
 
     private static void AssertBatchResponseStatus(HttpStatusCode statusCode)
     {
-        new[] { HttpStatusCode.OK, HttpStatusCode.MultiStatus, HttpStatusCode.InternalServerError }
+        new[] { HttpStatusCode.OK, HttpStatusCode.MultiStatus }
             .ShouldContain(statusCode);
     }
 
@@ -2397,4 +2413,5 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
     private sealed record PagedPayload<T>(IReadOnlyList<T> Items, int TotalCount, int PageNumber, int PageSize);
     private sealed record SeekPayload<T>(IReadOnlyList<T> Items, string? NextToken, int? TotalCount, int PageSize);
 }
+
 

@@ -1,5 +1,5 @@
 using KyrolusSous.EndpointKit.Core.Batch;
-using KyrolusSous.Repositories.EF.Abstractions.Query;
+using KyrolusSous.Repositories.Marten.Abstractions.Query;
 
 namespace KyrolusSous.EndpointKit.Marten.BaseKyrolusModule.Interfaces;
 
@@ -28,3 +28,4 @@ public interface IKyrolusMartenCommandQueryHandler<TResponse, TModel, TKey>
     Task<IResult> HandleRestoreByKeysAsync([FromQuery] string[]? keys, [FromQuery] bool? cacheable = null);
     Task<IResult> HandleBatchAsync([FromBody] KyrolusBatchRequest<TModel, TKey> request, CancellationToken cancellationToken = default);
 }
+

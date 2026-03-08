@@ -1,5 +1,5 @@
 
-using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
+using KyrolusSous.Repositories.Marten.Abstractions.Query;
 
 namespace KyrolusSous.CQRS.Marten.Query;
 
@@ -74,3 +74,4 @@ public class GetAllQueryHandler<TSession, TResponse, TKey>(IKyrolusMartenUnitOfW
         }
     }
 }
+

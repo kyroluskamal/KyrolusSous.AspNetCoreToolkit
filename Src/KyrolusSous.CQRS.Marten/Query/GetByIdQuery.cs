@@ -1,4 +1,4 @@
-using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
+using KyrolusSous.Repositories.Marten.Abstractions.Query;
 
 namespace KyrolusSous.CQRS.Marten.Query;
 
@@ -17,3 +17,4 @@ public class GetByIdQuery<TResponse, TKey>(TKey id, bool cacheable = false)
     public string? RowVersionPropertyName { get; set; }
     public string? TenantId { get; set; }
 }
+

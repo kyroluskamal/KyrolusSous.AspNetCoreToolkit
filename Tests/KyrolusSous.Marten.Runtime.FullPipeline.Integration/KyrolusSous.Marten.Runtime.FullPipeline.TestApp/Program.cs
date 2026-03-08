@@ -34,36 +34,37 @@ using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Infrastructure;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Models;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Modules;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Services;
-using KyrolusSous.Repositories.EF.Abstractions.Query;
 using KyrolusSous.Repositories.Marten.Abstractions.Interfaces;
 using KyrolusSous.Repositories.Marten.Abstractions.SoftDelete;
 using KyrolusSous.Repositories.Marten.Runtime;
+using KyrolusSous.Repositories.Marten.Runtime.Saga;
 using KyrolusSous.Validation.FluentValidation;
 using KyrolusSous.Validation.Runtime;
 using FluentValidation;
 using Marten;
 using Npgsql;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 using System.Linq.Expressions;
-using OpenIddict.EntityFrameworkCore.Models;
-using OpenIddict.Server;
-using OpenIddict.Validation.AspNetCore;
-using static OpenIddict.Abstractions.OpenIddictConstants;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<MediatorRuntimeState>();
 builder.Services.AddKyrolusLogging(builder.Configuration);
 builder.Host.UseKyrolusLogging();
 
 var postgresConnString = builder.Configuration.GetConnectionString("Marten")
     ?? "Host=localhost;Port=5432;Database=kyrolus_marten_fullpipeline_tests;Username=postgres;Password=postgres";
-var authConnString = builder.Configuration.GetConnectionString("Auth") ?? BuildAuthConnectionString(postgresConnString);
 var redisConnString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
+var authSigningKey = builder.Configuration["Auth:SigningKey"]
+    ?? "KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Default.Auth.SigningKey.2026";
 
 builder.Services.AddSingleton(new KyrolusRepositoryCachePolicyRegistry()
     .SetForType<MenuItem>("GetAllAsync", new KyrolusCachePolicy(TimeSpan.FromMinutes(5)))
@@ -80,6 +81,8 @@ builder.Services.AddMarten(options =>
     options.Schema.For<MenuItem>().Identity(x => x.Id);
     options.Schema.For<Order>().Identity(x => x.Id);
     options.Schema.For<Payment>().Identity(x => x.Id);
+    options.Schema.For<KyrolusMartenSagaEnvelope>().Identity(x => x.Id);
+    options.Schema.For<RuntimeSeekProbe>().Identity(x => x.Id);
 });
 
 builder.Services.AddKyrolusRedisCacheProvider(redisConnString, options =>
@@ -133,57 +136,26 @@ builder.Services.AddScoped<IKyrolusCommandHandler<ExecuteDeleteCommand<MenuItem,
 builder.Services.AddSingleton<IEmailSender, FakeEmailSender>();
 builder.Services.AddSingleton<IPaymentGateway, FakePaymentGateway>();
 builder.Services.AddSingleton<TestUserStore>();
-
-builder.Services.AddDbContext<AuthDbContext>(options =>
-{
-    options.UseNpgsql(authConnString);
-    options.UseOpenIddict<OpenIddictEntityFrameworkCoreApplication,
-        OpenIddictEntityFrameworkCoreAuthorization,
-        OpenIddictEntityFrameworkCoreScope,
-        OpenIddictEntityFrameworkCoreToken, string>();
-});
+builder.Services.AddSingleton(new TestTokenService(authSigningKey));
 
 builder.Services.AddAuthentication(options =>
 {
-    options.DefaultScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+}).AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = false,
+        ValidateAudience = false,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(authSigningKey)),
+        ClockSkew = TimeSpan.Zero,
+        NameClaimType = JwtRegisteredClaimNames.Sub
+    };
 });
 builder.Services.AddAuthorization();
-
-builder.Services.AddOpenIddict()
-    .AddCore(options =>
-    {
-        options.UseEntityFrameworkCore()
-            .UseDbContext<AuthDbContext>();
-    })
-    .AddServer(options =>
-    {
-        options.SetTokenEndpointUris("/connect/token");
-        options.AllowPasswordFlow();
-        options.AcceptAnonymousClients();
-        options.RegisterScopes("api");
-        if (builder.Environment.IsDevelopment() || builder.Configuration.GetValue<bool>("OpenIddict:UseEphemeralKeys"))
-        {
-            options.AddEphemeralEncryptionKey()
-                   .AddEphemeralSigningKey();
-        }
-        else
-        {
-            options.AddDevelopmentEncryptionCertificate()
-                   .AddDevelopmentSigningCertificate();
-        }
-        options.UseAspNetCore()
-               .DisableTransportSecurityRequirement();
-
-        options.AddEventHandler<OpenIddictServerEvents.HandleTokenRequestContext>(builder =>
-        {
-            builder.UseScopedHandler<PasswordGrantHandler>();
-        });
-    })
-    .AddValidation(options =>
-    {
-        options.UseLocalServer();
-        options.UseAspNetCore();
-    });
 
 var dataProtection = builder.Services.AddKyrolusDataProtection(options =>
 {
@@ -252,20 +224,17 @@ builder.Services.AddKyrolus(builder =>
             EndpointNames.Query
         }
     });
+
 });
 
 var app = builder.Build();
 
 await EnsureDatabaseExistsAsync(postgresConnString);
-await EnsureDatabaseExistsAsync(authConnString);
 
 using (var scope = app.Services.CreateScope())
 {
     var store = scope.ServiceProvider.GetRequiredService<IDocumentStore>();
     await store.Storage.ApplyAllConfiguredChangesToDatabaseAsync();
-
-    var db = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
-    await db.Database.EnsureCreatedAsync();
 }
 
 app.UseKyrolusExceptionHandling();
@@ -278,6 +247,40 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapKyrolus();
+
+app.MapPost("/connect/token", async (HttpContext httpContext, TestUserStore userStore, TestTokenService tokenService) =>
+{
+    if (!httpContext.Request.HasFormContentType)
+    {
+        return Results.BadRequest(new { error = "invalid_request" });
+    }
+
+    var form = await httpContext.Request.ReadFormAsync();
+    if (!string.Equals(form["grant_type"], "password", StringComparison.Ordinal))
+    {
+        return Results.BadRequest(new { error = "unsupported_grant_type" });
+    }
+
+    var user = userStore.Validate(form["username"], form["password"]);
+    if (user is null)
+    {
+        return Results.BadRequest(new { error = "invalid_grant", error_description = "Invalid credentials." });
+    }
+
+    var scopeValue = form["scope"].ToString();
+    var scopes = string.IsNullOrWhiteSpace(scopeValue)
+        ? Array.Empty<string>()
+        : scopeValue.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    var accessToken = tokenService.CreateAccessToken(userStore.BuildClaims(user, scopes));
+    return Results.Ok(new
+    {
+        access_token = accessToken,
+        token_type = "Bearer",
+        expires_in = 3600,
+        scope = string.Join(" ", scopes)
+    });
+}).AllowAnonymous();
 
 var martenMenuItemsRoutes = app.MapGroup("/api/menu-items");
 static IKyrolusMartenCommandQueryHandler<MenuItem, MenuItem, Guid> AsMartenHandler(ICommandQueryHandler<MenuItem, MenuItem, Guid> handler)
@@ -333,11 +336,11 @@ martenMenuItemsRoutes.MapDelete("/range",
 
 martenMenuItemsRoutes.MapPost("/query",
     ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
-        [FromBody] QueryRequest? request,
+        [FromBody] TestQueryRequest? request,
         [FromQuery] bool? cacheable,
         [FromQuery] bool? includeDeleted,
         CancellationToken cancellationToken) =>
-        AsMartenHandler(handler).HandleQueryAsync(request, cacheable, includeDeleted, cancellationToken));
+        TestQueryContractBridge.InvokeHandleQueryAsync(AsMartenHandler(handler), request, cacheable, includeDeleted, cancellationToken));
 
 martenMenuItemsRoutes.MapGet("/paged",
     ([FromServices] ICommandQueryHandler<MenuItem, MenuItem, Guid> handler,
@@ -440,20 +443,20 @@ martenMenuItemsRoutes.MapPost("/diagnostics/query-helper",
             var items = await repository.GetAllAsync(options, cancellationToken).ConfigureAwait(false);
             return Results.Ok(items);
         }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Marten.Exceptions.BadLinqExpressionException)
         {
             return Results.BadRequest(ex.Message);
         }
     });
 
 martenMenuItemsRoutes.MapPost("/diagnostics/filter-builder",
-    async ([FromBody] FilterBuilderDiagnosticsRequest? request,
+    async ([FromBody] TestFilterBuilderDiagnosticsRequest? request,
         [FromServices] IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
         CancellationToken cancellationToken) =>
     {
         try
         {
-            request ??= new FilterBuilderDiagnosticsRequest();
+            request ??= new TestFilterBuilderDiagnosticsRequest();
             var strict = request.Strict ?? false;
             var caseInsensitive = request.CaseInsensitive ?? false;
             HashSet<string>? allowlist = null;
@@ -468,7 +471,7 @@ martenMenuItemsRoutes.MapPost("/diagnostics/filter-builder",
 
             if (request.Clauses is { Length: > 0 })
             {
-                built = KyrolusSous.EndpointKit.Marten.FilterBuilder.TryBuildFilterExpression<MenuItem>(
+                built = TestQueryContractBridge.TryBuildClauseFilterExpression<MenuItem>(
                     request.Clauses,
                     allowlist,
                     strict,
@@ -499,6 +502,37 @@ martenMenuItemsRoutes.MapPost("/diagnostics/filter-builder",
             return Results.Ok(items);
         }
         catch (ArgumentException ex)
+        {
+            return Results.BadRequest(ex.Message);
+        }
+    });
+
+martenMenuItemsRoutes.MapPost("/diagnostics/runtime-filter-expression-builder",
+    async ([FromBody] TestFilterBuilderDiagnosticsRequest? request,
+        [FromServices] IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
+        CancellationToken cancellationToken) =>
+    {
+        try
+        {
+            request ??= new TestFilterBuilderDiagnosticsRequest();
+            var caseInsensitive = request.CaseInsensitive ?? false;
+
+            if (!KyrolusSous.Repositories.Marten.Abstractions.Query.KyrolusFilterExpressionBuilder.TryBuildFilterExpression<MenuItem>(
+                request.Filter,
+                caseInsensitive,
+                out var filter,
+                out var error))
+            {
+                return Results.BadRequest(error ?? "Invalid filter.");
+            }
+
+            var repository = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, MenuItem, Guid>>();
+            var items = await repository.GetAllAsync(
+                new KyrolusSous.Repositories.Marten.Abstractions.Records.MartenQueryOptions<MenuItem>(Filter: filter),
+                cancellationToken).ConfigureAwait(false);
+            return Results.Ok(items);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Marten.Exceptions.BadLinqExpressionException)
         {
             return Results.BadRequest(ex.Message);
         }
@@ -539,6 +573,90 @@ martenMenuItemsRoutes.MapPost("/diagnostics/routing-helper",
         return Results.Ok(new { included, error });
     });
 
+martenMenuItemsRoutes.MapPost("/diagnostics/repository-runtime",
+    async ([FromBody] RepositoryRuntimeDiagnosticsRequest? request,
+        [FromServices] IDocumentStore store,
+        [FromServices] IDocumentSession session,
+        [FromServices] IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
+        [FromServices] ITenantResolver tenantResolver,
+        [FromServices] IServiceProvider rootServiceProvider,
+        CancellationToken cancellationToken) =>
+    {
+        request ??= new RepositoryRuntimeDiagnosticsRequest();
+        var tenantId = tenantResolver.ResolveTenantId() ?? "default";
+        var diagnosticsCacheProvider = new RuntimeInMemoryCacheProvider();
+
+        return request.Mode switch
+        {
+            "menu-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunMenuRuntimeAsync(
+                session,
+                diagnosticsCacheProvider,
+                tenantId,
+                cancellationToken).ConfigureAwait(false)),
+            "menu-runtime-cache-disabled" => Results.Ok(await RepositoryRuntimeDiagnostics.RunMenuRuntimeCacheDisabledAsync(
+                session,
+                diagnosticsCacheProvider,
+                tenantId,
+                cancellationToken).ConfigureAwait(false)),
+            "menu-runtime-no-cache-provider" => Results.Ok(await RepositoryRuntimeDiagnostics.RunMenuRuntimeNoCacheProviderAsync(
+                session,
+                tenantId,
+                cancellationToken).ConfigureAwait(false)),
+            "menu-soft-delete-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunMenuSoftDeleteRuntimeAsync(
+                session,
+                diagnosticsCacheProvider,
+                tenantId,
+                cancellationToken).ConfigureAwait(false)),
+            "order-includes-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunOrderIncludesRuntimeAsync(
+                session,
+                diagnosticsCacheProvider,
+                tenantId,
+                cancellationToken).ConfigureAwait(false)),
+            "abstractions-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunAbstractionsRuntimeAsync(
+                session,
+                tenantId,
+                cancellationToken).ConfigureAwait(false)),
+            "runtime-infrastructure" => Results.Ok(await RepositoryRuntimeDiagnostics.RunRuntimeInfrastructureAsync(
+                store,
+                session,
+                tenantId,
+                cancellationToken).ConfigureAwait(false)),
+            "cqrs-handlers-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunCqrsHandlersRuntimeAsync(
+                unitOfWork,
+                session,
+                tenantId,
+                cancellationToken).ConfigureAwait(false)),
+            "endpointkit-core-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunEndpointKitCoreRuntimeAsync(
+                tenantId,
+                cancellationToken).ConfigureAwait(false)),
+            "validation-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunValidationRuntimeAsync(
+                cancellationToken).ConfigureAwait(false)),
+            "exception-handling-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunExceptionHandlingRuntimeAsync(
+                rootServiceProvider,
+                cancellationToken).ConfigureAwait(false)),
+            "data-protection-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunDataProtectionRuntimeAsync(
+                tenantId,
+                cancellationToken).ConfigureAwait(false)),
+            "redis-cache-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunRedisCacheRuntimeAsync(
+                redisConnString,
+                tenantId,
+                cancellationToken).ConfigureAwait(false)),
+            "redis-fallback-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunRedisFallbackRuntimeAsync(
+                cancellationToken).ConfigureAwait(false)),
+            "data-protection-redis-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunDataProtectionRedisRuntimeAsync(
+                redisConnString,
+                tenantId,
+                cancellationToken).ConfigureAwait(false)),
+            "exception-abstractions-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunExceptionAbstractionsRuntimeAsync(
+                cancellationToken).ConfigureAwait(false)),
+            "mediator-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunMediatorRuntimeAsync(
+                cancellationToken).ConfigureAwait(false)),
+            "logging-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunLoggingRuntimeAsync(
+                cancellationToken).ConfigureAwait(false)),
+            _ => Results.BadRequest("Unknown diagnostics mode.")
+        };
+    });
+
 app.MapPost("/api/orders", async (PlaceOrderRequest request, IKyrolusMediatorSender mediator, CancellationToken ct) =>
 {
     var command = new PlaceOrderCommand(request.CustomerEmail, request.Lines, request.PaymentMethod);
@@ -569,20 +687,20 @@ app.MapPost("/api/orders/diagnostics/query-helper", async (
         var items = await repository.GetAllAsync(options, ct).ConfigureAwait(false);
         return Results.Ok(items);
     }
-    catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+    catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Marten.Exceptions.BadLinqExpressionException)
     {
         return Results.BadRequest(ex.Message);
     }
 }).RequireAuthorization();
 
 app.MapPost("/api/orders/diagnostics/filter-builder", async (
-    [FromBody] FilterBuilderDiagnosticsRequest? request,
+    [FromBody] TestFilterBuilderDiagnosticsRequest? request,
     [FromServices] IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
     CancellationToken ct) =>
 {
     try
     {
-        request ??= new FilterBuilderDiagnosticsRequest();
+        request ??= new TestFilterBuilderDiagnosticsRequest();
         var strict = request.Strict ?? false;
         var caseInsensitive = request.CaseInsensitive ?? false;
         HashSet<string>? allowlist = null;
@@ -597,7 +715,7 @@ app.MapPost("/api/orders/diagnostics/filter-builder", async (
 
         if (request.Clauses is { Length: > 0 })
         {
-            built = KyrolusSous.EndpointKit.Marten.FilterBuilder.TryBuildFilterExpression<Order>(
+            built = TestQueryContractBridge.TryBuildClauseFilterExpression<Order>(
                 request.Clauses,
                 allowlist,
                 strict,
@@ -617,6 +735,37 @@ app.MapPost("/api/orders/diagnostics/filter-builder", async (
         }
 
         if (!built)
+        {
+            return Results.BadRequest(error ?? "Invalid filter.");
+        }
+
+        var repository = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, Order, Guid>>();
+        var items = await repository.GetAllAsync(
+            new KyrolusSous.Repositories.Marten.Abstractions.Records.MartenQueryOptions<Order>(Filter: filter),
+            ct).ConfigureAwait(false);
+        return Results.Ok(items);
+    }
+    catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Marten.Exceptions.BadLinqExpressionException)
+    {
+        return Results.BadRequest(ex.Message);
+    }
+}).RequireAuthorization();
+
+app.MapPost("/api/orders/diagnostics/runtime-filter-expression-builder", async (
+    [FromBody] TestFilterBuilderDiagnosticsRequest? request,
+    [FromServices] IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
+    CancellationToken ct) =>
+{
+    try
+    {
+        request ??= new TestFilterBuilderDiagnosticsRequest();
+        var caseInsensitive = request.CaseInsensitive ?? false;
+
+        if (!KyrolusSous.Repositories.Marten.Abstractions.Query.KyrolusFilterExpressionBuilder.TryBuildFilterExpression<Order>(
+            request.Filter,
+            caseInsensitive,
+            out var filter,
+            out var error))
         {
             return Results.BadRequest(error ?? "Invalid filter.");
         }
@@ -693,25 +842,11 @@ static async Task EnsureDatabaseExistsAsync(string connectionString)
     }
 }
 
-static string BuildAuthConnectionString(string baseConnectionString)
-{
-    var builder = new NpgsqlConnectionStringBuilder(baseConnectionString);
-    builder.Database = $"{builder.Database}_auth";
-    return builder.ConnectionString;
-}
-
 public sealed class SetMenuItemActiveCommand : IKyrolusCommand<bool>
 {
     public Guid Id { get; set; }
     public bool Active { get; set; }
 }
-
-public sealed record FilterBuilderDiagnosticsRequest(
-    string? Filter = null,
-    KyrolusSous.Repositories.EF.Abstractions.Query.FilterClause[]? Clauses = null,
-    string[]? AllowedProperties = null,
-    bool? Strict = null,
-    bool? CaseInsensitive = null);
 
 public sealed record RoutingHelperDiagnosticsRequest(
     string? IncludedProperties = null,

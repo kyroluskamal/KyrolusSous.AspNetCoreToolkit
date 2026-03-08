@@ -1,4 +1,4 @@
-using KyrolusSous.Repositories.EF.Abstractions.Query;
+using KyrolusSous.Repositories.Marten.Abstractions.Query;
 
 namespace KyrolusSous.EndpointKit.Marten.BaseKyrolusModule;
 
@@ -10,3 +10,4 @@ public sealed record KyrolusMartenSeekQueryRequest(
     bool? IncludeDeleted = null,
     bool? IncludeTotalCount = null,
     bool? Descending = null);
+

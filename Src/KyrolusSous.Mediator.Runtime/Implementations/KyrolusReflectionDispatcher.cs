@@ -1,3 +1,6 @@
+using System.Reflection;
+using System.Runtime.ExceptionServices;
+
 namespace KyrolusSous.Mediator.Runtime.Implementations;
 
 /// <summary>
@@ -21,8 +24,7 @@ public sealed class KyrolusReflectionDispatcher : IGeneratedDispatcher
         }
 
         var handleMethod = GetHandleMethod(handler.GetType(), requestType);
-        var task = (Task<TResponse>)handleMethod.Invoke(handler, new object[] { request, ct })!;
-        return task;
+        return InvokeTask<TResponse>(handleMethod, handler, request, ct);
     }
 
     public Task DispatchCommandAsync(object command, IServiceProvider sp, CancellationToken ct)
@@ -31,8 +33,15 @@ public sealed class KyrolusReflectionDispatcher : IGeneratedDispatcher
         ArgumentNullException.ThrowIfNull(sp);
 
         var requestType = command.GetType();
-        var handlerInterfaceType = typeof(IKyrolusCommandHandler<>).MakeGenericType(requestType);
-        var handler = sp.GetService(handlerInterfaceType);
+        Type? handlerInterfaceType = null;
+        object? handler = null;
+
+        if (command is IKyrolusCommand)
+        {
+            handlerInterfaceType = typeof(IKyrolusCommandHandler<>).MakeGenericType(requestType);
+            handler = sp.GetService(handlerInterfaceType);
+        }
+
         if (handler is null && command is IKyrolusRequest<Unit>)
         {
             handlerInterfaceType = typeof(IKyrolusRequestHandler<>).MakeGenericType(requestType);
@@ -45,7 +54,7 @@ public sealed class KyrolusReflectionDispatcher : IGeneratedDispatcher
         }
 
         var handleMethod = GetHandleMethod(handler.GetType(), requestType);
-        return (Task)handleMethod.Invoke(handler, new object[] { command, ct })!;
+        return InvokeTask(handleMethod, handler, command, ct);
     }
 
     public IAsyncEnumerable<TResponse> DispatchStreamAsync<TResponse>(object request, IServiceProvider sp, CancellationToken ct)
@@ -62,7 +71,7 @@ public sealed class KyrolusReflectionDispatcher : IGeneratedDispatcher
         }
 
         var handleMethod = GetHandleMethod(handler.GetType(), requestType);
-        return (IAsyncEnumerable<TResponse>)handleMethod.Invoke(handler, new object[] { request, ct })!;
+        return InvokeStream<TResponse>(handleMethod, handler, request, ct);
     }
 
     private static Type ResolveRequestHandlerInterface<TResponse>(object request, Type requestType)
@@ -85,5 +94,44 @@ public sealed class KyrolusReflectionDispatcher : IGeneratedDispatcher
         return s_handleMethodCache.GetOrAdd(handlerType, type =>
             type.GetMethod("Handle", new[] { requestType, typeof(CancellationToken) })
             ?? throw new InvalidOperationException($"[KyrolusMediator] Could not find Handle({requestType.Name}, CancellationToken) on {type.FullName}."));
+    }
+
+    private static Task<TResponse> InvokeTask<TResponse>(MethodInfo handleMethod, object handler, object request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (Task<TResponse>)handleMethod.Invoke(handler, [request, cancellationToken])!;
+        }
+        catch (TargetInvocationException exception) when (exception.InnerException is not null)
+        {
+            ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
+            throw;
+        }
+    }
+
+    private static Task InvokeTask(MethodInfo handleMethod, object handler, object request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (Task)handleMethod.Invoke(handler, [request, cancellationToken])!;
+        }
+        catch (TargetInvocationException exception) when (exception.InnerException is not null)
+        {
+            ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
+            throw;
+        }
+    }
+
+    private static IAsyncEnumerable<TResponse> InvokeStream<TResponse>(MethodInfo handleMethod, object handler, object request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (IAsyncEnumerable<TResponse>)handleMethod.Invoke(handler, [request, cancellationToken])!;
+        }
+        catch (TargetInvocationException exception) when (exception.InnerException is not null)
+        {
+            ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
+            throw;
+        }
     }
 }

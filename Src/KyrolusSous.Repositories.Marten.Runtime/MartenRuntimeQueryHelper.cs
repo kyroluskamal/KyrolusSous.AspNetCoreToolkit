@@ -7,6 +7,9 @@ namespace KyrolusSous.Repositories.Marten.Runtime;
 
 public sealed class MartenRuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
 {
+    // Keep parsed timestamp values aligned with PostgreSQL microsecond precision.
+    private const long TimestampPrecisionTicks = 10L;
+
     public QueryParts<TEntity> Build(QueryRequest? request)
     {
         request ??= new QueryRequest();
@@ -916,13 +919,15 @@ public sealed class MartenRuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
 
             if (nonNullable == typeof(DateTimeOffset))
             {
-                value = DateTimeOffset.Parse(raw, CultureInfo.InvariantCulture);
+                var parsed = DateTimeOffset.Parse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces);
+                value = NormalizeDateTimeOffsetPrecision(parsed);
                 return true;
             }
 
             if (nonNullable == typeof(DateTime))
             {
-                value = DateTime.Parse(raw, CultureInfo.InvariantCulture);
+                var parsed = DateTime.Parse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces);
+                value = NormalizeDateTimePrecision(parsed);
                 return true;
             }
 
@@ -957,5 +962,25 @@ public sealed class MartenRuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
         {
             return false;
         }
+    }
+
+    private static DateTimeOffset NormalizeDateTimeOffsetPrecision(DateTimeOffset value)
+    {
+        var utc = value.ToUniversalTime();
+        var ticks = utc.Ticks - (utc.Ticks % TimestampPrecisionTicks);
+        return new DateTimeOffset(ticks, TimeSpan.Zero);
+    }
+
+    private static DateTime NormalizeDateTimePrecision(DateTime value)
+    {
+        var utc = value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
+
+        var ticks = utc.Ticks - (utc.Ticks % TimestampPrecisionTicks);
+        return new DateTime(ticks, DateTimeKind.Utc);
     }
 }

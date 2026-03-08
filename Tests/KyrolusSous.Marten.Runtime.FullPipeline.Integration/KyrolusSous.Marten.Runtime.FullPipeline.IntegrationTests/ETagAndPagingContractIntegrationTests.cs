@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using KyrolusSous.EndpointKit.Marten.BaseKyrolusModule;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Models;
-using KyrolusSous.Repositories.EF.Abstractions.Query;
+using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Contracts;
 using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
@@ -91,10 +91,10 @@ public sealed class ETagAndPagingContractIntegrationTests(TestAppFactory factory
         await CreateMenuItemAsync(client, "Main-2", "Main", 20);
         await CreateMenuItemAsync(client, "Drink-1", "Drinks", 30);
 
-        var request = new KyrolusMartenPagedQueryRequest(
-            Request: new QueryRequest(
-                Filters: [new FilterClause("Category", "eq", "Main")],
-                OrderBy: [new OrderClause("Price", Desc: false)]),
+        var request = new TestPagedQueryRequest(
+            Request: new TestQueryRequest(
+                Filters: [new TestFilterClause("Category", "eq", "Main")],
+                OrderBy: [new TestOrderClause("Price", Desc: false)]),
             PageNumber: 1,
             PageSize: 1,
             Cacheable: false,
@@ -144,3 +144,4 @@ public sealed class ETagAndPagingContractIntegrationTests(TestAppFactory factory
 
     private sealed record PagedPayload<T>(IReadOnlyList<T> Items, int TotalCount, int PageNumber, int PageSize);
 }
+

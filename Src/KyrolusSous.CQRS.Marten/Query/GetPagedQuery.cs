@@ -1,5 +1,5 @@
 using KyrolusSous.CQRS.Abstractions.Models;
-using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
+using KyrolusSous.Repositories.Marten.Abstractions.Query;
 
 namespace KyrolusSous.CQRS.Marten.Query;
 
@@ -20,3 +20,4 @@ public sealed class GetPagedQuery<TResponse, TKey>(int pageNumber, int pageSize,
     public Expression<Func<TResponse, TResponse>>? Selector { get; set; }
     public string? TenantId { get; set; }
 }
+

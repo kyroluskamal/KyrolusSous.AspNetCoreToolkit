@@ -1,6 +1,6 @@
 global using System.Linq.Expressions;
 using System.Linq;
-using KyrolusSous.Repositories.EF.Abstractions.Query;
+using KyrolusSous.Repositories.Marten.Abstractions.Query;
 using System.Collections;
 using System.Globalization;
 using System.Reflection;
@@ -11,6 +11,9 @@ namespace KyrolusSous.EndpointKit.Marten;
 
 public static class FilterBuilder
 {
+    // PostgreSQL timestamp precision is microseconds; normalize parsed values to avoid sub-microsecond mismatches.
+    private const long TimestampPrecisionTicks = 10L;
+
     public static Expression<Func<TEntity, bool>>? BuildFilterExpression<TEntity>(string? filter)
     {
         _ = TryBuildFilterExpression<TEntity>(filter, null, false, false, out var expression, out _);
@@ -700,7 +703,14 @@ public static class FilterBuilder
         {
             // Invoke the generic TryBuildFilterExpression<TEntity>(...) at runtime for the elementType
             var tryBuildMethod = typeof(FilterBuilder).GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == nameof(TryBuildFilterExpression) && m.IsGenericMethodDefinition && m.GetParameters().Length == 6)
+                .Where(m => m.Name == nameof(TryBuildFilterExpression) && m.IsGenericMethodDefinition)
+                .Where(m =>
+                {
+                    var parameters = m.GetParameters();
+                    return parameters.Length == 6
+                           && parameters[0].ParameterType == typeof(string)
+                           && parameters[1].ParameterType == typeof(ISet<string>);
+                })
                 .Single();
             var generic = tryBuildMethod.MakeGenericMethod(elementType);
             object?[] invokeArgs = new object?[] { rawContent, null, false, caseInsensitive, null, null };
@@ -722,6 +732,18 @@ public static class FilterBuilder
         }
         else
         {
+            if (!isAny)
+            {
+                error = "Operator 'all' with value lists is not supported for Marten collections.";
+                return false;
+            }
+
+            if (elementType == typeof(string) && caseInsensitive)
+            {
+                error = "Case-insensitive 'any' with value lists is not supported for string collections.";
+                return false;
+            }
+
             if (!TryConvertList(values, elementType, out var converted, out error))
             {
                 return false;
@@ -852,7 +874,6 @@ public static class FilterBuilder
         if (span.Contains(" endswith ", StringComparison.OrdinalIgnoreCase)) return true;
         if (span.Contains(" in ", StringComparison.OrdinalIgnoreCase)) return true;
         if (span.Contains(" between ", StringComparison.OrdinalIgnoreCase)) return true;
-        if (span.Contains(",", StringComparison.Ordinal) || span.Contains("|", StringComparison.Ordinal)) return true;
         return false;
     }
 
@@ -963,9 +984,9 @@ public static class FilterBuilder
 
         if (nonNullableType == typeof(DateTimeOffset))
         {
-            if (DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dto))
+            if (DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces, out var dto))
             {
-                result = dto;
+                result = NormalizeDateTimeOffsetPrecision(dto);
                 return true;
             }
             return false;
@@ -973,9 +994,9 @@ public static class FilterBuilder
 
         if (nonNullableType == typeof(DateTime))
         {
-            if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt))
+            if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces, out var dt))
             {
-                result = dt;
+                result = NormalizeDateTimePrecision(dt);
                 return true;
             }
             return false;
@@ -1025,6 +1046,26 @@ public static class FilterBuilder
         }
     }
 
+    private static DateTimeOffset NormalizeDateTimeOffsetPrecision(DateTimeOffset value)
+    {
+        var utc = value.ToUniversalTime();
+        var ticks = utc.Ticks - (utc.Ticks % TimestampPrecisionTicks);
+        return new DateTimeOffset(ticks, TimeSpan.Zero);
+    }
+
+    private static DateTime NormalizeDateTimePrecision(DateTime value)
+    {
+        var utc = value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
+
+        var ticks = utc.Ticks - (utc.Ticks % TimestampPrecisionTicks);
+        return new DateTime(ticks, DateTimeKind.Utc);
+    }
+
     private static bool IsAllowed(ISet<string>? allowlist, string property)
         => allowlist is null || allowlist.Count == 0 || allowlist.Contains(property);
 
@@ -1037,3 +1078,4 @@ public static class FilterBuilder
             => node == source ? target : base.VisitParameter(node);
     }
 }
+

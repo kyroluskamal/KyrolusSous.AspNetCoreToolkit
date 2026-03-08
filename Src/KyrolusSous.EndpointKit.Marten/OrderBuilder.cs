@@ -1,4 +1,4 @@
-using KyrolusSous.Repositories.EF.Abstractions.Query;
+using KyrolusSous.Repositories.Marten.Abstractions.Query;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -126,3 +126,4 @@ public static class OrderBuilder
     private static ISet<string>? NormalizeAllowlist(ISet<string>? allowlist)
         => allowlist is null || allowlist.Count == 0 ? null : new HashSet<string>(allowlist, StringComparer.OrdinalIgnoreCase);
 }
+

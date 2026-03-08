@@ -1,5 +1,5 @@
 using KyrolusSous.CQRS.Abstractions.Models;
-using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
+using KyrolusSous.Repositories.Marten.Abstractions.Query;
 
 namespace KyrolusSous.CQRS.Marten.Query;
 
@@ -47,3 +47,4 @@ public sealed class GetPagedQueryHandler<TSession, TResponse, TKey>(IKyrolusMart
         return merged.Count == 0 ? null : merged.ToArray();
     }
 }
+

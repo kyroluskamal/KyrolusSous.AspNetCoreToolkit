@@ -1,5 +1,4 @@
-using KyrolusSous.Repositories.EF.Abstractions.Helpers;
-using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
+using KyrolusSous.Repositories.Marten.Abstractions.Query;
 
 namespace KyrolusSous.CQRS.Marten.Query;
 
@@ -12,7 +11,7 @@ public class GetByKeyValuesQueryHandler<TSession, TResponse, TKey>(IKyrolusMarte
     public async Task<TResponse?> Handle(GetByKeyValuesQuery<TResponse, TKey> query, CancellationToken cancellationToken)
     {
         var keyProps = ResolveKeyProperties(query);
-        var filter = KyrolusEFRepositoryBase<TResponse>.GetPrimaryKeyFromKeyValues(query.KeyValues, keyProps);
+        var filter = KyrolusQueryExpressionBuilder<TResponse>.GetPrimaryKeyFromKeyValues(query.KeyValues, keyProps);
         var options = BuildOptions(query, filter);
 
         if (query.IncludeDeleted)
@@ -21,13 +20,13 @@ public class GetByKeyValuesQueryHandler<TSession, TResponse, TKey>(IKyrolusMarte
             if (soft is not null)
             {
                 var items = await soft.GetAllIncludingDeletedAsync(options, cancellationToken).ConfigureAwait(false);
-                return ApplyRowVersion(items.FirstOrDefault(), null, query.RowVersionPropertyName);
+                return items.FirstOrDefault();
             }
         }
 
         var repo = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<TSession, TResponse, TKey>>();
         var result = await repo.GetAllAsync(options, cancellationToken).ConfigureAwait(false);
-        return ApplyRowVersion(result.FirstOrDefault(), null, query.RowVersionPropertyName);
+        return result.FirstOrDefault();
     }
 
     private static string[] ResolveKeyProperties(GetByKeyValuesQuery<TResponse, TKey> query)
@@ -64,40 +63,6 @@ public class GetByKeyValuesQueryHandler<TSession, TResponse, TKey>(IKyrolusMarte
         return merged.Count == 0 ? null : merged.ToArray();
     }
 
-    private static TResponse? ApplyRowVersion(TResponse? entity, Guid? version, string? rowVersionPropertyName)
-    {
-        if (entity is null) return null;
-        if (!string.IsNullOrWhiteSpace(rowVersionPropertyName) && version.HasValue)
-        {
-            TrySetRowVersion(entity, rowVersionPropertyName, version.Value);
-        }
-
-        return entity;
-    }
-
-    private static void TrySetRowVersion(TResponse entity, string propertyName, Guid version)
-    {
-        var prop = typeof(TResponse).GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
-        if (prop is null || !prop.CanWrite) return;
-
-        if (prop.PropertyType == typeof(Guid) || prop.PropertyType == typeof(Guid?))
-        {
-            prop.SetValue(entity, version);
-            return;
-        }
-
-        if (prop.PropertyType == typeof(string))
-        {
-            prop.SetValue(entity, version.ToString("N"));
-            return;
-        }
-
-        if (prop.PropertyType == typeof(byte[]))
-        {
-            prop.SetValue(entity, version.ToByteArray());
-        }
-    }
-
     private IKyrolusMartenSoftDeleteRepositoryAsync<TSession, TResponse, TKey>? TryResolveSoftRepository()
     {
         try
@@ -110,3 +75,4 @@ public class GetByKeyValuesQueryHandler<TSession, TResponse, TKey>(IKyrolusMarte
         }
     }
 }
+

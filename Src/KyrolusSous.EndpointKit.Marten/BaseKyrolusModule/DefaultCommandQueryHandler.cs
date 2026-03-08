@@ -6,9 +6,7 @@ using KyrolusSous.EndpointKit.Marten.BaseKyrolusModule.Interfaces;
 using KyrolusSous.ExceptionHandling;
 using KyrolusSous.ExceptionHandling.Abstractions.Models;
 using KyrolusSous.ExceptionHandling.Interfaces;
-using KyrolusSous.Repositories.EF.Abstractions.Helpers;
-using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
-using KyrolusSous.Repositories.EF.Abstractions.Query;
+using KyrolusSous.Repositories.Marten.Abstractions.Query;
 using KyrolusSous.Repositories.Marten.Abstractions.Interfaces;
 using Marten.Exceptions;
 using KyrolusSous.Validation.Abstractions;
@@ -223,15 +221,20 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         ApplyCacheable(command, cacheable);
         TrySetProperty(command, "Entity", entity);
 
-        TResponse result;
+        TResponse? result;
         try
         {
             result = await mediator.SendAsync(command, CancellationToken.None);
         }
-        catch (ConcurrencyException)
+        catch (Exception ex) when (IsConcurrencyException(ex))
         {
             return BuildConflict(ConcurrencyConflictMessage);
         }
+        if (result is null)
+        {
+            return BuildSuccess(null, EndpointNames.Update, StatusCodes.Status200OK);
+        }
+
         TrySetEtagHeader(result);
         return BuildSuccess(result, EndpointNames.Update, StatusCodes.Status200OK);
     }
@@ -262,7 +265,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         {
             result = await mediator.SendAsync(command, CancellationToken.None);
         }
-        catch (ConcurrencyException)
+        catch (Exception ex) when (IsConcurrencyException(ex))
         {
             return BuildConflict(ConcurrencyConflictMessage);
         }
@@ -297,7 +300,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         {
             await SendCommandAsync(command, CancellationToken.None);
         }
-        catch (ConcurrencyException)
+        catch (Exception ex) when (IsConcurrencyException(ex))
         {
             return BuildConflict(ConcurrencyConflictMessage);
         }
@@ -361,7 +364,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         {
             result = await mediator.SendAsync(command, CancellationToken.None);
         }
-        catch (ConcurrencyException)
+        catch (Exception ex) when (IsConcurrencyException(ex))
         {
             return BuildConflict(ConcurrencyConflictMessage);
         }
@@ -436,15 +439,20 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         ApplyCacheable(command, cacheable);
         TrySetProperty(command, "Entity", entity);
 
-        TResponse result;
+        TResponse? result;
         try
         {
             result = await mediator.SendAsync(command, CancellationToken.None);
         }
-        catch (ConcurrencyException)
+        catch (Exception ex) when (IsConcurrencyException(ex))
         {
             return BuildConflict(ConcurrencyConflictMessage);
         }
+        if (result is null)
+        {
+            return BuildSuccess(null, EndpointNames.Update, StatusCodes.Status200OK);
+        }
+
         TrySetEtagHeader(result);
         return BuildSuccess(result, EndpointNames.Update, StatusCodes.Status200OK);
     }
@@ -477,7 +485,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         {
             await SendCommandAsync(command, CancellationToken.None);
         }
-        catch (ConcurrencyException)
+        catch (Exception ex) when (IsConcurrencyException(ex))
         {
             return BuildConflict(ConcurrencyConflictMessage);
         }
@@ -513,6 +521,10 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         var command = config.PatchCommand;
         ApplyCacheable(command, cacheable);
         TrySetProperty(command, KeyValuesPropertyName, keyValues);
+        if (keyValues.Length == 1)
+        {
+            TrySetProperty(command, "Id", keyValues[0]);
+        }
         TrySetProperty(command, "Updates", filteredUpdates);
 
         TResponse? result;
@@ -520,7 +532,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         {
             result = await mediator.SendAsync(command, CancellationToken.None);
         }
-        catch (ConcurrencyException)
+        catch (Exception ex) when (IsConcurrencyException(ex))
         {
             return BuildConflict(ConcurrencyConflictMessage);
         }
@@ -610,7 +622,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         {
             restored = await mediator.SendAsync(command, CancellationToken.None);
         }
-        catch (ConcurrencyException)
+        catch (Exception ex) when (IsConcurrencyException(ex))
         {
             return BuildConflict(ConcurrencyConflictMessage);
         }
@@ -643,7 +655,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         {
             restored = await mediator.SendAsync(command, CancellationToken.None);
         }
-        catch (ConcurrencyException)
+        catch (Exception ex) when (IsConcurrencyException(ex))
         {
             return BuildConflict(ConcurrencyConflictMessage);
         }
@@ -1157,13 +1169,6 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
             cancellationToken).ConfigureAwait(false);
         if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
 
-        // Check atomic mode
-        var useAtomic = request.Atomic;
-        if (useAtomic && !batchOptions.AllowNonAtomic && !request.Atomic)
-        {
-            useAtomic = true; // Force atomic if non-atomic not allowed
-        }
-
         var results = new List<KyrolusBatchOperationResult<TResponse, TKey>>();
         var shouldContinue = true;
 
@@ -1237,7 +1242,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
                     $"Unknown operation type: {operation.Operation}")
             };
         }
-        catch (ConcurrencyException)
+        catch (Exception ex) when (IsConcurrencyException(ex))
         {
             return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
                 operation.OperationId,
@@ -1311,7 +1316,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         bool returnData,
         CancellationToken cancellationToken)
     {
-        if (operation.Id is null)
+        if (IsMissingKey(operation.Id))
         {
             return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
                 operation.OperationId,
@@ -1340,7 +1345,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         }
 
         var entity = (TResponse)mapper.MapModelToEntity<TModel, TResponse>(operation.Data);
-        if (!TrySetEntityId(entity, operation.Id, out _))
+        if (!TrySetEntityId(entity, operation.Id!, out _))
         {
             return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
                 operation.OperationId,
@@ -1379,7 +1384,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         bool returnData,
         CancellationToken cancellationToken)
     {
-        if (operation.Id is null)
+        if (IsMissingKey(operation.Id))
         {
             return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
                 operation.OperationId,
@@ -1414,9 +1419,13 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
                 "No update fields provided.");
         }
 
-        var keyValues = BuildKeyValues(operation.Id);
+        var keyValues = BuildKeyValues(operation.Id!);
         var command = config.PatchCommand;
         TrySetProperty(command, KeyValuesPropertyName, keyValues);
+        if (keyValues.Length == 1)
+        {
+            TrySetProperty(command, "Id", keyValues[0]);
+        }
         TrySetProperty(command, "Updates", updates);
 
         var result = await mediator.SendAsync(command, cancellationToken);
@@ -1433,7 +1442,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         KyrolusBatchOperation<TModel, TKey> operation,
         CancellationToken cancellationToken)
     {
-        if (operation.Id is null)
+        if (IsMissingKey(operation.Id))
         {
             return KyrolusBatchOperationResult<TResponse, TKey>.Failed(
                 operation.OperationId,
@@ -1444,7 +1453,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
                 "ID is required for delete operation.");
         }
 
-        var keyValues = BuildKeyValues(operation.Id);
+        var keyValues = BuildKeyValues(operation.Id!);
         IKyrolusCommandBase command = config.RemoveCommand;
         if (ShouldUseSoftDeleteForDelete())
         {
@@ -1577,6 +1586,9 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         var value = idProperty.GetValue(entity);
         return value is TKey key ? key : default;
     }
+
+    private static bool IsMissingKey(TKey? id)
+        => id is null || EqualityComparer<TKey>.Default.Equals(id, default!);
 
     private static Dictionary<string, object> ConvertModelToUpdates(TModel model)
     {
@@ -1979,6 +1991,33 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         }
 
         return true;
+    }
+
+    private static bool IsConcurrencyException(Exception ex)
+    {
+        if (ex is ConcurrencyException)
+        {
+            return true;
+        }
+
+        var fullName = ex.GetType().FullName;
+        if (string.Equals(fullName, "Marten.Exceptions.ConcurrentUpdateException", StringComparison.Ordinal)
+            || string.Equals(fullName, "Marten.Exceptions.ConcurrencyException", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (ex is TargetInvocationException invocation && invocation.InnerException is not null)
+        {
+            return IsConcurrencyException(invocation.InnerException);
+        }
+
+        if (ex is AggregateException aggregate)
+        {
+            return aggregate.Flatten().InnerExceptions.Any(IsConcurrencyException);
+        }
+
+        return false;
     }
 
     private bool TryEnsureTenantMatch(TResponse entity, out IResult? errorResult)
@@ -2501,7 +2540,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
     {
         useStringIncludes = includes?.Any(static p => p.Contains('.', StringComparison.Ordinal)) == true;
         if (useStringIncludes || includes is null || includes.Count == 0) return null;
-        var expressions = KyrolusEFRepositoryBase<TResponse>.ConvertIncludePropertiesToExpressions(includes);
+        var expressions = KyrolusQueryExpressionBuilder<TResponse>.ConvertIncludePropertiesToExpressions(includes);
         return expressions?.Length > 0 ? expressions : null;
     }
 
@@ -3331,3 +3370,5 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
 
 
 }
+
+

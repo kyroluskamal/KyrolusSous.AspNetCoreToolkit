@@ -93,7 +93,6 @@ public class KyrolusBatchOperationResult<TResponse, TKey>
 
     /// <summary>The entity ID.</summary>
     [JsonPropertyName("id")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public TKey? Id { get; set; }
 
     /// <summary>Whether the operation succeeded.</summary>

@@ -1,4 +1,4 @@
-using KyrolusSous.Repositories.EF.Abstractions.Helpers;
+using KyrolusSous.Repositories.Marten.Abstractions.Query;
 
 namespace KyrolusSous.CQRS.Marten.Command.Bulk;
 
@@ -16,7 +16,7 @@ public sealed class BulkPatchCommandHandler<TSession, TResponse, TKey>(IKyrolusM
 
         foreach (var item in command.Items)
         {
-            var filter = KyrolusEFRepositoryBase<TResponse>.GetPrimaryKeyFromKeyValues(item.KeyValues, keyProps);
+            var filter = KyrolusQueryExpressionBuilder<TResponse>.GetPrimaryKeyFromKeyValues(item.KeyValues, keyProps);
             total += await repo.PatchWhereAsync(filter, item.Updates, command.TenantId, cancellationToken).ConfigureAwait(false);
         }
 
@@ -34,3 +34,4 @@ public sealed class BulkPatchCommandHandler<TSession, TResponse, TKey>(IKyrolusM
         return ["Id"];
     }
 }
+

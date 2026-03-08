@@ -1,3 +1,5 @@
+using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Infrastructure;
+
 namespace KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Models;
 
 public sealed class MenuItem
@@ -8,6 +10,6 @@ public sealed class MenuItem
     public string Category { get; set; } = string.Empty;
     public decimal Price { get; set; }
     public bool IsDeleted { get; set; }
-    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset CreatedAt { get; set; } = UtcTimestamp.DateTimeOffsetNow();
     public DateTimeOffset? UpdatedAt { get; set; }
 }

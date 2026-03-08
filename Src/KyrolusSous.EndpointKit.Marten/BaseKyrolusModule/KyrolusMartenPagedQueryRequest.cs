@@ -1,4 +1,4 @@
-using KyrolusSous.Repositories.EF.Abstractions.Query;
+using KyrolusSous.Repositories.Marten.Abstractions.Query;
 
 namespace KyrolusSous.EndpointKit.Marten.BaseKyrolusModule;
 
@@ -8,3 +8,4 @@ public sealed record KyrolusMartenPagedQueryRequest(
     int? PageSize = null,
     bool? Cacheable = null,
     bool? IncludeDeleted = null);
+

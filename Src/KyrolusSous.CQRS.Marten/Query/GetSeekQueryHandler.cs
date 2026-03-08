@@ -1,5 +1,5 @@
 using KyrolusSous.CQRS.Abstractions.Models;
-using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
+using KyrolusSous.Repositories.Marten.Abstractions.Query;
 using System.Globalization;
 
 namespace KyrolusSous.CQRS.Marten.Query;
@@ -401,3 +401,4 @@ public sealed class GetSeekQueryHandler<TSession, TResponse, TKey>(IKyrolusMarte
             => node == source ? target : base.VisitParameter(node);
     }
 }
+
