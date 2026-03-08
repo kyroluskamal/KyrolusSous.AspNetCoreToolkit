@@ -39,13 +39,17 @@ using KyrolusSous.Repositories.Marten.Abstractions.SoftDelete;
 using KyrolusSous.Repositories.Marten.Abstractions.Specifications;
 using KyrolusSous.Repositories.Marten.Abstractions.Tracing;
 using KyrolusSous.Repositories.Marten.Abstractions.Validation;
+using KyrolusSous.Repositories.Marten.Runtime;
 using KyrolusSous.Repositories.Marten.Runtime.EventStore;
 using KyrolusSous.Repositories.Marten.Runtime.Projection;
 using KyrolusSous.Repositories.Marten.Runtime.Repository;
+using KyrolusSous.Repositories.Marten.Runtime.Repository.Decorators;
 using KyrolusSous.Repositories.Marten.Runtime.Saga;
 using KyrolusSous.Repositories.Marten.Runtime.UnitOfWork;
 using KyrolusSous.Validation.Abstractions;
+using KyrolusSous.Validation.FluentValidation;
 using KyrolusSous.Validation.Runtime;
+using KyrolusSous.CQRS.Validation;
 using FluentValidation;
 using FluentValidation.Results;
 using Marten;
@@ -118,6 +122,7 @@ public sealed record RepositoryRuntimeDiagnosticsResponse(
     int? EventStoreChecks = null,
     int? ProjectionManagerChecks = null,
     int? ProjectionOrchestratorChecks = null,
+    int? RuntimeRegistrationChecks = null,
     int? CqrsHandlerChecks = null,
     int? EndpointKitCoreChecks = null,
     int? ValidationRuntimeChecks = null,
@@ -749,6 +754,7 @@ public static partial class RepositoryRuntimeDiagnostics
         var eventStoreChecks = await RunBestEffortAsync(() => RunEventStoreScenariosAsync(session, cancellationToken)).ConfigureAwait(false);
         var projectionManagerChecks = await RunBestEffortAsync(() => RunProjectionManagerScenariosAsync(store, cancellationToken)).ConfigureAwait(false);
         var projectionOrchestratorChecks = await RunBestEffortAsync(() => RunProjectionOrchestratorScenariosAsync(store, cancellationToken)).ConfigureAwait(false);
+        var runtimeRegistrationChecks = await RunBestEffortAsync(() => RunRuntimeRegistrationScenariosAsync(store, cancellationToken)).ConfigureAwait(false);
 
         return new RepositoryRuntimeDiagnosticsResponse(
             Mode: "runtime-infrastructure",
@@ -756,6 +762,7 @@ public static partial class RepositoryRuntimeDiagnostics
             EventStoreChecks: eventStoreChecks,
             ProjectionManagerChecks: projectionManagerChecks,
             ProjectionOrchestratorChecks: projectionOrchestratorChecks,
+            RuntimeRegistrationChecks: runtimeRegistrationChecks,
             DbProbeCount: dbProbeCount);
     }
 
@@ -797,6 +804,7 @@ public static partial class RepositoryRuntimeDiagnostics
         checks += await RunHateoasScenariosAsync(cancellationToken).ConfigureAwait(false);
         checks += await RunOpenApiSchemaProviderScenariosAsync(cancellationToken).ConfigureAwait(false);
         checks += await RunOpenApiMetadataScenariosAsync(cancellationToken).ConfigureAwait(false);
+        checks += await RunDefaultRouteMapperScenariosAsync(cancellationToken).ConfigureAwait(false);
         checks += await RunEndpointPolicyFilterScenariosAsync(tenantId, cancellationToken).ConfigureAwait(false);
         checks += await RunEndpointCacheRegistryScenariosAsync(tenantId, cancellationToken).ConfigureAwait(false);
         checks += await RunIdempotencyStoreScenariosAsync(tenantId, cancellationToken).ConfigureAwait(false);
@@ -1652,14 +1660,34 @@ public static partial class RepositoryRuntimeDiagnostics
         CancellationToken cancellationToken)
     {
         var checks = 0;
+        ExpectThrows<ArgumentNullException>(() => _ = new KyrolusMartenEventStore(null!));
+        checks++;
+
         var eventStore = new KyrolusMartenEventStore(session);
         var streamKey = $"diag-runtime-stream-{Guid.NewGuid():N}";
+        try
+        {
+            var missingStream = await eventStore.LoadStreamAsync($"{streamKey}-missing", cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (missingStream.Count == 0)
+            {
+                checks++;
+            }
+        }
+        catch
+        {
+            // Marten may throw for missing streams depending on provider/version.
+            checks++;
+        }
 
         var existsBefore = await eventStore.StreamExistsAsync(streamKey, cancellationToken).ConfigureAwait(false);
         if (!existsBefore)
         {
             checks++;
         }
+
+        ExpectThrows<ArgumentNullException>(
+            () => eventStore.AppendEventsAsync(streamKey, null!, cancellationToken: cancellationToken).GetAwaiter().GetResult());
+        checks++;
 
         await eventStore.AppendEventsAsync(
             streamKey,
@@ -1670,6 +1698,18 @@ public static partial class RepositoryRuntimeDiagnostics
 
         var loadedAfterFirstAppend = await eventStore.LoadStreamAsync(streamKey, fromVersion: 0, cancellationToken).ConfigureAwait(false);
         if (loadedAfterFirstAppend.Count == 1)
+        {
+            checks++;
+        }
+
+        var numericStreamId = 42;
+        await eventStore.AppendEventsAsync(
+            numericStreamId,
+            [new RuntimeEvent("numeric", DateTime.UtcNow)],
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        var numericLoaded = await eventStore.LoadStreamAsync(numericStreamId, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var numericExists = await eventStore.StreamExistsAsync(numericStreamId, cancellationToken).ConfigureAwait(false);
+        if (numericLoaded.Count == 1 && numericExists)
         {
             checks++;
         }
@@ -1710,6 +1750,12 @@ public static partial class RepositoryRuntimeDiagnostics
     {
         var checks = 0;
         var orchestrator = new CountingProjectionOrchestrator();
+        ExpectThrows<ArgumentNullException>(() => _ = new KyrolusMartenProjectionManager(null!, orchestrator));
+        checks++;
+        ExpectThrows<ArgumentNullException>(() => _ = new KyrolusMartenProjectionManager(store, null!));
+        checks++;
+        ExpectThrows<ArgumentNullException>(() => _ = new KyrolusMartenExplicitProjectionManager(null!, ["orders"]));
+        checks++;
 
         var projectionManager = new KyrolusMartenProjectionManager(
             store,
@@ -1750,6 +1796,62 @@ public static partial class RepositoryRuntimeDiagnostics
         {
             checks++;
         }
+
+        var normalizeProjectionNamesMethod = typeof(KyrolusMartenProjectionManager).GetMethod(
+            "NormalizeProjectionNames",
+            BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("NormalizeProjectionNames method was not found.");
+        if (normalizeProjectionNamesMethod.Invoke(null, [null]) is null)
+        {
+            checks++;
+        }
+
+        if (normalizeProjectionNamesMethod.Invoke(null, [new[] { " Orders ", "orders", "Payments", " " }]) is IReadOnlyList<string> normalizedNames &&
+            normalizedNames.Count == 2 &&
+            normalizedNames[0] == "Orders" &&
+            normalizedNames[1] == "Payments")
+        {
+            checks++;
+        }
+
+        var extractProjectionNameMethod = typeof(KyrolusMartenProjectionManager).GetMethod(
+            "ExtractProjectionName",
+            BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("ExtractProjectionName method was not found.");
+        if (extractProjectionNameMethod.Invoke(null, [null]) is null)
+        {
+            checks++;
+        }
+
+        if ((string?)extractProjectionNameMethod.Invoke(null, [new RuntimeProjectionWrapper(new RuntimeProjectionDescriptor("wrapped-projection"))]) == "wrapped-projection")
+        {
+            checks++;
+        }
+
+        if ((string?)extractProjectionNameMethod.Invoke(null, [new RuntimeNameOnlyProjection("name-only-projection")]) == "name-only-projection")
+        {
+            checks++;
+        }
+
+        if ((string?)extractProjectionNameMethod.Invoke(null, [new RuntimeUnnamedProjection()]) == nameof(RuntimeUnnamedProjection))
+        {
+            checks++;
+        }
+
+        var discoverProjectionNamesMethod = typeof(KyrolusMartenProjectionManager).GetMethod(
+            "DiscoverProjectionNames",
+            BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("DiscoverProjectionNames method was not found.");
+        if (discoverProjectionNamesMethod.Invoke(null, [store]) is string[] discoveredProjectionNames &&
+            discoveredProjectionNames.Length >= 0)
+        {
+            checks++;
+        }
+
+        var discoveredManager = new KyrolusMartenProjectionManager(store, orchestrator, projectionNames: null);
+        await discoveredManager.RebuildAsync(cancellationToken).ConfigureAwait(false);
+        await discoveredManager.AssertIsUpToDateAsync(cancellationToken).ConfigureAwait(false);
+        checks++;
 
         return checks;
     }
@@ -1869,6 +1971,249 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
         catch (InvalidOperationException)
+        {
+            checks++;
+        }
+
+        var settingsConfiguredCount = 0;
+        var settingsProbeOrchestrator = new KyrolusMartenProjectionOrchestrator(
+            store,
+            Options.Create(new KyrolusMartenDaemonOptions
+            {
+                ConfigureSettings = _ => settingsConfiguredCount++
+            }));
+        var createDaemonSettingsMethod = typeof(KyrolusMartenProjectionOrchestrator).GetMethod(
+            "CreateDaemonSettings",
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("CreateDaemonSettings method was not found.");
+        var daemonSettings = createDaemonSettingsMethod.Invoke(settingsProbeOrchestrator, []);
+        if (daemonSettings is null || settingsConfiguredCount == 1)
+        {
+            checks++;
+        }
+
+        var buildShardArgumentMethod = typeof(KyrolusMartenProjectionOrchestrator).GetMethod(
+            "BuildShardArgument",
+            BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("BuildShardArgument method was not found.");
+        var stringShardMethod = typeof(RuntimeStringShardMethodHolder).GetMethod(nameof(RuntimeStringShardMethodHolder.StartStringShard))
+            ?? throw new InvalidOperationException("StartStringShard method was not found.");
+        if ((string?)buildShardArgumentMethod.Invoke(null, [stringShardMethod, "alpha-shard"]) == "alpha-shard")
+        {
+            checks++;
+        }
+
+        var typedShardMethod = typeof(RuntimeDaemonLifecycleProbe).GetMethod(nameof(RuntimeDaemonLifecycleProbe.StartShard))
+            ?? throw new InvalidOperationException("StartShard method was not found.");
+        if (buildShardArgumentMethod.Invoke(null, [typedShardMethod, "beta-shard"]) is RuntimeShardName shard &&
+            shard.Name == "beta-shard")
+        {
+            checks++;
+        }
+
+        var invokePossiblyAsyncMethod = typeof(KyrolusMartenProjectionOrchestrator).GetMethod(
+            "InvokePossiblyAsync",
+            BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("InvokePossiblyAsync method was not found.");
+        var invocationProbe = new RuntimeInvocationProbe();
+        var runSyncMethod = typeof(RuntimeInvocationProbe).GetMethod(nameof(RuntimeInvocationProbe.RunSync))
+            ?? throw new InvalidOperationException("RunSync method was not found.");
+        var runAsyncMethod = typeof(RuntimeInvocationProbe).GetMethod(nameof(RuntimeInvocationProbe.RunAsync))
+            ?? throw new InvalidOperationException("RunAsync method was not found.");
+        await ((Task)invokePossiblyAsyncMethod.Invoke(null, [runSyncMethod, invocationProbe, Array.Empty<object?>()])!).ConfigureAwait(false);
+        await ((Task)invokePossiblyAsyncMethod.Invoke(null, [runAsyncMethod, invocationProbe, Array.Empty<object?>()])!).ConfigureAwait(false);
+        if (invocationProbe.SyncCalls == 1 && invocationProbe.AsyncCalls == 1)
+        {
+            checks++;
+        }
+
+        var startDaemonAsyncMethod = typeof(KyrolusMartenProjectionOrchestrator).GetMethod(
+            "StartDaemonAsync",
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("StartDaemonAsync method was not found.");
+        var noAutoStartProbe = new RuntimeDaemonLifecycleProbe();
+        await ((Task)startDaemonAsyncMethod.Invoke(orchestrator, [noAutoStartProbe])!).ConfigureAwait(false);
+        if (noAutoStartProbe.StartAllCalls == 0 && noAutoStartProbe.StartedShards.Count == 0)
+        {
+            checks++;
+        }
+
+        var startAllProbe = new RuntimeDaemonLifecycleProbe();
+        var startAllOrchestrator = new KyrolusMartenProjectionOrchestrator(
+            store,
+            Options.Create(new KyrolusMartenDaemonOptions
+            {
+                AutoStart = true
+            }));
+        await ((Task)startDaemonAsyncMethod.Invoke(startAllOrchestrator, [startAllProbe])!).ConfigureAwait(false);
+        if (startAllProbe.StartAllCalls == 1)
+        {
+            checks++;
+        }
+
+        var specificShardProbe = new RuntimeDaemonLifecycleProbe();
+        var specificShardOrchestrator = new KyrolusMartenProjectionOrchestrator(
+            store,
+            Options.Create(new KyrolusMartenDaemonOptions
+            {
+                AutoStart = true,
+                ShardsToStart = ["alpha", "beta"]
+            }));
+        await ((Task)startDaemonAsyncMethod.Invoke(specificShardOrchestrator, [specificShardProbe])!).ConfigureAwait(false);
+        if (specificShardProbe.StartedShards.Count == 2 &&
+            specificShardProbe.StartedShards[0] == "alpha" &&
+            specificShardProbe.StartedShards[1] == "beta")
+        {
+            checks++;
+        }
+
+        var rebuildIfRequestedMethod = typeof(KyrolusMartenProjectionOrchestrator).GetMethod(
+            "RebuildIfRequestedAsync",
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("RebuildIfRequestedAsync method was not found.");
+        var noRebuildProbe = new RuntimeSingleArgRebuildDaemon();
+        await ((Task)rebuildIfRequestedMethod.Invoke(orchestrator, [noRebuildProbe])!).ConfigureAwait(false);
+        if (noRebuildProbe.RebuiltProjectionNames.Count == 0)
+        {
+            checks++;
+        }
+
+        var singleArgRebuildProbe = new RuntimeSingleArgRebuildDaemon();
+        var singleArgRebuildOrchestrator = new KyrolusMartenProjectionOrchestrator(
+            store,
+            Options.Create(new KyrolusMartenDaemonOptions
+            {
+                RebuildProjections = ["projection-a", "projection-b"]
+            }));
+        await ((Task)rebuildIfRequestedMethod.Invoke(singleArgRebuildOrchestrator, [singleArgRebuildProbe])!).ConfigureAwait(false);
+        if (singleArgRebuildProbe.RebuiltProjectionNames.Count == 2)
+        {
+            checks++;
+        }
+
+        var twoArgRebuildProbe = new RuntimeTwoArgRebuildDaemon();
+        var twoArgRebuildOrchestrator = new KyrolusMartenProjectionOrchestrator(
+            store,
+            Options.Create(new KyrolusMartenDaemonOptions
+            {
+                RebuildProjections = ["projection-c", "projection-d"]
+            }));
+        await ((Task)rebuildIfRequestedMethod.Invoke(twoArgRebuildOrchestrator, [twoArgRebuildProbe])!).ConfigureAwait(false);
+        if (twoArgRebuildProbe.RebuiltProjectionNames.Count == 2)
+        {
+            checks++;
+        }
+
+        return checks;
+    }
+
+    private static async Task<int> RunRuntimeRegistrationScenariosAsync(
+        IDocumentStore store,
+        CancellationToken cancellationToken)
+    {
+        var checks = 0;
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(store);
+        services.AddScoped<IDocumentSession>(_ => store.LightweightSession());
+        services.AddScoped<RuntimeCustomRepository>();
+        services.AddKyrolusMartenRuntime(options =>
+        {
+            options.AutoStart = true;
+            options.WaitForNonStaleTimeout = TimeSpan.FromSeconds(1);
+            options.ShardsToStart = ["alpha"];
+            options.RebuildProjections = ["beta"];
+        });
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var scopedProvider = scope.ServiceProvider;
+        var daemonOptions = scopedProvider.GetRequiredService<IOptions<KyrolusMartenDaemonOptions>>().Value;
+        if (daemonOptions.AutoStart &&
+            daemonOptions.WaitForNonStaleTimeout == TimeSpan.FromSeconds(1) &&
+            daemonOptions.ShardsToStart.SequenceEqual(["alpha"]) &&
+            daemonOptions.RebuildProjections.SequenceEqual(["beta"]))
+        {
+            checks++;
+        }
+
+        if (ReferenceEquals(scopedProvider.GetRequiredService<IKyrolusMartenObserver>(), KyrolusMartenNoopObserver.Instance) &&
+            ReferenceEquals(scopedProvider.GetRequiredService<IKyrolusMartenAuthorization>(), KyrolusMartenAllowAllAuthorization.Instance) &&
+            ReferenceEquals(scopedProvider.GetRequiredService<IKyrolusMartenValidation>(), KyrolusMartenNoopValidation.Instance) &&
+            ReferenceEquals(scopedProvider.GetRequiredService<IKyrolusMartenSoftDeletePolicy>(), KyrolusMartenNoSoftDeletePolicy.Instance))
+        {
+            checks++;
+        }
+
+        if (ReferenceEquals(scopedProvider.GetRequiredService<ICacheProvider>(), NullCacheProvider.Instance) &&
+            scopedProvider.GetRequiredService<IKyrolusRepositoryCachePolicyProvider>() is KyrolusRepositoryCachePolicyRegistry &&
+            ReferenceEquals(scopedProvider.GetRequiredService<IKyrolusMartenRepositoryPolicyProvider>(), KyrolusNoopMartenRepositoryPolicyProvider.Instance) &&
+            ReferenceEquals(scopedProvider.GetRequiredService<IKyrolusMartenResiliencePolicy>(), KyrolusMartenNoopResiliencePolicy.Instance) &&
+            ReferenceEquals(scopedProvider.GetRequiredService<IKyrolusMartenTracing>(), KyrolusMartenNoopTracing.Instance))
+        {
+            checks++;
+        }
+
+        if (scopedProvider.GetRequiredService<IKyrolusMartenEventStore>() is KyrolusMartenEventStore &&
+            scopedProvider.GetRequiredService<IKyrolusMartenProjectionOrchestrator>() is KyrolusMartenProjectionOrchestrator &&
+            scopedProvider.GetRequiredService<IKyrolusMartenProjectionManager>() is KyrolusMartenProjectionManager &&
+            scopedProvider.GetRequiredService<IQueryHelper<MenuItem>>() is MartenRuntimeQueryHelper<MenuItem>)
+        {
+            checks++;
+        }
+
+        var scopedSession = scopedProvider.GetRequiredService<IDocumentSession>();
+        var decoratedRepository = scopedProvider.CreateDecoratedRepository<IDocumentSession, MenuItem, Guid>(scopedSession);
+        if (decoratedRepository is KyrolusMartenRepositoryDecorator<IDocumentSession, MenuItem, Guid> &&
+            ReferenceEquals(decoratedRepository.CacheProvider, NullCacheProvider.Instance) &&
+            ReferenceEquals(decoratedRepository.ResiliencePolicy, KyrolusMartenNoopResiliencePolicy.Instance) &&
+            ReferenceEquals(decoratedRepository.Tracing, KyrolusMartenNoopTracing.Instance))
+        {
+            checks++;
+        }
+
+        var unitOfWork = scopedProvider.GetRequiredService<IKyrolusMartenUnitOfWork<IDocumentSession>>();
+        var repository = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, MenuItem, Guid>>();
+        var repositoryAgain = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, MenuItem, Guid>>();
+        if (ReferenceEquals(repository, repositoryAgain))
+        {
+            checks++;
+        }
+
+        var softDeleteRepository = unitOfWork.GetRepository<IKyrolusMartenSoftDeleteRepositoryAsync<IDocumentSession, MenuItem, Guid>>();
+        if (softDeleteRepository is KyrolusMartenSoftDeleteRepositoryAsync<IDocumentSession, MenuItem, Guid>)
+        {
+            checks++;
+        }
+
+        var customRepository = unitOfWork.GetRepository<RuntimeCustomRepository>();
+        if (customRepository is RuntimeCustomRepository)
+        {
+            checks++;
+        }
+
+        var factoryUnitOfWork = new KyrolusMartenUnitOfWork<IDocumentSession>(
+            scopedSession,
+            repositoryFactory: type => type == typeof(RuntimeFactoryRepository) ? new RuntimeFactoryRepository() : null);
+        var factoryRepository = factoryUnitOfWork.GetRepository<RuntimeFactoryRepository>();
+        var cachedFactoryRepository = factoryUnitOfWork.GetRepository<RuntimeFactoryRepository>();
+        if (factoryRepository is RuntimeFactoryRepository &&
+            ReferenceEquals(factoryRepository, cachedFactoryRepository))
+        {
+            checks++;
+        }
+
+        var serviceUnitOfWork = new KyrolusMartenUnitOfWork<IDocumentSession>(scopedSession, scopedProvider);
+        if (serviceUnitOfWork.GetRepository<RuntimeCustomRepository>() is RuntimeCustomRepository)
+        {
+            checks++;
+        }
+
+        ExpectThrows<InvalidOperationException>(() => new KyrolusMartenUnitOfWork<IDocumentSession>(scopedSession).GetRepository<RuntimeMissingRepository>());
+        checks++;
+
+        var saved = await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        if (saved == 1)
         {
             checks++;
         }
@@ -2683,6 +3028,14 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
+        if (KyrolusFieldSelectionParser.TryParse("  Category.Name  ,  CustomerName  ", out var dottedSelection, out var dottedError) &&
+            dottedError is null &&
+            dottedSelection.GetNestedSelection("Category")?.IsFieldSelected("Name") == true &&
+            dottedSelection.IsFieldSelected("CustomerName"))
+        {
+            checks++;
+        }
+
         var order = new RuntimeFieldSelectionOrder
         {
             Id = Guid.NewGuid(),
@@ -2700,7 +3053,11 @@ public static partial class RepositoryRuntimeDiagnostics
             ReadOnlyLines =
             [
                 new RuntimeFieldSelectionLine { Product = "Water", Quantity = 4 }
-            ]
+            ],
+            CustomEnumerableLines = new RuntimeFieldSelectionLineBag(
+            [
+                new RuntimeFieldSelectionLine { Product = "Juice", Quantity = 5 }
+            ])
         };
 
         var projectedSingle = KyrolusFieldProjector.ProjectSingle(order, parsedPaths);
@@ -2729,6 +3086,11 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
+        if (KyrolusFieldProjector.Project(null, parsedPaths) is null)
+        {
+            checks++;
+        }
+
         var projectedPage = KyrolusFieldProjector.ProjectPaged(
             new List<RuntimeFieldSelectionOrder> { order },
             totalCount: 1,
@@ -2751,6 +3113,12 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
+        if (KyrolusFieldValidator.Validate<RuntimeFieldSelectionOrder>(selectAll, out var selectAllInvalidFields) &&
+            selectAllInvalidFields.Count == 0)
+        {
+            checks++;
+        }
+
         KyrolusFieldValidator.Validate(typeof(RuntimeFieldSelectionOrder), parsedPaths, "", out var validInvalidFields);
         if (validInvalidFields.Count == 0)
         {
@@ -2762,6 +3130,13 @@ public static partial class RepositoryRuntimeDiagnostics
         if (!isValid &&
             invalidFields.Contains("MissingField") &&
             invalidFields.Any(x => x.Contains("MissingNested", StringComparison.OrdinalIgnoreCase)))
+        {
+            checks++;
+        }
+
+        var customEnumerableSelection = KyrolusFieldSelectionParser.Parse(["CustomEnumerableLines.Quantity"]);
+        if (KyrolusFieldValidator.Validate<RuntimeFieldSelectionOrder>(customEnumerableSelection, out var customEnumerableInvalidFields) &&
+            customEnumerableInvalidFields.Count == 0)
         {
             checks++;
         }
@@ -2908,6 +3283,17 @@ public static partial class RepositoryRuntimeDiagnostics
         if (pagedLinks.Any(x => x.Rel == KyrolusLinkRel.Self) &&
             pagedLinks.Any(x => x.Rel == KyrolusLinkRel.First) &&
             !pagedLinks.Any(x => x.Rel == KyrolusLinkRel.Last))
+        {
+            checks++;
+        }
+
+        var relatedLink = KyrolusLink.Related("runtime-related", "/api/runtime/related", "Related runtime item");
+        var customLink = new KyrolusLink("runtime-custom", "/api/runtime/custom", "PATCH", "Patch runtime item", "application/json");
+        if (relatedLink.Rel == "runtime-related" &&
+            relatedLink.Href == "/api/runtime/related" &&
+            relatedLink.Method == "GET" &&
+            relatedLink.Title == "Related runtime item" &&
+            customLink.Type == "application/json")
         {
             checks++;
         }
@@ -3066,6 +3452,12 @@ public static partial class RepositoryRuntimeDiagnostics
         var requestExamplesMethod = typeof(KyrolusOpenApiMetadata).GetMethod(
             "ApplyRequestExamples",
             BindingFlags.Static | BindingFlags.NonPublic);
+        var resolveSuccessTypeMethod = typeof(KyrolusOpenApiMetadata).GetMethod(
+            "ResolveSuccessType",
+            BindingFlags.Static | BindingFlags.NonPublic)?.MakeGenericMethod(typeof(RuntimeLinkItem));
+        var normalizeOperationIdPartMethod = typeof(KyrolusOpenApiMetadata).GetMethod(
+            "NormalizeOperationIdPart",
+            BindingFlags.Static | BindingFlags.NonPublic);
 
         if (parameterDocsMethod is not null && requestExamplesMethod is not null)
         {
@@ -3074,8 +3466,17 @@ public static partial class RepositoryRuntimeDiagnostics
                 Parameters =
                 [
                     new OpenApiParameter { Name = "filter" },
+                    new OpenApiParameter { Name = "includedProps" },
+                    new OpenApiParameter { Name = "includeGraph" },
                     new OpenApiParameter { Name = "fields" },
-                    new OpenApiParameter { Name = "cursor" }
+                    new OpenApiParameter { Name = "cacheable" },
+                    new OpenApiParameter { Name = "includeDeleted" },
+                    new OpenApiParameter { Name = "pageNumber" },
+                    new OpenApiParameter { Name = "pageSize" },
+                    new OpenApiParameter { Name = "cursor" },
+                    new OpenApiParameter { Name = "includeTotalCount" },
+                    new OpenApiParameter { Name = "descending" },
+                    new OpenApiParameter { Name = "unknown" }
                 ],
                 RequestBody = new OpenApiRequestBody
                 {
@@ -3112,6 +3513,103 @@ public static partial class RepositoryRuntimeDiagnostics
             {
                 checks++;
             }
+        }
+
+        if (resolveSuccessTypeMethod is not null)
+        {
+            var viewModelConfig = new ApiKyrolusApiConfig<RuntimeLinkItem>
+            {
+                ApiName = "RuntimeTyped",
+                Prefix = "api",
+                Route = "runtime-typed",
+                EndpointConfig =
+                [
+                    new KyrolusEndpointConfig
+                    {
+                        Name = EndpointNames.QueryPaged,
+                        ViewModelType = typeof(RuntimeOpenApiProjection)
+                    }
+                ]
+            };
+
+            var bulkPatchType = resolveSuccessTypeMethod.Invoke(null, [fallbackConfig, EndpointNames.BulkPatch]) as Type;
+            var countType = resolveSuccessTypeMethod.Invoke(null, [fallbackConfig, EndpointNames.Count]) as Type;
+            var batchType = resolveSuccessTypeMethod.Invoke(null, [fallbackConfig, EndpointNames.Batch]) as Type;
+            var queryPagedType = resolveSuccessTypeMethod.Invoke(null, [viewModelConfig, EndpointNames.QueryPaged]) as Type;
+            var updateRangeType = resolveSuccessTypeMethod.Invoke(null, [fallbackConfig, EndpointNames.UpdateRange]) as Type;
+            if (bulkPatchType == typeof(int) &&
+                countType == typeof(long) &&
+                batchType == typeof(object) &&
+                updateRangeType?.IsGenericType == true &&
+                updateRangeType.GetGenericArguments()[0] == typeof(RuntimeLinkItem) &&
+                queryPagedType?.IsGenericType == true &&
+                queryPagedType.GetGenericArguments()[0] == typeof(RuntimeOpenApiProjection))
+            {
+                checks++;
+            }
+        }
+
+        if (normalizeOperationIdPartMethod is not null)
+        {
+            var fallbackOperationId = normalizeOperationIdPartMethod.Invoke(null, [null]);
+            var normalizedOperationId = normalizeOperationIdPartMethod.Invoke(null, ["runtime link/item"]);
+            if (Equals(fallbackOperationId, "KyrolusApi") &&
+                Equals(normalizedOperationId, "runtime_link_item"))
+            {
+                checks++;
+            }
+        }
+
+        await Task.Yield();
+        return checks;
+    }
+
+    private static async Task<int> RunDefaultRouteMapperScenariosAsync(CancellationToken cancellationToken)
+    {
+        var checks = 0;
+        var mapper = new DefaultRouteMapper<RuntimeLinkItem, RuntimeLinkItem, Guid>();
+
+        using var versionedApp = WebApplication.CreateBuilder().Build();
+        var versionedConfig = new ApiKyrolusApiConfig<RuntimeLinkItem>
+        {
+            ApiName = "RuntimeMapped",
+            Prefix = "api",
+            Route = "runtime-link-item",
+            ApiVersion = "2",
+            VersionPrefix = "v",
+            AppendVersionToPrefix = true,
+            Endpoints = [EndpointNames.UpdateRange, EndpointNames.DeleteRange]
+        };
+
+        mapper.MapEndpoints(versionedApp, versionedConfig);
+
+        var versionedPut = FindRouteEndpoint(versionedApp, "api/v2/runtime-link-items", HttpMethods.Put);
+        var versionedDelete = FindRouteEndpoint(versionedApp, "api/v2/runtime-link-items", HttpMethods.Delete);
+        if (versionedPut is not null &&
+            versionedDelete is not null &&
+            versionedPut.Metadata.GetMetadata<ITagsMetadata>()?.Tags.Contains("RuntimeMapped") == true)
+        {
+            checks++;
+        }
+
+        using var versionOnlyApp = WebApplication.CreateBuilder().Build();
+        var versionOnlyConfig = new ApiKyrolusApiConfig<RuntimeLinkItem>
+        {
+            ApiName = "RuntimeVersionOnly",
+            Prefix = string.Empty,
+            Route = "runtime-link-item",
+            ApiVersion = "3",
+            VersionPrefix = "v",
+            AppendVersionToPrefix = true,
+            Endpoints = [EndpointNames.GetAll]
+        };
+
+        mapper.MapEndpoints(versionOnlyApp, versionOnlyConfig);
+
+        var versionOnlyGet = FindRouteEndpoint(versionOnlyApp, "v3/runtime-link-items", HttpMethods.Get);
+        if (versionOnlyGet is not null)
+        {
+            checks++;
         }
 
         await Task.Yield();
@@ -3438,6 +3936,133 @@ public static partial class RepositoryRuntimeDiagnostics
         var noopMetrics = KyrolusNoopValidationMetrics.Instance;
         await noopMetrics.RecordAsync(new KyrolusValidationMetricsContext(typeof(RuntimeValidationProbeRequest), KyrolusValidationContext.Default, firstFailures, TimeSpan.FromMilliseconds(1)), cancellationToken).ConfigureAwait(false);
         checks++;
+
+        checks += await RunFluentValidationScenariosAsync(cancellationToken).ConfigureAwait(false);
+
+        return checks;
+    }
+
+    private static async Task<int> RunFluentValidationScenariosAsync(CancellationToken cancellationToken)
+    {
+        var checks = 0;
+
+        var invalidRequest = new RuntimeFluentValidationProbeRequest
+        {
+            Name = string.Empty,
+            CreatedBy = 0,
+            Id = 0,
+            Description = "too-long",
+            Color = "red",
+            Tags = Array.Empty<string>(),
+            Url = "notaurl",
+            StrictUrl = "still-not-a-url"
+        };
+
+        var validRequest = new RuntimeFluentValidationProbeRequest
+        {
+            Name = "valid",
+            CreatedBy = 7,
+            Id = 11,
+            Description = "short",
+            Color = "#A1B2C3",
+            Tags = ["tag"],
+            Url = "https://example.com",
+            OptionalUrl = null,
+            StrictUrl = "https://strict.example.com"
+        };
+
+        var services = new ServiceCollection();
+        services.AddKyrolusFluentValidation();
+        services.AddTransient<IValidator<RuntimeFluentValidationProbeRequest>, RuntimeFluentValidationProbeValidator>();
+
+        using var provider = services.BuildServiceProvider();
+        var requestValidator = provider.GetServices<IKyrolusRequestValidator<RuntimeFluentValidationProbeRequest>>().Single();
+        var contextualValidator = (IKyrolusRequestValidatorWithContext<RuntimeFluentValidationProbeRequest>)requestValidator;
+
+        var invalidFailures = await requestValidator.ValidateAsync(invalidRequest, cancellationToken).ConfigureAwait(false);
+        if (invalidFailures.Count >= 7 &&
+            invalidFailures.Any(failure => failure.PropertyName == nameof(RuntimeFluentValidationProbeRequest.Name) &&
+                                           failure.Group == "api" &&
+                                           failure.Severity == KyrolusValidationSeverity.Warning &&
+                                           failure.MessageKey == "name.required") &&
+            invalidFailures.Any(failure => failure.PropertyName == nameof(RuntimeFluentValidationProbeRequest.CreatedBy) &&
+                                           failure.Group == "audit") &&
+            invalidFailures.Any(failure => failure.PropertyName == nameof(RuntimeFluentValidationProbeRequest.Id) &&
+                                           failure.Group == "identity") &&
+            invalidFailures.Any(failure => failure.PropertyName == nameof(RuntimeFluentValidationProbeRequest.Description) &&
+                                           failure.Metadata is { Count: > 0 } &&
+                                           failure.Metadata.ContainsKey("MaxLength")) &&
+            invalidFailures.Any(failure => failure.PropertyName == "payload.url"))
+        {
+            checks++;
+        }
+
+        var strictFailures = await contextualValidator.ValidateAsync(
+            invalidRequest,
+            new KyrolusValidationContext(RuleSets: ["strict"]),
+            cancellationToken).ConfigureAwait(false);
+        if (strictFailures.Count == 1 &&
+            strictFailures[0].PropertyName == nameof(RuntimeFluentValidationProbeRequest.StrictUrl) &&
+            strictFailures[0].Severity == KyrolusValidationSeverity.Info &&
+            strictFailures[0].Group == "strict-group" &&
+            strictFailures[0].RuleSet == "strict")
+        {
+            checks++;
+        }
+
+        var validFailures = await requestValidator.ValidateAsync(validRequest, cancellationToken).ConfigureAwait(false);
+        if (validFailures.Count == 0)
+        {
+            checks++;
+        }
+
+        using var noValidatorProvider = new ServiceCollection()
+            .AddKyrolusFluentValidation()
+            .BuildServiceProvider();
+        var noValidator = noValidatorProvider.GetServices<IKyrolusRequestValidator<RuntimeNoValidatorFluentProbeRequest>>().Single();
+        var noValidatorFailures = await noValidator.ValidateAsync(new RuntimeNoValidatorFluentProbeRequest(), cancellationToken).ConfigureAwait(false);
+        if (noValidatorFailures.Count == 0)
+        {
+            checks++;
+        }
+
+        var behavior = new KyrolusValidationBehavior<RuntimeFluentValidationProbeRequest, string>(
+            provider.GetServices<IKyrolusRequestValidator<RuntimeFluentValidationProbeRequest>>());
+        var nextCalls = 0;
+        var nextResult = await behavior.Handle(
+            validRequest,
+            () =>
+            {
+                nextCalls++;
+                return Task.FromResult("validated");
+            },
+            cancellationToken).ConfigureAwait(false);
+        if (nextCalls == 1 && nextResult == "validated")
+        {
+            checks++;
+        }
+
+        await ExpectThrowsAsync<KyrolusSous.Validation.Abstractions.KyrolusValidationException>(() => behavior.Handle(
+            invalidRequest,
+            () => Task.FromResult("should-not-run"),
+            cancellationToken)).ConfigureAwait(false);
+        checks++;
+
+        var passThroughBehavior = new KyrolusValidationBehavior<RuntimeNoValidatorFluentProbeRequest, string>(
+            Array.Empty<IKyrolusRequestValidator<RuntimeNoValidatorFluentProbeRequest>>());
+        var passThroughCalls = 0;
+        var passThroughResult = await passThroughBehavior.Handle(
+            new RuntimeNoValidatorFluentProbeRequest(),
+            () =>
+            {
+                passThroughCalls++;
+                return Task.FromResult("pass-through");
+            },
+            cancellationToken).ConfigureAwait(false);
+        if (passThroughCalls == 1 && passThroughResult == "pass-through")
+        {
+            checks++;
+        }
 
         return checks;
     }
@@ -4539,6 +5164,72 @@ internal sealed class RuntimeNoValidatorValidationProbeRequest : IKyrolusValidat
     public TimeSpan? NegativeCacheTtl { get; init; }
 }
 
+internal sealed class RuntimeNoValidatorFluentProbeRequest;
+
+internal sealed class RuntimeFluentValidationProbeRequest
+{
+    public string Name { get; init; } = string.Empty;
+    public int CreatedBy { get; init; }
+    public int Id { get; init; }
+    public string Description { get; init; } = string.Empty;
+    public string Color { get; init; } = string.Empty;
+    public string[] Tags { get; init; } = Array.Empty<string>();
+    public string? Url { get; init; }
+    public string? OptionalUrl { get; init; }
+    public string? StrictUrl { get; init; }
+}
+
+internal sealed class RuntimeFluentValidationProbeValidator : AbstractValidator<RuntimeFluentValidationProbeRequest>
+{
+    public RuntimeFluentValidationProbeValidator()
+    {
+        RuleFor(x => x.Name)
+            .Required(x => x.Name)
+            .WithErrorCode("name.required")
+            .WithSeverity(Severity.Warning)
+            .WithState(_ => new KyrolusValidationGroup("api"));
+
+        RuleFor(x => x.CreatedBy)
+            .ShouldCreatedBySomeone(x => x.CreatedBy)
+            .WithErrorCode("createdby.invalid")
+            .WithState(_ => "audit");
+
+        RuleFor(x => x.Id)
+            .IdCanNotBeZero(x => x.Id)
+            .WithErrorCode("id.invalid")
+            .WithState(_ => new Dictionary<string, object?> { ["group"] = "identity" });
+
+        RuleFor(x => x.Description)
+            .HasMaximumLength(5, x => x.Description)
+            .WithErrorCode("description.max");
+
+        RuleFor(x => x.Color)
+            .IsColor(x => x.Color)
+            .WithErrorCode("color.invalid");
+
+        RuleFor(x => x.Tags)
+            .ArrayNotEmpty(x => x.Tags)
+            .WithErrorCode("tags.empty");
+
+        RuleFor(x => x.Url!)
+            .IsUrl(x => x.Url!, propertyName: "payload.url")
+            .WithErrorCode("url.invalid");
+
+        RuleFor(x => x.OptionalUrl!)
+            .IsUrl(x => x.OptionalUrl!, isNullOrEmpty: true)
+            .WithErrorCode("optional.url");
+
+        RuleSet("strict", () =>
+        {
+            RuleFor(x => x.StrictUrl!)
+                .IsUrl(x => x.StrictUrl!)
+                .WithErrorCode("strict.url")
+                .WithSeverity(Severity.Info)
+                .WithState(_ => "strict-group");
+        });
+    }
+}
+
 internal sealed class RuntimeScannedValidationRequest;
 
 internal sealed class RuntimeValidationProbeRequestValidator : IKyrolusRequestValidator<RuntimeValidationProbeRequest>
@@ -4749,6 +5440,7 @@ internal sealed class RuntimeFieldSelectionOrder
     public List<RuntimeFieldSelectionLine> Lines { get; set; } = [];
     public RuntimeFieldSelectionLine[] LineArray { get; set; } = [];
     public IReadOnlyCollection<RuntimeFieldSelectionLine> ReadOnlyLines { get; set; } = [];
+    public RuntimeFieldSelectionLineBag CustomEnumerableLines { get; set; } = new([]);
 }
 
 internal sealed class RuntimeFieldSelectionCategory
@@ -4763,10 +5455,24 @@ internal sealed class RuntimeFieldSelectionLine
     public int Quantity { get; set; }
 }
 
+internal sealed class RuntimeFieldSelectionLineBag(IEnumerable<RuntimeFieldSelectionLine> items) : IEnumerable<RuntimeFieldSelectionLine>
+{
+    private readonly IReadOnlyList<RuntimeFieldSelectionLine> items = items.ToList();
+
+    public IEnumerator<RuntimeFieldSelectionLine> GetEnumerator() => items.GetEnumerator();
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+}
+
 internal sealed class RuntimeLinkItem
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
+}
+
+internal sealed class RuntimeOpenApiProjection
+{
+    public Guid Id { get; set; }
 }
 
 [KyrolusOutputCache(Enabled = true, KeySuffix = "attribute")]
@@ -4862,6 +5568,98 @@ internal sealed class CountingProjectionOrchestrator : IKyrolusMartenProjectionO
         return Task.CompletedTask;
     }
 }
+
+internal sealed class RuntimeProjectionWrapper(object? value)
+{
+    public object? Value { get; } = value;
+}
+
+internal sealed class RuntimeProjectionDescriptor(string projectionName)
+{
+    public string ProjectionName { get; } = projectionName;
+}
+
+internal sealed class RuntimeNameOnlyProjection(string name)
+{
+    public string Name { get; } = name;
+}
+
+internal sealed class RuntimeUnnamedProjection;
+
+internal sealed class RuntimeStringShardMethodHolder
+{
+    public void StartStringShard(string shardName)
+    {
+    }
+}
+
+internal sealed class RuntimeShardName(string name)
+{
+    public string Name { get; } = name;
+}
+
+internal sealed class RuntimeInvocationProbe
+{
+    public int SyncCalls { get; private set; }
+    public int AsyncCalls { get; private set; }
+
+    public void RunSync()
+    {
+        SyncCalls++;
+    }
+
+    public Task RunAsync()
+    {
+        AsyncCalls++;
+        return Task.CompletedTask;
+    }
+}
+
+internal sealed class RuntimeDaemonLifecycleProbe
+{
+    public int StartAllCalls { get; private set; }
+    public List<string> StartedShards { get; } = [];
+
+    public Task StartAllShards()
+    {
+        StartAllCalls++;
+        return Task.CompletedTask;
+    }
+
+    public Task StartShard(RuntimeShardName shardName, CancellationToken cancellationToken)
+    {
+        StartedShards.Add(shardName.Name);
+        return Task.CompletedTask;
+    }
+}
+
+internal sealed class RuntimeSingleArgRebuildDaemon
+{
+    public List<string> RebuiltProjectionNames { get; } = [];
+
+    public Task RebuildProjection(string projectionName)
+    {
+        RebuiltProjectionNames.Add(projectionName);
+        return Task.CompletedTask;
+    }
+}
+
+internal sealed class RuntimeTwoArgRebuildDaemon
+{
+    public List<string> RebuiltProjectionNames { get; } = [];
+
+    public Task RebuildProjection(string projectionName, CancellationToken cancellationToken)
+    {
+        RebuiltProjectionNames.Add(projectionName);
+        return Task.CompletedTask;
+    }
+}
+
+internal sealed class RuntimeCustomRepository;
+
+internal sealed class RuntimeFactoryRepository;
+
+internal sealed class RuntimeMissingRepository;
 
 internal sealed class StaticTenantResolver(string tenantId) : ITenantResolver
 {

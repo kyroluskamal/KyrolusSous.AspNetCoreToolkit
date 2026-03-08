@@ -103,13 +103,15 @@ public sealed class RepositoryRuntimeDiagnosticsIntegrationTests(TestAppFactory 
         if (mode == "runtime-infrastructure")
         {
             payload.SagaChecks.ShouldNotBeNull();
-            payload.SagaChecks!.Value.ShouldBeGreaterThanOrEqualTo(0);
+            payload.SagaChecks!.Value.ShouldBeGreaterThan(5);
             payload.EventStoreChecks.ShouldNotBeNull();
             payload.EventStoreChecks!.Value.ShouldBeGreaterThanOrEqualTo(0);
             payload.ProjectionManagerChecks.ShouldNotBeNull();
-            payload.ProjectionManagerChecks!.Value.ShouldBeGreaterThanOrEqualTo(0);
+            payload.ProjectionManagerChecks!.Value.ShouldBeGreaterThan(10);
             payload.ProjectionOrchestratorChecks.ShouldNotBeNull();
-            payload.ProjectionOrchestratorChecks!.Value.ShouldBeGreaterThanOrEqualTo(0);
+            payload.ProjectionOrchestratorChecks!.Value.ShouldBeGreaterThan(10);
+            payload.RuntimeRegistrationChecks.ShouldNotBeNull();
+            payload.RuntimeRegistrationChecks!.Value.ShouldBeGreaterThan(10);
             payload.DbProbeCount.ShouldNotBeNull();
             payload.DbProbeCount!.Value.ShouldBeGreaterThanOrEqualTo(1);
             return;

@@ -636,6 +636,193 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
         NormalizeErrorCode(operationResult.Error?.Code).ShouldBe("INTERNAL_ERROR");
     }
 
+    [Theory(DisplayName = "Batch endpoint - mixed results aggregate counts and return data contract")]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Batch_mixed_results_aggregate_counts_and_return_data_contract(bool returnData)
+    {
+        using var customFactory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                var config = ResolveMenuItemMartenConfig(services);
+                config.BatchOptions.AllowedOperations.Add((KyrolusBatchOperationType)999);
+            });
+        });
+
+        using var client = customFactory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Tenant-Id", TestHelpers.NewTenantId($"menuitem-batch-mixed-{returnData}"));
+        var marker = $"MixedCreate-{Guid.NewGuid():N}";
+
+        var request = new KyrolusBatchRequest<MenuItem, Guid>
+        {
+            Atomic = true,
+            ContinueOnError = true,
+            ReturnData = returnData,
+            Operations =
+            [
+                new KyrolusBatchOperation<MenuItem, Guid>
+                {
+                    OperationId = "op-unknown",
+                    Operation = (KyrolusBatchOperationType)999
+                },
+                new KyrolusBatchOperation<MenuItem, Guid>
+                {
+                    OperationId = "op-create",
+                    Operation = KyrolusBatchOperationType.Create,
+                    Data = new MenuItem
+                    {
+                        Name = marker,
+                        Category = "Main",
+                        Price = 31
+                    }
+                }
+            ]
+        };
+
+        var response = await client.PostAsJsonAsync("/api/menu-items/$batch", request);
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.ShouldBe(HttpStatusCode.MultiStatus, body);
+
+        var payload = await response.Content.ReadFromJsonAsync<KyrolusBatchResponse<MenuItem, Guid>>();
+        payload.ShouldNotBeNull();
+        payload!.Success.ShouldBeFalse();
+        payload.TotalOperations.ShouldBe(2);
+        payload.SuccessCount.ShouldBe(1);
+        payload.FailureCount.ShouldBe(1);
+        payload.Results.Count.ShouldBe(2);
+
+        var failed = payload.Results[0];
+        failed.OperationId.ShouldBe("op-unknown");
+        failed.Success.ShouldBeFalse();
+        failed.Status.ShouldBe(StatusCodes.Status400BadRequest);
+        NormalizeErrorCode(failed.Error?.Code).ShouldBe("UNKNOWN_OPERATION");
+        failed.Data.ShouldBeNull();
+
+        var created = payload.Results[1];
+        created.OperationId.ShouldBe("op-create");
+        created.Success.ShouldBeTrue();
+        created.Status.ShouldBe(StatusCodes.Status201Created);
+        created.Id.ShouldNotBe(Guid.Empty);
+        if (returnData)
+        {
+            created.Data.ShouldNotBeNull();
+            created.Data!.Name.ShouldBe(marker);
+            created.Data.Price.ShouldBe(31);
+        }
+        else
+        {
+            created.Data.ShouldBeNull();
+        }
+
+        var all = await client.GetFromJsonAsync<List<MenuItem>>("/api/menu-items");
+        all.ShouldNotBeNull();
+        all!.ShouldContain(x => x.Name == marker);
+    }
+
+    [Fact(DisplayName = "Batch endpoint - stopped execution serializes skipped result contract")]
+    public async Task Batch_stopped_execution_serializes_skipped_result_contract()
+    {
+        using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-batch-skipped-contract"));
+        var marker = $"SkippedCreate-{Guid.NewGuid():N}";
+
+        var request = new KyrolusBatchRequest<MenuItem, Guid>
+        {
+            Atomic = true,
+            ContinueOnError = false,
+            ReturnData = true,
+            Operations =
+            [
+                new KyrolusBatchOperation<MenuItem, Guid>
+                {
+                    OperationId = "op-not-allowed",
+                    Operation = (KyrolusBatchOperationType)999
+                },
+                new KyrolusBatchOperation<MenuItem, Guid>
+                {
+                    OperationId = "op-skipped",
+                    Operation = KyrolusBatchOperationType.Create,
+                    Data = new MenuItem
+                    {
+                        Name = marker,
+                        Category = "Main",
+                        Price = 32
+                    }
+                }
+            ]
+        };
+
+        var response = await client.PostAsJsonAsync("/api/menu-items/$batch", request);
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.ShouldBe(HttpStatusCode.MultiStatus, body);
+
+        var payload = await response.Content.ReadFromJsonAsync<KyrolusBatchResponse<MenuItem, Guid>>();
+        payload.ShouldNotBeNull();
+        payload!.Success.ShouldBeFalse();
+        payload.TotalOperations.ShouldBe(2);
+        payload.SuccessCount.ShouldBe(0);
+        payload.FailureCount.ShouldBe(2);
+        payload.Results.Count.ShouldBe(2);
+
+        NormalizeErrorCode(payload.Results[0].Error?.Code).ShouldBe("OPERATION_NOT_ALLOWED");
+        payload.Results[0].Data.ShouldBeNull();
+        NormalizeErrorCode(payload.Results[1].Error?.Code).ShouldBe("SKIPPED");
+        payload.Results[1].Data.ShouldBeNull();
+        payload.Results[1].Status.ShouldBe(StatusCodes.Status400BadRequest);
+
+        var all = await client.GetFromJsonAsync<List<MenuItem>>("/api/menu-items");
+        all.ShouldNotBeNull();
+        all!.ShouldNotContain(x => x.Name == marker);
+    }
+
+    [Fact(DisplayName = "Batch endpoint - validation failure includes detailed error contract")]
+    public async Task Batch_validation_failure_includes_detailed_error_contract()
+    {
+        using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("menuitem-batch-validation-details"));
+
+        var request = new KyrolusBatchRequest<MenuItem, Guid>
+        {
+            Atomic = true,
+            ContinueOnError = false,
+            ReturnData = true,
+            Operations =
+            [
+                new KyrolusBatchOperation<MenuItem, Guid>
+                {
+                    OperationId = "op-invalid-create",
+                    Operation = KyrolusBatchOperationType.Create,
+                    Data = InvalidModel()
+                }
+            ]
+        };
+
+        var response = await client.PostAsJsonAsync("/api/menu-items/$batch", request);
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.ShouldBe(HttpStatusCode.MultiStatus, body);
+
+        var payload = await response.Content.ReadFromJsonAsync<KyrolusBatchResponse<MenuItem, Guid>>();
+        payload.ShouldNotBeNull();
+        payload!.Success.ShouldBeFalse();
+        payload.TotalOperations.ShouldBe(1);
+        payload.SuccessCount.ShouldBe(0);
+        payload.FailureCount.ShouldBe(1);
+
+        var result = payload.Results.Single();
+        result.Success.ShouldBeFalse();
+        result.Operation.ShouldBe(KyrolusBatchOperationType.Create);
+        result.Status.ShouldBe(StatusCodes.Status400BadRequest);
+        NormalizeErrorCode(result.Error?.Code).ShouldBe("VALIDATION_ERROR");
+        result.Error.ShouldNotBeNull();
+        result.Error!.Details.ShouldNotBeNull();
+        result.Error.Details!.Count.ShouldBeGreaterThanOrEqualTo(3);
+        result.Error.Details.ShouldContain(detail => string.Equals(detail.Field, nameof(MenuItem.Name), StringComparison.OrdinalIgnoreCase));
+        result.Error.Details.ShouldContain(detail => string.Equals(detail.Field, nameof(MenuItem.Category), StringComparison.OrdinalIgnoreCase));
+        result.Error.Details.ShouldContain(detail => string.Equals(detail.Field, nameof(MenuItem.Price), StringComparison.OrdinalIgnoreCase));
+        result.Error.Details.ShouldAllBe(detail => !string.IsNullOrWhiteSpace(detail.Code));
+        result.Error.Details.ShouldAllBe(detail => !string.IsNullOrWhiteSpace(detail.Message));
+        result.Data.ShouldBeNull();
+    }
+
     [Theory(DisplayName = "Batch endpoint - single operation success paths execute")]
     [MemberData(nameof(SuccessPathCases))]
     public async Task Batch_single_operation_success_paths_execute(
@@ -689,6 +876,41 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
         var body = await response.Content.ReadAsStringAsync();
         response.StatusCode.ShouldNotBe(HttpStatusCode.InternalServerError, body);
         body.ShouldNotContain("\"code\":\"internal_error\"");
+
+        var payload = await response.Content.ReadFromJsonAsync<KyrolusBatchResponse<MenuItem, Guid>>();
+        payload.ShouldNotBeNull();
+        payload!.Success.ShouldBeTrue();
+        payload.TotalOperations.ShouldBe(1);
+        payload.SuccessCount.ShouldBe(1);
+        payload.FailureCount.ShouldBe(0);
+        payload.Results.Count.ShouldBe(1);
+
+        var result = payload.Results[0];
+        result.OperationId.ShouldBe("op");
+        result.Operation.ShouldBe(operation);
+        result.Success.ShouldBeTrue();
+
+        var expectedStatus = operation switch
+        {
+            KyrolusBatchOperationType.Create => StatusCodes.Status201Created,
+            KyrolusBatchOperationType.Update => StatusCodes.Status200OK,
+            KyrolusBatchOperationType.Delete => StatusCodes.Status200OK,
+            KyrolusBatchOperationType.Upsert when useExistingId => StatusCodes.Status200OK,
+            KyrolusBatchOperationType.Upsert => StatusCodes.Status201Created,
+            _ => StatusCodes.Status200OK
+        };
+        result.Status.ShouldBe(expectedStatus);
+
+        if (operation == KyrolusBatchOperationType.Delete || !returnData)
+        {
+            result.Data.ShouldBeNull();
+        }
+        else
+        {
+            result.Data.ShouldNotBeNull();
+            result.Data!.Name.ShouldBe(expectedName);
+            result.Data.Price.ShouldBe(55);
+        }
 
         if (operation == KyrolusBatchOperationType.Delete && seeded is not null)
         {

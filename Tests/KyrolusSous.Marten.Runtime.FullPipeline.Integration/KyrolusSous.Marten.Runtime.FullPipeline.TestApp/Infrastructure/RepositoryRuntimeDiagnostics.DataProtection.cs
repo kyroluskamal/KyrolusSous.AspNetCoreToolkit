@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Reflection;
 using System.Text;
 using System.Xml.Linq;
 using KyrolusSous.DataProtection.Abstractions;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Infrastructure;
@@ -148,6 +150,11 @@ public static partial class RepositoryRuntimeDiagnostics
                     new KyrolusDataProtectionKeyDocument("imported-copy", importedElement.ToString(SaveOptions.DisableFormatting))
                 ],
                 cancellationToken).ConfigureAwait(false);
+            var documentsAfterImport = await repository.ExportAsync(cancellationToken).ConfigureAwait(false);
+            Require(
+                documentsAfterImport.Count >= exportedDocuments.Count,
+                "Repository import should preserve or grow the persisted key set.",
+                ref checks);
             checks++;
 
             await backupService.ExportToDirectoryAsync(backupDirectory, cancellationToken).ConfigureAwait(false);
@@ -282,6 +289,168 @@ public static partial class RepositoryRuntimeDiagnostics
             var generatedInstanceId = new KyrolusDataProtectionInstanceId(new StaticOptionsMonitor<KyrolusDataProtectionKeyRingRefreshOptions>(new()));
             Require(!string.IsNullOrWhiteSpace(generatedInstanceId.Value), "InstanceId should be generated when omitted.", ref checks);
 
+            ExpectThrows<ArgumentNullException>(
+                () => _ = new KyrolusDataProtectorFactory(null!),
+                "Data protector factory should reject null providers.",
+                ref checks);
+
+            var directFactory = new KyrolusDataProtectorFactory(provider.GetRequiredService<IDataProtectionProvider>());
+            var directProtector = directFactory.CreateProtector("direct-factory");
+            var directProtected = directProtector.Protect(payload);
+            Require(
+                Encoding.UTF8.GetString(directProtector.Unprotect(directProtected)) == "pipeline-payload",
+                "Direct data protector factory should round-trip payloads.",
+                ref checks);
+            ExpectThrows<ArgumentException>(
+                () => directFactory.CreateProtector(" "),
+                "Direct data protector factory should reject blank purposes.",
+                ref checks);
+
+            var cleanupLogger = provider.GetRequiredService<ILoggerFactory>().CreateLogger<KyrolusDataProtectionKeyCleanupService>();
+            var executeAsyncMethod = typeof(KyrolusDataProtectionKeyCleanupService).GetMethod(
+                "ExecuteAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Cleanup ExecuteAsync method was not found.");
+            var cleanupOnceMethod = typeof(KyrolusDataProtectionKeyCleanupService).GetMethod(
+                "CleanupOnceAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("CleanupOnceAsync method was not found.");
+
+            var disabledCleanupService = new KyrolusDataProtectionKeyCleanupService(
+                decoratedKeyManager,
+                new StaticOptionsMonitor<KyrolusDataProtectionKeyCleanupOptions>(new KyrolusDataProtectionKeyCleanupOptions
+                {
+                    Enabled = false
+                }),
+                cleanupLogger);
+            using (var cleanupCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(25)))
+            {
+                await ExpectBackgroundServiceCancellationAsync(
+                    () => (Task)executeAsyncMethod.Invoke(disabledCleanupService, [cleanupCts.Token])!,
+                    "Disabled cleanup service should honor cancellation.").ConfigureAwait(false);
+            }
+            checks++;
+
+            var innerKeyManagerField = decoratedKeyManager.GetType().GetField("inner", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (innerKeyManagerField?.GetValue(decoratedKeyManager) is IKeyManager innerKeyManager)
+            {
+                var canDeleteKeys = innerKeyManager is IDeletableKeyManager deletable && deletable.CanDeleteKeys;
+                var cleanupService = new KyrolusDataProtectionKeyCleanupService(
+                    innerKeyManager,
+                    new StaticOptionsMonitor<KyrolusDataProtectionKeyCleanupOptions>(new KyrolusDataProtectionKeyCleanupOptions
+                    {
+                        Enabled = true,
+                        DeleteRevokedKeys = true,
+                        RevokedKeyGracePeriod = TimeSpan.Zero,
+                        DeleteExpiredKeys = false,
+                        Interval = TimeSpan.Zero
+                    }),
+                    cleanupLogger);
+                await ((Task)cleanupOnceMethod.Invoke(cleanupService, [new KyrolusDataProtectionKeyCleanupOptions
+                {
+                    Enabled = true,
+                    DeleteRevokedKeys = true,
+                    RevokedKeyGracePeriod = TimeSpan.Zero,
+                    DeleteExpiredKeys = false,
+                    Interval = TimeSpan.Zero
+                    }, cancellationToken])!).ConfigureAwait(false);
+
+                var postCleanupDocuments = await repository.ExportAsync(cancellationToken).ConfigureAwait(false);
+                Require(
+                    canDeleteKeys
+                        ? postCleanupDocuments.Count <= documentsAfterImport.Count
+                        : postCleanupDocuments.Count == documentsAfterImport.Count,
+                    "Cleanup service should not increase the persisted key set.",
+                    ref checks);
+            }
+
+            var refreshLogger = provider.GetRequiredService<ILoggerFactory>().CreateLogger<KyrolusDataProtectionKeyRingRefreshService>();
+            var refreshStopCts = new CancellationTokenSource();
+            var refreshHook = new RuntimeDataProtectionRefreshHook(() => refreshStopCts.Cancel());
+            var refreshService = new KyrolusDataProtectionKeyRingRefreshService(
+                new RuntimeRefreshKeyManager(decoratedKeyManager.GetAllKeys(), new CancellationToken(canceled: true)),
+                [refreshHook, new ThrowingDataProtectionRefreshHook()],
+                new StaticOptionsMonitor<KyrolusDataProtectionKeyRingRefreshOptions>(new KyrolusDataProtectionKeyRingRefreshOptions
+                {
+                    Enabled = true,
+                    IncludeKeyDetails = true,
+                    MinimumInterval = TimeSpan.Zero
+                }),
+                refreshLogger);
+            var refreshExecuteAsyncMethod = typeof(KyrolusDataProtectionKeyRingRefreshService).GetMethod(
+                "ExecuteAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Key ring refresh ExecuteAsync method was not found.");
+            await ((Task)refreshExecuteAsyncMethod.Invoke(refreshService, [refreshStopCts.Token])!).ConfigureAwait(false);
+            Require(
+                refreshHook.InvocationCount == 1 &&
+                refreshHook.LastContext?.Keys is { Count: > 0 },
+                "Key ring refresh service should notify hooks with key details.",
+                ref checks);
+
+            var listenerLogger = provider.GetRequiredService<ILoggerFactory>().CreateLogger<KyrolusKeyRingRefreshNotifierListener>();
+            var listenerNotifier = new RuntimeListenerNotifier(
+                new KyrolusKeyRingRefreshSignal(
+                    runtimeOptions.ApplicationName,
+                    "external-instance",
+                    DateTimeOffset.UtcNow,
+                    KyrolusKeyRingRefreshReason.KeyRotated));
+            var listenerTokenSource = new KyrolusKeyRingRefreshTokenSource();
+            var listener = new KyrolusKeyRingRefreshNotifierListener(
+                listenerNotifier,
+                listenerTokenSource,
+                new StaticOptionsMonitor<KyrolusDataProtectionKeyRingRefreshOptions>(new KyrolusDataProtectionKeyRingRefreshOptions
+                {
+                    EnableCrossInstanceNotifications = true,
+                    RefreshOnExternalSignal = true
+                }),
+                Options.Create(runtimeOptions),
+                instanceId,
+                listenerLogger);
+            var listenerToken = listenerTokenSource.GetToken(CancellationToken.None);
+            var listenerExecuteAsyncMethod = typeof(KyrolusKeyRingRefreshNotifierListener).GetMethod(
+                "ExecuteAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Key ring listener ExecuteAsync method was not found.");
+            await ((Task)listenerExecuteAsyncMethod.Invoke(listener, [cancellationToken])!).ConfigureAwait(false);
+            Require(
+                listenerNotifier.ListenCalls == 1 &&
+                listenerToken.IsCancellationRequested,
+                "Key ring notifier listener should subscribe and signal token refresh for external instances.",
+                ref checks);
+
+            var handleSignalMethod = typeof(KyrolusKeyRingRefreshNotifierListener).GetMethod(
+                "HandleSignalAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Key ring listener HandleSignalAsync method was not found.");
+            var ignoredTokenSource = new KyrolusKeyRingRefreshTokenSource();
+            var ignoredListener = new KyrolusKeyRingRefreshNotifierListener(
+                new RuntimeListenerNotifier(
+                    new KyrolusKeyRingRefreshSignal(
+                        "ignored",
+                        instanceId.Value,
+                        DateTimeOffset.UtcNow,
+                        KyrolusKeyRingRefreshReason.KeyRotated)),
+                ignoredTokenSource,
+                new StaticOptionsMonitor<KyrolusDataProtectionKeyRingRefreshOptions>(new KyrolusDataProtectionKeyRingRefreshOptions
+                {
+                    EnableCrossInstanceNotifications = false,
+                    RefreshOnExternalSignal = true
+                }),
+                Options.Create(runtimeOptions),
+                instanceId,
+                listenerLogger);
+            var ignoredToken = ignoredTokenSource.GetToken(CancellationToken.None);
+            await ((Task)handleSignalMethod.Invoke(ignoredListener, [new KyrolusKeyRingRefreshSignal(
+                runtimeOptions.ApplicationName,
+                instanceId.Value,
+                DateTimeOffset.UtcNow,
+                KyrolusKeyRingRefreshReason.KeyRotated), cancellationToken])!).ConfigureAwait(false);
+            Require(
+                !ignoredToken.IsCancellationRequested,
+                "Key ring notifier listener should ignore disabled or same-instance signals.",
+                ref checks);
+
             return new RepositoryRuntimeDiagnosticsResponse(
                 Mode: "data-protection-runtime",
                 DataProtectionChecks: checks);
@@ -336,6 +505,20 @@ public static partial class RepositoryRuntimeDiagnostics
         {
         }
     }
+
+    private static async Task ExpectBackgroundServiceCancellationAsync(Func<Task> action, string message)
+    {
+        try
+        {
+            await action().ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(message);
+    }
 }
 
 internal sealed class StaticOptionsMonitor<T>(T currentValue) : IOptionsMonitor<T>
@@ -374,4 +557,62 @@ internal sealed class ThrowingDataProtectionKeyRepository : IKyrolusDataProtecti
 
     public Task ImportAsync(IEnumerable<KyrolusDataProtectionKeyDocument> documents, CancellationToken cancellationToken = default)
         => throw new InvalidOperationException("Repository import failure.");
+}
+
+internal sealed class RuntimeRefreshKeyManager(
+    IReadOnlyCollection<IKey> keys,
+    CancellationToken cacheExpirationToken) : IKeyManager
+{
+    public IReadOnlyCollection<IKey> GetAllKeys() => keys;
+
+    public IKey CreateNewKey(DateTimeOffset activationDate, DateTimeOffset expirationDate)
+        => throw new NotSupportedException();
+
+    public void RevokeKey(Guid keyId, string? reason = null)
+        => throw new NotSupportedException();
+
+    public void RevokeAllKeys(DateTimeOffset revocationDate, string? reason = null)
+        => throw new NotSupportedException();
+
+    public CancellationToken GetCacheExpirationToken() => cacheExpirationToken;
+}
+
+internal sealed class RuntimeDataProtectionRefreshHook(Action onInvoked) : IKyrolusKeyRingRefreshHook
+{
+    public int InvocationCount { get; private set; }
+    public KyrolusKeyRingRefreshContext? LastContext { get; private set; }
+
+    public Task OnKeyRingRefreshedAsync(
+        KyrolusKeyRingRefreshContext context,
+        CancellationToken cancellationToken = default)
+    {
+        InvocationCount++;
+        LastContext = context;
+        onInvoked();
+        return Task.CompletedTask;
+    }
+}
+
+internal sealed class ThrowingDataProtectionRefreshHook : IKyrolusKeyRingRefreshHook
+{
+    public Task OnKeyRingRefreshedAsync(
+        KyrolusKeyRingRefreshContext context,
+        CancellationToken cancellationToken = default)
+        => throw new InvalidOperationException("Refresh hook failure.");
+}
+
+internal sealed class RuntimeListenerNotifier(KyrolusKeyRingRefreshSignal signal) : IKyrolusKeyRingRefreshNotifier
+{
+    public int ListenCalls { get; private set; }
+
+    public Task PublishAsync(KyrolusKeyRingRefreshSignal signal, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+
+    public Task ListenAsync(
+        Func<KyrolusKeyRingRefreshSignal, CancellationToken, Task> handler,
+        CancellationToken cancellationToken = default)
+    {
+        ListenCalls++;
+        return handler(signal, cancellationToken);
+    }
 }
