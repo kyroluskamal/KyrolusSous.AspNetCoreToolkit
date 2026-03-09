@@ -3,10 +3,13 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
+using System.Security.Authentication;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using KyrolusSous.Caching.Abstractions;
 using KyrolusSous.CQRS.Marten.Command.Add;
@@ -25,8 +28,10 @@ using KyrolusSous.ExceptionHandling.Abstractions.Interfaces;
 using KyrolusSous.ExceptionHandling.Abstractions.Models;
 using KyrolusSous.ExceptionHandling.Abstractions.Exceptions;
 using KyrolusSous.ExceptionHandling.ClasesAndHelpers;
+using KyrolusSous.ExceptionHandling.Handlers;
 using KyrolusSous.ExceptionHandling.Interfaces;
 using KyrolusSous.ExceptionHandling.Mapping;
+using KyrolusSous.ExceptionHandling.Writers;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Models;
 using KyrolusSous.Repositories.Marten.Abstractions.Authorization;
 using KyrolusSous.Repositories.Marten.Abstractions;
@@ -54,10 +59,13 @@ using FluentValidation;
 using FluentValidation.Results;
 using Marten;
 using Marten.Linq;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Metadata;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,6 +75,7 @@ using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
+using Npgsql;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Infrastructure;
 
@@ -127,6 +136,7 @@ public sealed record RepositoryRuntimeDiagnosticsResponse(
     int? EndpointKitCoreChecks = null,
     int? ValidationRuntimeChecks = null,
     int? ExceptionHandlingChecks = null,
+    int? CacheAbstractionsChecks = null,
     int? DataProtectionChecks = null,
     int? MediatorChecks = null,
     int? LoggingChecks = null,
@@ -833,6 +843,16 @@ public static partial class RepositoryRuntimeDiagnostics
         return new RepositoryRuntimeDiagnosticsResponse(
             Mode: "exception-handling-runtime",
             ExceptionHandlingChecks: checks,
+            DbProbeCount: 0);
+    }
+
+    public static async Task<RepositoryRuntimeDiagnosticsResponse> RunCacheAbstractionsRuntimeAsync(
+        CancellationToken cancellationToken)
+    {
+        var checks = await RunCacheAbstractionsScenariosAsync(cancellationToken).ConfigureAwait(false);
+        return new RepositoryRuntimeDiagnosticsResponse(
+            Mode: "cache-abstractions-runtime",
+            CacheAbstractionsChecks: checks,
             DbProbeCount: 0);
     }
 
@@ -3560,6 +3580,62 @@ public static partial class RepositoryRuntimeDiagnostics
             }
         }
 
+        if (endpointResponse is not null)
+        {
+            var transformerMetadata = endpointResponse.Metadata.First(metadata => metadata.GetType().Name == "KyrolusOpenApiOperationMetadata");
+            var transformer = new KyrolusOpenApiOperationTransformer();
+            var transformerOperation = new OpenApiOperation
+            {
+                Parameters =
+                [
+                    new OpenApiParameter { Name = "filter" },
+                    new OpenApiParameter { Name = "fields" }
+                ],
+                RequestBody = new OpenApiRequestBody
+                {
+                    Content = new Dictionary<string, OpenApiMediaType>
+                    {
+                        ["application/json"] = new OpenApiMediaType()
+                    }
+                }
+            };
+            var transformerContext = new OpenApiOperationTransformerContext
+            {
+                ApplicationServices = app.Services,
+                DocumentName = "default",
+                Description = new ApiDescription
+                {
+                    ActionDescriptor = new ActionDescriptor
+                    {
+                        EndpointMetadata = [transformerMetadata]
+                    }
+                }
+            };
+            await transformer.TransformAsync(transformerOperation, transformerContext, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(transformerOperation.OperationId) &&
+                !string.IsNullOrWhiteSpace(transformerOperation.Parameters[0].Description) &&
+                transformerOperation.RequestBody.Content["application/json"].Example is not null)
+            {
+                checks++;
+            }
+
+            var noMetadataOperation = new OpenApiOperation();
+            var noMetadataContext = new OpenApiOperationTransformerContext
+            {
+                ApplicationServices = app.Services,
+                DocumentName = "default",
+                Description = new ApiDescription
+                {
+                    ActionDescriptor = new ActionDescriptor()
+                }
+            };
+            await transformer.TransformAsync(noMetadataOperation, noMetadataContext, cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(noMetadataOperation.OperationId))
+            {
+                checks++;
+            }
+        }
+
         await Task.Yield();
         return checks;
     }
@@ -4297,6 +4373,408 @@ public static partial class RepositoryRuntimeDiagnostics
         {
             checks++;
         }
+
+        var registeredServices = new ServiceCollection()
+            .AddLogging()
+            .AddKyrolusExceptionHandling();
+        using var registeredProvider = registeredServices.BuildServiceProvider();
+        if (registeredProvider.GetRequiredService<IHttpContextAccessor>() is HttpContextAccessor &&
+            registeredProvider.GetRequiredService<KyrolusHttpErrorContextFactory>() is not null &&
+            registeredProvider.GetRequiredService<KyrolusExceptionMappingService>() is not null &&
+            registeredProvider.GetRequiredService<IKyrolusErrorResponseWriter>() is KyrolusJsonErrorResponseWriter &&
+            registeredProvider.GetServices<IKyrolusExceptionMapper>().Count() >= 3)
+        {
+            checks++;
+        }
+
+        using var dictionaryLocalizationProvider = new ServiceCollection()
+            .AddKyrolusExceptionHandlingLocalization(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["localized.code"] = "Localized title"
+            })
+            .BuildServiceProvider();
+        if (dictionaryLocalizationProvider.GetRequiredService<IKyrolusErrorLocalizer>()
+            .Localize("localized.code", "fallback", CultureInfo.InvariantCulture) == "Localized title")
+        {
+            checks++;
+        }
+
+        using var typedLocalizationProvider = new ServiceCollection()
+            .AddSingleton<IStringLocalizer<RuntimeExceptionResource>>(
+                new RuntimeTypedStringLocalizer<RuntimeExceptionResource>(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["typed.code"] = "Typed title"
+                }))
+            .AddKyrolusExceptionHandlingLocalization<RuntimeExceptionResource>()
+            .BuildServiceProvider();
+        if (typedLocalizationProvider.GetRequiredService<IKyrolusErrorLocalizer>()
+            .Localize("typed.code", "fallback", CultureInfo.InvariantCulture) == "Typed title")
+        {
+            checks++;
+        }
+
+        var appBuilder = new ApplicationBuilder(registeredProvider);
+        if (ReferenceEquals(appBuilder.UseKyrolusExceptionHandling(), appBuilder))
+        {
+            checks++;
+        }
+
+        var fallbackMappingService = new KyrolusExceptionMappingService(Array.Empty<IKyrolusExceptionMapper>());
+        var fallbackMapping = fallbackMappingService.Map(new InvalidOperationException("fallback"), translatorContext);
+        if (fallbackMapping.StatusCode == HttpStatusCode.InternalServerError &&
+            fallbackMapping.Error.Code == KyrolusErrorCodes.InternalError)
+        {
+            checks++;
+        }
+
+        var localizedMappingService = new KyrolusExceptionMappingService(
+            [new KyrolusFrameworkExceptionMapper()],
+            new KyrolusDictionaryErrorLocalizer(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [KyrolusErrorCodes.Unauthorized] = "Localized unauthorized",
+                [$"{KyrolusErrorCodes.Unauthorized}.detail"] = "Localized unauthorized detail"
+            }));
+        var localizedUnauthorized = localizedMappingService.Map(new UnauthorizedAccessException("denied"), translatorContext);
+        if (localizedUnauthorized.StatusCode == HttpStatusCode.Unauthorized &&
+            localizedUnauthorized.Error.Title == "Localized unauthorized" &&
+            localizedUnauthorized.Error.Detail == "Localized unauthorized detail")
+        {
+            checks++;
+        }
+
+        var frameworkMapper = new KyrolusFrameworkExceptionMapper();
+        var frameworkCases = new (Exception Exception, HttpStatusCode StatusCode, string ErrorCode, bool IsTransient)[]
+        {
+            (new TimeoutException("timeout"), HttpStatusCode.GatewayTimeout, KyrolusErrorCodes.Timeout, true),
+            (new TaskCanceledException("task-cancelled"), HttpStatusCode.RequestTimeout, KyrolusErrorCodes.Cancelled, true),
+            (new OperationCanceledException("cancelled"), HttpStatusCode.RequestTimeout, KyrolusErrorCodes.Cancelled, true),
+            (new HttpRequestException("external", null, HttpStatusCode.BadGateway), HttpStatusCode.BadGateway, KyrolusErrorCodes.ExternalService, true),
+            (new HttpRequestException("external"), HttpStatusCode.BadGateway, KyrolusErrorCodes.ExternalService, true),
+            (new SocketException((int)SocketError.ConnectionRefused), HttpStatusCode.BadGateway, KyrolusErrorCodes.ExternalService, true),
+            (new JsonException("json"), HttpStatusCode.BadRequest, KyrolusErrorCodes.InvalidJson, false),
+            (new ArgumentException("arg"), HttpStatusCode.BadRequest, KyrolusErrorCodes.BadRequest, false),
+            (new NotSupportedException("unsupported"), HttpStatusCode.BadRequest, KyrolusErrorCodes.BadRequest, false)
+        };
+        if (frameworkCases.All(testCase =>
+                frameworkMapper.TryMap(testCase.Exception, translatorContext, out var mapped) &&
+                mapped.StatusCode == testCase.StatusCode &&
+                mapped.Error.Code == testCase.ErrorCode &&
+                mapped.IsTransient == testCase.IsTransient &&
+                mapped.Error.TraceId == translatorContext.TraceId))
+        {
+            checks++;
+        }
+
+        if (!frameworkMapper.TryMap(new InvalidOperationException("not-mapped"), translatorContext, out _))
+        {
+            checks++;
+        }
+
+        var translatorDefaultContext = translator.Translate(new InvalidOperationException("default-context"));
+        if (translatorDefaultContext.StatusCode == HttpStatusCode.InternalServerError &&
+            translatorDefaultContext.Error.Code == KyrolusErrorCodes.InternalError)
+        {
+            checks++;
+        }
+
+        var productionTranslator = new KyrolusExceptionTranslator(
+            localizedMappingService,
+            metadataSanitizer,
+            new RuntimeHostEnvironment("Production"),
+            Options.Create(new KyrolusExceptionHandlingOptions
+            {
+                IncludeExceptionDetailsInResponse = false,
+                IncludeContextMetadata = false,
+                IncludeTraceId = false,
+                IncludeExceptionDetailsInDevelopment = true
+            }));
+        var translatedProduction = productionTranslator.Translate(new InvalidOperationException("prod"));
+        if (translatedProduction.Error.Metadata is null or { Count: 0 })
+        {
+            checks++;
+        }
+
+        var writerContext = new DefaultHttpContext
+        {
+            Response =
+            {
+                Body = new MemoryStream()
+            }
+        };
+        var jsonWriter = new KyrolusJsonErrorResponseWriter();
+        var writerMapping = new KyrolusExceptionMapping(
+            new KyrolusErrorEnvelope("writer_code", "Writer title", "Writer detail", "trace-writer"),
+            HttpStatusCode.Conflict);
+        await jsonWriter.WriteAsync(writerContext, writerMapping, translatorContext, cancellationToken).ConfigureAwait(false);
+        writerContext.Response.Body.Position = 0;
+        var writerBody = await new StreamReader(writerContext.Response.Body).ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        if (writerContext.Response.StatusCode == StatusCodes.Status409Conflict &&
+            writerContext.Response.ContentType == "application/json" &&
+            writerBody.Contains("\"code\":\"writer_code\"", StringComparison.Ordinal))
+        {
+            checks++;
+        }
+
+        static DefaultHttpContext CreateExceptionHandlerContext()
+            => new()
+            {
+                Response =
+                {
+                    Body = new MemoryStream()
+                }
+            };
+
+        var authenticationHandler = new AuthenticationExceptionHandler(loggerFactory.CreateLogger<SocketExceptionHandler>());
+        var authenticationContext = CreateExceptionHandlerContext();
+        if (await authenticationHandler.TryHandleAsync(authenticationContext, new SslAuthenticationException("ssl"), cancellationToken).ConfigureAwait(false) &&
+            authenticationContext.Response.StatusCode == StatusCodes.Status502BadGateway &&
+            !await authenticationHandler.TryHandleAsync(CreateExceptionHandlerContext(), new InvalidOperationException("ignored"), cancellationToken).ConfigureAwait(false))
+        {
+            checks++;
+        }
+
+        var unauthorizedHandler = new UnauthorizedExceptionHandler(loggerFactory.CreateLogger<SocketExceptionHandler>());
+        var unauthorizedContext = CreateExceptionHandlerContext();
+        if (await unauthorizedHandler.TryHandleAsync(unauthorizedContext, new UnauthorizedException("unauthorized"), cancellationToken).ConfigureAwait(false) &&
+            unauthorizedContext.Response.StatusCode == StatusCodes.Status401Unauthorized &&
+            !await unauthorizedHandler.TryHandleAsync(CreateExceptionHandlerContext(), new InvalidOperationException("ignored"), cancellationToken).ConfigureAwait(false))
+        {
+            checks++;
+        }
+
+        var notFoundHandler = new NotFoundExceptionHandler(loggerFactory.CreateLogger<NotFoundExceptionHandler>());
+        var notFoundContext = CreateExceptionHandlerContext();
+        if (await notFoundHandler.TryHandleAsync(notFoundContext, new NotFoundException("missing"), cancellationToken).ConfigureAwait(false) &&
+            notFoundContext.Response.StatusCode == StatusCodes.Status404NotFound &&
+            !await notFoundHandler.TryHandleAsync(CreateExceptionHandlerContext(), new InvalidOperationException("ignored"), cancellationToken).ConfigureAwait(false))
+        {
+            checks++;
+        }
+
+        var validationHandler = new ValidationExceptionHandler(loggerFactory.CreateLogger<ValidationExceptionHandler>());
+        var validationContext = CreateExceptionHandlerContext();
+        if (await validationHandler.TryHandleAsync(validationContext, validationException, cancellationToken).ConfigureAwait(false) &&
+            validationContext.Response.StatusCode == 450 &&
+            !await validationHandler.TryHandleAsync(CreateExceptionHandlerContext(), new InvalidOperationException("ignored"), cancellationToken).ConfigureAwait(false))
+        {
+            checks++;
+        }
+
+        var socketHandler = new SocketExceptionHandler(loggerFactory.CreateLogger<SocketExceptionHandler>());
+        var socketContext = CreateExceptionHandlerContext();
+        if (await socketHandler.TryHandleAsync(socketContext, new SocketException((int)SocketError.HostNotFound), cancellationToken).ConfigureAwait(false) &&
+            socketContext.Response.StatusCode == StatusCodes.Status500InternalServerError &&
+            !await socketHandler.TryHandleAsync(CreateExceptionHandlerContext(), new InvalidOperationException("ignored"), cancellationToken).ConfigureAwait(false))
+        {
+            checks++;
+        }
+
+        var npgsqlHandler = new NpgsqlExceptionHandler(loggerFactory.CreateLogger<NpgsqlExceptionHandler>());
+        var npgsqlContext = CreateExceptionHandlerContext();
+        if (await npgsqlHandler.TryHandleAsync(
+                npgsqlContext,
+                new PostgresException("npgsql", "ERROR", "ERROR", PostgresErrorCodes.SerializationFailure),
+                cancellationToken).ConfigureAwait(false) &&
+            npgsqlContext.Response.StatusCode == StatusCodes.Status500InternalServerError &&
+            !await npgsqlHandler.TryHandleAsync(CreateExceptionHandlerContext(), new InvalidOperationException("ignored"), cancellationToken).ConfigureAwait(false))
+        {
+            checks++;
+        }
+
+        var generalHandler = new GeneralExceptionHandler(loggerFactory.CreateLogger<GeneralExceptionHandler>());
+        var generalContext = CreateExceptionHandlerContext();
+        if (await generalHandler.TryHandleAsync(generalContext, new Exception("general"), cancellationToken).ConfigureAwait(false) &&
+            generalContext.Response.StatusCode == StatusCodes.Status400BadRequest)
+        {
+            checks++;
+        }
+
+        await Task.Yield();
+        return checks;
+    }
+
+    private static async Task<int> RunCacheAbstractionsScenariosAsync(CancellationToken cancellationToken)
+    {
+        var checks = 0;
+
+        var defaultPolicy = new KyrolusCachePolicy(AbsoluteExpirationRelativeToNow: TimeSpan.FromMinutes(5), KeySuffix: "default");
+        var operationPolicy = new KyrolusCachePolicy(SlidingExpiration: TimeSpan.FromMinutes(2), KeySuffix: "operation");
+        var typePolicy = new KyrolusCachePolicy(NegativeCacheTtl: TimeSpan.FromSeconds(30), KeySuffix: "type");
+        var cachePolicyRegistry = new KyrolusCachePolicyRegistry()
+            .SetDefault(defaultPolicy)
+            .SetForOperation(KyrolusCacheOperation.Get, operationPolicy)
+            .SetForType<RuntimeCachePayload>(KyrolusCacheOperation.Get, typePolicy);
+
+        if (cachePolicyRegistry.GetPolicy(typeof(RuntimeCachePayload), KyrolusCacheOperation.Get)?.KeySuffix == "type" &&
+            cachePolicyRegistry.GetPolicy(typeof(string), KyrolusCacheOperation.Get)?.KeySuffix == "operation" &&
+            ReferenceEquals(cachePolicyRegistry.GetPolicy(typeof(int), KyrolusCacheOperation.Set), defaultPolicy) &&
+            KyrolusNullCachePolicyProvider.Instance.GetPolicy(typeof(RuntimeCachePayload), KyrolusCacheOperation.Remove) is null)
+        {
+            checks++;
+        }
+
+        ExpectThrows<ArgumentNullException>(() => _ = new KyrolusCachePolicyRegistry().SetDefault(null!));
+        checks++;
+
+        ExpectThrows<ArgumentNullException>(() => _ = new KyrolusCachePolicyRegistry().SetForOperation(KyrolusCacheOperation.Get, null!));
+        checks++;
+
+        ExpectThrows<ArgumentNullException>(() => _ = new KyrolusCachePolicyRegistry().SetForType<RuntimeCachePayload>(KyrolusCacheOperation.Get, null!));
+        checks++;
+
+        var repositoryDefault = new KyrolusCachePolicy(KeySuffix: "repo-default");
+        var repositoryOperation = new KyrolusCachePolicy(KeySuffix: "repo-operation");
+        var repositoryType = new KyrolusCachePolicy(KeySuffix: "repo-type");
+        var repositoryTenant = new KyrolusCachePolicy(KeySuffix: "repo-tenant");
+        var repositoryTenantOperation = new KyrolusCachePolicy(KeySuffix: "repo-tenant-operation");
+        var repositoryTenantType = new KyrolusCachePolicy(KeySuffix: "repo-tenant-type");
+        var repositoryRegistry = new KyrolusRepositoryCachePolicyRegistry()
+            .SetDefault(repositoryDefault)
+            .SetForOperation("get", repositoryOperation)
+            .SetForType<RuntimeCachePayload>("get", repositoryType)
+            .SetForTenant("tenant-a", repositoryTenant)
+            .SetForTenantOperation("tenant-a", "get", repositoryTenantOperation)
+            .SetForTenantType<RuntimeCachePayload>("tenant-a", "get", repositoryTenantType);
+
+        if ((await repositoryRegistry.GetPolicyAsync(new KyrolusRepositoryCachePolicyContext(typeof(RuntimeCachePayload), Operation: "get", TenantId: "tenant-a"), cancellationToken).ConfigureAwait(false))?.KeySuffix == "repo-tenant-type" &&
+            (await repositoryRegistry.GetPolicyAsync(new KyrolusRepositoryCachePolicyContext(typeof(string), Operation: "get", TenantId: "tenant-a"), cancellationToken).ConfigureAwait(false))?.KeySuffix == "repo-tenant-operation" &&
+            (await repositoryRegistry.GetPolicyAsync(new KyrolusRepositoryCachePolicyContext(typeof(string), Operation: "set", TenantId: "tenant-a"), cancellationToken).ConfigureAwait(false))?.KeySuffix == "repo-tenant" &&
+            (await repositoryRegistry.GetPolicyAsync(new KyrolusRepositoryCachePolicyContext(typeof(RuntimeCachePayload), Operation: "get"), cancellationToken).ConfigureAwait(false))?.KeySuffix == "repo-type" &&
+            (await repositoryRegistry.GetPolicyAsync(new KyrolusRepositoryCachePolicyContext(typeof(string), Operation: "get"), cancellationToken).ConfigureAwait(false))?.KeySuffix == "repo-operation" &&
+            (await repositoryRegistry.GetPolicyAsync(new KyrolusRepositoryCachePolicyContext(typeof(string), Operation: "set"), cancellationToken).ConfigureAwait(false))?.KeySuffix == "repo-default" &&
+            await KyrolusNoopRepositoryCachePolicyProvider.Instance.GetPolicyAsync(new KyrolusRepositoryCachePolicyContext(typeof(string), Operation: "set"), cancellationToken).ConfigureAwait(false) is null)
+        {
+            checks++;
+        }
+
+        ExpectThrows<ArgumentNullException>(() => _ = new KyrolusRepositoryCachePolicyRegistry().SetDefault(null!));
+        checks++;
+
+        ExpectThrows<ArgumentException>(() => _ = new KyrolusRepositoryCachePolicyRegistry().SetForOperation(" ", repositoryOperation));
+        checks++;
+
+        ExpectThrows<ArgumentException>(() => _ = new KyrolusRepositoryCachePolicyRegistry().SetForTenant(" ", repositoryTenant));
+        checks++;
+
+        ExpectThrows<ArgumentException>(() => _ = new KyrolusRepositoryCachePolicyRegistry().SetForTenantOperation("tenant", " ", repositoryTenantOperation));
+        checks++;
+
+        ExpectThrows<ArgumentException>(() => _ = new KyrolusRepositoryCachePolicyRegistry().SetForTenantType<RuntimeCachePayload>(" ", "get", repositoryTenantType));
+        checks++;
+
+        ExpectThrows<ArgumentNullException>(
+            () => _ = new KyrolusRepositoryCachePolicyRegistry().GetPolicyAsync(null!, cancellationToken).GetAwaiter().GetResult());
+        checks++;
+
+        var nullCacheProvider = NullCacheProvider.Instance;
+        await nullCacheProvider.SetAsync("set", new RuntimeCachePayload { Name = "value", Count = 1 }, TimeSpan.FromMinutes(1), cancellationToken).ConfigureAwait(false);
+        await nullCacheProvider.SetAsync("set-options", new RuntimeCachePayload { Name = "value", Count = 1 }, new KyrolusCacheEntryOptions(), cancellationToken).ConfigureAwait(false);
+        await nullCacheProvider.RemoveAsync("set", cancellationToken).ConfigureAwait(false);
+        await nullCacheProvider.RemoveKeysByPatternAsync("pattern*", cancellationToken).ConfigureAwait(false);
+        await nullCacheProvider.SetManyAsync(new[]
+        {
+            new KeyValuePair<string, RuntimeCachePayload>("one", new RuntimeCachePayload { Name = "one", Count = 1 })
+        }, TimeSpan.FromMinutes(1), cancellationToken).ConfigureAwait(false);
+        await nullCacheProvider.SetManyAsync(new[]
+        {
+            new KeyValuePair<string, RuntimeCachePayload>("one", new RuntimeCachePayload { Name = "one", Count = 1 })
+        }, new KyrolusCacheEntryOptions(), cancellationToken).ConfigureAwait(false);
+        await nullCacheProvider.RemoveManyAsync(["one"], cancellationToken).ConfigureAwait(false);
+        await nullCacheProvider.RemoveByTagAsync("tag", cancellationToken).ConfigureAwait(false);
+        var factoryCalls = 0;
+        var nullCacheValue = await nullCacheProvider.GetOrCreateAsync(
+            "factory",
+            _ =>
+            {
+                factoryCalls++;
+                return Task.FromResult(new RuntimeCachePayload { Name = "factory", Count = 2 });
+            },
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (await nullCacheProvider.GetAsync<RuntimeCachePayload>("missing", cancellationToken).ConfigureAwait(false) is null &&
+            !await nullCacheProvider.ExistsAsync("missing", cancellationToken).ConfigureAwait(false) &&
+            (await nullCacheProvider.GetManyAsync<RuntimeCachePayload>(["one", "two"], cancellationToken).ConfigureAwait(false)).Count == 0 &&
+            nullCacheValue.Name == "factory" &&
+            factoryCalls == 1)
+        {
+            checks++;
+        }
+
+        var observerContext = new KyrolusCacheObserverContext(
+            Key: "cache-key",
+            Operation: KyrolusCacheOperation.Get,
+            Observation: KyrolusCacheObservation.Hit,
+            ValueType: typeof(RuntimeCachePayload),
+            Duration: TimeSpan.FromMilliseconds(5),
+            Region: "runtime",
+            TenantId: "tenant-a",
+            Exception: null);
+        await KyrolusNullCacheObserver.Instance.OnObservationAsync(observerContext).ConfigureAwait(false);
+        if (observerContext.Operation == KyrolusCacheOperation.Get &&
+            observerContext.Observation == KyrolusCacheObservation.Hit &&
+            observerContext.ValueType == typeof(RuntimeCachePayload))
+        {
+            checks++;
+        }
+
+        var key = Encoding.UTF8.GetBytes("0123456789ABCDEF0123456789ABCDEF");
+        var iv = Encoding.UTF8.GetBytes("1234567890ABCDEF");
+        var payload = Encoding.UTF8.GetBytes("cache-payload");
+        var aesWithStaticIv = new KyrolusAesCachePayloadTransformer(key, iv);
+        var aesStaticEncrypted = aesWithStaticIv.Transform(payload);
+        var aesStaticRestored = aesWithStaticIv.Restore(aesStaticEncrypted);
+        var aesWithDynamicIv = new KyrolusAesCachePayloadTransformer(key);
+        var aesDynamicEncrypted = aesWithDynamicIv.Transform(payload);
+        var aesDynamicRestored = aesWithDynamicIv.Restore(aesDynamicEncrypted);
+        if (Encoding.UTF8.GetString(aesStaticRestored) == "cache-payload" &&
+            Encoding.UTF8.GetString(aesDynamicRestored) == "cache-payload" &&
+            aesDynamicEncrypted.Length > payload.Length)
+        {
+            checks++;
+        }
+
+        ExpectThrows<ArgumentNullException>(() => _ = new KyrolusAesCachePayloadTransformer(null!));
+        checks++;
+
+        ExpectThrows<ArgumentException>(() => _ = new KyrolusAesCachePayloadTransformer([1, 2, 3]));
+        checks++;
+
+        ExpectThrows<ArgumentException>(() => _ = new KyrolusAesCachePayloadTransformer(key, [1, 2, 3]));
+        checks++;
+
+        ExpectThrows<InvalidOperationException>(() => _ = aesWithDynamicIv.Restore([1, 2, 3]));
+        checks++;
+
+        var gzipTransformer = new KyrolusGzipCachePayloadTransformer(minSizeBytes: 8);
+        var shortPayload = Encoding.UTF8.GetBytes("short");
+        var longPayload = Encoding.UTF8.GetBytes(new string('x', 256));
+        var rawTransformed = gzipTransformer.Transform(shortPayload);
+        var compressedTransformed = gzipTransformer.Transform(longPayload);
+        var unknownHeaderPayload = new byte[] { (byte)'K', (byte)'Y', (byte)'C', (byte)'0', 9, 1, 2, 3 };
+        if (Encoding.UTF8.GetString(gzipTransformer.Restore(rawTransformed)) == "short" &&
+            Encoding.UTF8.GetString(gzipTransformer.Restore(compressedTransformed)) == new string('x', 256) &&
+            gzipTransformer.Restore(unknownHeaderPayload).SequenceEqual(unknownHeaderPayload) &&
+            gzipTransformer.Restore([(byte)'K', (byte)'Y', (byte)'C', (byte)'0']).Length == 4)
+        {
+            checks++;
+        }
+
+        ExpectThrows<ArgumentNullException>(() => _ = new KyrolusJsonContextCacheSerializer(null!));
+        checks++;
+
+        var serializer = new KyrolusJsonContextCacheSerializer(RuntimeCacheJsonContext.Default);
+        var serializedPayload = serializer.Serialize(new RuntimeCachePayload { Name = "serialized", Count = 3 });
+        var deserializedPayload = serializer.Deserialize<RuntimeCachePayload>(serializedPayload);
+        if (deserializedPayload?.Name == "serialized" &&
+            deserializedPayload.Count == 3)
+        {
+            checks++;
+        }
+
+        ExpectThrows<InvalidOperationException>(() => _ = serializer.Serialize(new RuntimeMissingCachePayload { Value = "missing" }));
+        checks++;
+
+        ExpectThrows<InvalidOperationException>(() => _ = serializer.Deserialize<RuntimeMissingCachePayload>(Encoding.UTF8.GetBytes("{}")));
+        checks++;
 
         await Task.Yield();
         return checks;
@@ -5400,6 +5878,35 @@ internal sealed class RuntimeStringLocalizer(IReadOnlyDictionary<string, string>
 
     public IStringLocalizer WithCulture(CultureInfo culture) => this;
 }
+
+internal sealed class RuntimeTypedStringLocalizer<T>(IReadOnlyDictionary<string, string> map) : IStringLocalizer<T>
+{
+    private readonly RuntimeStringLocalizer inner = new(map);
+
+    public LocalizedString this[string name] => inner[name];
+
+    public LocalizedString this[string name, params object[] arguments] => inner[name, arguments];
+
+    public IEnumerable<LocalizedString> GetAllStrings(bool includeParentCultures) => inner.GetAllStrings(includeParentCultures);
+
+    public IStringLocalizer WithCulture(CultureInfo culture) => this;
+}
+
+internal sealed class RuntimeExceptionResource;
+
+internal sealed class RuntimeCachePayload
+{
+    public string Name { get; init; } = string.Empty;
+    public int Count { get; init; }
+}
+
+internal sealed class RuntimeMissingCachePayload
+{
+    public string Value { get; init; } = string.Empty;
+}
+
+[JsonSerializable(typeof(RuntimeCachePayload))]
+internal sealed partial class RuntimeCacheJsonContext : JsonSerializerContext;
 
 internal sealed class RuntimeHostEnvironment(string environmentName) : IHostEnvironment
 {

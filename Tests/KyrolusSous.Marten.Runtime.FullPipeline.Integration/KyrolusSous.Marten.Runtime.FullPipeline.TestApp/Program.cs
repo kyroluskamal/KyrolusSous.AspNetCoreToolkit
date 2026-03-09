@@ -55,6 +55,7 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
+builder.Services.AddSingleton<KyrolusOpenApiOperationTransformer>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<MediatorRuntimeState>();
 builder.Services.AddKyrolusLogging(builder.Configuration);
@@ -634,6 +635,8 @@ martenMenuItemsRoutes.MapPost("/diagnostics/repository-runtime",
             "exception-handling-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunExceptionHandlingRuntimeAsync(
                 rootServiceProvider,
                 cancellationToken).ConfigureAwait(false)),
+            "cache-abstractions-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunCacheAbstractionsRuntimeAsync(
+                cancellationToken).ConfigureAwait(false)),
             "data-protection-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunDataProtectionRuntimeAsync(
                 tenantId,
                 cancellationToken).ConfigureAwait(false)),
@@ -799,6 +802,21 @@ app.MapGet("/api/diagnostics/secure", () => Results.Ok(new { status = "ok" }))
 app.MapGet("/api/diagnostics/exception", () =>
 {
     throw new KyrolusBadRequestException("Bad input", "Simulated failure");
+});
+
+app.MapGet("/api/diagnostics/exception/{kind}", (string kind) =>
+{
+    throw kind switch
+    {
+        "bad-request" => new KyrolusBadRequestException("Bad input", "Simulated failure"),
+        "not-found" => new KyrolusSous.ExceptionHandling.Abstractions.KyrolusNotFoundException("MenuItem", "42"),
+        "unauthorized" => new KyrolusUnauthorizedException("Unauthorized diagnostics request."),
+        "framework-unauthorized" => new UnauthorizedAccessException("Access denied."),
+        "timeout" => new TimeoutException("Timed out."),
+        "external" => new HttpRequestException("Upstream failure."),
+        "invalid-json" => new System.Text.Json.JsonException("Invalid JSON."),
+        _ => new InvalidOperationException($"Unknown diagnostics exception kind '{kind}'.")
+    };
 });
 
 app.UseHttpsRedirection();

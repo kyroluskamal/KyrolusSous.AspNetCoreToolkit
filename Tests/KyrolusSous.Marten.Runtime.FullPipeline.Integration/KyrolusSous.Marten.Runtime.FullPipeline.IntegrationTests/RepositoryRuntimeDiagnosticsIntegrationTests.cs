@@ -147,6 +147,13 @@ public sealed class RepositoryRuntimeDiagnosticsIntegrationTests(TestAppFactory 
             return;
         }
 
+        if (mode == "cache-abstractions-runtime")
+        {
+            payload.CacheAbstractionsChecks.ShouldNotBeNull();
+            payload.CacheAbstractionsChecks!.Value.ShouldBeGreaterThan(15);
+            return;
+        }
+
         if (mode == "data-protection-runtime")
         {
             payload.DataProtectionChecks.ShouldNotBeNull();
@@ -287,6 +294,7 @@ public sealed class RepositoryRuntimeDiagnosticsIntegrationTests(TestAppFactory 
         yield return ["endpointkit-core-runtime", HttpStatusCode.OK];
         yield return ["validation-runtime", HttpStatusCode.OK];
         yield return ["exception-handling-runtime", HttpStatusCode.OK];
+        yield return ["cache-abstractions-runtime", HttpStatusCode.OK];
         yield return ["data-protection-runtime", HttpStatusCode.OK];
         yield return ["redis-cache-runtime", HttpStatusCode.OK];
         yield return ["redis-fallback-runtime", HttpStatusCode.OK];

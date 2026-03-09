@@ -83,6 +83,47 @@ public sealed class OpenApiDocumentIntegrationTests(TestAppFactory factory) : IC
         schemas.EnumerateObject().Any().ShouldBeTrue(body);
     }
 
+    [Fact(DisplayName = "OpenAPI document endpoint - top-level tags include the MenuItems module")]
+    public async Task Openapi_document_endpoint_top_level_tags_include_the_menuitems_module()
+    {
+        using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("openapi-doc-tags"));
+        var (_, response, body) = await ResolveOpenApiDocumentAsync(client);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, body);
+        using var json = JsonDocument.Parse(body);
+        json.RootElement.TryGetProperty("tags", out var tags).ShouldBeTrue(body);
+        tags.EnumerateArray()
+            .Select(tag => tag.GetProperty("name").GetString())
+            .ShouldContain("MenuItems", StringComparer.Ordinal);
+    }
+
+    [Fact(DisplayName = "OpenAPI document endpoint - shared request schemas expose batch and query contracts")]
+    public async Task Openapi_document_endpoint_shared_request_schemas_expose_batch_and_query_contracts()
+    {
+        using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("openapi-doc-contract-schemas"));
+        var (_, response, body) = await ResolveOpenApiDocumentAsync(client);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, body);
+        using var json = JsonDocument.Parse(body);
+        var schemas = json.RootElement
+            .GetProperty("components")
+            .GetProperty("schemas");
+
+        var batchRequestProperties = schemas
+            .GetProperty("KyrolusBatchRequestOfMenuItemAndGuid")
+            .GetProperty("properties");
+        batchRequestProperties.TryGetProperty("operations", out _).ShouldBeTrue(body);
+        batchRequestProperties.TryGetProperty("atomic", out _).ShouldBeTrue(body);
+        batchRequestProperties.TryGetProperty("returnData", out _).ShouldBeTrue(body);
+
+        var queryRequestProperties = schemas
+            .GetProperty("QueryRequest")
+            .GetProperty("properties");
+        queryRequestProperties.TryGetProperty("filters", out _).ShouldBeTrue(body);
+        queryRequestProperties.TryGetProperty("orderBy", out _).ShouldBeTrue(body);
+        queryRequestProperties.TryGetProperty("includeGraph", out _).ShouldBeTrue(body);
+    }
+
     public static IEnumerable<object[]> UnknownDocumentCases()
     {
         yield return ["/openapi/unknown.json"];
