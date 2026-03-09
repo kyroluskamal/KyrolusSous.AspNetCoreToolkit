@@ -157,21 +157,21 @@ public sealed class RepositoryRuntimeDiagnosticsIntegrationTests(TestAppFactory 
         if (mode == "data-protection-runtime")
         {
             payload.DataProtectionChecks.ShouldNotBeNull();
-            payload.DataProtectionChecks!.Value.ShouldBeGreaterThan(25);
+            payload.DataProtectionChecks!.Value.ShouldBeGreaterThan(40);
             return;
         }
 
         if (mode == "redis-cache-runtime")
         {
             payload.RedisCacheChecks.ShouldNotBeNull();
-            payload.RedisCacheChecks!.Value.ShouldBeGreaterThan(15);
+            payload.RedisCacheChecks!.Value.ShouldBeGreaterThan(30);
             return;
         }
 
         if (mode == "redis-fallback-runtime")
         {
             payload.RedisFallbackChecks.ShouldNotBeNull();
-            payload.RedisFallbackChecks!.Value.ShouldBeGreaterThan(15);
+            payload.RedisFallbackChecks!.Value.ShouldBeGreaterThan(20);
             return;
         }
 

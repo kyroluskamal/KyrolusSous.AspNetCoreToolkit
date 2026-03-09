@@ -12,6 +12,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using KyrolusSous.Caching.Abstractions;
+using KyrolusSous.CQRS.ExceptionHandling;
 using KyrolusSous.CQRS.Marten.Command.Add;
 using KyrolusSous.CQRS.Marten.Command.Patch;
 using KyrolusSous.CQRS.Marten.Command.Remove;
@@ -28,6 +29,7 @@ using KyrolusSous.ExceptionHandling.Abstractions.Interfaces;
 using KyrolusSous.ExceptionHandling.Abstractions.Models;
 using KyrolusSous.ExceptionHandling.Abstractions.Exceptions;
 using KyrolusSous.ExceptionHandling.ClasesAndHelpers;
+using KyrolusSous.ExceptionHandling.FluentValidation;
 using KyrolusSous.ExceptionHandling.Handlers;
 using KyrolusSous.ExceptionHandling.Interfaces;
 using KyrolusSous.ExceptionHandling.Mapping;
@@ -3979,11 +3981,57 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
+        if (KyrolusValidationProfiles.All.Count == 4 &&
+            KyrolusValidationProfiles.All.Select(profile => profile.Name).SequenceEqual(["Create", "Update", "UiHints", "BackgroundJobs"]) &&
+            KyrolusValidationProfiles.Create.Context.RuleSets!.Single() == "Create" &&
+            KyrolusValidationProfiles.Update.Context.RuleSets!.Single() == "Update" &&
+            KyrolusValidationProfiles.UiHints.Context.Groups!.Single() == "UiHints" &&
+            KyrolusValidationProfiles.BackgroundJobs.Context.RuleSets!.Single() == "BackgroundJobs" &&
+            KyrolusValidationProfiles.UiHints.Context.MinimumSeverity == KyrolusValidationSeverity.Info)
+        {
+            checks++;
+        }
+
+        Dictionary<string, object?>? activityTags = null;
+        ActivityStatusCode? activityStatus = null;
+        string? activityStatusDescription = null;
+        using var activityListener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == "Kyrolus.Validation.Diagnostics",
+            Sample = static (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            SampleUsingParentId = static (ref ActivityCreationOptions<string> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activity =>
+            {
+                activityTags = activity.TagObjects.ToDictionary(tag => tag.Key, tag => tag.Value, StringComparer.Ordinal);
+                activityStatus = activity.Status;
+                activityStatusDescription = activity.StatusDescription;
+            }
+        };
+        ActivitySource.AddActivityListener(activityListener);
+
         var tracer = new KyrolusValidationActivityTracer("Kyrolus.Validation.Diagnostics");
-        var traceContext = new KyrolusValidationTraceContext(typeof(RuntimeValidationProbeRequest), KyrolusValidationContext.Default);
+        var traceContext = new KyrolusValidationTraceContext(
+            typeof(RuntimeValidationProbeRequest),
+            new KyrolusValidationContext(
+                RuleSets: ["strict"],
+                Groups: ["api"],
+                MinimumSeverity: KyrolusValidationSeverity.Warning));
         var traceState = tracer.Start(traceContext);
         await tracer.StopAsync(traceContext, traceState, firstFailures, new InvalidOperationException("validation-trace"), cancellationToken).ConfigureAwait(false);
-        checks++;
+        if (traceState is Activity &&
+            activityTags is not null &&
+            Equals(activityTags["validation.request_type"], typeof(RuntimeValidationProbeRequest).FullName) &&
+            Equals(activityTags["validation.rule_sets"], "strict") &&
+            Equals(activityTags["validation.groups"], "api") &&
+            Equals(activityTags["validation.min_severity"], KyrolusValidationSeverity.Warning.ToString()) &&
+            Equals(activityTags["validation.failures"], firstFailures.Count) &&
+            Equals(activityTags["validation.max_severity"], firstFailures.Max(failure => failure.Severity).ToString()) &&
+            Equals(activityTags["validation.exception"], typeof(InvalidOperationException).FullName) &&
+            activityStatus == ActivityStatusCode.Error &&
+            activityStatusDescription == "validation-trace")
+        {
+            checks++;
+        }
 
         var noopTracer = KyrolusNoopValidationTracer.Instance;
         var noopState = noopTracer.Start(traceContext);
@@ -4386,6 +4434,67 @@ public static partial class RepositoryRuntimeDiagnostics
         {
             checks++;
         }
+
+        var fluentExceptionServices = new ServiceCollection();
+        if (ReferenceEquals(fluentExceptionServices, fluentExceptionServices.AddKyrolusFluentValidationExceptionHandling()) &&
+            fluentExceptionServices.Any(descriptor =>
+                descriptor.ServiceType == typeof(IKyrolusExceptionMapper) &&
+                descriptor.ImplementationType == typeof(KyrolusFluentValidationExceptionMapper)))
+        {
+            checks++;
+        }
+
+        var fluentExceptionMapper = new KyrolusFluentValidationExceptionMapper();
+        var fluentContext = new KyrolusErrorContext("trace-fluent", null, null, null, null, null, CultureInfo.InvariantCulture);
+        var fluentException = new ValidationException("Validation failed",
+        [
+            new ValidationFailure("Name", "Name is required")
+            {
+                ErrorCode = "NotEmptyValidator"
+            }
+        ]);
+        if (fluentExceptionMapper.Order == -50 &&
+            fluentExceptionMapper.TryMap(fluentException, fluentContext, out var fluentMapping) &&
+            fluentMapping.StatusCode == HttpStatusCode.BadRequest &&
+            fluentMapping.Error.Code == KyrolusErrorCodes.Validation &&
+            fluentMapping.Error.Errors is { Count: 1 } &&
+            fluentMapping.Error.Errors[0].Field == "Name" &&
+            fluentMapping.Error.Errors[0].Code == "NotEmptyValidator" &&
+            !fluentExceptionMapper.TryMap(new InvalidOperationException("not-fluent"), fluentContext, out _))
+        {
+            checks++;
+        }
+
+        var cqrsExceptionServices = new ServiceCollection();
+        if (ReferenceEquals(cqrsExceptionServices, cqrsExceptionServices.AddKyrolusCqrsExceptionHandling()) &&
+            cqrsExceptionServices.Any(descriptor =>
+                descriptor.ServiceType == typeof(KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusPipelineBehavior<,>) &&
+                descriptor.ImplementationType == typeof(KyrolusExceptionMappingBehavior<,>)))
+        {
+            checks++;
+        }
+
+        var cqrsMappedBehavior = new KyrolusExceptionMappingBehavior<string, string>(
+            [new RuntimeMappedCqrsExceptionMapper<string, InvalidOperationException>("mapped-response")]);
+        if (await cqrsMappedBehavior.Handle(
+                "mapped-request",
+                () => Task.FromException<string>(new InvalidOperationException("mapped")),
+                cancellationToken).ConfigureAwait(false) == "mapped-response" &&
+            await cqrsMappedBehavior.Handle(
+                "pass-through",
+                () => Task.FromResult("ok"),
+                cancellationToken).ConfigureAwait(false) == "ok")
+        {
+            checks++;
+        }
+
+        await ExpectThrowsAsync<ArgumentException>(
+            () => cqrsMappedBehavior.Handle(
+                "unmapped-request",
+                () => Task.FromException<string>(new ArgumentException("unmapped")),
+                cancellationToken),
+            "CQRS exception mapping behavior should rethrow exceptions that no mapper handles.").ConfigureAwait(false);
+        checks++;
 
         using var dictionaryLocalizationProvider = new ServiceCollection()
             .AddKyrolusExceptionHandlingLocalization(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -6052,6 +6161,23 @@ internal sealed class RuntimeNoopLinkGenerator : LinkGenerator
         LinkOptions? options = null)
     {
         return null;
+    }
+}
+
+internal sealed class RuntimeMappedCqrsExceptionMapper<TResponse, TException>(TResponse response)
+    : IKyrolusExceptionMapper<TResponse>
+    where TException : Exception
+{
+    public bool TryMap(Exception exception, out TResponse mappedResponse)
+    {
+        if (exception is TException)
+        {
+            mappedResponse = response;
+            return true;
+        }
+
+        mappedResponse = default!;
+        return false;
     }
 }
 

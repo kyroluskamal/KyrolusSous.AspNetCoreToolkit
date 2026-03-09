@@ -97,6 +97,45 @@ public static partial class RepositoryRuntimeDiagnostics
             Tags = ["tag-main", "tag-extra"]
         };
 
+        var emptyMany = await cache.GetManyAsync<string>(Array.Empty<string>(), cancellationToken).ConfigureAwait(false);
+        Require(emptyMany.Count == 0, "Redis cache runtime should return an empty dictionary for empty batched reads.", ref checks);
+        await cache.SetManyAsync(Array.Empty<KeyValuePair<string, string>>(), entryOptions, cancellationToken).ConfigureAwait(false);
+        await cache.RemoveManyAsync(Array.Empty<string>(), cancellationToken).ConfigureAwait(false);
+        checks++;
+
+        var extensionServices = new ServiceCollection();
+        extensionServices.AddSingleton<IKyrolusCachePayloadTransformer>(new RuntimePrefixPayloadTransformer("registered|"));
+        extensionServices.AddKyrolusRedisCacheProvider(redisConnectionString, providerOptions =>
+        {
+            providerOptions.KeyPrefix = $"{prefix}:extension";
+            providerOptions.DefaultRegion = region;
+            providerOptions.DefaultTenantId = tenantId;
+            providerOptions.RequireRegion = true;
+            providerOptions.RequireTenantId = true;
+            providerOptions.EnableEncryption = true;
+            providerOptions.EncryptionKeyBase64 = Convert.ToBase64String(CreateDiagnosticsAesKey());
+            providerOptions.EncryptionIvBase64 = Convert.ToBase64String(CreateDiagnosticsIv());
+            providerOptions.CircuitBreaker = new KyrolusRedisCircuitBreakerOptions { Enabled = false };
+        });
+        extensionServices.AddKyrolusRedisInvalidationBus(invalidationOptions =>
+        {
+            invalidationOptions.Channel = $"{channel}:services";
+        });
+        using var extensionProvider = extensionServices.BuildServiceProvider();
+        var extensionCache = extensionProvider.GetRequiredService<ICacheProvider>();
+        var extensionSerializer = extensionProvider.GetRequiredService<IKyrolusCacheSerializer>();
+        Require(
+            extensionCache is RedisCacheProvider &&
+            extensionSerializer is not KyrolusJsonCacheSerializer &&
+            extensionProvider.GetRequiredService<IKyrolusCacheInvalidationBus>() is KyrolusRedisInvalidationBus,
+            "Redis cache runtime should support connection-string registrations, serializer transformers, and invalidation-bus services.",
+            ref checks);
+        await extensionCache.SetAsync("extension-alpha", "payload", entryOptions, cancellationToken).ConfigureAwait(false);
+        Require(
+            await extensionCache.GetAsync<string>("extension-alpha", cancellationToken).ConfigureAwait(false) == "payload",
+            "Redis cache runtime should round-trip entries through the connection-string registration path.",
+            ref checks);
+
         var largePayload = new string('Z', 2048);
         await cache.SetAsync("alpha", largePayload, entryOptions, cancellationToken).ConfigureAwait(false);
         var storedPayload = await primaryConnection.GetDatabase().StringGetAsync(
@@ -222,6 +261,230 @@ public static partial class RepositoryRuntimeDiagnostics
             "Redis cache runtime should invalidate entries by pattern using server scan.",
             ref checks);
 
+        var disabledPatternOptions = CreateRedisRuntimeOptions($"{prefix}:disabled", region, tenantId);
+        disabledPatternOptions.PatternRemovalStrategy = KyrolusRedisPatternRemovalStrategy.Disabled;
+        var disabledPatternCache = BuildRedisCacheProvider(primaryConnection, disabledPatternOptions);
+        await disabledPatternCache.SetAsync("disabled-one", "1", TimeSpan.FromMinutes(1), cancellationToken).ConfigureAwait(false);
+        await disabledPatternCache.RemoveKeysByPatternAsync("disabled-*", cancellationToken).ConfigureAwait(false);
+        Require(
+            await disabledPatternCache.ExistsAsync("disabled-one", cancellationToken).ConfigureAwait(false),
+            "Redis cache runtime should leave keys untouched when pattern invalidation is disabled.",
+            ref checks);
+
+        var policyRegistry = new KyrolusCachePolicyRegistry()
+            .SetForType<string>(KyrolusCacheOperation.GetOrCreate, new KyrolusCachePolicy(
+                SlidingExpiration: TimeSpan.FromSeconds(20),
+                NegativeCacheTtl: TimeSpan.FromSeconds(20),
+                Jitter: TimeSpan.FromMilliseconds(1)));
+        var policyOptions = CreateRedisRuntimeOptions($"{prefix}:policy", region, tenantId);
+        var policyCache = BuildRedisCacheProvider(primaryConnection, policyOptions, policyProvider: policyRegistry);
+        var policyFactoryCalls = 0;
+        var policyFirst = await policyCache.GetOrCreateAsync<string?>(
+            "policy-null",
+            _ =>
+            {
+                policyFactoryCalls++;
+                return Task.FromResult<string?>(null);
+            },
+            new KyrolusCacheEntryOptions
+            {
+                Region = region,
+                TenantId = tenantId
+            },
+            cancellationToken).ConfigureAwait(false);
+        var policySecond = await policyCache.GetOrCreateAsync<string?>(
+            "policy-null",
+            _ =>
+            {
+                policyFactoryCalls++;
+                return Task.FromResult<string?>("other");
+            },
+            new KyrolusCacheEntryOptions
+            {
+                Region = region,
+                TenantId = tenantId
+            },
+            cancellationToken).ConfigureAwait(false);
+        Require(
+            policyFirst is null &&
+            policySecond is null &&
+            policyFactoryCalls == 1,
+            "Redis cache runtime should merge cache policies and reuse negative GetOrCreate hits.",
+            ref checks);
+
+        var noLockOptions = CreateRedisRuntimeOptions($"{prefix}:nolock", region, tenantId);
+        noLockOptions.LockStrategy = KyrolusRedisLockStrategy.Disabled;
+        var noLockCache = BuildRedisCacheProvider(primaryConnection, noLockOptions);
+        var noLockCalls = 0;
+        var noLockFirst = await noLockCache.GetOrCreateAsync(
+            "no-lock",
+            _ =>
+            {
+                noLockCalls++;
+                return Task.FromResult("no-lock-value");
+            },
+            new KyrolusCacheEntryOptions
+            {
+                Region = region,
+                TenantId = tenantId,
+                SlidingExpiration = TimeSpan.FromSeconds(20)
+            },
+            cancellationToken).ConfigureAwait(false);
+        var noLockSecond = await noLockCache.GetOrCreateAsync(
+            "no-lock",
+            _ =>
+            {
+                noLockCalls++;
+                return Task.FromResult("other");
+            },
+            new KyrolusCacheEntryOptions
+            {
+                Region = region,
+                TenantId = tenantId,
+                SlidingExpiration = TimeSpan.FromSeconds(20)
+            },
+            cancellationToken).ConfigureAwait(false);
+        Require(
+            noLockFirst == "no-lock-value" &&
+            noLockSecond == "no-lock-value" &&
+            noLockCalls == 1,
+            "Redis cache runtime should support lock-free GetOrCreate paths.",
+            ref checks);
+
+        var simpleLockOptions = CreateRedisRuntimeOptions($"{prefix}:simple", region, tenantId);
+        simpleLockOptions.LockStrategy = KyrolusRedisLockStrategy.Simple;
+        var simpleLockCache = BuildRedisCacheProvider(primaryConnection, simpleLockOptions);
+        Require(
+            await simpleLockCache.GetOrCreateAsync(
+                "simple-lock",
+                _ => Task.FromResult("simple-lock-value"),
+                new KyrolusCacheEntryOptions
+                {
+                    Region = region,
+                    TenantId = tenantId
+                },
+                cancellationToken).ConfigureAwait(false) == "simple-lock-value",
+            "Redis cache runtime should support the simple lock strategy for GetOrCreate.",
+            ref checks);
+
+        var retryOptions = CreateRedisRuntimeOptions($"{prefix}:retry", region, tenantId);
+        retryOptions.LockStrategy = KyrolusRedisLockStrategy.Simple;
+        retryOptions.LockWait = TimeSpan.FromMilliseconds(60);
+        retryOptions.LockRetryDelay = TimeSpan.FromMilliseconds(5);
+        retryOptions.LockBackoffMode = KyrolusRedisLockBackoffMode.Exponential;
+        retryOptions.LockBackoffMultiplier = 2;
+        retryOptions.LockMaxRetryDelay = TimeSpan.FromMilliseconds(10);
+        var retryFactory = new KyrolusCacheKeyFactory(retryOptions.KeyPrefix);
+        var retryResolvedKey = retryFactory.BuildKey("contended", region, tenantId);
+        var retryLockKey = $"{retryResolvedKey}:lock";
+        await primaryConnection.GetDatabase().StringSetAsync(
+            retryLockKey,
+            "held",
+            retryOptions.LockWait!.Value + TimeSpan.FromSeconds(1),
+            flags: CommandFlags.None).ConfigureAwait(false);
+        var retryCache = BuildRedisCacheProvider(primaryConnection, retryOptions);
+        var retryCalls = 0;
+        Require(
+            await retryCache.GetOrCreateAsync(
+                "contended",
+                _ =>
+                {
+                    retryCalls++;
+                    return Task.FromResult("retry-value");
+                },
+                new KyrolusCacheEntryOptions
+                {
+                    Region = region,
+                    TenantId = tenantId
+                },
+                cancellationToken).ConfigureAwait(false) == "retry-value" &&
+            retryCalls == 1,
+            "Redis cache runtime should fall back after contended locks with exponential backoff.",
+            ref checks);
+
+        var warningMessages = new ConcurrentQueue<string>();
+        var warningPrefix = $"{prefix}:warning";
+        _ = BuildRedisCacheProvider(primaryConnection, new KyrolusRedisCacheOptions
+        {
+            KeyPrefix = warningPrefix,
+            DefaultRegion = region,
+            DefaultTenantId = tenantId,
+            RequireRegion = true,
+            RequireTenantId = true,
+            WarningSink = warningMessages.Enqueue,
+            CircuitBreaker = new KyrolusRedisCircuitBreakerOptions { Enabled = false }
+        });
+        _ = BuildRedisCacheProvider(primaryConnection, new KyrolusRedisCacheOptions
+        {
+            KeyPrefix = warningPrefix,
+            DefaultRegion = region,
+            DefaultTenantId = tenantId,
+            RequireRegion = true,
+            RequireTenantId = true,
+            EnableCompression = true,
+            CompressionThresholdBytes = 1,
+            WarningSink = warningMessages.Enqueue,
+            CircuitBreaker = new KyrolusRedisCircuitBreakerOptions { Enabled = false }
+        });
+        Require(
+            warningMessages.Any(message => message.Contains("Cache payload settings changed", StringComparison.Ordinal)),
+            "Redis cache runtime should warn when payload settings change for an existing keyspace.",
+            ref checks);
+
+        var disabledCircuitBreaker = CreateRedisCircuitBreaker(new KyrolusRedisCircuitBreakerOptions { Enabled = false });
+        Require(
+            TryEnterRedisCircuitBreaker(disabledCircuitBreaker, out var disabledRetryAfter) &&
+            disabledRetryAfter is null,
+            "Redis cache runtime should allow immediate access when the circuit breaker is disabled.",
+            ref checks);
+        ReportRedisCircuitBreakerSuccess(disabledCircuitBreaker);
+        ReportRedisCircuitBreakerFailure(disabledCircuitBreaker);
+        checks++;
+
+        var openCircuitBreaker = CreateRedisCircuitBreaker(new KyrolusRedisCircuitBreakerOptions
+        {
+            Enabled = true,
+            FailureThreshold = 2,
+            OpenDuration = TimeSpan.FromMilliseconds(40),
+            HalfOpenSuccesses = 2,
+            MaxOpenDuration = TimeSpan.FromMilliseconds(100)
+        });
+        Require(TryEnterRedisCircuitBreaker(openCircuitBreaker, out _) , "Redis cache runtime should allow entry before the circuit opens.", ref checks);
+        ReportRedisCircuitBreakerFailure(openCircuitBreaker);
+        Require(TryEnterRedisCircuitBreaker(openCircuitBreaker, out _), "Redis cache runtime should stay closed before the failure threshold is reached.", ref checks);
+        ReportRedisCircuitBreakerFailure(openCircuitBreaker);
+        Require(
+            !TryEnterRedisCircuitBreaker(openCircuitBreaker, out var openRetryAfter) &&
+            openRetryAfter > TimeSpan.Zero,
+            "Redis cache runtime should reject entry while the circuit is open.",
+            ref checks);
+        await Task.Delay(60, cancellationToken).ConfigureAwait(false);
+        Require(TryEnterRedisCircuitBreaker(openCircuitBreaker, out _), "Redis cache runtime should re-enter after the open window elapses.", ref checks);
+        ReportRedisCircuitBreakerSuccess(openCircuitBreaker);
+        Require(
+            TryEnterRedisCircuitBreaker(openCircuitBreaker, out _),
+            "Redis cache runtime should allow half-open probes after the open window elapses.",
+            ref checks);
+        ReportRedisCircuitBreakerSuccess(openCircuitBreaker);
+        Require(TryEnterRedisCircuitBreaker(openCircuitBreaker, out _), "Redis cache runtime should close again after enough half-open successes.", ref checks);
+
+        var clampedCircuitBreaker = CreateRedisCircuitBreaker(new KyrolusRedisCircuitBreakerOptions
+        {
+            Enabled = true,
+            FailureThreshold = 1,
+            OpenDuration = TimeSpan.Zero,
+            MaxOpenDuration = TimeSpan.FromMilliseconds(15),
+            BackoffMultiplier = 0.5
+        });
+        ReportRedisCircuitBreakerFailure(clampedCircuitBreaker);
+        Require(
+            !TryEnterRedisCircuitBreaker(clampedCircuitBreaker, out var clampedRetryAfter) &&
+            clampedRetryAfter <= TimeSpan.FromMilliseconds(15),
+            "Redis cache runtime should clamp circuit-breaker open duration when max duration is configured.",
+            ref checks);
+        await Task.Delay(20, cancellationToken).ConfigureAwait(false);
+        Require(TryEnterRedisCircuitBreaker(clampedCircuitBreaker, out _), "Redis cache runtime should recover after the clamped open duration.", ref checks);
+
         var healthReport = await healthChecks.CheckHealthAsync(
             registration => string.Equals(registration.Name, "diag-redis-cache", StringComparison.Ordinal),
             cancellationToken).ConfigureAwait(false);
@@ -281,6 +544,7 @@ public static partial class RepositoryRuntimeDiagnostics
         await nearCacheA.SetAsync("shared", "near", TimeSpan.FromMinutes(1), cancellationToken).ConfigureAwait(false);
         var nearShared = await nearCacheB.GetAsync<string>("shared", cancellationToken).ConfigureAwait(false);
         Require(nearShared == "near", "Redis near cache runtime should populate L1 from Redis.", ref checks);
+        Require(await nearCacheA.ExistsAsync("shared", cancellationToken).ConfigureAwait(false), "Redis near cache runtime should delegate existence checks to Redis.", ref checks);
 
         await nearCacheA.RemoveAsync("shared", cancellationToken).ConfigureAwait(false);
         var nearInvalidated = await AwaitConditionAsync(
@@ -301,6 +565,11 @@ public static partial class RepositoryRuntimeDiagnostics
             nearMany["bulk-a"] == "1" && nearMany["bulk-b"] == "2",
             "Redis near cache runtime should support bulk reads.",
             ref checks);
+        var nearManyCached = await nearCacheB.GetManyAsync<string>(["bulk-a", "bulk-b"], cancellationToken).ConfigureAwait(false);
+        Require(
+            nearManyCached["bulk-a"] == "1" && nearManyCached["bulk-b"] == "2",
+            "Redis near cache runtime should serve repeated bulk reads from L1 without Redis misses.",
+            ref checks);
 
         await nearCacheA.RemoveKeysByPatternAsync("bulk-*", cancellationToken).ConfigureAwait(false);
         var nearPatternInvalidated = await AwaitConditionAsync(
@@ -310,6 +579,149 @@ public static partial class RepositoryRuntimeDiagnostics
             TimeSpan.FromSeconds(5),
             cancellationToken).ConfigureAwait(false);
         Require(nearPatternInvalidated, "Redis near cache runtime should invalidate peer caches by pattern.", ref checks);
+
+        var nearEntryOptions = new KyrolusCacheEntryOptions
+        {
+            Region = "diag-near",
+            TenantId = tenantId,
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1),
+            Tags = ["near-tag"]
+        };
+        await nearCacheA.SetAsync("tagged", "value", nearEntryOptions, cancellationToken).ConfigureAwait(false);
+        Require(
+            await nearCacheB.GetAsync<string>("tagged", cancellationToken).ConfigureAwait(false) == "value",
+            "Redis near cache runtime should honor the options-based set overload.",
+            ref checks);
+        await nearCacheA.RemoveByTagAsync("near-tag", cancellationToken).ConfigureAwait(false);
+        var nearTagInvalidated = await AwaitConditionAsync(
+            async () => await nearCacheA.GetAsync<string>("tagged", cancellationToken).ConfigureAwait(false) is null,
+            TimeSpan.FromSeconds(5),
+            cancellationToken).ConfigureAwait(false);
+        Require(nearTagInvalidated, "Redis near cache runtime should invalidate local L1 entries by tag.", ref checks);
+
+        await nearCacheA.SetManyAsync(
+            [
+                new KeyValuePair<string, string>("group-a", "10"),
+                new KeyValuePair<string, string>("group-b", "20")
+            ],
+            new KyrolusCacheEntryOptions
+            {
+                Region = "diag-near",
+                TenantId = tenantId,
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1),
+                Tags = ["near-group"]
+            },
+            cancellationToken).ConfigureAwait(false);
+        var grouped = await nearCacheB.GetManyAsync<string>(["group-a", "group-b"], cancellationToken).ConfigureAwait(false);
+        Require(
+            grouped["group-a"] == "10" && grouped["group-b"] == "20",
+            "Redis near cache runtime should honor the options-based bulk set overload.",
+            ref checks);
+        await nearCacheA.RemoveManyAsync(["group-a", "group-b"], cancellationToken).ConfigureAwait(false);
+        var nearManyInvalidated = await AwaitConditionAsync(
+            async () =>
+                await nearCacheB.GetAsync<string>("group-a", cancellationToken).ConfigureAwait(false) is null &&
+                await nearCacheB.GetAsync<string>("group-b", cancellationToken).ConfigureAwait(false) is null,
+            TimeSpan.FromSeconds(5),
+            cancellationToken).ConfigureAwait(false);
+        Require(nearManyInvalidated, "Redis near cache runtime should invalidate peer caches after bulk removes.", ref checks);
+
+        await nearCacheA.SetAsync<string?>(
+            "nullable",
+            null,
+            new KyrolusCacheEntryOptions
+            {
+                Region = "diag-near",
+                TenantId = tenantId,
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
+            },
+            cancellationToken).ConfigureAwait(false);
+        var nullableMany = await nearCacheB.GetManyAsync<string?>(["nullable"], cancellationToken).ConfigureAwait(false);
+        var nullableCached = await nearCacheB.GetAsync<string?>("nullable", cancellationToken).ConfigureAwait(false);
+        Require(
+            nullableMany["nullable"] is null &&
+            nullableCached is null,
+            "Redis near cache runtime should cache existing null payloads in L1.",
+            ref checks);
+
+        var nearFactoryCalls = 0;
+        var nearFactoryFirst = await nearCacheA.GetOrCreateAsync(
+            "near-factory",
+            _ =>
+            {
+                nearFactoryCalls++;
+                return Task.FromResult("factory-near");
+            },
+            new KyrolusCacheEntryOptions
+            {
+                Region = "diag-near",
+                TenantId = tenantId,
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
+            },
+            cancellationToken).ConfigureAwait(false);
+        var nearFactorySecond = await nearCacheA.GetOrCreateAsync(
+            "near-factory",
+            _ =>
+            {
+                nearFactoryCalls++;
+                return Task.FromResult("other");
+            },
+            new KyrolusCacheEntryOptions
+            {
+                Region = "diag-near",
+                TenantId = tenantId,
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
+            },
+            cancellationToken).ConfigureAwait(false);
+        Require(
+            nearFactoryFirst == "factory-near" &&
+            nearFactorySecond == "factory-near" &&
+            nearFactoryCalls == 1,
+            "Redis near cache runtime should satisfy repeated GetOrCreate requests from L1.",
+            ref checks);
+
+        var emptyNearMany = await nearCacheA.GetManyAsync<string>(Array.Empty<string>(), cancellationToken).ConfigureAwait(false);
+        Require(emptyNearMany.Count == 0, "Redis near cache runtime should return an empty dictionary for empty batched reads.", ref checks);
+
+        using var noPublishNearProvider = BuildNearCacheServiceProvider(
+            primaryConnection,
+            $"{nearPrefix}:nopublish",
+            tenantId,
+            $"{nearChannel}:nopublish",
+            configureNearCache: nearOptions =>
+            {
+                nearOptions.PublishInvalidations = false;
+                nearOptions.SubscribeInvalidations = false;
+            });
+        var noPublishNearCache = noPublishNearProvider.GetRequiredService<ICacheProvider>();
+        await noPublishNearCache.SetAsync("nopublish", "value", TimeSpan.FromMinutes(1), cancellationToken).ConfigureAwait(false);
+        await noPublishNearCache.RemoveAsync("nopublish", cancellationToken).ConfigureAwait(false);
+        await noPublishNearCache.RemoveKeysByPatternAsync("nopublish*", cancellationToken).ConfigureAwait(false);
+        checks++;
+
+        var nearConnectionStringServices = new ServiceCollection();
+        nearConnectionStringServices.AddKyrolusRedisNearCache(
+            redisConnectionString,
+            configure: cacheOptions =>
+            {
+                cacheOptions.KeyPrefix = $"{nearPrefix}:connection";
+                cacheOptions.DefaultRegion = "diag-near";
+                cacheOptions.DefaultTenantId = tenantId;
+                cacheOptions.RequireRegion = true;
+                cacheOptions.RequireTenantId = true;
+                cacheOptions.CircuitBreaker = new KyrolusRedisCircuitBreakerOptions { Enabled = false };
+            },
+            configureNearCache: nearOptions =>
+            {
+                nearOptions.InvalidationChannel = $"{nearChannel}:connection";
+                nearOptions.PublishInvalidations = false;
+                nearOptions.SubscribeInvalidations = false;
+            });
+        using var nearConnectionStringProvider = nearConnectionStringServices.BuildServiceProvider();
+        Require(
+            nearConnectionStringProvider.GetRequiredService<ICacheProvider>() is KyrolusRedisNearCacheProvider,
+            "Redis near cache runtime should support the connection-string registration overload.",
+            ref checks);
 
         Require(logEntries.Any(entry => entry.Contains("Cache", StringComparison.Ordinal)), "Redis cache runtime should emit cache observer logs.", ref checks);
 
@@ -385,6 +797,22 @@ public static partial class RepositoryRuntimeDiagnostics
             "Redis fallback runtime should fall back to the provided factory.",
             ref checks);
         Require(observer.ErrorObservations.Count >= 6, "Redis fallback runtime should observe graceful fallback errors.", ref checks);
+        Require(
+            (await gracefulCache.GetManyAsync<string>(Array.Empty<string>(), cancellationToken).ConfigureAwait(false)).Count == 0,
+            "Redis fallback runtime should preserve empty batched reads when Redis is unavailable.",
+            ref checks);
+        await gracefulCache.SetAsync("options-alpha", "value", new KyrolusCacheEntryOptions
+        {
+            Region = "fallback",
+            TenantId = "fallback-tenant"
+        }, cancellationToken).ConfigureAwait(false);
+        await gracefulCache.SetManyAsync(Array.Empty<KeyValuePair<string, string>>(), new KyrolusCacheEntryOptions
+        {
+            Region = "fallback",
+            TenantId = "fallback-tenant"
+        }, cancellationToken).ConfigureAwait(false);
+        await gracefulCache.RemoveManyAsync(Array.Empty<string>(), cancellationToken).ConfigureAwait(false);
+        checks++;
 
         var throwingOptions = new KyrolusRedisCacheOptions
         {
@@ -744,11 +1172,66 @@ public static partial class RepositoryRuntimeDiagnostics
         throw new InvalidOperationException("Unable to create a disconnected Redis connection for fallback diagnostics.");
     }
 
+    private static RedisCacheProvider BuildRedisCacheProvider(
+        IConnectionMultiplexer connection,
+        KyrolusRedisCacheOptions options,
+        IKyrolusCacheObserver? observer = null,
+        IKyrolusCachePolicyProvider? policyProvider = null,
+        IKyrolusCacheSerializer? serializer = null)
+    {
+        return new RedisCacheProvider(
+            connection,
+            new KyrolusRedisCacheDependencies(
+                serializer ?? new KyrolusJsonCacheSerializer(),
+                new KyrolusCacheKeyFactory(options.KeyPrefix),
+                options,
+                observer,
+                policyProvider));
+    }
+
+    private static KyrolusRedisCacheOptions CreateRedisRuntimeOptions(
+        string prefix,
+        string region,
+        string tenantId)
+    {
+        return new KyrolusRedisCacheOptions
+        {
+            KeyPrefix = prefix,
+            DefaultRegion = region,
+            DefaultTenantId = tenantId,
+            RequireRegion = true,
+            RequireTenantId = true,
+            CircuitBreaker = new KyrolusRedisCircuitBreakerOptions { Enabled = false }
+        };
+    }
+
+    private static object CreateRedisCircuitBreaker(KyrolusRedisCircuitBreakerOptions options)
+    {
+        var type = typeof(KyrolusRedisCacheOptions).Assembly.GetType("KyrolusSous.Caching.Redis.KyrolusRedisCircuitBreaker", throwOnError: true)!;
+        return Activator.CreateInstance(type, options)!;
+    }
+
+    private static bool TryEnterRedisCircuitBreaker(object circuitBreaker, out TimeSpan? retryAfter)
+    {
+        var arguments = new object?[] { null };
+        var tryEnter = (bool)circuitBreaker.GetType().GetMethod("TryEnter")!.Invoke(circuitBreaker, arguments)!;
+        retryAfter = arguments[0] is TimeSpan value ? value : null;
+        return tryEnter;
+    }
+
+    private static void ReportRedisCircuitBreakerSuccess(object circuitBreaker)
+        => circuitBreaker.GetType().GetMethod("ReportSuccess")!.Invoke(circuitBreaker, null);
+
+    private static void ReportRedisCircuitBreakerFailure(object circuitBreaker)
+        => circuitBreaker.GetType().GetMethod("ReportFailure")!.Invoke(circuitBreaker, null);
+
     private static ServiceProvider BuildNearCacheServiceProvider(
         IConnectionMultiplexer connection,
         string prefix,
         string tenantId,
-        string channel)
+        string channel,
+        Action<KyrolusRedisCacheOptions>? configureCache = null,
+        Action<KyrolusRedisNearCacheOptions>? configureNearCache = null)
     {
         var services = new ServiceCollection();
         services.AddSingleton(connection);
@@ -761,6 +1244,7 @@ public static partial class RepositoryRuntimeDiagnostics
                 options.RequireRegion = true;
                 options.RequireTenantId = true;
                 options.CircuitBreaker = new KyrolusRedisCircuitBreakerOptions { Enabled = false };
+                configureCache?.Invoke(options);
             },
             configureNearCache: options =>
             {
@@ -768,6 +1252,7 @@ public static partial class RepositoryRuntimeDiagnostics
                 options.DefaultL1Ttl = TimeSpan.FromMinutes(1);
                 options.PublishInvalidations = true;
                 options.SubscribeInvalidations = true;
+                configureNearCache?.Invoke(options);
             });
         return services.BuildServiceProvider();
     }
@@ -973,6 +1458,15 @@ internal sealed class RedisRuntimeObserver : IKyrolusCacheObserver
 
         return Task.CompletedTask;
     }
+}
+
+internal sealed class RuntimePrefixPayloadTransformer(string prefix) : IKyrolusCachePayloadTransformer
+{
+    private readonly byte[] prefixBytes = Encoding.UTF8.GetBytes(prefix);
+
+    public byte[] Transform(byte[] payload) => [.. prefixBytes, .. payload];
+
+    public byte[] Restore(byte[] payload) => payload[prefixBytes.Length..];
 }
 
 internal sealed class RuntimeCacheLoggerProvider(ConcurrentQueue<string> entries) : ILoggerProvider

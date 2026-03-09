@@ -37,6 +37,12 @@ public static partial class RepositoryRuntimeDiagnostics
             provider.GetRequiredService<IKyrolusNotificationPublishStrategy>() is KyrolusParallelNotificationPublishStrategy,
             "Parallel notification strategy should be the default.",
             ref checks);
+        var notificationServices = new ServiceCollection();
+        Require(
+            ReferenceEquals(notificationServices, notificationServices.UseKyrolusMediatorSequentialNotifications()) &&
+            ReferenceEquals(notificationServices, notificationServices.UseKyrolusMediatorParallelNotifications()),
+            "Mediator notification strategy helpers should return the same service collection for chaining.",
+            ref checks);
 
         var queryRequestTypeName = typeof(MediatorProbeQuery).Name;
 
@@ -52,6 +58,8 @@ public static partial class RepositoryRuntimeDiagnostics
             state.Events.Contains($"outer-after:{queryRequestTypeName}"),
             "Query pipeline markers should all execute.",
             ref checks);
+        var queryAsRequest = await sender.SendAsync<string>((IKyrolusRequest<string>)new MediatorProbeQuery("request-query"), cancellationToken).ConfigureAwait(false);
+        Require(queryAsRequest == "query:request-query", "Sender should route IKyrolusRequest queries through the query overload.", ref checks);
 
         var commandResult = await sender.SendAsync<int>((IKyrolusRequest<int>)new MediatorResponseCommand(21), cancellationToken).ConfigureAwait(false);
         Require(commandResult == 42, "Command requests with responses should route correctly.", ref checks);
@@ -71,6 +79,15 @@ public static partial class RepositoryRuntimeDiagnostics
 
         Require(streamValues.SequenceEqual([1, 2, 3]), "Stream handlers should yield the expected sequence.", ref checks);
         Require(state.StreamRequestCount == 1, "Stream request handler should execute once.", ref checks);
+        Require(
+            ContainsSequence(
+                state.Events,
+                $"stream-outer-before:{typeof(MediatorStreamRequest).Name}",
+                $"stream-inner-before:{typeof(MediatorStreamRequest).Name}",
+                $"stream-inner-after:{typeof(MediatorStreamRequest).Name}",
+                $"stream-outer-after:{typeof(MediatorStreamRequest).Name}"),
+            "Stream pipeline behaviors should execute in deterministic order.",
+            ref checks);
 
         await mediator.PublishAsync(new MediatorSuccessNotification("notify"), cancellationToken).ConfigureAwait(false);
         Require(
@@ -123,6 +140,19 @@ public static partial class RepositoryRuntimeDiagnostics
         await ExpectThrowsAsync<InvalidOperationException>(
             () => sender.SendAsync<string>((IKyrolusRequest<string>)new MediatorExplicitRequest("explicit"), cancellationToken),
             "Explicit-only handlers should fail reflection dispatch.").ConfigureAwait(false);
+        checks++;
+        await ExpectThrowsAsync<InvalidOperationException>(
+            () => sender.SendAsync<string>((IKyrolusRequest<string>)new MediatorThrowingRequest("throw"), cancellationToken),
+            "Sender should unwrap request handler exceptions from reflection dispatch.").ConfigureAwait(false);
+        checks++;
+        await ExpectThrowsAsync<InvalidOperationException>(
+            async () =>
+            {
+                await foreach (var _ in sender.StreamAsync(new MediatorThrowingStreamRequest(1), cancellationToken).ConfigureAwait(false))
+                {
+                }
+            },
+            "Sender should unwrap stream pipeline exceptions from reflection dispatch.").ConfigureAwait(false);
         checks++;
 
         await ExpectThrowsAsync<ArgumentNullException>(
@@ -223,6 +253,23 @@ public static partial class RepositoryRuntimeDiagnostics
         }
 
         return expected.Length == 0;
+    }
+
+    internal static async IAsyncEnumerable<TResponse> WrapAsync<TResponse>(
+        IAsyncEnumerable<TResponse> source,
+        MediatorRuntimeState state,
+        string beforeMarker,
+        string afterMarker,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        state.Events.Enqueue(beforeMarker);
+
+        await foreach (var item in source.WithCancellation(cancellationToken).ConfigureAwait(false))
+        {
+            yield return item;
+        }
+
+        state.Events.Enqueue(afterMarker);
     }
 }
 
@@ -326,6 +373,49 @@ internal sealed class MediatorStreamRequestHandler(MediatorRuntimeState state) :
             cancellationToken.ThrowIfCancellationRequested();
         }
     }
+}
+
+[PipelineOrder(-1500)]
+internal sealed class MediatorOuterStreamBehavior<TRequest, TResponse>(MediatorRuntimeState state) : IKyrolusStreamPipelineBehavior<TRequest, TResponse>
+{
+    public IAsyncEnumerable<TResponse> Handle(TRequest request, StreamHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+        => RepositoryRuntimeDiagnostics.WrapAsync(
+            next(cancellationToken),
+            state,
+            $"stream-outer-before:{typeof(TRequest).Name}",
+            $"stream-outer-after:{typeof(TRequest).Name}",
+            cancellationToken);
+}
+
+[PipelineOrder(500)]
+internal sealed class MediatorInnerStreamBehavior<TRequest, TResponse>(MediatorRuntimeState state) : IKyrolusStreamPipelineBehavior<TRequest, TResponse>
+{
+    public IAsyncEnumerable<TResponse> Handle(TRequest request, StreamHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+        => RepositoryRuntimeDiagnostics.WrapAsync(
+            next(cancellationToken),
+            state,
+            $"stream-inner-before:{typeof(TRequest).Name}",
+            $"stream-inner-after:{typeof(TRequest).Name}",
+            cancellationToken);
+}
+
+internal sealed record MediatorThrowingRequest(string Value) : IKyrolusRequest<string>;
+
+internal sealed class MediatorThrowingRequestHandler : IKyrolusRequestHandler<MediatorThrowingRequest, string>
+{
+    public Task<string> Handle(MediatorThrowingRequest request, CancellationToken cancellationToken)
+        => throw new InvalidOperationException($"request:{request.Value}");
+}
+
+internal sealed record MediatorThrowingStreamRequest(int Count) : IKyrolusStreamRequest<int>;
+
+internal sealed class MediatorThrowingStreamBehavior : IKyrolusStreamPipelineBehavior<MediatorThrowingStreamRequest, int>
+{
+    public IAsyncEnumerable<int> Handle(
+        MediatorThrowingStreamRequest request,
+        StreamHandlerDelegate<int> next,
+        CancellationToken cancellationToken)
+        => throw new InvalidOperationException($"stream:{request.Count}");
 }
 
 internal sealed record MediatorSuccessNotification(string Value) : INotification;

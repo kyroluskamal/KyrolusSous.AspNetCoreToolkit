@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -47,7 +48,10 @@ public static partial class RepositoryRuntimeDiagnostics
 
             builder.DataProtection.PersistKeysToFileSystem(new DirectoryInfo(keyDirectory));
             builder
-                .AddKyrolusDataProtectionInstrumentation()
+                .AddKyrolusDataProtectionInstrumentation(options =>
+                {
+                    options.EnableMetrics = false;
+                })
                 .AddKyrolusDataProtectionHealthChecks(name: "diag-dataprotection")
                 .AddKyrolusDataProtectionTenantIsolation(options =>
                 {
@@ -58,6 +62,12 @@ public static partial class RepositoryRuntimeDiagnostics
                 .AddKyrolusDataProtectionFileKeyEscrowEncrypted(encryptedEscrowDirectory, options =>
                 {
                     options.EncryptionKeyBase64 = Convert.ToBase64String(keyBytes);
+                })
+                .AddKyrolusDataProtectionKeyCleanup(options =>
+                {
+                    options.Interval = TimeSpan.FromMilliseconds(20);
+                    options.DeleteExpiredKeys = true;
+                    options.DeleteRevokedKeys = true;
                 })
                 .AddKyrolusDataProtectionKeyRingRefreshHooks(options =>
                 {
@@ -71,6 +81,8 @@ public static partial class RepositoryRuntimeDiagnostics
 
             var runtimeOptions = provider.GetRequiredService<IOptions<KyrolusDataProtectionOptions>>().Value;
             var tenantOptions = provider.GetRequiredService<IOptions<KyrolusDataProtectionTenantOptions>>().Value;
+            var instrumentationOptions = provider.GetRequiredService<IOptions<KyrolusDataProtectionInstrumentationOptions>>().Value;
+            var cleanupOptions = provider.GetRequiredService<IOptions<KyrolusDataProtectionKeyCleanupOptions>>().Value;
             var keyManager = provider.GetRequiredService<IKyrolusDataProtectionKeyManager>();
             var repository = provider.GetRequiredService<IKyrolusDataProtectionKeyRepository>();
             var protectorFactory = provider.GetRequiredService<IKyrolusDataProtectorFactory>();
@@ -80,16 +92,29 @@ public static partial class RepositoryRuntimeDiagnostics
             var healthChecks = provider.GetRequiredService<HealthCheckService>();
             var decoratedKeyManager = provider.GetRequiredService<IKeyManager>();
             var instanceId = provider.GetRequiredService<KyrolusDataProtectionInstanceId>();
+            var hostedServices = provider.GetServices<IHostedService>().ToArray();
 
             Require(runtimeOptions.ApplicationName == "repository-runtime-dataprotection", "ApplicationName should match.", ref checks);
             Require(runtimeOptions.DefaultKeyLifetime == TimeSpan.FromDays(14), "Default key lifetime should match.", ref checks);
             Require(runtimeOptions.AutoGenerateKeys == false, "AutoGenerateKeys should match.", ref checks);
             Require(tenantOptions.UseTenantPrefix, "Tenant prefix should be enabled.", ref checks);
             Require(tenantOptions.PurposePrefix == "tenant-scope", "Tenant prefix should match.", ref checks);
+            Require(!instrumentationOptions.EnableMetrics, "Instrumentation options should honor runtime configuration.", ref checks);
+            Require(
+                cleanupOptions.Enabled &&
+                cleanupOptions.Interval == TimeSpan.FromMilliseconds(20),
+                "Cleanup options should honor runtime configuration.",
+                ref checks);
             Require(decoratedKeyManager is KyrolusKeyManagerRefreshDecorator, "IKeyManager should be decorated.", ref checks);
             Require(protectorFactory is KyrolusInstrumentedDataProtectorFactory, "Protector factory should be instrumented.", ref checks);
             Require(instanceId.Value == "diag-instance", "Configured instance id should be preserved.", ref checks);
             Require(instrumentation is not null, "Instrumentation should resolve.", ref checks);
+            Require(
+                hostedServices.OfType<KyrolusDataProtectionKeyCleanupService>().Any() &&
+                hostedServices.OfType<KyrolusDataProtectionKeyRingRefreshService>().Any() &&
+                hostedServices.OfType<KyrolusKeyRingRefreshNotifierListener>().Any(),
+                "Runtime data protection should register hosted services for cleanup and key-ring refresh.",
+                ref checks);
 
             var activationDate = DateTimeOffset.UtcNow.AddMinutes(-5);
             var createdKey = await keyManager.CreateKeyAsync(activationDate, TimeSpan.FromDays(5), cancellationToken).ConfigureAwait(false);
@@ -159,6 +184,13 @@ public static partial class RepositoryRuntimeDiagnostics
 
             await backupService.ExportToDirectoryAsync(backupDirectory, cancellationToken).ConfigureAwait(false);
             Require(Directory.EnumerateFiles(backupDirectory, "*.xml").Any(), "Backup export should write files.", ref checks);
+            var importRepository = new RecordingDataProtectionKeyRepository();
+            var importBackupService = new KyrolusDataProtectionKeyBackupService(importRepository);
+            await importBackupService.ImportFromDirectoryAsync(backupDirectory, cancellationToken).ConfigureAwait(false);
+            Require(
+                importRepository.ImportedDocuments.Count > 0,
+                "Backup import should replay exported key documents into the target repository.",
+                ref checks);
             checks++;
 
             ExpectThrows<ArgumentException>(
@@ -206,6 +238,58 @@ public static partial class RepositoryRuntimeDiagnostics
                         KeyProtection = new KyrolusKeyProtectionOptions { Kind = KyrolusKeyProtectionKind.Dpapi }
                     }).Failed,
                 "Validator should honor DPAPI platform rules.",
+                ref checks);
+
+            if (OperatingSystem.IsWindows())
+            {
+                var dpapiServices = new ServiceCollection();
+                dpapiServices.AddLogging();
+                _ = dpapiServices.AddKyrolusDataProtection(options =>
+                {
+                    options.ApplicationName = "dpapi-protection";
+                    options.KeyProtection = new KyrolusKeyProtectionOptions
+                    {
+                        Kind = KyrolusKeyProtectionKind.Dpapi,
+                        UseMachineStore = false
+                    };
+                });
+                checks++;
+            }
+            else
+            {
+                ExpectThrows<PlatformNotSupportedException>(
+                    () =>
+                    {
+                        var dpapiServices = new ServiceCollection();
+                        dpapiServices.AddLogging();
+                        _ = dpapiServices.AddKyrolusDataProtection(options =>
+                        {
+                            options.ApplicationName = "dpapi-protection";
+                            options.KeyProtection = new KyrolusKeyProtectionOptions
+                            {
+                                Kind = KyrolusKeyProtectionKind.Dpapi
+                            };
+                        });
+                    },
+                    "DPAPI protection should reject unsupported platforms.",
+                    ref checks);
+            }
+
+            ExpectThrows<InvalidOperationException>(
+                () =>
+                {
+                    var missingThumbprintServices = new ServiceCollection();
+                    missingThumbprintServices.AddLogging();
+                    _ = missingThumbprintServices.AddKyrolusDataProtection(options =>
+                    {
+                        options.ApplicationName = "certificate-thumbprint";
+                        options.KeyProtection = new KyrolusKeyProtectionOptions
+                        {
+                            Kind = KyrolusKeyProtectionKind.Certificate
+                        };
+                    });
+                },
+                "Certificate protection should require a thumbprint at registration time.",
                 ref checks);
 
             ExpectThrows<InvalidOperationException>(
@@ -331,35 +415,53 @@ public static partial class RepositoryRuntimeDiagnostics
             }
             checks++;
 
+            var unsupportedCleanupService = new KyrolusDataProtectionKeyCleanupService(
+                new RuntimeRefreshKeyManager(Array.Empty<IKey>(), CancellationToken.None),
+                new StaticOptionsMonitor<KyrolusDataProtectionKeyCleanupOptions>(new KyrolusDataProtectionKeyCleanupOptions
+                {
+                    Enabled = true,
+                    DeleteExpiredKeys = true,
+                    DeleteRevokedKeys = true,
+                    Interval = TimeSpan.Zero
+                }),
+                cleanupLogger);
+            await ((Task)cleanupOnceMethod.Invoke(unsupportedCleanupService, [new KyrolusDataProtectionKeyCleanupOptions
+            {
+                Enabled = true,
+                DeleteExpiredKeys = true,
+                DeleteRevokedKeys = true,
+                Interval = TimeSpan.Zero
+            }, cancellationToken])!).ConfigureAwait(false);
+            checks++;
+
             var innerKeyManagerField = decoratedKeyManager.GetType().GetField("inner", BindingFlags.Instance | BindingFlags.NonPublic);
             if (innerKeyManagerField?.GetValue(decoratedKeyManager) is IKeyManager innerKeyManager)
             {
                 var canDeleteKeys = innerKeyManager is IDeletableKeyManager deletable && deletable.CanDeleteKeys;
-                var cleanupService = new KyrolusDataProtectionKeyCleanupService(
-                    innerKeyManager,
-                    new StaticOptionsMonitor<KyrolusDataProtectionKeyCleanupOptions>(new KyrolusDataProtectionKeyCleanupOptions
-                    {
-                        Enabled = true,
-                        DeleteRevokedKeys = true,
-                        RevokedKeyGracePeriod = TimeSpan.Zero,
-                        DeleteExpiredKeys = false,
-                        Interval = TimeSpan.Zero
-                    }),
-                    cleanupLogger);
-                await ((Task)cleanupOnceMethod.Invoke(cleanupService, [new KyrolusDataProtectionKeyCleanupOptions
+                var expiredKey = await keyManager.CreateKeyAsync(DateTimeOffset.UtcNow.AddDays(-30), TimeSpan.FromDays(1), cancellationToken).ConfigureAwait(false);
+                var revokedKey = await keyManager.CreateKeyAsync(DateTimeOffset.UtcNow.AddDays(-20), TimeSpan.FromDays(10), cancellationToken).ConfigureAwait(false);
+                await keyManager.RevokeKeyAsync(revokedKey.KeyId, "cleanup", cancellationToken).ConfigureAwait(false);
+                var cleanupOptionsValue = new KyrolusDataProtectionKeyCleanupOptions
                 {
                     Enabled = true,
                     DeleteRevokedKeys = true,
                     RevokedKeyGracePeriod = TimeSpan.Zero,
-                    DeleteExpiredKeys = false,
+                    DeleteExpiredKeys = true,
+                    ExpiredKeyGracePeriod = TimeSpan.Zero,
                     Interval = TimeSpan.Zero
-                    }, cancellationToken])!).ConfigureAwait(false);
+                };
+                var cleanupService = new KyrolusDataProtectionKeyCleanupService(
+                    innerKeyManager,
+                    new StaticOptionsMonitor<KyrolusDataProtectionKeyCleanupOptions>(cleanupOptionsValue),
+                    cleanupLogger);
+                var preCleanupDocuments = await repository.ExportAsync(cancellationToken).ConfigureAwait(false);
+                await ((Task)cleanupOnceMethod.Invoke(cleanupService, [cleanupOptionsValue, cancellationToken])!).ConfigureAwait(false);
 
                 var postCleanupDocuments = await repository.ExportAsync(cancellationToken).ConfigureAwait(false);
                 Require(
                     canDeleteKeys
-                        ? postCleanupDocuments.Count <= documentsAfterImport.Count
-                        : postCleanupDocuments.Count == documentsAfterImport.Count,
+                        ? postCleanupDocuments.Count <= preCleanupDocuments.Count
+                        : postCleanupDocuments.Count == preCleanupDocuments.Count,
                     "Cleanup service should not increase the persisted key set.",
                     ref checks);
             }
@@ -547,6 +649,20 @@ internal sealed class DataProtectionRuntimeNotifier : IKyrolusKeyRingRefreshNoti
     {
         ArgumentNullException.ThrowIfNull(handler);
         return Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+    }
+}
+
+internal sealed class RecordingDataProtectionKeyRepository : IKyrolusDataProtectionKeyRepository
+{
+    public List<KyrolusDataProtectionKeyDocument> ImportedDocuments { get; } = [];
+
+    public Task<IReadOnlyList<KyrolusDataProtectionKeyDocument>> ExportAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<KyrolusDataProtectionKeyDocument>>(ImportedDocuments);
+
+    public Task ImportAsync(IEnumerable<KyrolusDataProtectionKeyDocument> documents, CancellationToken cancellationToken = default)
+    {
+        ImportedDocuments.AddRange(documents);
+        return Task.CompletedTask;
     }
 }
 
