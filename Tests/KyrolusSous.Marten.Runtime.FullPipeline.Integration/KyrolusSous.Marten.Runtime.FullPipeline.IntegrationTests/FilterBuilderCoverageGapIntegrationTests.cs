@@ -128,12 +128,20 @@ public sealed class FilterBuilderCoverageGapIntegrationTests(TestAppFactory fact
         yield return ["updatedat-between-invalid", "UpdatedAt between [invalid,{updatedAtMaxIso}]", false, HttpStatusCode.BadRequest, (int?)null, "could not be converted to DateTimeOffset"];
         yield return ["quoted-escape-eq", "Name=='Al\\'pha'", false, HttpStatusCode.OK, 1, null];
         yield return ["list-quoted-escape-in", "Name in ['Al\\'pha','Beta']", false, HttpStatusCode.OK, 2, null];
+        yield return ["name-eq-case-insensitive", "Name=='alpha'", true, HttpStatusCode.OK, 1, null];
+        yield return ["name-in-case-insensitive", "Name in [alpha,beta]", true, HttpStatusCode.OK, 2, null];
+        yield return ["price-between-braces", "Price between {10,26}", false, HttpStatusCode.OK, 3, null];
+        yield return ["missing-value", "Name eq", false, HttpStatusCode.BadRequest, (int?)null, "Value is required."];
     }
 
     public static IEnumerable<object[]> OrderFilterTemplateCases()
     {
         yield return ["paymentids-any-guid", "PaymentIds any [{order1PaymentId}]", false, HttpStatusCode.OK, 1, null];
         yield return ["paymentarray-any-guid", "PaymentArrayIds any [{order2PaymentId}]", false, HttpStatusCode.OK, 1, null];
+        yield return ["paymentset-any-guid", "PaymentSetIds any [{order2PaymentId}]", false, HttpStatusCode.OK, 1, null];
+        yield return ["paymentid-notnull", "PaymentId notnull", false, HttpStatusCode.OK, 2, null];
+        yield return ["paymentid-isnull", "PaymentId isnull", false, HttpStatusCode.OK, 0, null];
+        yield return ["paymentid-in-null-or-guid", "PaymentId in [null,{order1PaymentId}]", false, HttpStatusCode.OK, 1, null];
         yield return ["lines-any-nested", "Lines any Quantity>2", false, HttpStatusCode.OK, 1, null];
         yield return ["lines-all-nested", "Lines all Quantity>0", false, HttpStatusCode.OK, 0, null];
         yield return ["tags-any-case-sensitive", "Tags any [HighQty1]", false, HttpStatusCode.OK, 1, null];
@@ -146,6 +154,7 @@ public sealed class FilterBuilderCoverageGapIntegrationTests(TestAppFactory fact
         yield return ["businessdate-neq-angle", "BusinessDate<>{order1BusinessDate}", false, HttpStatusCode.OK, 1, null];
         yield return ["businesstime-lt-alias", "BusinessTime lt {order2BusinessTime}", false, HttpStatusCode.OK, 1, null];
         yield return ["businesstime-lte-alias", "BusinessTime lte {order1BusinessTime}", false, HttpStatusCode.OK, 1, null];
+        yield return ["businesstime-between-wide", "BusinessTime between [{order1BusinessTime},{order2BusinessTime}]", false, HttpStatusCode.OK, 2, null];
         yield return ["businessdate-invalid", "BusinessDate==not-a-date", false, HttpStatusCode.BadRequest, (int?)null, "could not be converted to DateOnly"];
         yield return ["businesstime-invalid", "BusinessTime==not-a-time", false, HttpStatusCode.BadRequest, (int?)null, "could not be converted to TimeOnly"];
     }
@@ -158,6 +167,7 @@ public sealed class FilterBuilderCoverageGapIntegrationTests(TestAppFactory fact
         yield return ["isnull-on-value-type", new[] { new FilterClausePayload("Price", "isnull", null) }, HttpStatusCode.BadRequest, (int?)null, "does not allow null values"];
         yield return ["updatedat-isnull", new[] { new FilterClausePayload("UpdatedAt", "isnull", null) }, HttpStatusCode.OK, 3, null];
         yield return ["updatedat-notnull", new[] { new FilterClausePayload("UpdatedAt", "notnull", null) }, HttpStatusCode.OK, 1, null];
+        yield return ["price-between", new[] { new FilterClausePayload("Price", "between", "10,15") }, HttpStatusCode.OK, 2, null];
     }
 
     private static async Task<MenuSeedContext> SeedMenuItemsAsync(HttpClient client)

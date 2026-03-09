@@ -105,7 +105,7 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
     [Theory(DisplayName = "Marten query helper - menu diagnostics request matrix covers success and failure paths")]
     [MemberData(nameof(MenuQueryRequestCases))]
     public async Task Query_helper_menu_diagnostics_request_matrix_covers_success_and_failure_paths(
-        QueryHelperRequest request,
+        QueryHelperRequest? request,
         HttpStatusCode expectedStatus,
         int? expectedCount)
     {
@@ -302,6 +302,8 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
 
     public static IEnumerable<object[]> MenuQueryRequestCases()
     {
+        yield return [null, HttpStatusCode.OK, 3];
+        yield return [new QueryHelperRequest(), HttpStatusCode.OK, 3];
         yield return [new QueryHelperRequest(Filters: [new QueryHelperFilter("Category", "=", "Main")]), HttpStatusCode.OK, 2];
         yield return [new QueryHelperRequest(Filters: [new QueryHelperFilter("Category", "<>", "Main")]), HttpStatusCode.OK, 1];
         yield return [new QueryHelperRequest(Filters: [new QueryHelperFilter("Price", ">=", "26")]), HttpStatusCode.OK, 2];
@@ -419,13 +421,18 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return MenuBurstCase("name-in-pipe", [new("Name", "in", "Alpha|Cola")], HttpStatusCode.OK, 2);
         yield return MenuBurstCase("name-in-comma", [new("Name", "in", "Alpha,Cola")], HttpStatusCode.OK, 2);
         yield return MenuBurstCase("name-in-quoted", [new("Name", "in", "\"Alpha\"|\"Cola\"")], HttpStatusCode.OK, 2);
+        yield return MenuBurstCase("name-in-single-quoted", [new("Name", "in", "'Alpha'|'Cola'")], HttpStatusCode.OK, 2);
+        yield return MenuBurstCase("name-in-quoted-with-spaces", [new("Name", "in", "  \"Alpha\"  |  \"Cola\"  ")], HttpStatusCode.OK, 2);
+        yield return MenuBurstCase("category-in-single-quoted", [new("Category", "in", "'Main'")], HttpStatusCode.OK, 2);
         yield return MenuBurstCase("price-in-pipe", [new("Price", "in", "10|26|40")], HttpStatusCode.OK, 3);
         yield return MenuBurstCase("price-in-comma", [new("Price", "in", "10,26")], HttpStatusCode.OK, 2);
+        yield return MenuBurstCase("price-in-pipe-with-spaces", [new("Price", "in", " 10 | 26 ")], HttpStatusCode.OK, 2);
         yield return MenuBurstCase("updatedat-in-with-null", [new("UpdatedAt", "in", "{updatedAtIso}|null")], HttpStatusCode.OK, 3);
         yield return MenuBurstCase("updatedat-in-single", [new("UpdatedAt", "in", "{updatedAtIso}")], HttpStatusCode.OK, 1);
         yield return MenuBurstCase("price-between-dotdot", [new("Price", "between", "10..26")], HttpStatusCode.OK, 2);
         yield return MenuBurstCase("price-between-pipe", [new("Price", "between", "10|26")], HttpStatusCode.OK, 2);
         yield return MenuBurstCase("price-between-comma", [new("Price", "between", "10,26")], HttpStatusCode.OK, 2);
+        yield return MenuBurstCase("price-between-comma-with-spaces", [new("Price", "between", " 10 , 26 ")], HttpStatusCode.OK, 2);
         yield return MenuBurstCase("updatedat-between-dotdot", [new("UpdatedAt", "between", "{updatedAtIso}..{updatedAtIso}")], HttpStatusCode.OK, 1);
         yield return MenuBurstCase("createdat-between-dotdot", [new("CreatedAt", "between", "2000-01-01T00:00:00Z..2100-01-01T00:00:00Z")], HttpStatusCode.OK, 3);
         yield return MenuBurstCase("createdat-between-pipe", [new("CreatedAt", "between", "2000-01-01T00:00:00Z|2100-01-01T00:00:00Z")], HttpStatusCode.OK, 3);
@@ -514,12 +521,25 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return OrderBurstCase("total-between-pipe", [new("Total", "between", "10|40")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("total-in-pipe", [new("Total", "in", "10|40|78")], HttpStatusCode.OK, 3);
         yield return OrderBurstCase("total-in-comma", [new("Total", "in", "10,78")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("id-in-order1-order3", [new("Id", "in", "{order1Id}|{order3Id}")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("customer-in-two-three", [new("CustomerEmail", "in", "two@local.test|three@local.test")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("businessdate-in", [new("BusinessDate", "in", "{order1BusinessDate}|{order3BusinessDate}")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("businessdate-in-comma", [new("BusinessDate", "in", "{order1BusinessDate},{order3BusinessDate}")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("businessdate-between-dotdot", [new("BusinessDate", "between", "{businessDateMin}..{businessDateMax}")], HttpStatusCode.OK, 3);
         yield return OrderBurstCase("businessdate-between-comma", [new("BusinessDate", "between", "{businessDateMin},{businessDateMax}")], HttpStatusCode.OK, 3);
         yield return OrderBurstCase("businesstime-in", [new("BusinessTime", "in", "{order1BusinessTime}|{order3BusinessTime}")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("businesstime-between-dotdot", [new("BusinessTime", "between", "{businessTimeMin}..{businessTimeMid}")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("businesstime-between-pipe", [new("BusinessTime", "between", "{businessTimeMin}|{businessTimeMax}")], HttpStatusCode.OK, 3);
+        yield return OrderBurstCase("fulfillmentwindow-between-dotdot", [new("FulfillmentWindow", "between", "{fulfillmentMin}..{fulfillmentMid}")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("fulfillmentwindow-in-pipe", [new("FulfillmentWindow", "in", "{fulfillmentMin}|{fulfillmentMid}")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("fulfillmentwindow-in-comma", [new("FulfillmentWindow", "in", "{fulfillmentMin},{fulfillmentMid}")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("paymentid-notnull", [new("PaymentId", "notnull", null)], HttpStatusCode.OK, 3);
         yield return OrderBurstCase("paymentid-isnull", [new("PaymentId", "isnull", null)], HttpStatusCode.OK, 0);
+        yield return OrderBurstCase("paymentid-eq-order1", [new("PaymentId", "eq", "{order1PaymentId}")], HttpStatusCode.OK, 1);
+        yield return OrderBurstCase("paymentid-neq-order1", [new("PaymentId", "neq", "{order1PaymentId}")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("paymentid-eq-null", [new("PaymentId", "eq", null)], HttpStatusCode.OK, 0);
+        yield return OrderBurstCase("paymentid-neq-null", [new("PaymentId", "neq", null)], HttpStatusCode.OK, 3);
+        yield return OrderBurstCase("paymentid-in-order1-order3", [new("PaymentId", "in", "{order1PaymentId}|{order3PaymentId}")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("paymentids-any-id1", [new("PaymentIds", "any", "{order1PaymentId}")], HttpStatusCode.OK, 1);
         yield return OrderBurstCase("paymentarray-any-id2", [new("PaymentArrayIds", "any", "{order2PaymentId}")], HttpStatusCode.OK, 1);
         yield return OrderBurstCase("paymentset-any-id3", [new("PaymentSetIds", "any", "{order3PaymentId}")], HttpStatusCode.OK, 1);
@@ -660,6 +680,7 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
 
         return value
             .Replace("{order1Id}", seed.Order1Id.ToString(), StringComparison.Ordinal)
+            .Replace("{order3Id}", seed.Order3Id.ToString(), StringComparison.Ordinal)
             .Replace("{order1PaymentId}", seed.Order1PaymentId.ToString(), StringComparison.Ordinal)
             .Replace("{order2PaymentId}", seed.Order2PaymentId.ToString(), StringComparison.Ordinal)
             .Replace("{order3PaymentId}", seed.Order3PaymentId.ToString(), StringComparison.Ordinal)
@@ -668,6 +689,12 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
             .Replace("{order2BusinessTime}", seed.Order2BusinessTime, StringComparison.Ordinal)
             .Replace("{order1BusinessTime}", seed.Order1BusinessTime, StringComparison.Ordinal)
             .Replace("{order3BusinessTime}", seed.Order3BusinessTime, StringComparison.Ordinal)
+            .Replace("{businessTimeMin}", seed.BusinessTimeMin, StringComparison.Ordinal)
+            .Replace("{businessTimeMid}", seed.BusinessTimeMid, StringComparison.Ordinal)
+            .Replace("{businessTimeMax}", seed.BusinessTimeMax, StringComparison.Ordinal)
+            .Replace("{fulfillmentMin}", seed.FulfillmentMin, StringComparison.Ordinal)
+            .Replace("{fulfillmentMid}", seed.FulfillmentMid, StringComparison.Ordinal)
+            .Replace("{fulfillmentMax}", seed.FulfillmentMax, StringComparison.Ordinal)
             .Replace("{businessDateMin}", seed.BusinessDateMin, StringComparison.Ordinal)
             .Replace("{businessDateMax}", seed.BusinessDateMax, StringComparison.Ordinal);
     }
@@ -758,9 +785,16 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         var businessDates = new[] { first.BusinessDate, second.BusinessDate, third.BusinessDate }
             .OrderBy(x => x)
             .ToArray();
+        var businessTimes = new[] { first.BusinessTime, second.BusinessTime, third.BusinessTime }
+            .OrderBy(x => x)
+            .ToArray();
+        var fulfillmentWindows = new[] { first.FulfillmentWindow, second.FulfillmentWindow, third.FulfillmentWindow }
+            .OrderBy(x => x)
+            .ToArray();
 
         return new OrderBurstSeedContext(
             Order1Id: first.Id,
+            Order3Id: third.Id,
             Order1PaymentId: first.PaymentId!.Value,
             Order2PaymentId: second.PaymentId!.Value,
             Order3PaymentId: third.PaymentId!.Value,
@@ -769,6 +803,12 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
             Order1BusinessTime: first.BusinessTime.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
             Order2BusinessTime: second.BusinessTime.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
             Order3BusinessTime: third.BusinessTime.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
+            BusinessTimeMin: businessTimes[0].ToString("HH:mm:ss", CultureInfo.InvariantCulture),
+            BusinessTimeMid: businessTimes[1].ToString("HH:mm:ss", CultureInfo.InvariantCulture),
+            BusinessTimeMax: businessTimes[^1].ToString("HH:mm:ss", CultureInfo.InvariantCulture),
+            FulfillmentMin: fulfillmentWindows[0].ToString("c", CultureInfo.InvariantCulture),
+            FulfillmentMid: fulfillmentWindows[1].ToString("c", CultureInfo.InvariantCulture),
+            FulfillmentMax: fulfillmentWindows[^1].ToString("c", CultureInfo.InvariantCulture),
             BusinessDateMin: businessDates[0].ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             BusinessDateMax: businessDates[^1].ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
     }
@@ -805,6 +845,7 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
 
     private sealed record OrderBurstSeedContext(
         Guid Order1Id,
+        Guid Order3Id,
         Guid Order1PaymentId,
         Guid Order2PaymentId,
         Guid Order3PaymentId,
@@ -813,6 +854,12 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         string Order1BusinessTime,
         string Order2BusinessTime,
         string Order3BusinessTime,
+        string BusinessTimeMin,
+        string BusinessTimeMid,
+        string BusinessTimeMax,
+        string FulfillmentMin,
+        string FulfillmentMid,
+        string FulfillmentMax,
         string BusinessDateMin,
         string BusinessDateMax);
 

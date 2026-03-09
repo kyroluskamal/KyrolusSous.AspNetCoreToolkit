@@ -24,6 +24,7 @@ using KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Interfaces;
 using KyrolusSous.EndpointKit.Core.Envelope;
 using KyrolusSous.EndpointKit.Core.FieldSelection;
 using KyrolusSous.EndpointKit.Core.Hateoas;
+using KyrolusSous.EndpointKit.Marten.BaseKyrolusModule;
 using KyrolusSous.ExceptionHandling;
 using KyrolusSous.ExceptionHandling.Abstractions.Interfaces;
 using KyrolusSous.ExceptionHandling.Abstractions.Models;
@@ -61,6 +62,7 @@ using FluentValidation;
 using FluentValidation.Results;
 using Marten;
 using Marten.Linq;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Metadata;
@@ -532,6 +534,7 @@ public static partial class RepositoryRuntimeDiagnostics
             removedRange = false;
         }
         await session.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await RunRepositoryUtilityProbeScenariosAsync(session, tenantId, cancellationToken).ConfigureAwait(false);
 
         return new RepositoryRuntimeDiagnosticsResponse(
             Mode: mode,
@@ -555,6 +558,169 @@ public static partial class RepositoryRuntimeDiagnostics
             PatchResultFound: patched is not null,
             ResolvedFromResolver: resolvedFromResolver,
             ResolvedFromNullResolver: resolvedFromNullResolver);
+    }
+
+    private static async Task RunRepositoryUtilityProbeScenariosAsync(
+        IDocumentSession session,
+        string tenantId,
+        CancellationToken cancellationToken)
+    {
+        var checks = 0;
+        var cacheProvider = new RuntimeInMemoryCacheProvider();
+        var probe = new RuntimeRepositoryUtilityProbe<MenuItem>(
+            session,
+            new KyrolusMartenRepositoryDependencies(
+                CacheProvider: cacheProvider,
+                CacheKeyContext: new RuntimeCacheKeyContext("seed-scope", "seed-region", tenantId),
+                CachePolicyProvider: new RuntimeRepositoryCachePolicyProvider(),
+                CachePolicy: new KyrolusCachePolicy(
+                    Enabled: true,
+                    KeySuffix: "static",
+                    ExtraInvalidationKeys: ["static:{entity}:{tenant}:{id}", "{all}:static"],
+                    ExtraInvalidationKeyPatterns: ["static-pattern:{entity}:{scope}:{id}"]),
+                PolicyProvider: new RuntimeRepositoryPolicyProvider(cacheProvider, tenantId)));
+
+        await probe.ProbeEnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        if (probe.Observer is RuntimeObserver &&
+            probe.Authorization is RuntimeAuthorization &&
+            probe.Validation is RuntimeValidation &&
+            probe.SoftDeletePolicy is not null &&
+            probe.CacheProvider is not null &&
+            probe.ResiliencePolicy is RuntimeResiliencePolicy &&
+            probe.Tracing is RuntimeTracing)
+        {
+            checks++;
+        }
+
+        var resolvedPolicy = await probe.ProbeResolveCachePolicyAsync("GetAllAsync", null, cancellationToken).ConfigureAwait(false);
+        var cacheKey = probe.ProbeBuildCacheKey(null, Guid.Empty, resolvedPolicy.KeySuffix);
+        var allKey = probe.ProbeBuildCacheAllKey(null, resolvedPolicy.KeySuffix);
+        var entryOptions = probe.ProbeBuildCacheEntryOptions(resolvedPolicy, null);
+        if (resolvedPolicy.Enabled == true &&
+            resolvedPolicy.KeySuffix == "dynamic" &&
+            (resolvedPolicy.ExtraInvalidationKeys?.Count ?? 0) >= 2 &&
+            (resolvedPolicy.ExtraInvalidationKeyPatterns?.Count ?? 0) >= 2 &&
+            entryOptions.Region == "policy-region" &&
+            entryOptions.TenantId == tenantId &&
+            cacheKey.Contains("scope=policy-scope%3AMenuItem", StringComparison.Ordinal) &&
+            allKey.Contains("policy=dynamic", StringComparison.Ordinal))
+        {
+            checks++;
+        }
+
+        var sameSession = probe.ProbeResolveSession(tenantId);
+        var otherSession = probe.ProbeResolveSession($"{tenantId}-other");
+        if (ReferenceEquals(sameSession, session) &&
+            !ReferenceEquals(otherSession, session))
+        {
+            checks++;
+        }
+
+        var probeItem = new MenuItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Name = $"Probe-{Guid.NewGuid():N}",
+            Category = "DiagUtilityProbe",
+            Price = 7
+        };
+        session.Store(probeItem);
+        await session.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        var patched = await probe.ProbePatchEntityAsync(
+            probeItem.Id,
+            new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [nameof(MenuItem.Price)] = JsonDocument.Parse("12").RootElement.Clone(),
+                [nameof(MenuItem.Name)] = JsonDocument.Parse("\"ProbeUpdated\"").RootElement.Clone(),
+                ["UnknownProperty"] = JsonDocument.Parse("\"ignored\"").RootElement.Clone()
+            },
+            session,
+            cancellationToken).ConfigureAwait(false);
+        var missingPatch = await probe.ProbePatchEntityAsync(
+            Guid.NewGuid(),
+            new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [nameof(MenuItem.Price)] = 1
+            },
+            session,
+            cancellationToken).ConfigureAwait(false);
+        if (patched is not null &&
+            patched.Price == 12m &&
+            patched.Name == "ProbeUpdated" &&
+            missingPatch is null)
+        {
+            checks++;
+        }
+
+        var valueProbe = new MenuItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Name = "ValueProbe",
+            Category = "ValueCategory",
+            Price = 5
+        };
+        RuntimeRepositoryUtilityProbe<MenuItem>.ProbeApplyProperty(valueProbe, nameof(MenuItem.Category), null);
+        RuntimeRepositoryUtilityProbe<MenuItem>.ProbeApplyProperty(valueProbe, nameof(MenuItem.Price), null);
+        RuntimeRepositoryUtilityProbe<MenuItem>.ProbeApplyProperty(valueProbe, nameof(MenuItem.Price), JsonDocument.Parse("13").RootElement.Clone());
+        if (valueProbe.Category is null &&
+            valueProbe.Price == 13m &&
+            RuntimeRepositoryUtilityProbe<MenuItem>.ProbeNormalizeValue(JsonDocument.Parse("{}").RootElement.Clone(), typeof(string)) is null)
+        {
+            checks++;
+        }
+
+        var versionGuid = Guid.NewGuid();
+        var etagGuid = Guid.NewGuid();
+        if (RuntimeRepositoryUtilityProbe<MenuItem>.ProbeReadVersion(new RuntimeVersionProbeMetadata { Version = versionGuid }) == versionGuid &&
+            RuntimeRepositoryUtilityProbe<MenuItem>.ProbeReadVersion(new RuntimeVersionProbeMetadata { ETag = etagGuid.ToString("D", CultureInfo.InvariantCulture) }) == etagGuid)
+        {
+            checks++;
+        }
+
+        var tenantSessionId = $"{tenantId}-tenant-probe";
+        var tenantSession = probe.ProbeResolveSession(tenantSessionId);
+        if (RuntimeRepositoryUtilityProbe<MenuItem>.ProbeTryResolveSessionTenantId(tenantSession) == tenantSessionId &&
+            RuntimeRepositoryUtilityProbe<Order>.ProbeResolveIdProperty(typeof(Order), nameof(Order.Payment))?.Name == nameof(Order.PaymentId) &&
+            RuntimeRepositoryUtilityProbe<Order>.ProbeResolveIdsProperty(typeof(Order), nameof(Order.Payments))?.Name == nameof(Order.PaymentIds) &&
+            RuntimeRepositoryUtilityProbe<Order>.ProbeTryGetCollectionElementType(typeof(HashSet<Payment>), out var collectionElementType) &&
+            collectionElementType == typeof(Payment))
+        {
+            checks++;
+        }
+
+        var mergedIncludes = RuntimeRepositoryUtilityProbe<Order>.ProbeMergeIncludes(
+            [nameof(Order.Payment)],
+            [
+                order => order.Payment!,
+                order => order.PaymentArray!,
+                order => order.CustomerEmail
+            ]);
+        var convertedEnum = RuntimeRepositoryUtilityProbe<Order>.ProbeConvertId("Active", typeof(RuntimeSeekProbeStatus));
+        var convertedGuid = RuntimeRepositoryUtilityProbe<Order>.ProbeConvertId(probeItem.Id.ToString("D", CultureInfo.InvariantCulture), typeof(Guid));
+        if (mergedIncludes.SequenceEqual([nameof(Order.Payment), nameof(Order.Payment), nameof(Order.PaymentArray), nameof(Order.CustomerEmail)]) &&
+            convertedEnum is RuntimeSeekProbeStatus.Active &&
+            convertedGuid is Guid parsedGuid &&
+            parsedGuid == probeItem.Id)
+        {
+            checks++;
+        }
+
+        await probe.RemoveAsync(probeItem.Id, tenantId: tenantId, cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (cacheProvider.RemovedKeys.Any(key => key.Contains($"{nameof(MenuItem)}:id", StringComparison.Ordinal)) &&
+            cacheProvider.RemovedKeys.Any(key => key.Contains("static:MenuItem", StringComparison.Ordinal)) &&
+            cacheProvider.RemovedKeys.Any(key => key.Contains("dynamic:MenuItem", StringComparison.Ordinal)) &&
+            cacheProvider.RemovedPatterns.Any(pattern => pattern.Contains("static-pattern:MenuItem", StringComparison.Ordinal)) &&
+            cacheProvider.RemovedPatterns.Any(pattern => pattern.Contains("dynamic-pattern:MenuItem", StringComparison.Ordinal)))
+        {
+            checks++;
+        }
+
+        if (checks < 6)
+        {
+            throw new InvalidOperationException("Repository utility probe diagnostics did not exercise the expected runtime branches.");
+        }
     }
 
     public static async Task<RepositoryRuntimeDiagnosticsResponse> RunOrderIncludesRuntimeAsync(
@@ -1595,6 +1761,84 @@ public static partial class RepositoryRuntimeDiagnostics
 
         var context = new KyrolusMartenAuthorizationContext(Roles: null, Permissions: null);
         if (context.Roles.Count == 0 && context.Permissions.Count == 0)
+        {
+            checks++;
+        }
+
+        var includeProbe = new RuntimeQueryBuilderProbe
+        {
+            Nested = new RuntimeQueryBuilderNested("nested-name"),
+            StatusFromText = RuntimeSeekProbeStatus.Active
+        };
+        var includeExpressions = KyrolusQueryExpressionBuilder<RuntimeQueryBuilderProbe>.ConvertIncludePropertiesToExpressions(
+            [nameof(RuntimeQueryBuilderProbe.Nested) + "." + nameof(RuntimeQueryBuilderNested.Name), " ", nameof(RuntimeQueryBuilderProbe.StatusFromText)]);
+        if (KyrolusQueryExpressionBuilder<RuntimeQueryBuilderProbe>.BuildIncludeExpression(" ") is null &&
+            KyrolusQueryExpressionBuilder<RuntimeQueryBuilderProbe>.ConvertIncludePropertiesToExpressions(null) is null &&
+            includeExpressions is { Length: 2 } &&
+            (string?)includeExpressions[0].Compile().Invoke(includeProbe) == "nested-name" &&
+            includeExpressions[1].Compile().Invoke(includeProbe) is RuntimeSeekProbeStatus.Active)
+        {
+            checks++;
+        }
+
+        ExpectThrows<ArgumentException>(
+            () => _ = KyrolusQueryExpressionBuilder<RuntimeQueryBuilderProbe>.GetPrimaryKeyFromKeyValues(
+                [1],
+                [nameof(RuntimeQueryBuilderProbe.Sequence), nameof(RuntimeQueryBuilderProbe.OptionalSequence)]));
+        checks++;
+
+        var convertedGuid = Guid.NewGuid();
+        var directGuid = Guid.NewGuid();
+        var occurredAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+        var happenedOn = DateTime.UtcNow.AddDays(-1);
+        var duration = TimeSpan.FromMinutes(15);
+        var convertedPredicate = KyrolusQueryExpressionBuilder<RuntimeQueryBuilderProbe>.GetPrimaryKeyFromKeyValues(
+            [
+                convertedGuid.ToString(),
+                directGuid,
+                occurredAt.ToString("O"),
+                happenedOn.ToString("O"),
+                duration.ToString(),
+                "Active",
+                1,
+                "7",
+                null
+            ],
+            [
+                nameof(RuntimeQueryBuilderProbe.Id),
+                nameof(RuntimeQueryBuilderProbe.DirectId),
+                nameof(RuntimeQueryBuilderProbe.OccurredAt),
+                nameof(RuntimeQueryBuilderProbe.HappenedOn),
+                nameof(RuntimeQueryBuilderProbe.Duration),
+                nameof(RuntimeQueryBuilderProbe.StatusFromText),
+                nameof(RuntimeQueryBuilderProbe.StatusFromNumber),
+                nameof(RuntimeQueryBuilderProbe.Sequence),
+                nameof(RuntimeQueryBuilderProbe.OptionalSequence)
+            ]).Compile();
+        if (convertedPredicate(new RuntimeQueryBuilderProbe
+            {
+                Id = convertedGuid,
+                DirectId = directGuid,
+                OccurredAt = occurredAt,
+                HappenedOn = happenedOn,
+                Duration = duration,
+                StatusFromText = RuntimeSeekProbeStatus.Active,
+                StatusFromNumber = RuntimeSeekProbeStatus.Active,
+                Sequence = 7,
+                OptionalSequence = null
+            }) &&
+            !convertedPredicate(new RuntimeQueryBuilderProbe
+            {
+                Id = convertedGuid,
+                DirectId = directGuid,
+                OccurredAt = occurredAt,
+                HappenedOn = happenedOn,
+                Duration = duration,
+                StatusFromText = RuntimeSeekProbeStatus.New,
+                StatusFromNumber = RuntimeSeekProbeStatus.Active,
+                Sequence = 7,
+                OptionalSequence = null
+            }))
         {
             checks++;
         }
@@ -3646,6 +3890,7 @@ public static partial class RepositoryRuntimeDiagnostics
     {
         var checks = 0;
         var mapper = new DefaultRouteMapper<RuntimeLinkItem, RuntimeLinkItem, Guid>();
+        var martenMapper = new KyrolusMartenRouteMapper<RuntimeLinkItem, RuntimeLinkItem, Guid>();
 
         using var versionedApp = WebApplication.CreateBuilder().Build();
         var versionedConfig = new ApiKyrolusApiConfig<RuntimeLinkItem>
@@ -3690,6 +3935,131 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
+        using var defaultedApp = WebApplication.CreateBuilder().Build();
+        var defaultedConfig = new ApiKyrolusApiConfig<RuntimeLinkItem>
+        {
+            ApiName = null!,
+            Prefix = "api",
+            Route = null!,
+            AppendVersionToPrefix = false,
+            Endpoints = [EndpointNames.GetAll, EndpointNames.GetById],
+            EndpointConfig =
+            [
+                new KyrolusEndpointConfig
+                {
+                    Name = EndpointNames.GetById,
+                    Authorize = true,
+                    AuthorizationPolicy = "by-id-policy"
+                }
+            ]
+        };
+
+        mapper.MapEndpoints(defaultedApp, defaultedConfig);
+
+        var defaultedGetAll = FindRouteEndpoint(defaultedApp, "api/RuntimeLinkItems", HttpMethods.Get);
+        var defaultedGetById = FindRouteEndpoint(defaultedApp, "api/RuntimeLinkItems/{id}", HttpMethods.Get);
+        if (defaultedGetAll is not null &&
+            defaultedGetById is not null &&
+            defaultedConfig.ApiName == nameof(RuntimeLinkItem) &&
+            defaultedConfig.Route == nameof(RuntimeLinkItem) &&
+            defaultedGetAll.Metadata.GetMetadata<ITagsMetadata>()?.Tags.Contains(nameof(RuntimeLinkItem)) == true &&
+            !HasAuthorizationMetadata(defaultedGetAll) &&
+            HasAuthorizationPolicy(defaultedGetById, "by-id-policy"))
+        {
+            checks++;
+        }
+
+        using var excludedApp = WebApplication.CreateBuilder().Build();
+        var excludedConfig = new ApiKyrolusApiConfig<RuntimeLinkItem>
+        {
+            ApiName = "ExcludedRuntime",
+            Prefix = string.Empty,
+            Route = "excluded-runtime",
+            AppendVersionToPrefix = false,
+            AllEndpointsExcept = [EndpointNames.All, EndpointNames.DeleteRange],
+            AuthorizeAllEndpoints = true,
+            GeneralAuthorizationPolicy = "general-policy"
+        };
+
+        mapper.MapEndpoints(excludedApp, excludedConfig);
+
+        var excludedGet = FindRouteEndpoint(excludedApp, "excluded-runtimes", HttpMethods.Get);
+        var excludedDeleteRange = FindRouteEndpoint(excludedApp, "excluded-runtimes", HttpMethods.Delete);
+        if (excludedGet is not null &&
+            excludedDeleteRange is null &&
+            HasAuthorizationPolicy(excludedGet, "general-policy"))
+        {
+            checks++;
+        }
+
+        using var prefixOnlyApp = WebApplication.CreateBuilder().Build();
+        var prefixOnlyConfig = new ApiKyrolusApiConfig<RuntimeLinkItem>
+        {
+            ApiName = "PrefixOnly",
+            Prefix = "tenant",
+            Route = "prefix-only",
+            AppendVersionToPrefix = false,
+            Endpoints = [EndpointNames.Add]
+        };
+
+        mapper.MapEndpoints(prefixOnlyApp, prefixOnlyConfig);
+
+        var prefixOnlyPost = FindRouteEndpoint(prefixOnlyApp, "tenant/prefix-onlys", HttpMethods.Post);
+        if (prefixOnlyPost is not null)
+        {
+            checks++;
+        }
+
+        using var martenHeadApp = WebApplication.CreateBuilder().Build();
+        var martenHeadConfig = new KyrolusMartenApiConfig<RuntimeLinkItem>
+        {
+            ApiName = "MartenHead",
+            Prefix = "api",
+            Route = "marten-head-item",
+            AppendVersionToPrefix = false,
+            Endpoints = [EndpointNames.GetById],
+            EnableHeadEndpoint = true,
+            AuthorizeAllEndpoints = true,
+            GeneralAuthorizationPolicy = "head-general-policy"
+        };
+
+        martenMapper.MapEndpoints(martenHeadApp, martenHeadConfig);
+
+        var martenHead = FindRouteEndpoint(martenHeadApp, "api/marten-head-items/{id}", HttpMethods.Head);
+        var martenGetById = FindRouteEndpoint(martenHeadApp, "api/marten-head-items/{id}", HttpMethods.Get);
+        if (martenHead is not null &&
+            martenGetById is not null &&
+            HasAuthorizationPolicy(martenHead, "head-general-policy"))
+        {
+            checks++;
+        }
+
+        using var compositeKeyOnlyApp = WebApplication.CreateBuilder().Build();
+        var compositeKeyOnlyConfig = new KyrolusMartenApiConfig<RuntimeLinkItem>
+        {
+            ApiName = "CompositeOnly",
+            Prefix = "api",
+            Route = "composite-only-item",
+            AppendVersionToPrefix = false,
+            Endpoints = [EndpointNames.All],
+            AllEndpointsExcept = [EndpointNames.DeleteRange],
+            CompositeKeyOnly = true,
+            EnableHeadEndpoint = true
+        };
+
+        martenMapper.MapEndpoints(compositeKeyOnlyApp, compositeKeyOnlyConfig);
+
+        if (FindRouteEndpoint(compositeKeyOnlyApp, "api/composite-only-items/{id}", HttpMethods.Get) is null &&
+            FindRouteEndpoint(compositeKeyOnlyApp, "api/composite-only-items/{id}", HttpMethods.Head) is null &&
+            FindRouteEndpoint(compositeKeyOnlyApp, "api/composite-only-items/{id}", HttpMethods.Put) is null &&
+            FindRouteEndpoint(compositeKeyOnlyApp, "api/composite-only-items/{id}", HttpMethods.Patch) is null &&
+            FindRouteEndpoint(compositeKeyOnlyApp, "api/composite-only-items/{id}", HttpMethods.Delete) is null &&
+            FindRouteEndpoint(compositeKeyOnlyApp, "api/composite-only-items", HttpMethods.Get) is not null &&
+            compositeKeyOnlyConfig.AllEndpointsExcept.SequenceEqual([EndpointNames.DeleteRange]))
+        {
+            checks++;
+        }
+
         await Task.Yield();
         return checks;
     }
@@ -3717,6 +4087,22 @@ public static partial class RepositoryRuntimeDiagnostics
         }
 
         return null;
+    }
+
+    private static bool HasAuthorizationMetadata(RouteEndpoint endpoint)
+    {
+        return endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>().Count > 0;
+    }
+
+    private static bool HasAuthorizationPolicy(RouteEndpoint endpoint, string? policy)
+    {
+        var metadata = endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>();
+        if (metadata.Count == 0)
+        {
+            return false;
+        }
+
+        return metadata.Any(entry => string.Equals(entry.Policy, policy, StringComparison.Ordinal));
     }
 
     private static bool HasProducesStatus(RouteEndpoint endpoint, int statusCode)
@@ -5600,6 +5986,8 @@ internal sealed class RuntimeTracing : IKyrolusMartenTracing
 internal sealed class RuntimeInMemoryCacheProvider : ICacheProvider
 {
     private readonly ConcurrentDictionary<string, object?> store = new(StringComparer.Ordinal);
+    public ConcurrentQueue<string> RemovedKeys { get; } = new();
+    public ConcurrentQueue<string> RemovedPatterns { get; } = new();
 
     public Task<T?> GetAsync<T>(string cacheKey, CancellationToken cancellationToken = default)
     {
@@ -5630,6 +6018,7 @@ internal sealed class RuntimeInMemoryCacheProvider : ICacheProvider
 
     public Task RemoveAsync(string cacheKey, CancellationToken cancellationToken = default)
     {
+        RemovedKeys.Enqueue(cacheKey);
         store.TryRemove(cacheKey, out _);
         return Task.CompletedTask;
     }
@@ -5644,6 +6033,7 @@ internal sealed class RuntimeInMemoryCacheProvider : ICacheProvider
             return Task.CompletedTask;
         }
 
+        RemovedPatterns.Enqueue(keyPattern);
         var regex = BuildRegex(keyPattern);
         foreach (var key in store.Keys.Where(key => regex.IsMatch(key)))
         {
@@ -5730,6 +6120,103 @@ internal sealed class RuntimeInMemoryCacheProvider : ICacheProvider
         var escaped = Regex.Escape(pattern);
         var regexPattern = "^" + escaped.Replace("\\*", ".*").Replace("\\?", ".") + "$";
         return new Regex(regexPattern, RegexOptions.CultureInvariant);
+    }
+}
+
+internal sealed class RuntimeVersionProbeMetadata
+{
+    public Guid? Version { get; init; }
+    public string? ETag { get; init; }
+}
+
+internal sealed class RuntimeRepositoryUtilityProbe<TEntity>(
+    IDocumentSession session,
+    KyrolusMartenRepositoryDependencies dependencies)
+    : KyrolusMartenRepositoryAsync<IDocumentSession, TEntity, Guid>(session, dependencies)
+    where TEntity : class
+{
+    public Task ProbeEnsurePolicyInitializedAsync(CancellationToken cancellationToken)
+        => EnsurePolicyInitializedAsync(cancellationToken);
+
+    public ValueTask<KyrolusCachePolicy> ProbeResolveCachePolicyAsync(
+        string operation,
+        string? tenantId,
+        CancellationToken cancellationToken)
+        => ResolveCachePolicyAsync(operation, tenantId, cancellationToken);
+
+    public KyrolusCacheEntryOptions ProbeBuildCacheEntryOptions(KyrolusCachePolicy policy, string? tenantId)
+        => BuildCacheEntryOptions(policy, tenantId);
+
+    public string ProbeBuildCacheKey(string? tenantId, Guid id, string? policySuffix = null)
+        => BuildCacheKey(tenantId, id, policySuffix);
+
+    public string ProbeBuildCacheAllKey(string? tenantId, string? policySuffix = null)
+        => BuildCacheAllKey(tenantId, policySuffix);
+
+    public IDocumentSession ProbeResolveSession(string? tenantId)
+        => ResolveSession(tenantId);
+
+    public Task<TEntity?> ProbePatchEntityAsync(
+        Guid id,
+        Dictionary<string, object> updates,
+        IDocumentSession session,
+        CancellationToken cancellationToken)
+        => PatchEntityAsync(id, updates, session, cancellationToken);
+
+    public static Guid? ProbeReadVersion(object? metadata)
+        => ReadVersion(metadata);
+
+    public static void ProbeApplyProperty(TEntity entity, string propertyName, object? rawValue)
+        => ApplyProperty(entity, propertyName, rawValue);
+
+    public static object? ProbeNormalizeValue(object? rawValue, Type targetType)
+        => NormalizeValue(rawValue, targetType);
+
+    public static List<string> ProbeMergeIncludes(
+        List<string>? includeProperties,
+        Expression<Func<TEntity, object?>>[]? includeExpressions)
+    {
+        return (List<string>)typeof(KyrolusMartenRepositoryAsync<IDocumentSession, TEntity, Guid>)
+            .GetMethod("MergeIncludes", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, [includeProperties, includeExpressions])!;
+    }
+
+    public static bool ProbeTryGetCollectionElementType(Type type, out Type elementType)
+    {
+        var args = new object?[] { type, null };
+        var result = (bool)typeof(KyrolusMartenRepositoryAsync<IDocumentSession, TEntity, Guid>)
+            .GetMethod("TryGetCollectionElementType", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, args)!;
+        elementType = (Type)args[1]!;
+        return result;
+    }
+
+    public static PropertyInfo? ProbeResolveIdProperty(Type entityType, string includeName)
+    {
+        return (PropertyInfo?)typeof(KyrolusMartenRepositoryAsync<IDocumentSession, TEntity, Guid>)
+            .GetMethod("ResolveIdProperty", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, [entityType, includeName]);
+    }
+
+    public static PropertyInfo? ProbeResolveIdsProperty(Type entityType, string includeName)
+    {
+        return (PropertyInfo?)typeof(KyrolusMartenRepositoryAsync<IDocumentSession, TEntity, Guid>)
+            .GetMethod("ResolveIdsProperty", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, [entityType, includeName]);
+    }
+
+    public static object? ProbeConvertId(object? value, Type targetType)
+    {
+        return typeof(KyrolusMartenRepositoryAsync<IDocumentSession, TEntity, Guid>)
+            .GetMethod("ConvertId", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, [value, targetType]);
+    }
+
+    public static string? ProbeTryResolveSessionTenantId(IDocumentSession session)
+    {
+        return (string?)typeof(KyrolusMartenRepositoryAsync<IDocumentSession, TEntity, Guid>)
+            .GetMethod("TryResolveSessionTenantId", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, [session]);
     }
 }
 
@@ -6035,6 +6522,25 @@ internal enum RuntimeSeekProbeStatus
 {
     New = 0,
     Active = 1
+}
+
+internal sealed class RuntimeQueryBuilderProbe
+{
+    public Guid Id { get; set; }
+    public Guid DirectId { get; set; }
+    public DateTimeOffset OccurredAt { get; set; }
+    public DateTime HappenedOn { get; set; }
+    public TimeSpan Duration { get; set; }
+    public RuntimeSeekProbeStatus StatusFromText { get; set; }
+    public RuntimeSeekProbeStatus StatusFromNumber { get; set; }
+    public int Sequence { get; set; }
+    public int? OptionalSequence { get; set; }
+    public RuntimeQueryBuilderNested Nested { get; set; } = new(string.Empty);
+}
+
+internal sealed class RuntimeQueryBuilderNested(string name)
+{
+    public string Name { get; set; } = name;
 }
 
 internal sealed class RuntimeSeekProbe
