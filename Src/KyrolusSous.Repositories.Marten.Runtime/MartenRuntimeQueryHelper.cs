@@ -376,7 +376,7 @@ public sealed class MartenRuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
 
     private static Expression? BuildStringPredicate(Expression left, string op, string rawValue)
     {
-        var constant = Expression.Constant(rawValue, typeof(string));
+        var constant = Expression.Constant(NormalizeStringValue(rawValue), typeof(string));
 
         if (IsEqualityOperator(op))
             return BuildEquality(op, left, constant);
@@ -453,20 +453,30 @@ public sealed class MartenRuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
             return false;
         }
 
-        var list = Array.CreateInstance(elementType, nonNullConverted.Count);
-        for (var i = 0; i < nonNullConverted.Count; i++)
-            list.SetValue(nonNullConverted[i], i);
+        var listElementType = elementType.IsEnum ? Enum.GetUnderlyingType(elementType) : elementType;
+        List<object?> normalizedConverted = elementType.IsEnum
+            ? nonNullConverted
+                .Select(v => Convert.ChangeType(v!, listElementType, CultureInfo.InvariantCulture))
+                .Cast<object?>()
+                .ToList()
+            : nonNullConverted;
+
+        var list = Array.CreateInstance(listElementType, normalizedConverted.Count);
+        for (var i = 0; i < normalizedConverted.Count; i++)
+            list.SetValue(normalizedConverted[i], i);
 
         var listExpr = Expression.Constant(list);
 
         var containsMethod = typeof(Enumerable).GetMethods()
             .Single(m => m.Name == nameof(Enumerable.Contains) && m.GetParameters().Length == 2)
-            .MakeGenericMethod(elementType);
+            .MakeGenericMethod(listElementType);
 
         if (memberType != elementType)
         {
             var hasValue = Expression.Property(member, nameof(Nullable<int>.HasValue));
-            var value = Expression.Property(member, nameof(Nullable<int>.Value));
+            Expression value = Expression.Property(member, nameof(Nullable<int>.Value));
+            if (elementType.IsEnum)
+                value = Expression.Convert(value, listElementType);
 
             Expression containsValue = Expression.Call(containsMethod, listExpr, value);
             Expression nonNullBranch = Expression.AndAlso(hasValue, containsValue);
@@ -481,7 +491,12 @@ public sealed class MartenRuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
             expression = nonNullBranch;
             return true;
         }
-        expression = Expression.Call(containsMethod, listExpr, member);
+
+        Expression memberValue = member;
+        if (elementType.IsEnum)
+            memberValue = Expression.Convert(member, listElementType);
+
+        expression = Expression.Call(containsMethod, listExpr, memberValue);
         return true;
     }
 
@@ -839,6 +854,9 @@ public sealed class MartenRuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
         var trimmed = token.Trim();
         return trimmed.Length == 0 ? null : trimmed;
     }
+
+    private static string NormalizeStringValue(string raw)
+        => raw.Trim().Trim('"').Trim('\'');
 
     private static bool TryConvertList(IReadOnlyList<string?> values, Type targetType, out List<object?> converted, out string? error)
     {
