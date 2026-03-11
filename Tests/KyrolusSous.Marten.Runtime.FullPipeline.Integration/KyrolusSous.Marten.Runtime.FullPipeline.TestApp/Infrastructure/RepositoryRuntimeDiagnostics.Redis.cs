@@ -723,6 +723,153 @@ public static partial class RepositoryRuntimeDiagnostics
             "Redis near cache runtime should support the connection-string registration overload.",
             ref checks);
 
+        var fallbackOptions = CreateRedisRuntimeOptions($"{prefix}:faults", region, tenantId);
+        fallbackOptions.EnableGracefulFallback = true;
+
+        var fallbackRecorder = new RedisRuntimeObserver();
+        var fallbackSeedCache = BuildRedisCacheProvider(primaryConnection, fallbackOptions, observer: fallbackRecorder);
+        await fallbackSeedCache.SetAsync(
+            "deserialize-fault",
+            "value",
+            new KyrolusCacheEntryOptions
+            {
+                Region = region,
+                TenantId = tenantId,
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        var deserializeFaultCache = BuildRedisCacheProvider(
+            primaryConnection,
+            fallbackOptions,
+            observer: fallbackRecorder,
+            serializer: new ThrowingRedisCacheSerializer(throwOnDeserialize: true));
+        Require(
+            await deserializeFaultCache.GetAsync<string>("deserialize-fault", cancellationToken).ConfigureAwait(false) is null &&
+            fallbackRecorder.ErrorObservations.Any(context =>
+                context.Operation == KyrolusCacheOperation.Get &&
+                string.Equals(context.Key, "deserialize-fault", StringComparison.Ordinal)),
+            "Redis cache runtime should gracefully fall back when deserialization throws a Redis exception.",
+            ref checks);
+
+        var serializeRecorder = new RedisRuntimeObserver();
+        var serializeFaultCache = BuildRedisCacheProvider(
+            primaryConnection,
+            fallbackOptions,
+            observer: serializeRecorder,
+            serializer: new ThrowingRedisCacheSerializer(throwOnSerialize: true));
+        await serializeFaultCache.SetAsync(
+            "serialize-fault",
+            "value",
+            new KyrolusCacheEntryOptions
+            {
+                Region = region,
+                TenantId = tenantId,
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
+            },
+            cancellationToken).ConfigureAwait(false);
+        Require(
+            !await fallbackSeedCache.ExistsAsync("serialize-fault", cancellationToken).ConfigureAwait(false) &&
+            serializeRecorder.ErrorObservations.Any(context =>
+                context.Operation == KyrolusCacheOperation.Set &&
+                string.Equals(context.Key, "serialize-fault", StringComparison.Ordinal)),
+            "Redis cache runtime should gracefully fall back when serialization throws during single-key writes.",
+            ref checks);
+
+        await serializeFaultCache.SetManyAsync(
+            [
+                new KeyValuePair<string, string>("serialize-many-a", "1"),
+                new KeyValuePair<string, string>("serialize-many-b", "2")
+            ],
+            TimeSpan.FromMinutes(1),
+            cancellationToken).ConfigureAwait(false);
+        await serializeFaultCache.SetManyAsync(
+            [
+                new KeyValuePair<string, string>("serialize-many-c", "3")
+            ],
+            new KyrolusCacheEntryOptions
+            {
+                Region = region,
+                TenantId = tenantId,
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
+            },
+            cancellationToken).ConfigureAwait(false);
+        Require(
+            !await fallbackSeedCache.ExistsAsync("serialize-many-a", cancellationToken).ConfigureAwait(false) &&
+            !await fallbackSeedCache.ExistsAsync("serialize-many-b", cancellationToken).ConfigureAwait(false) &&
+            !await fallbackSeedCache.ExistsAsync("serialize-many-c", cancellationToken).ConfigureAwait(false) &&
+            serializeRecorder.ErrorObservations.Count(context => context.Operation == KyrolusCacheOperation.SetMany) >= 2,
+            "Redis cache runtime should gracefully fall back when serialization throws during batched writes.",
+            ref checks);
+
+        await fallbackSeedCache.SetManyAsync(
+            [
+                new KeyValuePair<string, string>("observer-a", "1"),
+                new KeyValuePair<string, string>("observer-b", "2")
+            ],
+            new KyrolusCacheEntryOptions
+            {
+                Region = region,
+                TenantId = tenantId,
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1),
+                Tags = ["observer-tag"]
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        var observerRecorder = new RedisRuntimeObserver();
+        var observerFaultCache = BuildRedisCacheProvider(
+            primaryConnection,
+            fallbackOptions,
+            observer: new ThrowingRedisCacheObserver(
+                observerRecorder,
+                context => context.Observation != KyrolusCacheObservation.Error));
+        Require(
+            !await observerFaultCache.ExistsAsync("observer-a", cancellationToken).ConfigureAwait(false) &&
+            observerRecorder.ErrorObservations.Any(context => context.Operation == KyrolusCacheOperation.Exists),
+            "Redis cache runtime should gracefully fall back when observer callbacks fail during exists checks.",
+            ref checks);
+
+        var observerMany = await observerFaultCache.GetManyAsync<string>(["observer-a", "observer-b"], cancellationToken).ConfigureAwait(false);
+        Require(
+            observerMany.Count == 0 &&
+            observerRecorder.ErrorObservations.Any(context => context.Operation == KyrolusCacheOperation.GetMany),
+            "Redis cache runtime should gracefully fall back when observer callbacks fail during batched reads.",
+            ref checks);
+
+        await observerFaultCache.RemoveAsync("observer-a", cancellationToken).ConfigureAwait(false);
+        await observerFaultCache.RemoveManyAsync(["observer-b"], cancellationToken).ConfigureAwait(false);
+        await observerFaultCache.RemoveByTagAsync("observer-tag", cancellationToken).ConfigureAwait(false);
+        await observerFaultCache.RemoveKeysByPatternAsync("observer-*", cancellationToken).ConfigureAwait(false);
+        Require(
+            observerRecorder.ErrorObservations.Any(context => context.Operation == KyrolusCacheOperation.Remove) &&
+            observerRecorder.ErrorObservations.Any(context => context.Operation == KyrolusCacheOperation.RemoveMany) &&
+            observerRecorder.ErrorObservations.Any(context => context.Operation == KyrolusCacheOperation.RemoveByTag) &&
+            observerRecorder.ErrorObservations.Any(context => context.Operation == KyrolusCacheOperation.RemoveByPattern),
+            "Redis cache runtime should gracefully fall back when observer callbacks fail during invalidation operations.",
+            ref checks);
+
+        var observerFactoryCalls = 0;
+        var observerFactoryResult = await observerFaultCache.GetOrCreateAsync(
+            "observer-factory",
+            _ =>
+            {
+                observerFactoryCalls++;
+                return Task.FromResult("observer-created");
+            },
+            new KyrolusCacheEntryOptions
+            {
+                Region = region,
+                TenantId = tenantId,
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
+            },
+            cancellationToken).ConfigureAwait(false);
+        Require(
+            observerFactoryResult == "observer-created" &&
+            observerFactoryCalls == 1 &&
+            observerRecorder.ErrorObservations.Any(context => context.Operation == KyrolusCacheOperation.GetOrCreate),
+            "Redis cache runtime should gracefully fall back to the factory when observer callbacks fail during GetOrCreate.",
+            ref checks);
+
         Require(logEntries.Any(entry => entry.Contains("Cache", StringComparison.Ordinal)), "Redis cache runtime should emit cache observer logs.", ref checks);
 
         return new RepositoryRuntimeDiagnosticsResponse(
@@ -1467,6 +1614,50 @@ internal sealed class RuntimePrefixPayloadTransformer(string prefix) : IKyrolusC
     public byte[] Transform(byte[] payload) => [.. prefixBytes, .. payload];
 
     public byte[] Restore(byte[] payload) => payload[prefixBytes.Length..];
+}
+
+internal sealed class ThrowingRedisCacheSerializer(bool throwOnSerialize = false, bool throwOnDeserialize = false) : IKyrolusCacheSerializer
+{
+    private readonly KyrolusJsonCacheSerializer inner = new();
+
+    public byte[] Serialize<T>(T value)
+    {
+        if (throwOnSerialize)
+        {
+            throw new RedisServerException("Simulated serializer write failure.");
+        }
+
+        return inner.Serialize(value);
+    }
+
+    public T? Deserialize<T>(byte[] payload)
+    {
+        if (throwOnDeserialize)
+        {
+            throw new RedisServerException("Simulated serializer read failure.");
+        }
+
+        return inner.Deserialize<T>(payload);
+    }
+}
+
+internal sealed class ThrowingRedisCacheObserver(
+    RedisRuntimeObserver recorder,
+    Func<KyrolusCacheObserverContext, bool> shouldThrow) : IKyrolusCacheObserver
+{
+    private readonly RedisRuntimeObserver recorder = recorder;
+    private readonly Func<KyrolusCacheObserverContext, bool> shouldThrow = shouldThrow;
+
+    public Task OnObservationAsync(KyrolusCacheObserverContext context)
+    {
+        recorder.OnObservationAsync(context);
+        if (shouldThrow(context))
+        {
+            throw new TimeoutException($"Simulated observer failure for {context.Operation}.");
+        }
+
+        return Task.CompletedTask;
+    }
 }
 
 internal sealed class RuntimeCacheLoggerProvider(ConcurrentQueue<string> entries) : ILoggerProvider
