@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Reflection;
@@ -109,6 +111,84 @@ public static partial class RepositoryRuntimeDiagnostics
             Require(protectorFactory is KyrolusInstrumentedDataProtectorFactory, "Protector factory should be instrumented.", ref checks);
             Require(instanceId.Value == "diag-instance", "Configured instance id should be preserved.", ref checks);
             Require(instrumentation is not null, "Instrumentation should resolve.", ref checks);
+
+            var disabledInstrumentation = new KyrolusDataProtectionInstrumentation(
+                Options.Create(new KyrolusDataProtectionInstrumentationOptions
+                {
+                    EnableActivities = false,
+                    EnableMetrics = false
+                }));
+            Require(disabledInstrumentation.StartActivity("protect") is null, "Disabled instrumentation should skip activities.", ref checks);
+            disabledInstrumentation.RecordSuccess("protect", 1);
+            disabledInstrumentation.RecordFailure("unprotect", 1);
+            checks++;
+            disabledInstrumentation.Dispose();
+
+            var activityStarts = 0;
+            using var activityListener = new ActivityListener
+            {
+                ShouldListenTo = source => string.Equals(source.Name, "kyrolus-dp-diag-activity", StringComparison.Ordinal),
+                Sample = static (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+                ActivityStarted = _ => activityStarts++,
+                ActivityStopped = _ => { }
+            };
+            ActivitySource.AddActivityListener(activityListener);
+
+            var metricCounts = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+            var metricDurations = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            using var metricsInstrumentation = new KyrolusDataProtectionInstrumentation(
+                Options.Create(new KyrolusDataProtectionInstrumentationOptions
+                {
+                    EnableActivities = true,
+                    EnableMetrics = true,
+                    ActivitySourceName = "kyrolus-dp-diag-activity",
+                    MeterName = $"kyrolus-dp-diag-meter-{Guid.NewGuid():N}"
+                }));
+            using var meterListener = new MeterListener();
+            meterListener.InstrumentPublished = (instrument, listener) =>
+            {
+                if (string.Equals(instrument.Meter.Name, metricsInstrumentation.Meter.Name, StringComparison.Ordinal))
+                {
+                    listener.EnableMeasurementEvents(instrument);
+                }
+            };
+            meterListener.SetMeasurementEventCallback<long>((instrument, measurement, _, _) =>
+            {
+                metricCounts[instrument.Name] = metricCounts.GetValueOrDefault(instrument.Name) + measurement;
+            });
+            meterListener.SetMeasurementEventCallback<double>((instrument, measurement, tags, _) =>
+            {
+                var operation = instrument.Name;
+                foreach (var tag in tags)
+                {
+                    if (string.Equals(tag.Key, "operation", StringComparison.Ordinal))
+                    {
+                        operation = tag.Value?.ToString() ?? instrument.Name;
+                        break;
+                    }
+                }
+                metricDurations[operation] = metricDurations.GetValueOrDefault(operation) + measurement;
+            });
+            meterListener.Start();
+            using (var activity = metricsInstrumentation.StartActivity("protect"))
+            {
+                Require(activity is not null, "Enabled instrumentation should start activities.", ref checks);
+            }
+            metricsInstrumentation.RecordSuccess("protect", 5);
+            metricsInstrumentation.RecordSuccess("unprotect", 7);
+            metricsInstrumentation.RecordFailure("protect", 11);
+            metricsInstrumentation.RecordFailure("unprotect", 13);
+            Require(
+                activityStarts >= 1 &&
+                metricCounts.GetValueOrDefault("kyrolus.dataprotection.protect.success") == 1 &&
+                metricCounts.GetValueOrDefault("kyrolus.dataprotection.protect.failure") == 1 &&
+                metricCounts.GetValueOrDefault("kyrolus.dataprotection.unprotect.success") == 1 &&
+                metricCounts.GetValueOrDefault("kyrolus.dataprotection.unprotect.failure") == 1 &&
+                metricDurations.GetValueOrDefault("protect") > 0 &&
+                metricDurations.GetValueOrDefault("unprotect") > 0,
+                "Enabled instrumentation should emit activity and metric observations.",
+                ref checks);
+
             Require(
                 hostedServices.OfType<KyrolusDataProtectionKeyCleanupService>().Any() &&
                 hostedServices.OfType<KyrolusDataProtectionKeyRingRefreshService>().Any() &&
@@ -466,6 +546,55 @@ public static partial class RepositoryRuntimeDiagnostics
                     ref checks);
             }
 
+            var fakeCleanupOptions = new KyrolusDataProtectionKeyCleanupOptions
+            {
+                Enabled = true,
+                DeleteExpiredKeys = true,
+                ExpiredKeyGracePeriod = TimeSpan.Zero,
+                DeleteRevokedKeys = true,
+                RevokedKeyGracePeriod = TimeSpan.Zero,
+                Interval = TimeSpan.Zero
+            };
+            var fakeDeleteManager = new RuntimeDeletableKeyManager(decoratedKeyManager.GetAllKeys(), canDeleteKeys: true);
+            var fakeCleanupService = new KyrolusDataProtectionKeyCleanupService(
+                fakeDeleteManager,
+                new StaticOptionsMonitor<KyrolusDataProtectionKeyCleanupOptions>(fakeCleanupOptions),
+                cleanupLogger);
+            await ((Task)cleanupOnceMethod.Invoke(fakeCleanupService, [fakeCleanupOptions, cancellationToken])!).ConfigureAwait(false);
+            Require(
+                fakeDeleteManager.DeleteCalls == 1 &&
+                fakeDeleteManager.LastMatchedKeys.Count > 0,
+                "Cleanup service should evaluate and delete expired or revoked keys when the key manager supports deletion.",
+                ref checks);
+
+            var noDeleteManager = new RuntimeDeletableKeyManager(Array.Empty<IKey>(), canDeleteKeys: true);
+            var noDeleteCleanupService = new KyrolusDataProtectionKeyCleanupService(
+                noDeleteManager,
+                new StaticOptionsMonitor<KyrolusDataProtectionKeyCleanupOptions>(fakeCleanupOptions),
+                cleanupLogger);
+            await ((Task)cleanupOnceMethod.Invoke(noDeleteCleanupService, [fakeCleanupOptions, cancellationToken])!).ConfigureAwait(false);
+            Require(
+                noDeleteManager.DeleteCalls == 1 &&
+                noDeleteManager.LastMatchedKeys.Count == 0,
+                "Cleanup service should tolerate deletable key managers when no keys match the cleanup predicate.",
+                ref checks);
+
+            var executingCleanupManager = new RuntimeDeletableKeyManager(decoratedKeyManager.GetAllKeys(), canDeleteKeys: true);
+            var executingCleanupService = new KyrolusDataProtectionKeyCleanupService(
+                executingCleanupManager,
+                new StaticOptionsMonitor<KyrolusDataProtectionKeyCleanupOptions>(fakeCleanupOptions),
+                cleanupLogger);
+            using (var enabledCleanupCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(25)))
+            {
+                await ExpectBackgroundServiceCancellationAsync(
+                    () => (Task)executeAsyncMethod.Invoke(executingCleanupService, [enabledCleanupCts.Token])!,
+                    "Enabled cleanup service should honor cancellation after executing at least one cleanup cycle.").ConfigureAwait(false);
+            }
+            Require(
+                executingCleanupManager.DeleteCalls >= 1,
+                "Enabled cleanup service should execute cleanup work before cancellation.",
+                ref checks);
+
             var refreshLogger = provider.GetRequiredService<ILoggerFactory>().CreateLogger<KyrolusDataProtectionKeyRingRefreshService>();
             var refreshStopCts = new CancellationTokenSource();
             var refreshHook = new RuntimeDataProtectionRefreshHook(() => refreshStopCts.Cancel());
@@ -691,6 +820,40 @@ internal sealed class RuntimeRefreshKeyManager(
         => throw new NotSupportedException();
 
     public CancellationToken GetCacheExpirationToken() => cacheExpirationToken;
+}
+
+internal sealed class RuntimeDeletableKeyManager(
+    IReadOnlyCollection<IKey> keys,
+    bool canDeleteKeys) : IDeletableKeyManager
+{
+    private readonly IReadOnlyCollection<IKey> keys = keys;
+
+    public int DeleteCalls { get; private set; }
+
+    public IReadOnlyList<IKey> LastMatchedKeys { get; private set; } = [];
+
+    public bool CanDeleteKeys => canDeleteKeys;
+
+    public IReadOnlyCollection<IKey> GetAllKeys() => keys;
+
+    public IKey CreateNewKey(DateTimeOffset activationDate, DateTimeOffset expirationDate)
+        => throw new NotSupportedException();
+
+    public void RevokeKey(Guid keyId, string? reason = null)
+        => throw new NotSupportedException();
+
+    public void RevokeAllKeys(DateTimeOffset revocationDate, string? reason = null)
+        => throw new NotSupportedException();
+
+    public CancellationToken GetCacheExpirationToken() => CancellationToken.None;
+
+    public bool DeleteKeys(Func<IKey, bool> shouldDelete)
+    {
+        ArgumentNullException.ThrowIfNull(shouldDelete);
+        DeleteCalls++;
+        LastMatchedKeys = [.. keys.Where(shouldDelete)];
+        return LastMatchedKeys.Count > 0;
+    }
 }
 
 internal sealed class RuntimeDataProtectionRefreshHook(Action onInvoked) : IKyrolusKeyRingRefreshHook
