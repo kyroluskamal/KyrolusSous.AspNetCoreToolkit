@@ -923,57 +923,59 @@ public sealed class MartenRuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
                 return true;
             }
 
+            var normalizedRaw = NormalizeStringValue(raw);
+
             if (nonNullable == typeof(string))
             {
-                value = raw.Trim('"').Trim('\'');
+                value = normalizedRaw;
                 return true;
             }
 
             if (nonNullable == typeof(Guid))
             {
-                value = Guid.Parse(raw);
+                value = Guid.Parse(normalizedRaw);
                 return true;
             }
 
             if (nonNullable == typeof(DateTimeOffset))
             {
-                var parsed = DateTimeOffset.Parse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces);
+                var parsed = DateTimeOffset.Parse(normalizedRaw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces);
                 value = NormalizeDateTimeOffsetPrecision(parsed);
                 return true;
             }
 
             if (nonNullable == typeof(DateTime))
             {
-                var parsed = DateTime.Parse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces);
+                var parsed = DateTime.Parse(normalizedRaw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces);
                 value = NormalizeDateTimePrecision(parsed);
                 return true;
             }
 
             if (nonNullable == typeof(DateOnly))
             {
-                value = DateOnly.Parse(raw, CultureInfo.InvariantCulture);
+                value = DateOnly.Parse(normalizedRaw, CultureInfo.InvariantCulture);
                 return true;
             }
 
             if (nonNullable == typeof(TimeOnly))
             {
-                value = TimeOnly.Parse(raw, CultureInfo.InvariantCulture);
+                value = TimeOnly.Parse(normalizedRaw, CultureInfo.InvariantCulture);
                 return true;
             }
 
             if (nonNullable == typeof(TimeSpan))
             {
-                value = TimeSpan.Parse(raw, CultureInfo.InvariantCulture);
+                value = TimeSpan.Parse(normalizedRaw, CultureInfo.InvariantCulture);
                 return true;
             }
 
             if (nonNullable.IsEnum)
             {
-                value = Enum.Parse(nonNullable, raw, true);
+                value = Enum.Parse(nonNullable, normalizedRaw, true);
                 return true;
             }
 
-            value = Convert.ChangeType(raw, nonNullable, CultureInfo.InvariantCulture);
+            value = Convert.ChangeType(normalizedRaw, nonNullable, CultureInfo.InvariantCulture);
             return true;
         }
         catch

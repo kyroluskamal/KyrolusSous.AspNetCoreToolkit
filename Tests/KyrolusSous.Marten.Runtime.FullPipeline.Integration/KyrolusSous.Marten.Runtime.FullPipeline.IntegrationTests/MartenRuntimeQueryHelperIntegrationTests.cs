@@ -419,7 +419,11 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return MenuBurstCase("name-startswith-a", [new("Name", "startswith", "A")], HttpStatusCode.OK, 1);
         yield return MenuBurstCase("name-endswith-a", [new("Name", "endswith", "a")], HttpStatusCode.OK, 3);
         yield return MenuBurstCase("name-eq-double-quoted", [new("Name", "eq", "\"Alpha\"")], HttpStatusCode.OK, 1);
+        yield return MenuBurstCase("name-eq-single-quoted", [new("Name", "eq", "'Alpha'")], HttpStatusCode.OK, 1);
+        yield return MenuBurstCase("name-neq-double-quoted", [new("Name", "neq", "\"Alpha\"")], HttpStatusCode.OK, 2);
+        yield return MenuBurstCase("name-neq-single-quoted", [new("Name", "neq", "'Alpha'")], HttpStatusCode.OK, 2);
         yield return MenuBurstCase("category-eq-single-quoted", [new("Category", "eq", "'Main'")], HttpStatusCode.OK, 2);
+        yield return MenuBurstCase("category-eq-double-quoted", [new("Category", "eq", "\"Main\"")], HttpStatusCode.OK, 2);
         yield return MenuBurstCase("name-in-pipe", [new("Name", "in", "Alpha|Cola")], HttpStatusCode.OK, 2);
         yield return MenuBurstCase("name-in-comma", [new("Name", "in", "Alpha,Cola")], HttpStatusCode.OK, 2);
         yield return MenuBurstCase("name-in-quoted", [new("Name", "in", "\"Alpha\"|\"Cola\"")], HttpStatusCode.OK, 2);
@@ -525,7 +529,15 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return OrderBurstCase("total-in-comma", [new("Total", "in", "10,78")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("id-in-order1-order3", [new("Id", "in", "{order1Id}|{order3Id}")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("status-in-paid-failed", [new("Status", "in", "paid|FAILED")], HttpStatusCode.OK, 3);
+        yield return OrderBurstCase("status-eq-double-quoted", [new("Status", "eq", "\"paid\"")], HttpStatusCode.OK, 3);
+        yield return OrderBurstCase("status-neq-single-quoted", [new("Status", "neq", "'FAILED'")], HttpStatusCode.OK, 3);
+        yield return OrderBurstCase("status-in-double-quoted", [new("Status", "in", "\"paid\"|\"FAILED\"")], HttpStatusCode.OK, 3);
+        yield return OrderBurstCase("status-in-single-quoted", [new("Status", "in", "'paid'|'FAILED'")], HttpStatusCode.OK, 3);
         yield return OrderBurstCase("customer-in-two-three", [new("CustomerEmail", "in", "two@local.test|three@local.test")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("customer-eq-double-quoted", [new("CustomerEmail", "eq", "\"two@local.test\"")], HttpStatusCode.OK, 1);
+        yield return OrderBurstCase("customer-neq-single-quoted", [new("CustomerEmail", "neq", "'two@local.test'")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("customer-in-double-quoted", [new("CustomerEmail", "in", "\"two@local.test\"|\"three@local.test\"")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("customer-in-single-quoted", [new("CustomerEmail", "in", "'two@local.test'|'three@local.test'")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("businessdate-in", [new("BusinessDate", "in", "{order1BusinessDate}|{order3BusinessDate}")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("businessdate-in-comma", [new("BusinessDate", "in", "{order1BusinessDate},{order3BusinessDate}")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("businessdate-between-dotdot", [new("BusinessDate", "between", "{businessDateMin}..{businessDateMax}")], HttpStatusCode.OK, 3);

@@ -478,6 +478,36 @@ public sealed class DefaultCommandQueryHandlerCoverageGapIntegrationTests(TestAp
         body.ShouldContain("Concurrency conflict");
     }
 
+    [Theory(DisplayName = "DefaultCommandQueryHandler marten concurrency - wrapped exception matrix returns conflict when concurrency is nested")]
+    [MemberData(nameof(WrappedConcurrencyCases))]
+    public async Task Update_by_id_wrapped_concurrency_exception_matrix_returns_conflict_when_concurrency_is_nested(string mode)
+    {
+        using var customFactory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddScoped<IKyrolusCommandHandler<UpdateCommand<MenuItem>, MenuItem>>(_ => new WrappedUpdateMenuItemCommandHandler(mode));
+            });
+        });
+
+        using var client = customFactory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Tenant-Id", TestHelpers.NewTenantId($"default-handler-wrapped-concurrency-{mode}"));
+        var item = await CreateMenuItemAsync(client, $"Wrapped-{mode}", "Main", 10);
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/menu-items/{item.Id}",
+            new MenuItem
+            {
+                Id = item.Id,
+                Name = $"Wrapped-{mode}-Updated",
+                Category = item.Category,
+                Price = item.Price + 1
+            });
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict, body);
+        body.ShouldContain("Concurrency conflict");
+    }
+
     [Fact(DisplayName = "DefaultCommandQueryHandler marten by-keys - includeDeleted=true returns soft-deleted item")]
     public async Task By_keys_get_with_include_deleted_true_returns_soft_deleted_item()
     {
@@ -989,6 +1019,12 @@ public sealed class DefaultCommandQueryHandlerCoverageGapIntegrationTests(TestAp
         yield return ["restore-by-keys"];
     }
 
+    public static IEnumerable<object[]> WrappedConcurrencyCases()
+    {
+        yield return ["target-invocation"];
+        yield return ["aggregate"];
+    }
+
     public static IEnumerable<object[]> BatchOperationGuardCases()
     {
         yield return ["update-missing-data", "MISSING_DATA"];
@@ -1105,6 +1141,17 @@ public sealed class DefaultCommandQueryHandlerCoverageGapIntegrationTests(TestAp
     {
         public Task<MenuItem> Handle(UpdateCommand<MenuItem> command, CancellationToken cancellationToken)
             => throw CreateMartenConcurrencyException();
+    }
+
+    private sealed class WrappedUpdateMenuItemCommandHandler(string mode) : IKyrolusCommandHandler<UpdateCommand<MenuItem>, MenuItem>
+    {
+        public Task<MenuItem> Handle(UpdateCommand<MenuItem> command, CancellationToken cancellationToken)
+            => throw mode switch
+            {
+                "target-invocation" => new System.Reflection.TargetInvocationException(CreateMartenConcurrencyException()),
+                "aggregate" => new AggregateException(CreateMartenConcurrencyException()),
+                _ => new InvalidOperationException($"Unknown wrapped concurrency mode '{mode}'.")
+            };
     }
 
     private sealed class NullReturningUpdateMenuItemCommandHandler : IKyrolusCommandHandler<UpdateCommand<MenuItem>, MenuItem>

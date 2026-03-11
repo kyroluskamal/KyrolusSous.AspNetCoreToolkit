@@ -796,7 +796,10 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
     }
     private async Task<object?> LoadAsync(Type docType, object id, IDocumentSession session, CancellationToken cancellationToken)
     {
-        var method = GetLoadAsyncMethod().MakeGenericMethod(docType);
+        if (id is null) return null;
+
+        var idType = ResolveDocumentIdType(docType, id.GetType());
+        var method = GetLoadAsyncMethod(idType).MakeGenericMethod(docType);
         var idParamType = method.GetParameters()[0].ParameterType;
         var typedId = ConvertId(id, idParamType);
         if (typedId is null) return null;
@@ -806,15 +809,19 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
     }
     private async Task<IReadOnlyList<object>> LoadManyAsync(Type docType, IEnumerable ids, IDocumentSession session, CancellationToken cancellationToken)
     {
-        var method = GetLoadManyAsyncMethod().MakeGenericMethod(docType);
-        var idParamType = method.GetParameters()[0].ParameterType.GetGenericArguments()[0];
-        var typedIds = CreateTypedIdList(ids, idParamType);
-        var task = (Task)method.Invoke(session, [typedIds, cancellationToken])!;
+        var idParamType = ResolveDocumentIdType(docType, ResolveEnumerableIdType(ids));
+        if (idParamType == typeof(object))
+            return Array.Empty<object>();
+
+        var method = GetLoadManyAsyncMethod(idParamType).MakeGenericMethod(docType);
+        var typedIds = CreateTypedIdCollection(ids, method.GetParameters()[1].ParameterType);
+        var task = (Task)method.Invoke(session, [cancellationToken, typedIds])!;
         await task.ConfigureAwait(false);
         return task.GetType().GetProperty("Result")?.GetValue(task) is not IEnumerable result ? Array.Empty<object>() : result.Cast<object>().ToList();
     }
-    private static object CreateTypedIdList(IEnumerable ids, Type idType)
+    private static object CreateTypedIdCollection(IEnumerable ids, Type parameterType)
     {
+        var idType = ResolveEnumerableItemType(parameterType);
         var listType = typeof(List<>).MakeGenericType(idType);
         var list = (IList)Activator.CreateInstance(listType)!;
         foreach (var raw in ids)
@@ -822,13 +829,20 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
             var converted = ConvertId(raw, idType);
             if (converted is not null) list.Add(converted);
         }
-        return list;
+
+        if (!parameterType.IsArray)
+            return list;
+
+        var array = Array.CreateInstance(idType, list.Count);
+        list.CopyTo(array, 0);
+        return array;
     }
     private static object? ConvertId(object? value, Type targetType)
     {
         if (value is null) return null;
         var underlying = Nullable.GetUnderlyingType(targetType) ?? targetType;
         if (underlying.IsInstanceOfType(value)) return value;
+        if (underlying == typeof(string)) return value.ToString();
         if (underlying == typeof(Guid)) return Guid.Parse(value.ToString()!);
         if (underlying.IsEnum) return Enum.Parse(underlying, value.ToString()!, true);
         return Convert.ChangeType(value, underlying);
@@ -863,12 +877,74 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
             }
         }
     }
-    private static MethodInfo GetLoadAsyncMethod() =>
-        typeof(IDocumentSession).GetMethods(BindingFlags.Public | BindingFlags.Instance)
-            .First(m => m.Name == "LoadAsync" && m.IsGenericMethodDefinition && m.GetParameters().Length == 2);
-    private static MethodInfo GetLoadManyAsyncMethod() =>
-        typeof(IDocumentSession).GetMethods(BindingFlags.Public | BindingFlags.Instance)
-            .First(m => m.Name == "LoadManyAsync" && m.IsGenericMethodDefinition && m.GetParameters().Length == 2);
+    private static MethodInfo GetLoadAsyncMethod(Type idType)
+    {
+        var normalizedIdType = Nullable.GetUnderlyingType(idType) ?? idType;
+        var methods = typeof(IQuerySession).GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where(m => m.Name == "LoadAsync" &&
+                        m.IsGenericMethodDefinition &&
+                        m.GetParameters().Length == 2 &&
+                        m.GetParameters()[1].ParameterType == typeof(CancellationToken))
+            .ToArray();
+
+        return methods.FirstOrDefault(m => m.GetParameters()[0].ParameterType == normalizedIdType)
+            ?? methods.First(m => m.GetParameters()[0].ParameterType == typeof(object));
+    }
+
+    private static MethodInfo GetLoadManyAsyncMethod(Type idType)
+    {
+        var normalizedIdType = Nullable.GetUnderlyingType(idType) ?? idType;
+        var methods = typeof(IQuerySession).GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where(m => m.Name == "LoadManyAsync" &&
+                        m.IsGenericMethodDefinition &&
+                        m.GetParameters().Length == 2 &&
+                        m.GetParameters()[0].ParameterType == typeof(CancellationToken))
+            .ToArray();
+
+        return methods.FirstOrDefault(m => IsEnumerableIdMatch(m.GetParameters()[1].ParameterType, normalizedIdType))
+            ?? methods.First(m => IsArrayIdMatch(m.GetParameters()[1].ParameterType, normalizedIdType));
+    }
+    private static bool IsEnumerableIdMatch(Type parameterType, Type idType)
+    {
+        if (parameterType.IsArray)
+            return false;
+
+        return parameterType.IsGenericType &&
+               parameterType.GetGenericTypeDefinition() == typeof(IEnumerable<>) &&
+               parameterType.GetGenericArguments()[0] == idType;
+    }
+    private static bool IsArrayIdMatch(Type parameterType, Type idType)
+    {
+        return parameterType.IsArray && parameterType.GetElementType() == idType;
+    }
+
+    private static Type ResolveEnumerableIdType(IEnumerable ids)
+    {
+        if (TryGetCollectionElementType(ids.GetType(), out var collectionElementType) && collectionElementType != typeof(object))
+            return Nullable.GetUnderlyingType(collectionElementType) ?? collectionElementType;
+
+        foreach (var item in ids)
+        {
+            if (item is not null)
+                return Nullable.GetUnderlyingType(item.GetType()) ?? item.GetType();
+        }
+
+        return typeof(object);
+    }
+    private static Type ResolveDocumentIdType(Type docType, Type fallbackType)
+    {
+        var idProperty = docType.GetProperty("Id", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+        var resolved = idProperty?.PropertyType ?? fallbackType;
+        return Nullable.GetUnderlyingType(resolved) ?? resolved;
+    }
+
+    private static Type ResolveEnumerableItemType(Type parameterType)
+    {
+        if (parameterType.IsArray)
+            return parameterType.GetElementType()!;
+
+        return parameterType.GetGenericArguments()[0];
+    }
 
     private static string? TryResolveSessionTenantId(IDocumentSession session)
     {

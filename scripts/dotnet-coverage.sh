@@ -96,12 +96,19 @@ if [[ ! -f "$TARGET" ]]; then
   exit 1
 fi
 
+cd "$REPO_ROOT"
+
 RESULTS_ROOT="$REPO_ROOT/TestResults/coverage-run"
 NORMALIZED_DIR="$RESULTS_ROOT/Coverage"
 COBERTURA_FILE="$NORMALIZED_DIR/coverage.cobertura.xml"
+RAW_COBERTURA_FILE="$RESULTS_ROOT/coverage.raw.cobertura.xml"
 TRX_FILE="$NORMALIZED_DIR/test-results.trx"
 REPORT_INDEX_HTML="$NORMALIZED_DIR/index.html"
 REPORT_INDEX_HTM="$NORMALIZED_DIR/index.htm"
+RUNNER_CMD_FILE="$RESULTS_ROOT/run-tests.cmd"
+RUNNER_CMD_CMD="TestResults\\coverage-run\\run-tests.cmd"
+RUNNER_PS1_FILE="$RESULTS_ROOT/run-coverage.ps1"
+RUNNER_PS1_CMD="TestResults\\coverage-run\\run-coverage.ps1"
 
 echo "Cleaning old coverage output..."
 rm -rf "$RESULTS_ROOT"
@@ -110,30 +117,93 @@ mkdir -p "$RESULTS_ROOT" "$NORMALIZED_DIR"
 echo "Running tests with coverage..."
 echo "Target: $TARGET"
 
-test_cmd=(
-  dotnet test "$TARGET"
+TARGET_WIN="$(to_tool_path "$TARGET")"
+RESULTS_ROOT_WIN="$(to_tool_path "$RESULTS_ROOT")"
+RAW_COBERTURA_WIN="$(to_tool_path "$RAW_COBERTURA_FILE")"
+COVERAGE_TOOL_WIN=""
+
+dotnet_test_args=(
+  "$TARGET_WIN"
   -c "$CONFIGURATION"
-  --results-directory "$RESULTS_ROOT"
+  --results-directory "$RESULTS_ROOT_WIN"
   --logger "trx;LogFileName=test-results.trx"
-  --collect:"XPlat Code Coverage"
+  -m:1
 )
 
 if [[ "$NO_RESTORE" == "true" ]]; then
-  test_cmd+=(--no-restore)
+  dotnet_test_args+=(--no-restore)
 fi
 
 if [[ -n "$FILTER" ]]; then
-  test_cmd+=(--filter "$FILTER")
+  dotnet_test_args+=(--filter "$FILTER")
 fi
 
-"${test_cmd[@]}"
+coverage_tool=""
+if [[ -x "$HOME/.dotnet/tools/dotnet-coverage.exe" ]]; then
+  coverage_tool="$HOME/.dotnet/tools/dotnet-coverage.exe"
+elif [[ -x "$HOME/.dotnet/tools/dotnet-coverage" ]]; then
+  coverage_tool="$HOME/.dotnet/tools/dotnet-coverage"
+elif [[ -x "$REPO_ROOT/.tools/dotnet-coverage" ]]; then
+  coverage_tool="$REPO_ROOT/.tools/dotnet-coverage"
+elif [[ -x "$REPO_ROOT/.tools/dotnet-coverage.exe" ]]; then
+  coverage_tool="$REPO_ROOT/.tools/dotnet-coverage.exe"
+elif command -v dotnet-coverage >/dev/null 2>&1; then
+  coverage_tool="dotnet-coverage"
+fi
 
-mapfile -t COVERAGE_FILES < <(find "$RESULTS_ROOT" -type f -name "coverage.cobertura.xml" | sort)
+if [[ -n "$coverage_tool" ]]; then
+  echo "Using dotnet-coverage: $coverage_tool"
+  COVERAGE_TOOL_WIN="$(to_tool_path "$coverage_tool")"
+  {
+    printf '@echo off\r\n'
+    printf 'dotnet test'
+    for arg in "${dotnet_test_args[@]}"; do
+      printf ' "%s"' "$arg"
+    done
+    printf '\r\n'
+  } > "$RUNNER_CMD_FILE"
+
+  {
+    printf '$ErrorActionPreference = '"'"'Stop'"'"'\r\n'
+    printf '& "%s" collect cmd /c "%s" -o "%s" -f cobertura\r\n' \
+      "$COVERAGE_TOOL_WIN" \
+      "$RUNNER_CMD_CMD" \
+      "$RAW_COBERTURA_WIN"
+  } > "$RUNNER_PS1_FILE"
+
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$RUNNER_PS1_CMD"
+else
+  test_cmd=(
+    dotnet test "$TARGET"
+    -c "$CONFIGURATION"
+    --results-directory "$RESULTS_ROOT"
+    --logger "trx;LogFileName=test-results.trx"
+    --collect:"XPlat Code Coverage"
+    -m:1
+  )
+
+  if [[ "$NO_RESTORE" == "true" ]]; then
+    test_cmd+=(--no-restore)
+  fi
+
+  if [[ -n "$FILTER" ]]; then
+    test_cmd+=(--filter "$FILTER")
+  fi
+
+  "${test_cmd[@]}"
+fi
+
 TRX_SOURCE="$(find "$RESULTS_ROOT" -type f -name "*.trx" | head -n 1 || true)"
 
-if [[ ${#COVERAGE_FILES[@]} -eq 0 ]]; then
-  echo "ERROR: coverage.cobertura.xml was not generated."
-  exit 1
+declare -a COVERAGE_FILES=()
+if [[ -f "$RAW_COBERTURA_FILE" ]]; then
+  COVERAGE_FILES=("$RAW_COBERTURA_FILE")
+else
+  mapfile -t COVERAGE_FILES < <(find "$RESULTS_ROOT" -type f -name "coverage.cobertura.xml" | sort)
+  if [[ ${#COVERAGE_FILES[@]} -eq 0 ]]; then
+    echo "ERROR: coverage.cobertura.xml was not generated."
+    exit 1
+  fi
 fi
 
 if [[ -n "$TRX_SOURCE" ]]; then

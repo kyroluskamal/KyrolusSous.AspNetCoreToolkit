@@ -2087,6 +2087,9 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
     {
         yield return ["Name"];
         yield return [new[] { "Name", "Category" }];
+        yield return [ParseJsonElement("\"Name,Category\"")];
+        yield return [ParseJsonElement("[\"Name\",\"Category\"]")];
+        yield return [ParseJsonElement("42")];
     }
 
     public static IEnumerable<object[]> SoftDeleteDecisionCases()
@@ -2373,6 +2376,9 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
 
         return false;
     }
+
+    private static JsonElement ParseJsonElement(string json)
+        => JsonDocument.Parse(json).RootElement.Clone();
 
     private static async Task<MenuItem> CreateMenuItemAsync(HttpClient client, string name, string category, decimal price)
     {

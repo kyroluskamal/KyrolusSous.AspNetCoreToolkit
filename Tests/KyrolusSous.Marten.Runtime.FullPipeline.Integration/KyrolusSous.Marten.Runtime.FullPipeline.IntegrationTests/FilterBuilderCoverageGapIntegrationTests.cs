@@ -122,7 +122,12 @@ public sealed class FilterBuilderCoverageGapIntegrationTests(TestAppFactory fact
         yield return ["price-lt-alias", "Price lt 20", false, HttpStatusCode.OK, 2, null];
         yield return ["price-lte-alias", "Price lte 15", false, HttpStatusCode.OK, 2, null];
         yield return ["createdat-gt", "CreatedAt>2000-01-01T00:00:00Z", false, HttpStatusCode.OK, 4, null];
+        yield return ["createdat-between-unspecified", "CreatedAt between [2000-01-01T00:00:00,2999-01-01T00:00:00]", false, HttpStatusCode.OK, 4, null];
+        yield return ["createdat-between-offset", "CreatedAt between [2000-01-01T00:00:00+02:00,2999-01-01T00:00:00+02:00]", false, HttpStatusCode.OK, 4, null];
         yield return ["createdat-invalid", "CreatedAt==not-a-dto", false, HttpStatusCode.BadRequest, (int?)null, "could not be converted to DateTimeOffset"];
+        yield return ["price-eq-null-string", "Price==null", false, HttpStatusCode.BadRequest, (int?)null, "does not allow null values."];
+        yield return ["updatedat-eq-null-string", "UpdatedAt==null", false, HttpStatusCode.OK, 3, null];
+        yield return ["updatedat-neq-null-string", "UpdatedAt!=null", false, HttpStatusCode.OK, 1, null];
         yield return ["updatedat-in-nullable", "UpdatedAt in [{updatedAtIso}]", false, HttpStatusCode.OK, 1, null];
         yield return ["updatedat-between-nullable", "UpdatedAt between [{updatedAtMinIso},{updatedAtMaxIso}]", false, HttpStatusCode.OK, 1, null];
         yield return ["updatedat-between-invalid", "UpdatedAt between [invalid,{updatedAtMaxIso}]", false, HttpStatusCode.BadRequest, (int?)null, "could not be converted to DateTimeOffset"];
@@ -132,6 +137,11 @@ public sealed class FilterBuilderCoverageGapIntegrationTests(TestAppFactory fact
         yield return ["name-in-case-insensitive", "Name in [alpha,beta]", true, HttpStatusCode.OK, 2, null];
         yield return ["price-between-braces", "Price between {10,26}", false, HttpStatusCode.OK, 3, null];
         yield return ["missing-value", "Name eq", false, HttpStatusCode.BadRequest, (int?)null, "Value is required."];
+        yield return ["or-missing-right", "Name=='Alpha'|", false, HttpStatusCode.BadRequest, (int?)null, "Property name is required."];
+        yield return ["and-missing-right", "Name=='Alpha',", false, HttpStatusCode.BadRequest, (int?)null, "Property name is required."];
+        yield return ["missing-closing-paren", "(Name=='Alpha'", false, HttpStatusCode.BadRequest, (int?)null, "Missing closing ')'."];
+        yield return ["missing-property-expression", ",Name=='Alpha'", false, HttpStatusCode.BadRequest, (int?)null, "Property name is required."];
+        yield return ["any-on-scalar-property", "Name any [Alpha]", false, HttpStatusCode.BadRequest, (int?)null, "only valid for collection properties."];
     }
 
     public static IEnumerable<object[]> OrderFilterTemplateCases()
@@ -157,6 +167,7 @@ public sealed class FilterBuilderCoverageGapIntegrationTests(TestAppFactory fact
         yield return ["businesstime-between-wide", "BusinessTime between [{order1BusinessTime},{order2BusinessTime}]", false, HttpStatusCode.OK, 2, null];
         yield return ["businessdate-invalid", "BusinessDate==not-a-date", false, HttpStatusCode.BadRequest, (int?)null, "could not be converted to DateOnly"];
         yield return ["businesstime-invalid", "BusinessTime==not-a-time", false, HttpStatusCode.BadRequest, (int?)null, "could not be converted to TimeOnly"];
+        yield return ["nested-missing-closing", "Lines any (Quantity>2", false, HttpStatusCode.BadRequest, (int?)null, "Missing closing bracket."];
     }
 
     public static IEnumerable<object[]> MenuClauseCases()
