@@ -540,12 +540,16 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return OrderBurstCase("customer-in-single-quoted", [new("CustomerEmail", "in", "'two@local.test'|'three@local.test'")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("businessdate-in", [new("BusinessDate", "in", "{order1BusinessDate}|{order3BusinessDate}")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("businessdate-in-comma", [new("BusinessDate", "in", "{order1BusinessDate},{order3BusinessDate}")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("businessdate-eq-double-quoted", [new("BusinessDate", "eq", "\"{order1BusinessDate}\"")], HttpStatusCode.OK, 1);
         yield return OrderBurstCase("businessdate-between-dotdot", [new("BusinessDate", "between", "{businessDateMin}..{businessDateMax}")], HttpStatusCode.OK, 3);
         yield return OrderBurstCase("businessdate-between-comma", [new("BusinessDate", "between", "{businessDateMin},{businessDateMax}")], HttpStatusCode.OK, 3);
         yield return OrderBurstCase("businesstime-in", [new("BusinessTime", "in", "{order1BusinessTime}|{order3BusinessTime}")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("businesstime-eq-single-quoted", [new("BusinessTime", "eq", "'{order2BusinessTime}'")], HttpStatusCode.OK, 1);
         yield return OrderBurstCase("businesstime-between-dotdot", [new("BusinessTime", "between", "{businessTimeMin}..{businessTimeMid}")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("businesstime-between-pipe", [new("BusinessTime", "between", "{businessTimeMin}|{businessTimeMax}")], HttpStatusCode.OK, 3);
+        yield return OrderBurstCase("fulfillmentwindow-eq-double-quoted", [new("FulfillmentWindow", "eq", "\"{fulfillmentMid}\"")], HttpStatusCode.OK, 1);
         yield return OrderBurstCase("fulfillmentwindow-between-dotdot", [new("FulfillmentWindow", "between", "{fulfillmentMin}..{fulfillmentMid}")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("fulfillmentwindow-between-comma", [new("FulfillmentWindow", "between", "{fulfillmentMin},{fulfillmentMax}")], HttpStatusCode.OK, 3);
         yield return OrderBurstCase("fulfillmentwindow-in-pipe", [new("FulfillmentWindow", "in", "{fulfillmentMin}|{fulfillmentMid}")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("fulfillmentwindow-in-comma", [new("FulfillmentWindow", "in", "{fulfillmentMin},{fulfillmentMid}")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("paymentid-notnull", [new("PaymentId", "notnull", null)], HttpStatusCode.OK, 3);
@@ -554,7 +558,9 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return OrderBurstCase("paymentid-neq-order1", [new("PaymentId", "neq", "{order1PaymentId}")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("paymentid-eq-null", [new("PaymentId", "eq", null)], HttpStatusCode.OK, 0);
         yield return OrderBurstCase("paymentid-neq-null", [new("PaymentId", "neq", null)], HttpStatusCode.OK, 3);
+        yield return OrderBurstCase("paymentid-in-comma", [new("PaymentId", "in", "{order1PaymentId},{order3PaymentId}")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("paymentid-in-order1-order3", [new("PaymentId", "in", "{order1PaymentId}|{order3PaymentId}")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("paymentid-in-single-quoted", [new("PaymentId", "in", "'{order1PaymentId}'|'{order3PaymentId}'")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("paymentids-any-id1", [new("PaymentIds", "any", "{order1PaymentId}")], HttpStatusCode.OK, 1);
         yield return OrderBurstCase("paymentarray-any-id2", [new("PaymentArrayIds", "any", "{order2PaymentId}")], HttpStatusCode.OK, 1);
         yield return OrderBurstCase("paymentset-any-id3", [new("PaymentSetIds", "any", "{order3PaymentId}")], HttpStatusCode.OK, 1);
@@ -564,6 +570,8 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return OrderBurstCase("lines-all-qty-gte1", [new("Lines", "all", "Quantity>=1")], HttpStatusCode.OK, 1);
         yield return OrderBurstCase("lines-all-qty-gte2", [new("Lines", "all", "Quantity>=2")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("lines-any-qty-between-dotdot", [new("Lines", "any", "Quantity between 2..3")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("lines-any-prepduration-eq", [new("Lines", "any", "PrepDuration==00:15:00")], HttpStatusCode.BadRequest, null, "Invalid filter: property='Lines'");
+        yield return OrderBurstCase("lines-any-prepduration-between-dotdot", [new("Lines", "any", "PrepDuration between 00:05:00..00:15:00")], HttpStatusCode.BadRequest, null, "Invalid filter: property='Lines'");
         yield return OrderBurstCase("lines-any-qty-between-comma", [new("Lines", "any", "Quantity between 2,3")], HttpStatusCode.BadRequest, null, "Invalid filter: property='Lines'");
         yield return OrderBurstCase("lines-any-qty-in", [new("Lines", "any", "Quantity in 1|4")], HttpStatusCode.BadRequest, null, "Invalid filter: property='Lines'");
         yield return OrderBurstCase("lines-any-date-eq", [new("Lines", "any", "ScheduledDate==2024-01-02")], HttpStatusCode.OK, 1);

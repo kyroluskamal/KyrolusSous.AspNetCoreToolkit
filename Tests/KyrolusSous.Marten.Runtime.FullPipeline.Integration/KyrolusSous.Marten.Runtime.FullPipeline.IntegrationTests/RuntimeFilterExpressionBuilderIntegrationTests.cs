@@ -131,6 +131,9 @@ public sealed class RuntimeFilterExpressionBuilderIntegrationTests(TestAppFactor
         yield return MenuCase("updatedat-neq-null", "UpdatedAt!=null", HttpStatusCode.OK, 1);
         yield return MenuCase("updatedat-in-null-only", "UpdatedAt in [null]", HttpStatusCode.OK, 3);
         yield return MenuCase("updatedat-in-null-or-updated", "UpdatedAt in [null,{updatedAtIso}]", HttpStatusCode.OK, 4);
+        yield return MenuCase("updatedat-in-single-updated", "UpdatedAt in [{updatedAtIso}]", HttpStatusCode.OK, 1);
+        yield return MenuCase("name-eq-case-insensitive-doublequoted", "Name==\"alpha\"", HttpStatusCode.OK, 1, caseInsensitive: true);
+        yield return MenuCase("name-neq-case-insensitive-singlequoted", "Name!='alpha'", HttpStatusCode.OK, 3, caseInsensitive: true);
         yield return MenuCase("name-contains-ol", "Name contains ol", HttpStatusCode.BadRequest, null, "does not (yet) support member string.Contains");
         yield return MenuCase("name-startswith-al", "Name startswith Al", HttpStatusCode.BadRequest, null, "does not (yet) support member string.StartsWith");
         yield return MenuCase("name-endswith-a", "Name endswith a", HttpStatusCode.BadRequest, null, "does not (yet) support member string.EndsWith");
@@ -181,12 +184,17 @@ public sealed class RuntimeFilterExpressionBuilderIntegrationTests(TestAppFactor
         yield return OrderCase("paymentid-notnull", "PaymentId notnull", HttpStatusCode.OK, 3);
         yield return OrderCase("paymentid-isnull", "PaymentId isnull", HttpStatusCode.OK, 0);
         yield return OrderCase("paymentid-in-null-or-order1", "PaymentId in [null,{order1PaymentId}]", HttpStatusCode.OK, 1);
+        yield return OrderCase("paymentid-in-single-order1", "PaymentId in [{order1PaymentId}]", HttpStatusCode.OK, 1);
         yield return OrderCase("businessdate-order1", "BusinessDate=={order1BusinessDate}", HttpStatusCode.OK, 1);
+        yield return OrderCase("businessdate-order1-doublequoted", "BusinessDate==\"{order1BusinessDate}\"", HttpStatusCode.OK, 1);
         yield return OrderCase("businessdate-between-wide", "BusinessDate between {businessDateMin}..{businessDateMax}", HttpStatusCode.OK, 3);
         yield return OrderCase("businesstime-order2", "BusinessTime=={order2BusinessTime}", HttpStatusCode.OK, 1);
+        yield return OrderCase("businesstime-order2-singlequoted", "BusinessTime=='{order2BusinessTime}'", HttpStatusCode.OK, 1);
         yield return OrderCase("businesstime-in-edge-values", "BusinessTime in [{order1BusinessTime},{order3BusinessTime}]", HttpStatusCode.OK, 2);
         yield return OrderCase("businesstime-between-wide", "BusinessTime between {businessTimeMin}..{businessTimeMax}", HttpStatusCode.OK, 3);
         yield return OrderCase("status-not-failed", "Status!=Failed", HttpStatusCode.OK, 3);
+        yield return OrderCase("status-eq-doublequoted", "Status==\"paid\"", HttpStatusCode.OK, 3);
+        yield return OrderCase("status-neq-singlequoted", "Status!='FAILED'", HttpStatusCode.OK, 3);
         yield return OrderCase("fulfillmentwindow-unsupported-timespan", "FulfillmentWindow==00:10:00", HttpStatusCode.BadRequest, null, "could not be converted to TimeSpan");
         yield return OrderCase("tags-any-highqty1", "Tags any [HighQty1]", HttpStatusCode.OK, 1);
         yield return OrderCase("tags-any-lower-sensitive", "Tags any [highqty1]", HttpStatusCode.OK, 0);
@@ -201,6 +209,7 @@ public sealed class RuntimeFilterExpressionBuilderIntegrationTests(TestAppFactor
         yield return OrderCase("lines-any-date-between", "Lines any ScheduledDate between 2024-01-02..2024-01-03", HttpStatusCode.BadRequest, null, "could not be converted to OrderLine");
         yield return OrderCase("lines-any-time-gte", "Lines any ScheduledTime>=10:00", HttpStatusCode.OK, 2);
         yield return OrderCase("lines-any-name-eq", "Lines any Name=='HighQty1'", HttpStatusCode.OK, 1);
+        yield return OrderCase("lines-any-name-eq-case-insensitive", "Lines any Name=='highqty1'", HttpStatusCode.OK, 0, caseInsensitive: true);
         yield return OrderCase("lines-any-name-in", "Lines any Name in ['HighQty1','MidQty']", HttpStatusCode.BadRequest, null, "could not be converted to OrderLine");
         yield return OrderCase("lines-any-quantity-in", "Lines any Quantity in [1,4]", HttpStatusCode.BadRequest, null, "could not be converted to OrderLine");
         yield return OrderCase("lines-any-quantity-between", "Lines any Quantity between 2..3", HttpStatusCode.BadRequest, null, "could not be converted to OrderLine");

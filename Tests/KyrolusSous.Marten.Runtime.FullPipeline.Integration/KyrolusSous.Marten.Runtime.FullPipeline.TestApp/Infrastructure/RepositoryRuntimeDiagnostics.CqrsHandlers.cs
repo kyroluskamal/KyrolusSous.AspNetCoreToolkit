@@ -982,6 +982,94 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
+        var methodMatrixValid =
+            RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeGetOrderMethodName(first: true, descending: false) == nameof(Queryable.OrderBy) &&
+            RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeGetOrderMethodName(first: true, descending: true) == nameof(Queryable.OrderByDescending) &&
+            RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeGetOrderMethodName(first: false, descending: false) == nameof(Queryable.ThenBy) &&
+            RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeGetOrderMethodName(first: false, descending: true) == nameof(Queryable.ThenByDescending) &&
+            RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeGetQueryableMethod(nameof(Queryable.OrderBy), typeof(int)).Name == nameof(Queryable.OrderBy) &&
+            RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeGetQueryableMethod(nameof(Queryable.ThenByDescending), typeof(Guid)).Name == nameof(Queryable.ThenByDescending);
+        Require(
+            methodMatrixValid,
+            "Seek handler should resolve the expected Queryable ordering methods.",
+            ref checks);
+
+        var orderingSource = new[]
+        {
+            new RuntimeSeekProbe { Id = Guid.Parse("00000000-0000-0000-0000-000000000003"), Sequence = 2, Scope = scope, TenantId = tenantId },
+            new RuntimeSeekProbe { Id = Guid.Parse("00000000-0000-0000-0000-000000000001"), Sequence = 1, Scope = scope, TenantId = tenantId },
+            new RuntimeSeekProbe { Id = Guid.Parse("00000000-0000-0000-0000-000000000002"), Sequence = 2, Scope = scope, TenantId = tenantId }
+        }.AsQueryable();
+        var ascendingOrder = RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>
+            .ProbeBuildOrderBy([nameof(RuntimeSeekProbe.Sequence), nameof(RuntimeSeekProbe.Id)], descending: false)(orderingSource)
+            .ToList();
+        var descendingOrder = RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>
+            .ProbeBuildOrderBy([nameof(RuntimeSeekProbe.Sequence), nameof(RuntimeSeekProbe.Id)], descending: true)(orderingSource)
+            .ToList();
+        Require(
+            ascendingOrder.Select(x => x.Id).SequenceEqual([
+                Guid.Parse("00000000-0000-0000-0000-000000000001"),
+                Guid.Parse("00000000-0000-0000-0000-000000000002"),
+                Guid.Parse("00000000-0000-0000-0000-000000000003")]) &&
+            descendingOrder.Select(x => x.Id).SequenceEqual([
+                Guid.Parse("00000000-0000-0000-0000-000000000003"),
+                Guid.Parse("00000000-0000-0000-0000-000000000002"),
+                Guid.Parse("00000000-0000-0000-0000-000000000001")]),
+            "Seek handler should apply OrderBy/ThenBy and descending variants consistently.",
+            ref checks);
+
+        Expression<Func<RuntimeSeekProbe, bool>> leftFilter = x => x.Scope == scope;
+        Expression<Func<RuntimeSeekProbe, bool>> rightFilter = x => x.Sequence >= 2;
+        var leftOnly = RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeCombineFilters(leftFilter, null);
+        var rightOnly = RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeCombineFilters(null, rightFilter);
+        var combinedFilter = RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeCombineFilters(leftFilter, rightFilter);
+        Require(
+            leftOnly is not null &&
+            rightOnly is not null &&
+            combinedFilter is not null &&
+            leftOnly.Compile().Invoke(probes[0]) &&
+            rightOnly.Compile().Invoke(probes[1]) &&
+            combinedFilter.Compile().Invoke(probes[1]) &&
+            !combinedFilter.Compile().Invoke(probes[0]),
+            "Seek handler should preserve null filters and combine non-null filters with AND.",
+            ref checks);
+
+        var mergedIncludes = RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeMergeIncludeExpressions(
+            [x => x.Status],
+            new IncludeGraph<RuntimeSeekProbe>(x => x.Amount));
+        var graphOnlyIncludes = RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeMergeIncludeExpressions(
+            null,
+            new IncludeGraph<RuntimeSeekProbe>(x => x.Sequence));
+        var noIncludes = RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeMergeIncludeExpressions(null, null);
+        Require(
+            mergedIncludes is { Length: 2 } &&
+            graphOnlyIncludes is { Length: 1 } &&
+            noIncludes is null,
+            "Seek handler should merge include expressions from direct includes and include graph.",
+            ref checks);
+
+        var seekOptions = RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeBuildOptions(
+            new GetSeekQuery<RuntimeSeekProbe, Guid>(2)
+            {
+                TenantId = tenantId,
+                IncludeDeleted = true,
+                IncludeProperties = [nameof(RuntimeSeekProbe.Scope)],
+                IncludeExpressions = [x => x.Status],
+                IncludeGraph = new IncludeGraph<RuntimeSeekProbe>(x => x.Amount),
+                SeekPropertyNames = [nameof(RuntimeSeekProbe.Sequence), nameof(RuntimeSeekProbe.Id)]
+            },
+            leftFilter,
+            RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeBuildOrderBy([nameof(RuntimeSeekProbe.Sequence)], descending: false));
+        Require(
+            seekOptions.Filter is not null &&
+            seekOptions.OrderBy is not null &&
+            seekOptions.IncludeSoftDeleted &&
+            seekOptions.TenantId == tenantId &&
+            seekOptions.IncludeProperties is { Count: 1 } &&
+            seekOptions.IncludeExpressions is { Length: 2 },
+            "Seek handler should build Marten query options with merged includes and soft-delete flags.",
+            ref checks);
+
         return checks;
     }
 }

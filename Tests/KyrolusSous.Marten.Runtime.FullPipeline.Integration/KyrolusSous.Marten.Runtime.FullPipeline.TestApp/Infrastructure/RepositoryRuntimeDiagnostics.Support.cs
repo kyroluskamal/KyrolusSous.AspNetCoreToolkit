@@ -401,8 +401,51 @@ internal sealed class RuntimeRepositoryUtilityProbe<TEntity>(
     public string ProbeBuildCacheAllKey(string? tenantId, string? policySuffix = null)
         => BuildCacheAllKey(tenantId, policySuffix);
 
+    public string ProbeBuildCompiledQueryCacheKey(object query, string? tenantId, string? policySuffix = null)
+    {
+        return (string)typeof(KyrolusMartenRepositoryAsync<IDocumentSession, TEntity, Guid>)
+            .GetMethod("BuildCompiledQueryCacheKey", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(this, [query, tenantId, policySuffix])!;
+    }
+
     public IDocumentSession ProbeResolveSession(string? tenantId)
         => ResolveSession(tenantId);
+
+    public Task ProbeInvalidateCacheByIdAsync(Guid id, string? tenantId, CancellationToken cancellationToken)
+    {
+        return (Task)typeof(KyrolusMartenRepositoryAsync<IDocumentSession, TEntity, Guid>)
+            .GetMethod(
+                "InvalidateCacheAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                binder: null,
+                types: [typeof(Guid), typeof(string), typeof(CancellationToken)],
+                modifiers: null)!
+            .Invoke(this, [id, tenantId, cancellationToken])!;
+    }
+
+    public Task ProbeInvalidateCacheByEntityAsync(TEntity entity, string? tenantId, CancellationToken cancellationToken)
+    {
+        return (Task)typeof(KyrolusMartenRepositoryAsync<IDocumentSession, TEntity, Guid>)
+            .GetMethod(
+                "InvalidateCacheAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                binder: null,
+                types: [typeof(TEntity), typeof(string), typeof(CancellationToken)],
+                modifiers: null)!
+            .Invoke(this, [entity, tenantId, cancellationToken])!;
+    }
+
+    public Task ProbeInvalidateCacheByEntitiesAsync(IEnumerable<TEntity> entities, string? tenantId, CancellationToken cancellationToken)
+    {
+        return (Task)typeof(KyrolusMartenRepositoryAsync<IDocumentSession, TEntity, Guid>)
+            .GetMethod(
+                "InvalidateCacheAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                binder: null,
+                types: [typeof(IEnumerable<TEntity>), typeof(string), typeof(CancellationToken)],
+                modifiers: null)!
+            .Invoke(this, [entities, tenantId, cancellationToken])!;
+    }
 
     public Task<TEntity?> ProbePatchEntityAsync(
         Guid id,
@@ -518,11 +561,48 @@ internal static class RuntimeGetSeekHandlerProbe<TResponse>
 {
     private static readonly Type HandlerType = typeof(GetSeekQueryHandler<IDocumentSession, TResponse, Guid>);
 
+    public static MartenQueryOptions<TResponse> ProbeBuildOptions(
+        GetSeekQuery<TResponse, Guid> query,
+        Expression<Func<TResponse, bool>>? filter,
+        Func<IQueryable<TResponse>, IOrderedQueryable<TResponse>> orderBy)
+    {
+        return (MartenQueryOptions<TResponse>)HandlerType
+            .GetMethod("BuildOptions", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, [query, filter, orderBy])!;
+    }
+
+    public static Expression<Func<TResponse, object?>>[]? ProbeMergeIncludeExpressions(
+        Expression<Func<TResponse, object?>>[]? includes,
+        IncludeGraph<TResponse>? graph)
+    {
+        return (Expression<Func<TResponse, object?>>[]?)HandlerType
+            .GetMethod("MergeIncludeExpressions", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, [includes, graph]);
+    }
+
     public static string? ProbeBuildNextToken(IReadOnlyList<TResponse> items, IReadOnlyList<string> properties, bool descending)
     {
         return (string?)HandlerType
             .GetMethod("BuildNextToken", BindingFlags.Static | BindingFlags.NonPublic)!
             .Invoke(null, [items, properties, descending]);
+    }
+
+    public static Expression<Func<TResponse, bool>>? ProbeCombineFilters(
+        Expression<Func<TResponse, bool>>? left,
+        Expression<Func<TResponse, bool>>? right)
+    {
+        return (Expression<Func<TResponse, bool>>?)HandlerType
+            .GetMethod("CombineFilters", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, [left, right]);
+    }
+
+    public static Func<IQueryable<TResponse>, IOrderedQueryable<TResponse>> ProbeBuildOrderBy(
+        IReadOnlyList<string> properties,
+        bool descending)
+    {
+        return (Func<IQueryable<TResponse>, IOrderedQueryable<TResponse>>)HandlerType
+            .GetMethod("BuildOrderBy", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, [properties, descending])!;
     }
 
     public static bool ProbeTryBuildSeekPredicate(
@@ -568,6 +648,20 @@ internal static class RuntimeGetSeekHandlerProbe<TResponse>
             .Invoke(null, args)!;
         value = args[2];
         return result;
+    }
+
+    public static string ProbeGetOrderMethodName(bool first, bool descending)
+    {
+        return (string)HandlerType
+            .GetMethod("GetOrderMethodName", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, [first, descending])!;
+    }
+
+    public static MethodInfo ProbeGetQueryableMethod(string name, Type memberType)
+    {
+        return (MethodInfo)HandlerType
+            .GetMethod("GetQueryableMethod", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, [name, typeof(TResponse), memberType])!;
     }
 
     public static bool ProbeTryConvert(string? raw, Type targetType, out object? result)

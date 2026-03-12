@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Text;
@@ -401,6 +402,236 @@ public static partial class RepositoryRuntimeDiagnostics
                 cancellationToken).ConfigureAwait(false) == "retry-value" &&
             retryCalls == 1,
             "Redis cache runtime should fall back after contended locks with exponential backoff.",
+            ref checks);
+
+        var cachedAfterLockOptions = CreateRedisRuntimeOptions($"{prefix}:cached-after-lock", region, tenantId);
+        cachedAfterLockOptions.LockStrategy = KyrolusRedisLockStrategy.Simple;
+        cachedAfterLockOptions.LockWait = TimeSpan.FromMilliseconds(50);
+        cachedAfterLockOptions.LockRetryDelay = TimeSpan.FromMilliseconds(2);
+        cachedAfterLockOptions.LockBackoffMode = KyrolusRedisLockBackoffMode.Fixed;
+        var cachedAfterLockCache = BuildRedisCacheProvider(primaryConnection, cachedAfterLockOptions);
+        var cachedAfterLockFactory = new KyrolusCacheKeyFactory(cachedAfterLockOptions.KeyPrefix);
+        var cachedAfterLockResolvedKey = cachedAfterLockFactory.BuildKey("cached-after-lock", region, tenantId);
+        var cachedAfterLockEntryOptions = new KyrolusCacheEntryOptions
+        {
+            Region = region,
+            TenantId = tenantId,
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
+        };
+        await cachedAfterLockCache.SetAsync(
+            "cached-after-lock",
+            "cached-value",
+            cachedAfterLockEntryOptions,
+            cancellationToken).ConfigureAwait(false);
+        await primaryConnection.GetDatabase().StringSetAsync(
+            $"{cachedAfterLockResolvedKey}:lock",
+            "held",
+            cachedAfterLockOptions.LockWait!.Value + TimeSpan.FromSeconds(1),
+            flags: CommandFlags.None).ConfigureAwait(false);
+        var cachedAfterLockFactoryCalls = 0;
+        Require(
+            await cachedAfterLockCache.GetOrCreateAsync(
+                "cached-after-lock",
+                _ =>
+                {
+                    cachedAfterLockFactoryCalls++;
+                    return Task.FromResult("factory-value");
+                },
+                cachedAfterLockEntryOptions,
+                cancellationToken).ConfigureAwait(false) == "cached-value" &&
+            cachedAfterLockFactoryCalls == 0,
+            "Redis cache runtime should return an existing cached value after lock contention without invoking the factory.",
+            ref checks);
+
+        var keyIndexBatchOptions = CreateRedisRuntimeOptions($"{prefix}:keyindex-batch", region, tenantId);
+        keyIndexBatchOptions.BatchSize = 1;
+        var keyIndexBatchCache = BuildRedisCacheProvider(primaryConnection, keyIndexBatchOptions);
+        await keyIndexBatchCache.SetManyAsync(
+            [
+                new KeyValuePair<string, string>("batch-key-1", "1"),
+                new KeyValuePair<string, string>("batch-key-2", "2"),
+                new KeyValuePair<string, string>("batch-key-3", "3")
+            ],
+            cachedAfterLockEntryOptions,
+            cancellationToken).ConfigureAwait(false);
+        await keyIndexBatchCache.RemoveKeysByPatternAsync("batch-key-*", cancellationToken).ConfigureAwait(false);
+        Require(
+            !await keyIndexBatchCache.ExistsAsync("batch-key-1", cancellationToken).ConfigureAwait(false) &&
+            !await keyIndexBatchCache.ExistsAsync("batch-key-2", cancellationToken).ConfigureAwait(false) &&
+            !await keyIndexBatchCache.ExistsAsync("batch-key-3", cancellationToken).ConfigureAwait(false),
+            "Redis cache runtime should flush key-index invalidation batches when the configured batch size is reached.",
+            ref checks);
+
+        var scanBatchOptions = CreateRedisRuntimeOptions($"{prefix}:scan-batch", region, tenantId);
+        scanBatchOptions.PatternRemovalStrategy = KyrolusRedisPatternRemovalStrategy.ServerScan;
+        scanBatchOptions.ScanServerRole = KyrolusRedisServerRole.Any;
+        var scanBatchCache = BuildRedisCacheProvider(primaryConnection, scanBatchOptions);
+        var scanBatchEntries = Enumerable.Range(0, 257)
+            .Select(index => new KeyValuePair<string, string>(
+                $"scan-batch-{index:D3}",
+                index.ToString(CultureInfo.InvariantCulture)))
+            .ToArray();
+        await scanBatchCache.SetManyAsync(scanBatchEntries, cachedAfterLockEntryOptions, cancellationToken).ConfigureAwait(false);
+        await scanBatchCache.RemoveKeysByPatternAsync("scan-batch-*", cancellationToken).ConfigureAwait(false);
+        Require(
+            !await scanBatchCache.ExistsAsync("scan-batch-000", cancellationToken).ConfigureAwait(false) &&
+            !await scanBatchCache.ExistsAsync("scan-batch-128", cancellationToken).ConfigureAwait(false) &&
+            !await scanBatchCache.ExistsAsync("scan-batch-256", cancellationToken).ConfigureAwait(false),
+            "Redis cache runtime should flush server-scan invalidation batches and support scanning across any connected server role.",
+            ref checks);
+
+        var missingRegionCache = BuildRedisCacheProvider(
+            primaryConnection,
+            CreateRedisRuntimeOptions($"{prefix}:missing-region", region, tenantId));
+        await ExpectThrowsAsync<InvalidOperationException>(
+            () => missingRegionCache.SetAsync(
+                "missing-region",
+                "value",
+                new KyrolusCacheEntryOptions
+                {
+                    Region = " ",
+                    TenantId = tenantId
+                },
+                cancellationToken)).ConfigureAwait(false);
+        checks++;
+
+        var missingTenantCache = BuildRedisCacheProvider(
+            primaryConnection,
+            CreateRedisRuntimeOptions($"{prefix}:missing-tenant", region, tenantId));
+        await ExpectThrowsAsync<InvalidOperationException>(
+            () => missingTenantCache.SetAsync(
+                "missing-tenant",
+                "value",
+                new KyrolusCacheEntryOptions
+                {
+                    Region = region,
+                    TenantId = " "
+                },
+                cancellationToken)).ConfigureAwait(false);
+        checks++;
+
+        var base64SignatureProvider = BuildRedisCacheProvider(primaryConnection, new KyrolusRedisCacheOptions
+        {
+            KeyPrefix = $"{prefix}:base64-signature",
+            DefaultRegion = region,
+            DefaultTenantId = tenantId,
+            RequireRegion = true,
+            RequireTenantId = true,
+            EnableEncryption = true,
+            EncryptionKeyBase64 = Convert.ToBase64String(CreateDiagnosticsAesKey()),
+            EncryptionIvBase64 = Convert.ToBase64String(CreateDiagnosticsIv()),
+            WarningSink = _ => { },
+            CircuitBreaker = new KyrolusRedisCircuitBreakerOptions { Enabled = false }
+        });
+        Require(
+            base64SignatureProvider is RedisCacheProvider,
+            "Redis cache runtime should build payload signatures from valid base64 encryption settings.",
+            ref checks);
+
+        _ = BuildRedisCacheProvider(primaryConnection, new KyrolusRedisCacheOptions
+        {
+            KeyPrefix = $"{prefix}:warning-catch",
+            DefaultRegion = region,
+            DefaultTenantId = tenantId,
+            RequireRegion = true,
+            RequireTenantId = true,
+            WarningSink = _ => { },
+            CircuitBreaker = new KyrolusRedisCircuitBreakerOptions { Enabled = false }
+        });
+        var warningCatchProvider = BuildRedisCacheProvider(primaryConnection, new KyrolusRedisCacheOptions
+        {
+            KeyPrefix = $"{prefix}:warning-catch",
+            DefaultRegion = region,
+            DefaultTenantId = tenantId,
+            RequireRegion = true,
+            RequireTenantId = true,
+            EnableCompression = true,
+            CompressionThresholdBytes = 1,
+            WarningSink = _ => throw new InvalidOperationException("Simulated warning sink failure."),
+            CircuitBreaker = new KyrolusRedisCircuitBreakerOptions { Enabled = false }
+        });
+        Require(
+            warningCatchProvider is RedisCacheProvider,
+            "Redis cache runtime should swallow configuration-signature failures because warnings are best-effort only.",
+            ref checks);
+
+        var gracefulCircuitObserver = new RedisRuntimeObserver();
+        var gracefulCircuitOptions = CreateRedisRuntimeOptions($"{prefix}:faults-circuit", region, tenantId);
+        gracefulCircuitOptions.EnableGracefulFallback = true;
+        gracefulCircuitOptions.CircuitBreaker = new KyrolusRedisCircuitBreakerOptions
+        {
+            Enabled = true,
+            FailureThreshold = 20,
+            OpenDuration = TimeSpan.FromSeconds(1)
+        };
+        var gracefulCircuitSeedCache = BuildRedisCacheProvider(
+            primaryConnection,
+            gracefulCircuitOptions,
+            observer: gracefulCircuitObserver);
+        await gracefulCircuitSeedCache.SetAsync(
+            "deserialize-fault-circuit",
+            "value",
+            cachedAfterLockEntryOptions,
+            cancellationToken).ConfigureAwait(false);
+        var gracefulCircuitCache = BuildRedisCacheProvider(
+            primaryConnection,
+            gracefulCircuitOptions,
+            observer: gracefulCircuitObserver,
+            serializer: new ThrowingRedisCacheSerializer(throwOnDeserialize: true));
+        Require(
+            await gracefulCircuitCache.GetAsync<string>("deserialize-fault-circuit", cancellationToken).ConfigureAwait(false) is null &&
+            gracefulCircuitObserver.ErrorObservations.Any(context =>
+                context.Operation == KyrolusCacheOperation.Get &&
+                string.Equals(context.Key, "deserialize-fault-circuit", StringComparison.Ordinal)),
+            "Redis cache runtime should report graceful-fallback failures through the circuit-breaker-enabled path.",
+            ref checks);
+
+        var activitySnapshots = new ConcurrentQueue<Dictionary<string, string?>>();
+        using var activityListener = new ActivityListener
+        {
+            ShouldListenTo = source => string.Equals(source.Name, KyrolusCacheInstrumentation.ActivitySourceName, StringComparison.Ordinal),
+            Sample = static (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            SampleUsingParentId = static (ref ActivityCreationOptions<string> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activity =>
+            {
+                var snapshot = new Dictionary<string, string?>(StringComparer.Ordinal);
+                foreach (var tag in activity.TagObjects)
+                {
+                    snapshot[tag.Key] = tag.Value?.ToString();
+                }
+
+                activitySnapshots.Enqueue(snapshot);
+            }
+        };
+        ActivitySource.AddActivityListener(activityListener);
+        var activityOptions = CreateRedisRuntimeOptions($"{prefix}:activity", region, tenantId);
+        activityOptions.CircuitBreaker = new KyrolusRedisCircuitBreakerOptions
+        {
+            Enabled = true,
+            FailureThreshold = 10,
+            OpenDuration = TimeSpan.FromSeconds(1)
+        };
+        var activityCache = BuildRedisCacheProvider(primaryConnection, activityOptions);
+        await activityCache.SetAsync(
+            "activity-key",
+            "activity-value",
+            cachedAfterLockEntryOptions,
+            cancellationToken).ConfigureAwait(false);
+        Require(
+            await activityCache.GetAsync<string>("activity-key", cancellationToken).ConfigureAwait(false) == "activity-value" &&
+            activitySnapshots.Any(snapshot =>
+                snapshot.TryGetValue("cache.operation", out var operation) &&
+                string.Equals(operation, nameof(KyrolusCacheOperation.Set), StringComparison.Ordinal) &&
+                snapshot.TryGetValue("cache.provider", out var providerName) &&
+                string.Equals(providerName, "redis", StringComparison.Ordinal) &&
+                snapshot.TryGetValue("cache.region", out var activityRegion) &&
+                string.Equals(activityRegion, region, StringComparison.Ordinal) &&
+                snapshot.TryGetValue("cache.tenant", out var activityTenant) &&
+                string.Equals(activityTenant, tenantId, StringComparison.Ordinal)) &&
+            activitySnapshots.Any(snapshot =>
+                snapshot.TryGetValue("cache.operation", out var operation) &&
+                string.Equals(operation, nameof(KyrolusCacheOperation.Get), StringComparison.Ordinal)),
+            "Redis cache runtime should emit activity tags for cache operations when telemetry listeners are attached.",
             ref checks);
 
         var warningMessages = new ConcurrentQueue<string>();
@@ -1026,3 +1257,4 @@ public static partial class RepositoryRuntimeDiagnostics
     }
 
 }
+

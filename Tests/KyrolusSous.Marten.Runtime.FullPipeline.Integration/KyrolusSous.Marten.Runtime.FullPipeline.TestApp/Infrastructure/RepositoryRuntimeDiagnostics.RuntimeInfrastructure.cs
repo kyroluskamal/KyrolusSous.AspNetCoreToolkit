@@ -811,11 +811,199 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
+        checks += await RunBestEffortAsync(() => RunRepositoryUtilityProbeScenariosAsync(store, cancellationToken)).ConfigureAwait(false);
+
         ExpectThrows<InvalidOperationException>(() => new KyrolusMartenUnitOfWork<IDocumentSession>(scopedSession).GetRepository<RuntimeMissingRepository>());
         checks++;
 
         var saved = await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         if (saved == 1)
+        {
+            checks++;
+        }
+
+        return checks;
+    }
+
+    private static async Task<int> RunRepositoryUtilityProbeScenariosAsync(
+        IDocumentStore store,
+        CancellationToken cancellationToken)
+    {
+        var checks = 0;
+        using var repositorySession = store.LightweightSession();
+        var repositoryCache = new RuntimeInMemoryCacheProvider();
+        var repositoryDependencies = new KyrolusMartenRepositoryDependencies(
+            CacheProvider: repositoryCache,
+            CacheKeyContext: new RuntimeCacheKeyContext("seed-scope", "seed-region", "seed-tenant"),
+            CachePolicyProvider: new RuntimeRepositoryCachePolicyProvider(),
+            CachePolicy: new KyrolusCachePolicy(
+                AbsoluteExpirationRelativeToNow: TimeSpan.FromMinutes(3),
+                SlidingExpiration: TimeSpan.FromMinutes(1),
+                NegativeCacheTtl: TimeSpan.FromSeconds(20),
+                Enabled: true,
+                KeySuffix: "seed",
+                ExtraInvalidationKeys: ["seed:{entity}:{id}"],
+                ExtraInvalidationKeyPatterns: ["seed-pattern:{scope}"]),
+            PolicyProvider: new RuntimeRepositoryPolicyProvider(repositoryCache, "tenant-policy"));
+        var repositoryProbe = new RuntimeRepositoryUtilityProbe<MenuItem>(repositorySession, repositoryDependencies);
+        await repositoryProbe.ProbeEnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
+        var resolvedPolicy = await repositoryProbe
+            .ProbeResolveCachePolicyAsync("GetByIdAsync", null, cancellationToken)
+            .ConfigureAwait(false);
+        if (resolvedPolicy.Enabled == true &&
+            string.Equals(resolvedPolicy.KeySuffix, "dynamic", StringComparison.Ordinal) &&
+            resolvedPolicy.ExtraInvalidationKeys is { Count: > 0 } resolvedKeys &&
+            resolvedKeys.Any(key => key.Contains("policy:{entity}", StringComparison.Ordinal)) &&
+            resolvedKeys.Any(key => key.Contains("dynamic:{entity}", StringComparison.Ordinal)) &&
+            resolvedPolicy.ExtraInvalidationKeyPatterns is { Count: > 0 } resolvedPatterns &&
+            resolvedPatterns.Any(pattern => pattern.Contains("policy-pattern:{entity}", StringComparison.Ordinal)) &&
+            resolvedPatterns.Any(pattern => pattern.Contains("dynamic-pattern:{entity}", StringComparison.Ordinal)))
+        {
+            checks++;
+        }
+
+        var resolvedEntryOptions = repositoryProbe.ProbeBuildCacheEntryOptions(resolvedPolicy, null);
+        var repositoryProbeId = Guid.NewGuid();
+        var cacheKey = repositoryProbe.ProbeBuildCacheKey(null, repositoryProbeId, resolvedPolicy.KeySuffix);
+        var cacheAllKey = repositoryProbe.ProbeBuildCacheAllKey(null, resolvedPolicy.KeySuffix);
+        var compiledQueryCacheKey = repositoryProbe.ProbeBuildCompiledQueryCacheKey(
+            new MenuItemCountCompiledQuery
+            {
+                Category = "Lunch Specials",
+                MinPrice = 9.5m,
+                Tags = ["alpha", "beta"]
+            },
+            null,
+            resolvedPolicy.KeySuffix);
+        if (string.Equals(resolvedEntryOptions.Region, "policy-region", StringComparison.Ordinal) &&
+            string.Equals(resolvedEntryOptions.TenantId, "tenant-policy", StringComparison.Ordinal) &&
+            resolvedEntryOptions.NegativeExpirationRelativeToNow == resolvedPolicy.NegativeCacheTtl &&
+            cacheKey.Contains("MenuItem:id:scope=policy-scope%3AMenuItem:policy=dynamic:", StringComparison.Ordinal) &&
+            cacheAllKey.Contains("MenuItem:all:scope=policy-scope%3AMenuItem:policy=dynamic", StringComparison.Ordinal) &&
+            compiledQueryCacheKey.Contains("Category=Lunch%20Specials", StringComparison.Ordinal) &&
+            compiledQueryCacheKey.Contains("MinPrice=9.5", StringComparison.Ordinal) &&
+            compiledQueryCacheKey.Contains("Tags=[alpha,beta]", StringComparison.Ordinal))
+        {
+            checks++;
+        }
+
+        var resolvedTenantSession = repositoryProbe.ProbeResolveSession("tenant-policy");
+        if (ReferenceEquals(repositoryProbe.ProbeResolveSession(null), repositorySession) &&
+            resolvedTenantSession is IDocumentSession &&
+            RuntimeRepositoryUtilityProbe<MenuItem>.ProbeTryResolveSessionTenantId(repositorySession) is null)
+        {
+            checks++;
+        }
+
+        repositorySession.Store(new RuntimeStringIdDocument { Id = "runtime-doc-a" });
+        repositorySession.Store(new RuntimeGuidIdDocument { Id = repositoryProbeId });
+        repositorySession.Store(new MenuItem
+        {
+            Id = repositoryProbeId,
+            TenantId = "tenant-policy",
+            Name = "Probe item",
+            Category = "Diagnostics",
+            Price = 10m
+        });
+        await repositorySession.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        var loadedStringDocument = await repositoryProbe
+            .ProbeLoadAsync(typeof(RuntimeStringIdDocument), "runtime-doc-a", repositorySession, cancellationToken)
+            .ConfigureAwait(false);
+        var loadedGuidDocument = await repositoryProbe
+            .ProbeLoadAsync(typeof(RuntimeGuidIdDocument), repositoryProbeId.ToString(), repositorySession, cancellationToken)
+            .ConfigureAwait(false);
+        var loadedGuidDocuments = await repositoryProbe
+            .ProbeLoadManyAsync(
+                typeof(RuntimeGuidIdDocument),
+                new object[] { repositoryProbeId.ToString(), Guid.NewGuid() },
+                repositorySession,
+                cancellationToken)
+            .ConfigureAwait(false);
+        var patchedEntity = await repositoryProbe
+            .ProbePatchEntityAsync(
+                repositoryProbeId,
+                new Dictionary<string, object>
+                {
+                    ["Name"] = "Probe item patched",
+                    ["Price"] = "12.75"
+                },
+                repositorySession,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (loadedStringDocument is RuntimeStringIdDocument { Id: "runtime-doc-a" } &&
+            loadedGuidDocument is RuntimeGuidIdDocument { Id: var loadedGuid } &&
+            loadedGuid == repositoryProbeId &&
+            loadedGuidDocuments.Count == 1 &&
+            patchedEntity is { Name: "Probe item patched", Price: 12.75m })
+        {
+            checks++;
+        }
+
+        var orderProbeId = Guid.NewGuid();
+        var probeOrder = new Order();
+        RuntimeRepositoryUtilityProbe<Order>.ProbeApplyProperty(probeOrder, nameof(Order.PaymentId), orderProbeId.ToString());
+        RuntimeRepositoryUtilityProbe<Order>.ProbeSetCollectionValue(
+            probeOrder,
+            nameof(Order.PaymentArrayIds),
+            typeof(Guid),
+            [orderProbeId, Guid.Empty]);
+        var mergedIncludes = RuntimeRepositoryUtilityProbe<Order>.ProbeMergeIncludes(
+            ["Payment"],
+            [order => order.Payment!, order => order.Payments!]);
+        var collectionResolved = RuntimeRepositoryUtilityProbe<Order>.ProbeTryGetCollectionElementType(typeof(List<Guid>), out var collectionElementType);
+        var normalizedStatus = RuntimeRepositoryUtilityProbe<Order>.ProbeNormalizeValue("Paid", typeof(OrderStatus));
+        var convertedId = RuntimeRepositoryUtilityProbe<Order>.ProbeConvertId(orderProbeId.ToString(), typeof(Guid));
+        var createdTypedIds = RuntimeRepositoryUtilityProbe<Order>.ProbeCreateTypedIdCollection(
+            new object[] { orderProbeId.ToString(), Guid.Empty },
+            typeof(List<Guid>));
+        if (probeOrder.PaymentId == orderProbeId &&
+            probeOrder.PaymentArrayIds is { Length: 2 } &&
+            mergedIncludes.Contains("Payment", StringComparer.Ordinal) &&
+            mergedIncludes.Contains("Payments", StringComparer.Ordinal) &&
+            collectionResolved &&
+            collectionElementType == typeof(Guid) &&
+            normalizedStatus is OrderStatus.Paid &&
+            RuntimeRepositoryUtilityProbe<Order>.ProbeResolveIdProperty(typeof(Order), "Payment")?.Name == nameof(Order.PaymentId) &&
+            RuntimeRepositoryUtilityProbe<Order>.ProbeResolveIdsProperty(typeof(Order), "Payment")?.Name == nameof(Order.PaymentIds) &&
+            convertedId is Guid convertedGuid &&
+            convertedGuid == orderProbeId &&
+            createdTypedIds is List<Guid> typedIds &&
+            typedIds.SequenceEqual([orderProbeId, Guid.Empty]))
+        {
+            checks++;
+        }
+
+        if (RuntimeRepositoryUtilityProbe<Order>.ProbeResolveDocumentIdType(typeof(RuntimeStringIdDocument), typeof(Guid)) == typeof(string) &&
+            RuntimeRepositoryUtilityProbe<Order>.ProbeResolveDocumentIdType(typeof(RuntimeNoIdDocument), typeof(Guid)) == typeof(Guid) &&
+            RuntimeRepositoryUtilityProbe<MenuItem>.ProbeReadVersion(null) is null)
+        {
+            checks++;
+        }
+
+        await repositoryProbe.ProbeInvalidateCacheByIdAsync(repositoryProbeId, null, cancellationToken).ConfigureAwait(false);
+        await repositoryProbe
+            .ProbeInvalidateCacheByEntitiesAsync(
+                [
+                    new MenuItem { Id = repositoryProbeId },
+                    new MenuItem { Id = Guid.NewGuid() }
+                ],
+                null,
+                cancellationToken)
+            .ConfigureAwait(false);
+        var noIdProbe = new RuntimeRepositoryUtilityProbe<RuntimeNoIdDocument>(repositorySession, repositoryDependencies);
+        var removedKeyCountBeforeNoId = repositoryCache.RemovedKeys.Count;
+        await noIdProbe
+            .ProbeInvalidateCacheByEntityAsync(new RuntimeNoIdDocument { Name = "no-id" }, null, cancellationToken)
+            .ConfigureAwait(false);
+        var removedKeys = repositoryCache.RemovedKeys.ToArray();
+        var removedPatterns = repositoryCache.RemovedPatterns.ToArray();
+        if (removedKeys.Any(key => key.Contains("MenuItem:id:scope=policy-scope%3AMenuItem:policy=dynamic:", StringComparison.Ordinal)) &&
+            removedKeys.Any(key => key.Contains("MenuItem:all:scope=policy-scope%3AMenuItem:policy=dynamic", StringComparison.Ordinal)) &&
+            removedKeys.Any(key => key.Contains("dynamic:MenuItem:tenant-policy:", StringComparison.Ordinal)) &&
+            removedKeys.Any(key => key.Contains("policy:MenuItem:tenant-policy:", StringComparison.Ordinal)) &&
+            removedPatterns.Any(pattern => pattern.Contains("dynamic-pattern:MenuItem:policy-scope:MenuItem:", StringComparison.Ordinal)) &&
+            removedPatterns.Any(pattern => pattern.Contains("policy-pattern:MenuItem:policy-scope:MenuItem:", StringComparison.Ordinal)) &&
+            repositoryCache.RemovedKeys.Count == removedKeyCountBeforeNoId)
         {
             checks++;
         }
