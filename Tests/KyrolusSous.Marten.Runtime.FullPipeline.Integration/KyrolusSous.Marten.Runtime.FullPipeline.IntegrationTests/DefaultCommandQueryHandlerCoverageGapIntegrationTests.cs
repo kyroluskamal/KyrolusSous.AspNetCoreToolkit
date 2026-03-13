@@ -853,6 +853,42 @@ public sealed class DefaultCommandQueryHandlerCoverageGapIntegrationTests(TestAp
         body.ShouldContain("Unknown");
     }
 
+
+    [Theory(DisplayName = "DefaultCommandQueryHandler marten include graph - enabled validation matrix covers allowed disallowed and depth branches")]
+    [MemberData(nameof(IncludeGraphValidationCases))]
+    public async Task Include_graph_enabled_validation_matrix_covers_allowed_disallowed_and_depth_branches(
+        string caseName,
+        string includeGraph,
+        bool strict,
+        string[]? allowedIncludes,
+        int maxDepth,
+        HttpStatusCode expectedStatus,
+        string? expectedFragment)
+    {
+        using var customFactory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                var config = ResolveMenuItemMartenConfig(services);
+                config.MaxIncludeGraphDepth = maxDepth;
+                config.StrictIncludeValidation = strict;
+                config.AllowedIncludeProperties = allowedIncludes;
+            });
+        });
+
+        using var client = customFactory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Tenant-Id", TestHelpers.NewTenantId($"default-handler-include-graph-{caseName}"));
+        var item = await CreateMenuItemAsync(client, $"IncludeGraph-{caseName}", "Main", 10);
+
+        var response = await client.GetAsync($"/api/menu-items/{item.Id}?includeGraph={Uri.EscapeDataString(includeGraph)}");
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.ShouldBe(expectedStatus, body);
+
+        if (expectedFragment is not null)
+        {
+            body.ShouldContain(expectedFragment);
+        }
+    }
     [Fact(DisplayName = "DefaultCommandQueryHandler marten include - strict include validation rejects unknown include")]
     public async Task Get_all_with_strict_include_validation_rejects_unknown_include()
     {
@@ -980,6 +1016,15 @@ public sealed class DefaultCommandQueryHandlerCoverageGapIntegrationTests(TestAp
         response.StatusCode.ShouldBe(HttpStatusCode.OK, body);
     }
 
+
+    public static IEnumerable<object[]> IncludeGraphValidationCases()
+    {
+        yield return ["valid-scalar-path", "Category", true, new[] { "Category" }, 1, HttpStatusCode.OK, null];
+        yield return ["strict-disallowed", "Price", true, new[] { "Category" }, 1, HttpStatusCode.BadRequest, "not allowed"];
+        yield return ["nonstrict-disallowed", "Price", false, new[] { "Category" }, 1, HttpStatusCode.OK, null];
+        yield return ["strict-missing", "Missing", true, null, 1, HttpStatusCode.BadRequest, "does not exist"];
+        yield return ["strict-depth", "Category.Length", true, null, 1, HttpStatusCode.BadRequest, "exceeds max depth"];
+    }
     public static IEnumerable<object[]> BatchUpdateExceptionCases()
     {
         yield return [true, "CONCURRENCY_CONFLICT"];
@@ -1289,4 +1334,5 @@ public sealed class DefaultCommandQueryHandlerCoverageGapIntegrationTests(TestAp
             .ShouldContain(statusCode);
     }
 }
+
 

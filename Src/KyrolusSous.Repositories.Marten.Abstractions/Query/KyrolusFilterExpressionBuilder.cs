@@ -452,21 +452,34 @@ public static class KyrolusFilterExpressionBuilder
         }
 
         var nonNullConverted = converted.Where(v => v is not null).ToList();
-        var list = Array.CreateInstance(elementType, nonNullConverted.Count);
-        for (var i = 0; i < nonNullConverted.Count; i++)
+        var listElementType = elementType.IsEnum ? Enum.GetUnderlyingType(elementType) : elementType;
+        List<object?> normalizedConverted = elementType.IsEnum
+            ? nonNullConverted
+                .Select(v => Convert.ChangeType(v!, listElementType, CultureInfo.InvariantCulture))
+                .Cast<object?>()
+                .ToList()
+            : nonNullConverted;
+
+        var list = Array.CreateInstance(listElementType, normalizedConverted.Count);
+        for (var i = 0; i < normalizedConverted.Count; i++)
         {
-            list.SetValue(nonNullConverted[i], i);
+            list.SetValue(normalizedConverted[i], i);
         }
 
         var listExpr = Expression.Constant(list);
         var containsMethod = typeof(Enumerable).GetMethods()
             .Single(m => m.Name == nameof(Enumerable.Contains) && m.GetParameters().Length == 2)
-            .MakeGenericMethod(elementType);
+            .MakeGenericMethod(listElementType);
 
         if (memberType != elementType)
         {
             var hasValue = Expression.Property(member, nameof(Nullable<int>.HasValue));
-            var value = Expression.Property(member, nameof(Nullable<int>.Value));
+            Expression value = Expression.Property(member, nameof(Nullable<int>.Value));
+            if (elementType.IsEnum)
+            {
+                value = Expression.Convert(value, listElementType);
+            }
+
             var containsValue = Expression.Call(containsMethod, listExpr, value);
             var nonNullBranch = Expression.AndAlso(hasValue, containsValue);
             if (hasNull)
@@ -479,7 +492,13 @@ public static class KyrolusFilterExpressionBuilder
             return true;
         }
 
-        expression = Expression.Call(containsMethod, listExpr, member);
+        Expression memberValue = member;
+        if (elementType.IsEnum)
+        {
+            memberValue = Expression.Convert(member, listElementType);
+        }
+
+        expression = Expression.Call(containsMethod, listExpr, memberValue);
         return true;
     }
 

@@ -138,6 +138,7 @@ public sealed record RepositoryRuntimeDiagnosticsResponse(
     int? RuntimeRegistrationChecks = null,
     int? CqrsHandlerChecks = null,
     int? EndpointKitCoreChecks = null,
+    int? EndpointKitMartenChecks = null,
     int? ValidationRuntimeChecks = null,
     int? ExceptionHandlingChecks = null,
     int? CacheAbstractionsChecks = null,
@@ -153,4 +154,5 @@ public sealed record RepositoryRuntimeDiagnosticsResponse(
 public static partial class RepositoryRuntimeDiagnostics
 {
 }
+
 

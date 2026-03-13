@@ -630,6 +630,8 @@ martenMenuItemsRoutes.MapPost("/diagnostics/repository-runtime",
             "endpointkit-core-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunEndpointKitCoreRuntimeAsync(
                 tenantId,
                 cancellationToken).ConfigureAwait(false)),
+            "endpointkit-marten-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunEndpointKitMartenRuntimeAsync(
+                cancellationToken).ConfigureAwait(false)),
             "validation-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunValidationRuntimeAsync(
                 cancellationToken).ConfigureAwait(false)),
             "exception-handling-runtime" => Results.Ok(await RepositoryRuntimeDiagnostics.RunExceptionHandlingRuntimeAsync(
@@ -873,3 +875,4 @@ public sealed record RoutingHelperDiagnosticsRequest(
     bool Strict = false);
 
 public partial class Program { }
+

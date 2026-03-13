@@ -133,6 +133,13 @@ public sealed class RepositoryRuntimeDiagnosticsIntegrationTests(TestAppFactory 
             return;
         }
 
+        if (mode == "endpointkit-marten-runtime")
+        {
+            payload.EndpointKitMartenChecks.ShouldNotBeNull();
+            payload.EndpointKitMartenChecks!.Value.ShouldBeGreaterThan(20);
+            return;
+        }
+
         if (mode == "validation-runtime")
         {
             payload.ValidationRuntimeChecks.ShouldNotBeNull();
@@ -274,7 +281,7 @@ public sealed class RepositoryRuntimeDiagnosticsIntegrationTests(TestAppFactory 
         tenantAPayload.ShouldNotBeNull();
         tenantBPayload.ShouldNotBeNull();
 
-        if (mode is not ("order-includes-runtime" or "abstractions-runtime" or "runtime-infrastructure" or "cqrs-handlers-runtime" or "endpointkit-core-runtime" or "validation-runtime" or "exception-handling-runtime" or "data-protection-runtime" or "redis-cache-runtime" or "redis-fallback-runtime" or "data-protection-redis-runtime" or "exception-abstractions-runtime" or "mediator-runtime" or "logging-runtime"))
+        if (mode is not ("order-includes-runtime" or "abstractions-runtime" or "runtime-infrastructure" or "cqrs-handlers-runtime" or "endpointkit-core-runtime" or "endpointkit-marten-runtime" or "validation-runtime" or "exception-handling-runtime" or "data-protection-runtime" or "redis-cache-runtime" or "redis-fallback-runtime" or "data-protection-redis-runtime" or "exception-abstractions-runtime" or "mediator-runtime" or "logging-runtime"))
         {
             tenantAPayload!.CrossTenantCount.ShouldNotBeNull();
             tenantBPayload!.CrossTenantCount.ShouldNotBeNull();
@@ -292,6 +299,7 @@ public sealed class RepositoryRuntimeDiagnosticsIntegrationTests(TestAppFactory 
         yield return ["runtime-infrastructure", HttpStatusCode.OK];
         yield return ["cqrs-handlers-runtime", HttpStatusCode.OK];
         yield return ["endpointkit-core-runtime", HttpStatusCode.OK];
+        yield return ["endpointkit-marten-runtime", HttpStatusCode.OK];
         yield return ["validation-runtime", HttpStatusCode.OK];
         yield return ["exception-handling-runtime", HttpStatusCode.OK];
         yield return ["cache-abstractions-runtime", HttpStatusCode.OK];
@@ -317,6 +325,7 @@ public sealed class RepositoryRuntimeDiagnosticsIntegrationTests(TestAppFactory 
         yield return ["runtime-infrastructure"];
         yield return ["cqrs-handlers-runtime"];
         yield return ["endpointkit-core-runtime"];
+        yield return ["endpointkit-marten-runtime"];
         yield return ["validation-runtime"];
         yield return ["exception-handling-runtime"];
         yield return ["data-protection-runtime"];
@@ -339,6 +348,7 @@ public sealed class RepositoryRuntimeDiagnosticsIntegrationTests(TestAppFactory 
         yield return ["runtime-infrastructure"];
         yield return ["cqrs-handlers-runtime"];
         yield return ["endpointkit-core-runtime"];
+        yield return ["endpointkit-marten-runtime"];
         yield return ["validation-runtime"];
         yield return ["exception-handling-runtime"];
         yield return ["data-protection-runtime"];
@@ -350,3 +360,6 @@ public sealed class RepositoryRuntimeDiagnosticsIntegrationTests(TestAppFactory 
         yield return ["logging-runtime"];
     }
 }
+
+
+

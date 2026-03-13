@@ -113,6 +113,47 @@ public sealed class FilterBuilderCoverageGapIntegrationTests(TestAppFactory fact
         payload!.Count.ShouldBe(expectedCount.Value, body);
     }
 
+
+    [Theory(DisplayName = "Marten filter builder menu allowlist - strict and non-strict matrix")]
+    [MemberData(nameof(MenuAllowlistCases))]
+    public async Task Filter_builder_menu_allowlist_strict_and_non_strict_matrix(
+        string caseName,
+        string? filter,
+        FilterClausePayload[]? clauses,
+        string[] allowedProperties,
+        bool strict,
+        HttpStatusCode expectedStatus,
+        int? expectedCount,
+        string? expectedFragment)
+    {
+        using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId($"marten-filter-builder-allowlist-{caseName}"));
+        await SeedMenuItemsAsync(client);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/menu-items/diagnostics/filter-builder",
+            new FilterBuilderRequest(
+                Filter: filter,
+                Clauses: clauses,
+                AllowedProperties: allowedProperties,
+                Strict: strict,
+                CaseInsensitive: false));
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.ShouldBe(expectedStatus, body);
+
+        if (expectedFragment is not null)
+        {
+            body.ShouldContain(expectedFragment);
+        }
+
+        if (expectedStatus != HttpStatusCode.OK || expectedCount is null)
+        {
+            return;
+        }
+
+        var payload = await response.Content.ReadFromJsonAsync<List<MenuItem>>();
+        payload.ShouldNotBeNull();
+        payload!.Count.ShouldBe(expectedCount.Value, body);
+    }
     [Theory(DisplayName = "Marten filter builder orders clauses - collection enum and nullable matrix")]
     [MemberData(nameof(OrderClauseCases))]
     public async Task Filter_builder_orders_clauses_collection_enum_and_nullable_matrix(
@@ -218,6 +259,14 @@ public sealed class FilterBuilderCoverageGapIntegrationTests(TestAppFactory fact
         yield return ["nested-missing-closing", "Lines any (Quantity>2", false, HttpStatusCode.BadRequest, (int?)null, "Missing closing bracket."];
     }
 
+
+    public static IEnumerable<object?[]> MenuAllowlistCases()
+    {
+        yield return ["string-strict-disallowed", "Price==10", null, new[] { "Name" }, true, HttpStatusCode.BadRequest, (int?)null, "not allowed"];
+        yield return ["string-nonstrict-disallowed", "Price==10", null, new[] { "Name" }, false, HttpStatusCode.OK, 4, null];
+        yield return ["clauses-strict-disallowed", null, new[] { new FilterClausePayload("Price", "eq", "10") }, new[] { "Name" }, true, HttpStatusCode.BadRequest, (int?)null, "not allowed"];
+        yield return ["clauses-nonstrict-disallowed", null, new[] { new FilterClausePayload("Price", "eq", "10") }, new[] { "Name" }, false, HttpStatusCode.OK, 4, null];
+    }
     public static IEnumerable<object?[]> MenuClauseCases()
     {
         yield return ["missing-property", new[] { new FilterClausePayload("", "eq", "Alpha") }, HttpStatusCode.BadRequest, (int?)null, "Property name is required."];
@@ -366,3 +415,4 @@ public sealed class FilterBuilderCoverageGapIntegrationTests(TestAppFactory fact
 
     public sealed record FilterClausePayload(string Property, string Operator, string? Value);
 }
+
