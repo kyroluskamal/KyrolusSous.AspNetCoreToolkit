@@ -191,9 +191,11 @@ public sealed class RuntimeFilterExpressionBuilderIntegrationTests(TestAppFactor
         yield return OrderCase("businessdate-order1", "BusinessDate=={order1BusinessDate}", HttpStatusCode.OK, 1);
         yield return OrderCase("businessdate-order1-doublequoted", "BusinessDate==\"{order1BusinessDate}\"", HttpStatusCode.OK, 1);
         yield return OrderCase("businessdate-order1-singlequoted", "BusinessDate=='{order1BusinessDate}'", HttpStatusCode.OK, 1);
+        yield return OrderCase("businessdate-in-quoted", "BusinessDate in ['{order1BusinessDate}']", HttpStatusCode.OK, 1);
         yield return OrderCase("businessdate-between-wide", "BusinessDate between {businessDateMin}..{businessDateMax}", HttpStatusCode.OK, 3);
         yield return OrderCase("businesstime-order2", "BusinessTime=={order2BusinessTime}", HttpStatusCode.OK, 1);
         yield return OrderCase("businesstime-order2-singlequoted", "BusinessTime=='{order2BusinessTime}'", HttpStatusCode.OK, 1);
+        yield return OrderCase("businesstime-in-quoted", "BusinessTime in ['{order1BusinessTime}','{order3BusinessTime}']", HttpStatusCode.OK, 2);
         yield return OrderCase("businesstime-in-edge-values", "BusinessTime in [{order1BusinessTime},{order3BusinessTime}]", HttpStatusCode.OK, 2);
         yield return OrderCase("businesstime-between-wide", "BusinessTime between {businessTimeMin}..{businessTimeMax}", HttpStatusCode.OK, 3);
         yield return OrderCase("businesstime-between-brackets", "BusinessTime between [{businessTimeMin},{businessTimeMax}]", HttpStatusCode.OK, 3);
@@ -224,6 +226,9 @@ public sealed class RuntimeFilterExpressionBuilderIntegrationTests(TestAppFactor
         yield return OrderCase("invalid-any-on-scalar", "CustomerEmail any admin", HttpStatusCode.BadRequest, null, "only valid for collection properties");
         yield return OrderCase("invalid-paymentids-nested-prop", "PaymentIds any Quantity>1", HttpStatusCode.BadRequest, null, "was not found");
         yield return OrderCase("invalid-paymentarray-bad-guid", "PaymentArrayIds any [not-a-guid]", HttpStatusCode.BadRequest, null, "could not be converted to Guid");
+        yield return OrderCase("invalid-businessdate-conversion", "BusinessDate==not-a-date", HttpStatusCode.BadRequest, null, "could not be converted to DateOnly");
+        yield return OrderCase("invalid-businesstime-conversion", "BusinessTime==not-a-time", HttpStatusCode.BadRequest, null, "could not be converted to TimeOnly");
+        yield return OrderCase("invalid-status-in-conversion", "Status in [Paid,Missing]", HttpStatusCode.BadRequest, null, "could not be converted to OrderStatus");
         yield return OrderCase("invalid-lines-quantity-isnull", "Lines any Quantity isnull", HttpStatusCode.BadRequest, null, "could not be converted to OrderLine");
         yield return OrderCase("invalid-lines-quantity-null-eq", "Lines any Quantity==null", HttpStatusCode.BadRequest, null, "does not allow null values");
         yield return OrderCase("invalid-lines-missing-close-paren", "Lines any (Quantity>2", HttpStatusCode.BadRequest, null, "Missing closing bracket.");

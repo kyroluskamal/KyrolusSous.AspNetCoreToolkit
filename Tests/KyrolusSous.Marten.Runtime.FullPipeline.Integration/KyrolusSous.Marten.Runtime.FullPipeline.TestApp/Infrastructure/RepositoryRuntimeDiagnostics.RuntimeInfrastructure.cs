@@ -811,6 +811,7 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
+        checks += await RunBestEffortAsync(() => RunQueryHelperProbeScenariosAsync(cancellationToken)).ConfigureAwait(false);
         checks += await RunBestEffortAsync(() => RunRepositoryUtilityProbeScenariosAsync(store, cancellationToken)).ConfigureAwait(false);
 
         ExpectThrows<InvalidOperationException>(() => new KyrolusMartenUnitOfWork<IDocumentSession>(scopedSession).GetRepository<RuntimeMissingRepository>());
@@ -823,6 +824,71 @@ public static partial class RepositoryRuntimeDiagnostics
         }
 
         return checks;
+    }
+
+    private static Task<int> RunQueryHelperProbeScenariosAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var checks = 0;
+
+        if (RuntimeMartenQueryHelperProbe<RuntimeQueryBuilderProbe>.ProbeBuildPropertyExpression(".") is null)
+        {
+            checks++;
+        }
+
+        var nullableEnumFilter = RuntimeMartenQueryHelperProbe<RuntimeQueryBuilderProbe>.ProbeBuildFilter(
+            new QueryRequest(Filters:
+            [
+                new FilterClause(nameof(RuntimeQueryBuilderProbe.NullableStatus), "in", "null|Active")
+            ]));
+        if (nullableEnumFilter is not null)
+        {
+            var compiled = nullableEnumFilter.Compile();
+            if (compiled(new RuntimeQueryBuilderProbe { NullableStatus = null }) &&
+                compiled(new RuntimeQueryBuilderProbe { NullableStatus = RuntimeSeekProbeStatus.Active }) &&
+                !compiled(new RuntimeQueryBuilderProbe { NullableStatus = RuntimeSeekProbeStatus.New }))
+            {
+                checks++;
+            }
+        }
+
+        if (RuntimeMartenQueryHelperProbe<RuntimeQueryBuilderProbe>.ProbeTrySplitBetween(
+                "'left\\'value'..\"right\\\"value\"",
+                out var escapedStart,
+                out var escapedEnd) &&
+            escapedStart == "left'value" &&
+            escapedEnd == "right\"value")
+        {
+            checks++;
+        }
+
+        var localDateTime = new DateTime(2024, 03, 02, 10, 11, 12, DateTimeKind.Local);
+        var unspecifiedDateTime = new DateTime(2024, 03, 02, 10, 11, 12, DateTimeKind.Unspecified);
+        var utcDateTime = new DateTime(2024, 03, 02, 10, 11, 12, DateTimeKind.Utc);
+        if (RuntimeMartenQueryHelperProbe<RuntimeQueryBuilderProbe>.ProbeTryConvertValue(
+                localDateTime.ToString("o", CultureInfo.InvariantCulture),
+                typeof(DateTime),
+                out var localConverted) &&
+            localConverted is DateTime localDateTimeValue &&
+            localDateTimeValue.Kind == DateTimeKind.Utc &&
+            RuntimeMartenQueryHelperProbe<RuntimeQueryBuilderProbe>.ProbeTryConvertValue(
+                unspecifiedDateTime.ToString("o", CultureInfo.InvariantCulture),
+                typeof(DateTime),
+                out var unspecifiedConverted) &&
+            unspecifiedConverted is DateTime unspecifiedDateTimeValue &&
+            unspecifiedDateTimeValue.Kind == DateTimeKind.Utc &&
+            RuntimeMartenQueryHelperProbe<RuntimeQueryBuilderProbe>.ProbeTryConvertValue(
+                utcDateTime.ToString("o", CultureInfo.InvariantCulture),
+                typeof(DateTime),
+                out var utcConverted) &&
+            utcConverted is DateTime utcDateTimeValue &&
+            utcDateTimeValue.Kind == DateTimeKind.Utc)
+        {
+            checks++;
+        }
+
+        return Task.FromResult(checks);
     }
 
     private static async Task<int> RunRepositoryUtilityProbeScenariosAsync(

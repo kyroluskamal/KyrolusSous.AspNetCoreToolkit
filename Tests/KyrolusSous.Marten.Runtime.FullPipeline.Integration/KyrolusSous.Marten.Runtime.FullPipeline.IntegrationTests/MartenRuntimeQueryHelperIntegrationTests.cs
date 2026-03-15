@@ -540,10 +540,12 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return OrderBurstCase("customer-in-single-quoted", [new("CustomerEmail", "in", "'two@local.test'|'three@local.test'")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("businessdate-in", [new("BusinessDate", "in", "{order1BusinessDate}|{order3BusinessDate}")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("businessdate-in-comma", [new("BusinessDate", "in", "{order1BusinessDate},{order3BusinessDate}")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("businessdate-in-single-quoted", [new("BusinessDate", "in", "'{order1BusinessDate}'|'{order3BusinessDate}'")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("businessdate-eq-double-quoted", [new("BusinessDate", "eq", "\"{order1BusinessDate}\"")], HttpStatusCode.OK, 1);
         yield return OrderBurstCase("businessdate-between-dotdot", [new("BusinessDate", "between", "{businessDateMin}..{businessDateMax}")], HttpStatusCode.OK, 3);
         yield return OrderBurstCase("businessdate-between-comma", [new("BusinessDate", "between", "{businessDateMin},{businessDateMax}")], HttpStatusCode.OK, 3);
         yield return OrderBurstCase("businesstime-in", [new("BusinessTime", "in", "{order1BusinessTime}|{order3BusinessTime}")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("businesstime-in-double-quoted", [new("BusinessTime", "in", "\"{order1BusinessTime}\"|\"{order3BusinessTime}\"")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("businesstime-eq-single-quoted", [new("BusinessTime", "eq", "'{order2BusinessTime}'")], HttpStatusCode.OK, 1);
         yield return OrderBurstCase("businesstime-between-dotdot", [new("BusinessTime", "between", "{businessTimeMin}..{businessTimeMid}")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("businesstime-between-pipe", [new("BusinessTime", "between", "{businessTimeMin}|{businessTimeMax}")], HttpStatusCode.OK, 3);
@@ -558,6 +560,8 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return OrderBurstCase("paymentid-neq-order1", [new("PaymentId", "neq", "{order1PaymentId}")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("paymentid-eq-null", [new("PaymentId", "eq", null)], HttpStatusCode.OK, 0);
         yield return OrderBurstCase("paymentid-neq-null", [new("PaymentId", "neq", null)], HttpStatusCode.OK, 3);
+        yield return OrderBurstCase("paymentid-in-null-only", [new("PaymentId", "in", "null")], HttpStatusCode.OK, 0);
+        yield return OrderBurstCase("paymentid-in-null-or-order1", [new("PaymentId", "in", "null|{order1PaymentId}")], HttpStatusCode.OK, 1);
         yield return OrderBurstCase("paymentid-in-comma", [new("PaymentId", "in", "{order1PaymentId},{order3PaymentId}")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("paymentid-in-order1-order3", [new("PaymentId", "in", "{order1PaymentId}|{order3PaymentId}")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("paymentid-in-single-quoted", [new("PaymentId", "in", "'{order1PaymentId}'|'{order3PaymentId}'")], HttpStatusCode.OK, 2);
@@ -581,6 +585,7 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return OrderBurstCase("lines-all-date-gte", [new("Lines", "all", "ScheduledDate>=2024-01-01")], HttpStatusCode.OK, 1);
 
         yield return OrderBurstCase("invalid-status-gt", [new("Status", "gt", "Paid")], HttpStatusCode.BadRequest, null, "Unsupported operator");
+        yield return OrderBurstCase("invalid-status-in", [new("Status", "in", "Paid|Missing")], HttpStatusCode.BadRequest, null, "could not be converted to OrderStatus");
         yield return OrderBurstCase("invalid-window-gt", [new("FulfillmentWindow", "gt", "00:10:00")], HttpStatusCode.BadRequest, null, "Invalid filter");
         yield return OrderBurstCase("invalid-businessdate", [new("BusinessDate", "eq", "bad-date")], HttpStatusCode.BadRequest, null, "Invalid filter");
         yield return OrderBurstCase("invalid-businesstime", [new("BusinessTime", "eq", "bad-time")], HttpStatusCode.BadRequest, null, "Invalid filter");

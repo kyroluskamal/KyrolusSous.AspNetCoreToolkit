@@ -1220,9 +1220,12 @@ public static partial class RepositoryRuntimeDiagnostics
                 DirectId = directGuid,
                 OccurredAt = occurredAt,
                 HappenedOn = happenedOn,
+                HappenedDate = DateOnly.FromDateTime(happenedOn),
+                HappenedTime = TimeOnly.FromDateTime(happenedOn),
                 Duration = duration,
                 StatusFromText = RuntimeSeekProbeStatus.Active,
                 StatusFromNumber = RuntimeSeekProbeStatus.Active,
+                NullableStatus = RuntimeSeekProbeStatus.Active,
                 Sequence = 7,
                 OptionalSequence = null
             }) &&
@@ -1232,12 +1235,102 @@ public static partial class RepositoryRuntimeDiagnostics
                 DirectId = directGuid,
                 OccurredAt = occurredAt,
                 HappenedOn = happenedOn,
+                HappenedDate = DateOnly.FromDateTime(happenedOn),
+                HappenedTime = TimeOnly.FromDateTime(happenedOn),
                 Duration = duration,
                 StatusFromText = RuntimeSeekProbeStatus.New,
                 StatusFromNumber = RuntimeSeekProbeStatus.Active,
+                NullableStatus = RuntimeSeekProbeStatus.Active,
                 Sequence = 7,
                 OptionalSequence = null
             }))
+        {
+            checks++;
+        }
+
+        if (!RuntimeMartenFilterExpressionBuilderProbe.ProbeTryBuildMemberAccess(".", out _, out var emptyPropertyError) &&
+            emptyPropertyError == "Property name is required.")
+        {
+            checks++;
+        }
+
+        if (RuntimeMartenFilterExpressionBuilderProbe.ProbeTryBuildFilterExpression(
+                typeof(RuntimeQueryBuilderProbe),
+                "NullableStatus in [Active]",
+                caseInsensitive: false,
+                out var nullableEnumExpression,
+                out var nullableEnumError) &&
+            nullableEnumExpression is Expression<Func<RuntimeQueryBuilderProbe, bool>> nullableEnumPredicate &&
+            nullableEnumError is null)
+        {
+            var compiled = nullableEnumPredicate.Compile();
+            if (compiled(new RuntimeQueryBuilderProbe { NullableStatus = RuntimeSeekProbeStatus.Active }) &&
+                !compiled(new RuntimeQueryBuilderProbe { NullableStatus = RuntimeSeekProbeStatus.New }) &&
+                !compiled(new RuntimeQueryBuilderProbe { NullableStatus = null }))
+            {
+                checks++;
+            }
+        }
+
+        if (!RuntimeMartenFilterExpressionBuilderProbe.ProbeTryBuildFilterExpression(
+                typeof(RuntimeQueryBuilderProbe),
+                "StatusFromText in [invalid-enum]",
+                caseInsensitive: false,
+                out _,
+                out var invalidEnumListError) &&
+            invalidEnumListError?.Contains("RuntimeSeekProbeStatus", StringComparison.Ordinal) == true)
+        {
+            checks++;
+        }
+
+        if (RuntimeMartenFilterExpressionBuilderProbe.ProbeTrySplitBetween(
+                "'left\\'value'..\"right\\\"value\"",
+                out var escapedStart,
+                out var escapedEnd) &&
+            escapedStart == "left'value" &&
+            escapedEnd == "right\"value")
+        {
+            checks++;
+        }
+
+        if (RuntimeMartenFilterExpressionBuilderProbe.ProbeTryConvert(null, typeof(DateOnly), out var nullDateOnly) &&
+            nullDateOnly is null &&
+            !RuntimeMartenFilterExpressionBuilderProbe.ProbeTryConvert("bad-datetime", typeof(DateTime), out _) &&
+            !RuntimeMartenFilterExpressionBuilderProbe.ProbeTryConvert("bad-dateonly", typeof(DateOnly), out _) &&
+            !RuntimeMartenFilterExpressionBuilderProbe.ProbeTryConvert("bad-timeonly", typeof(TimeOnly), out _) &&
+            !RuntimeMartenFilterExpressionBuilderProbe.ProbeTryConvert("bad-enum", typeof(RuntimeSeekProbeStatus), out _))
+        {
+            checks++;
+        }
+
+        if (RuntimeMartenFilterExpressionBuilderProbe.ProbeTryConvert("2024-03-02T10:11:12Z", typeof(DateTime), out var parsedDateTime) &&
+            parsedDateTime is DateTime parsedDateTimeValue &&
+            RuntimeMartenFilterExpressionBuilderProbe.ProbeTryConvert("2024-03-02", typeof(DateOnly), out var parsedDateOnly) &&
+            parsedDateOnly is DateOnly parsedDateOnlyValue &&
+            RuntimeMartenFilterExpressionBuilderProbe.ProbeTryConvert("10:11:12", typeof(TimeOnly), out var parsedTimeOnly) &&
+            parsedTimeOnly is TimeOnly parsedTimeOnlyValue &&
+            parsedDateTimeValue == DateTime.Parse("2024-03-02T10:11:12Z", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind) &&
+            parsedDateOnlyValue == new DateOnly(2024, 3, 2) &&
+            parsedTimeOnlyValue == new TimeOnly(10, 11, 12))
+        {
+            checks++;
+        }
+
+        if (RuntimeMartenFilterExpressionBuilderProbe.ProbeTryBuildFilterExpression(
+                typeof(RuntimeQueryBuilderProbe),
+                "HappenedDate in ['2024-03-01','2024-03-02']",
+                caseInsensitive: false,
+                out var dateListExpression,
+                out var dateListError) &&
+            dateListExpression is Expression<Func<RuntimeQueryBuilderProbe, bool>> dateListPredicate &&
+            dateListError is null &&
+            dateListPredicate.Compile().Invoke(new RuntimeQueryBuilderProbe { HappenedDate = new DateOnly(2024, 3, 2) }) &&
+            !dateListPredicate.Compile().Invoke(new RuntimeQueryBuilderProbe { HappenedDate = new DateOnly(2024, 3, 5) }))
+        {
+            checks++;
+        }
+
+        if (RuntimeMartenFilterExpressionBuilderProbe.ProbeThrowsUnsupportedComparison())
         {
             checks++;
         }

@@ -685,6 +685,126 @@ internal static class RuntimeGetSeekHandlerProbe<TResponse>
     }
 }
 
+internal static class RuntimeMartenFilterExpressionBuilderProbe
+{
+    private static readonly Type BuilderType = typeof(KyrolusFilterExpressionBuilder);
+
+    public static bool ProbeTryBuildFilterExpression(
+        Type entityType,
+        string? filter,
+        bool caseInsensitive,
+        out LambdaExpression? expression,
+        out string? error)
+    {
+        var args = new object?[] { entityType, filter, caseInsensitive, null, null };
+        var success = (bool)BuilderType
+            .GetMethod("TryBuildFilterExpressionInternal", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, args)!;
+        expression = args[3] as LambdaExpression;
+        error = args[4] as string;
+        return success;
+    }
+
+    public static bool ProbeTryBuildMemberAccess(string propertyPath, out Type? memberType, out string? error)
+    {
+        var args = new object?[]
+        {
+            Expression.Parameter(typeof(RuntimeQueryBuilderProbe), "x"),
+            propertyPath,
+            null,
+            null,
+            null
+        };
+
+        var success = (bool)BuilderType
+            .GetMethod("TryBuildMemberAccess", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, args)!;
+        memberType = args[3] as Type;
+        error = args[4] as string;
+        return success;
+    }
+
+    public static bool ProbeTrySplitBetween(string raw, out string? start, out string? end)
+    {
+        var args = new object?[] { raw, null, null };
+        var success = (bool)BuilderType
+            .GetMethod("TrySplitBetween", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, args)!;
+        start = args[1] as string;
+        end = args[2] as string;
+        return success;
+    }
+
+    public static bool ProbeTryConvert(string? raw, Type targetType, out object? result)
+    {
+        var args = new object?[] { raw, targetType, null };
+        var success = (bool)BuilderType
+            .GetMethod("TryConvert", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, args)!;
+        result = args[2];
+        return success;
+    }
+
+    public static bool ProbeThrowsUnsupportedComparison()
+    {
+        try
+        {
+            BuilderType
+                .GetMethod("BuildComparison", BindingFlags.Static | BindingFlags.NonPublic)!
+                .Invoke(
+                    null,
+                    [
+                        Expression.Property(Expression.Parameter(typeof(RuntimeQueryBuilderProbe), "x"), nameof(RuntimeQueryBuilderProbe.Sequence)),
+                        typeof(int),
+                        "has",
+                        1,
+                        false
+                    ]);
+            return false;
+        }
+        catch (TargetInvocationException ex) when (ex.InnerException is ArgumentException inner)
+        {
+            return inner.Message.Contains("Unsupported operator", StringComparison.Ordinal);
+        }
+    }
+}
+
+internal static class RuntimeMartenQueryHelperProbe<TEntity>
+    where TEntity : class
+{
+    private static readonly Type HelperType = typeof(MartenRuntimeQueryHelper<TEntity>);
+    private static readonly MartenRuntimeQueryHelper<TEntity> Helper = new();
+
+    public static Expression<Func<TEntity, bool>>? ProbeBuildFilter(QueryRequest? request)
+        => Helper.BuildFilter(request);
+
+    public static Expression? ProbeBuildPropertyExpression(string propertyPath)
+        => (Expression?)HelperType
+            .GetMethod("BuildPropertyExpression", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, [Expression.Parameter(typeof(TEntity), "e"), propertyPath]);
+
+    public static bool ProbeTrySplitBetween(string raw, out string? start, out string? end)
+    {
+        var args = new object?[] { raw, null, null };
+        var success = (bool)HelperType
+            .GetMethod("TrySplitBetween", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, args)!;
+        start = args[1] as string;
+        end = args[2] as string;
+        return success;
+    }
+
+    public static bool ProbeTryConvertValue(string raw, Type targetType, out object? value)
+    {
+        var args = new object?[] { raw, targetType, null };
+        var success = (bool)HelperType
+            .GetMethod("TryConvertValue", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, args)!;
+        value = args[2];
+        return success;
+    }
+}
+
 internal sealed class RuntimeValidationProbeRequest : IKyrolusValidationCacheable, IKyrolusValidationNegativeCacheable
 {
     public decimal Price { get; init; }
@@ -1000,12 +1120,22 @@ internal sealed class RuntimeQueryBuilderProbe
     public Guid DirectId { get; set; }
     public DateTimeOffset OccurredAt { get; set; }
     public DateTime HappenedOn { get; set; }
+    public DateOnly HappenedDate { get; set; }
+    public TimeOnly HappenedTime { get; set; }
     public TimeSpan Duration { get; set; }
     public RuntimeSeekProbeStatus StatusFromText { get; set; }
     public RuntimeSeekProbeStatus StatusFromNumber { get; set; }
+    public RuntimeSeekProbeStatus? NullableStatus { get; set; }
+    public List<RuntimeQueryBuilderElement> Children { get; set; } = [];
     public int Sequence { get; set; }
     public int? OptionalSequence { get; set; }
     public RuntimeQueryBuilderNested Nested { get; set; } = new(string.Empty);
+}
+
+internal sealed class RuntimeQueryBuilderElement
+{
+    public string Name { get; set; } = string.Empty;
+    public int Quantity { get; set; }
 }
 
 internal sealed class RuntimeQueryBuilderNested(string name)
