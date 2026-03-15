@@ -702,6 +702,19 @@ public static partial class RepositoryRuntimeDiagnostics
     {
         var checks = 0;
 
+        ExpectThrows<ArgumentOutOfRangeException>(() => _ = new KyrolusMartenRetryResiliencePolicy(-1, TimeSpan.Zero));
+        checks++;
+        ExpectThrows<ArgumentNullException>(() => _ = new KyrolusMartenRetryResiliencePolicy(1, (Func<int, TimeSpan>)null!));
+        checks++;
+        ExpectThrows<ArgumentOutOfRangeException>(() => _ = new KyrolusMartenTimeoutResiliencePolicy(TimeSpan.Zero));
+        checks++;
+        ExpectThrows<ArgumentOutOfRangeException>(() => _ = new KyrolusMartenCircuitBreakerResiliencePolicy(0, TimeSpan.FromMilliseconds(1)));
+        checks++;
+        ExpectThrows<ArgumentOutOfRangeException>(() => _ = new KyrolusMartenCircuitBreakerResiliencePolicy(1, TimeSpan.Zero));
+        checks++;
+        ExpectThrows<ArgumentNullException>(() => _ = new KyrolusMartenCompositeResiliencePolicy(null!));
+        checks++;
+
         var noopResult = await KyrolusMartenNoopResiliencePolicy.Instance.ExecuteAsync("noop", () => Task.FromResult(1), cancellationToken).ConfigureAwait(false);
         if (noopResult == 1)
         {
@@ -780,6 +793,27 @@ public static partial class RepositoryRuntimeDiagnostics
             return Task.CompletedTask;
         }, cancellationToken).ConfigureAwait(false);
         if (retryVoidAttempts == 2)
+        {
+            checks++;
+        }
+
+        var fixedDelayAttempts = 0;
+        var fixedDelayPolicy = new KyrolusMartenRetryResiliencePolicy(
+            maxRetries: 1,
+            delay: TimeSpan.Zero,
+            shouldRetry: ex => ex is InvalidOperationException,
+            operationFilter: operation => operation == "retry-fixed");
+        var fixedDelayResult = await fixedDelayPolicy.ExecuteAsync("retry-fixed", () =>
+        {
+            fixedDelayAttempts++;
+            if (fixedDelayAttempts == 1)
+            {
+                throw new InvalidOperationException("retry-fixed");
+            }
+
+            return Task.FromResult(13);
+        }, cancellationToken).ConfigureAwait(false);
+        if (fixedDelayResult == 13 && fixedDelayAttempts == 2)
         {
             checks++;
         }
@@ -951,6 +985,14 @@ public static partial class RepositoryRuntimeDiagnostics
         }
         await compositePolicy.ExecuteAsync("composite-void", () => Task.CompletedTask, cancellationToken).ConfigureAwait(false);
         checks++;
+
+        var emptyComposite = new KyrolusMartenCompositeResiliencePolicy(Array.Empty<IKyrolusMartenResiliencePolicy>());
+        var emptyCompositeResult = await emptyComposite.ExecuteAsync("empty-composite", () => Task.FromResult(12), cancellationToken).ConfigureAwait(false);
+        await emptyComposite.ExecuteAsync("empty-composite-void", () => Task.CompletedTask, cancellationToken).ConfigureAwait(false);
+        if (emptyCompositeResult == 12)
+        {
+            checks++;
+        }
 
         return checks;
     }

@@ -980,6 +980,148 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
+        var documentVersionGuid = Guid.NewGuid();
+        var currentVersionGuid = Guid.NewGuid();
+        if (RuntimeRepositoryUtilityProbe<MenuItem>.ProbeReadVersion(
+                new RuntimeDocumentVersionProbeMetadata
+                {
+                    DocumentVersion = documentVersionGuid.ToString("D", CultureInfo.InvariantCulture)
+                }) == documentVersionGuid &&
+            RuntimeRepositoryUtilityProbe<MenuItem>.ProbeReadVersion(
+                new RuntimeCurrentVersionProbeMetadata
+                {
+                    CurrentVersion = currentVersionGuid
+                }) == currentVersionGuid)
+        {
+            checks++;
+        }
+
+        var normalizedString = RuntimeRepositoryUtilityProbe<MenuItem>.ProbeNormalizeValue(
+            JsonDocument.Parse("\"NormalizedValue\"").RootElement.Clone(),
+            typeof(string));
+        var normalizedDouble = RuntimeRepositoryUtilityProbe<MenuItem>.ProbeNormalizeValue(
+            JsonDocument.Parse("12.5").RootElement.Clone(),
+            typeof(double));
+        var normalizedBool = RuntimeRepositoryUtilityProbe<MenuItem>.ProbeNormalizeValue(
+            JsonDocument.Parse("true").RootElement.Clone(),
+            typeof(bool));
+        var normalizedMenuItem = new MenuItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-policy",
+            Name = "NormalizationProbe",
+            Category = "Before",
+            Price = 1m,
+            IsDeleted = false
+        };
+        RuntimeRepositoryUtilityProbe<MenuItem>.ProbeApplyProperty(
+            normalizedMenuItem,
+            nameof(MenuItem.Name),
+            JsonDocument.Parse("\"After\"").RootElement.Clone());
+        RuntimeRepositoryUtilityProbe<MenuItem>.ProbeApplyProperty(
+            normalizedMenuItem,
+            nameof(MenuItem.IsDeleted),
+            JsonDocument.Parse("true").RootElement.Clone());
+        if ((string?)normalizedString == "NormalizedValue" &&
+            normalizedDouble is double normalizedDoubleValue &&
+            Math.Abs(normalizedDoubleValue - 12.5d) < 0.0001d &&
+            normalizedBool is true &&
+            normalizedMenuItem.Name == "After" &&
+            normalizedMenuItem.IsDeleted)
+        {
+            checks++;
+        }
+
+        var invalidGuidLoadThrew = false;
+        try
+        {
+            await repositoryProbe
+                .ProbeLoadAsync(typeof(RuntimeGuidIdDocument), "not-a-guid", repositorySession, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (FormatException)
+        {
+            invalidGuidLoadThrew = true;
+        }
+
+        var nullGuidLoad = await repositoryProbe
+            .ProbeLoadAsync(typeof(RuntimeGuidIdDocument), null!, repositorySession, cancellationToken)
+            .ConfigureAwait(false);
+        var noIdLoadedMany = await repositoryProbe
+            .ProbeLoadManyAsync(typeof(RuntimeNoIdDocument), new object[] { repositoryProbeId }, repositorySession, cancellationToken)
+            .ConfigureAwait(false);
+        var arrayCollectionResolved = RuntimeRepositoryUtilityProbe<Order>.ProbeTryGetCollectionElementType(typeof(Payment[]), out var paymentArrayElementType);
+        if (invalidGuidLoadThrew &&
+            nullGuidLoad is null &&
+            noIdLoadedMany.Count == 0 &&
+            arrayCollectionResolved &&
+            paymentArrayElementType == typeof(Payment))
+        {
+            checks++;
+        }
+
+        var typedIntArray = RuntimeRepositoryUtilityProbe<MenuItem>.ProbeCreateTypedIdCollection(
+            new object?[] { "1", null, "2" },
+            typeof(int[]));
+        var convertedEnumId = RuntimeRepositoryUtilityProbe<Order>.ProbeConvertId("Paid", typeof(OrderStatus?));
+        var convertedNumericId = RuntimeRepositoryUtilityProbe<Order>.ProbeConvertId("42", typeof(int));
+        var convertedStringId = RuntimeRepositoryUtilityProbe<Order>.ProbeConvertId(123, typeof(string));
+        var interfaceCollectionResolved = RuntimeRepositoryUtilityProbe<Order>.ProbeTryGetCollectionElementType(typeof(RuntimeFieldSelectionLineBag), out var interfaceCollectionElementType);
+        var nonCollectionResolved = RuntimeRepositoryUtilityProbe<Order>.ProbeTryGetCollectionElementType(typeof(int), out var nonCollectionElementType);
+        var hashSetOrder = new Order();
+        var paymentSetItem = new Payment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-policy",
+            OrderId = Guid.NewGuid(),
+            Amount = 7m
+        };
+        RuntimeRepositoryUtilityProbe<Order>.ProbeSetCollectionValue(
+            hashSetOrder,
+            nameof(Order.PaymentSet),
+            typeof(Payment),
+            [paymentSetItem]);
+        if (typedIntArray is int[] typedIntValues &&
+            typedIntValues.SequenceEqual([1, 2]) &&
+            convertedEnumId is OrderStatus.Paid &&
+            convertedNumericId is int convertedInt && convertedInt == 42 &&
+            convertedStringId is "123" &&
+            interfaceCollectionResolved &&
+            interfaceCollectionElementType == typeof(RuntimeFieldSelectionLine) &&
+            !nonCollectionResolved &&
+            nonCollectionElementType == typeof(object) &&
+            hashSetOrder.PaymentSet is { Count: 1 } &&
+            hashSetOrder.PaymentSet.Single().Id == paymentSetItem.Id)
+        {
+            checks++;
+        }
+
+        var pluralIdProperty = RuntimeRepositoryUtilityProbe<Order>.ProbeResolveIdProperty(typeof(Order), "Payments");
+        var pluralIdsProperty = RuntimeRepositoryUtilityProbe<Order>.ProbeResolveIdsProperty(typeof(Order), "Payments");
+        var opaqueCompiledQueryKey = repositoryProbe.ProbeBuildCompiledQueryCacheKey(
+            new { Payload = new StringBuilder("opaque") },
+            null,
+            null);
+        var fallbackRegionProbe = new RuntimeRepositoryUtilityProbe<MenuItem>(
+            repositorySession,
+            new KyrolusMartenRepositoryDependencies(
+                CacheProvider: repositoryCache,
+                CacheKeyContext: new RuntimeCacheKeyContext(null, null, "tenant-fallback")));
+        var fallbackEntryOptions = fallbackRegionProbe.ProbeBuildCacheEntryOptions(new KyrolusCachePolicy(Enabled: true), null);
+        var stringKeyProbe = new RuntimeRepositoryUtilityProbe<RuntimeStringIdDocument>(repositorySession, repositoryDependencies);
+        var removedKeyCountBeforeStringKeyEntity = repositoryCache.RemovedKeys.Count;
+        await stringKeyProbe
+            .ProbeInvalidateCacheByEntityAsync(new RuntimeStringIdDocument { Id = "not-a-guid" }, null, cancellationToken)
+            .ConfigureAwait(false);
+        if (pluralIdProperty?.Name == nameof(Order.PaymentId) &&
+            pluralIdsProperty?.Name == nameof(Order.PaymentIds) &&
+            opaqueCompiledQueryKey.Contains("Payload=opaque", StringComparison.Ordinal) &&
+            fallbackEntryOptions.Region == "tenant=tenant-fallback" &&
+            repositoryCache.RemovedKeys.Count == removedKeyCountBeforeStringKeyEntity)
+        {
+            checks++;
+        }
+
         await repositoryProbe.ProbeInvalidateCacheByIdAsync(repositoryProbeId, null, cancellationToken).ConfigureAwait(false);
         await repositoryProbe
             .ProbeInvalidateCacheByEntitiesAsync(

@@ -982,6 +982,22 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
+        var nestedEnvelope = new RuntimeGetSeekNestedEnvelope { Probe = probes[0] };
+        if (RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeTryConvert(probes[0].Id.ToString("D"), typeof(Guid), out var parsedGuid) &&
+            parsedGuid is Guid parsedGuidValue &&
+            parsedGuidValue == probes[0].Id &&
+            RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeTryConvert(probes[0].OccurredAt.ToString("O"), typeof(DateTimeOffset), out var parsedOccurredAt) &&
+            parsedOccurredAt is DateTimeOffset parsedOccurredAtValue &&
+            parsedOccurredAtValue == probes[0].OccurredAt &&
+            RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeTryConvert(probes[0].HappenedOn.ToString("O"), typeof(DateTime), out var parsedHappenedOn) &&
+            parsedHappenedOn is DateTime parsedHappenedOnValue &&
+            parsedHappenedOnValue == probes[0].HappenedOn &&
+            RuntimeGetSeekHandlerProbe<RuntimeGetSeekNestedEnvelope>.ProbeTryGetPropertyValue(nestedEnvelope, "Probe.Status", out var nestedStatusValue) &&
+            Equals(nestedStatusValue, probes[0].Status))
+        {
+            checks++;
+        }
+
         var methodMatrixValid =
             RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeGetOrderMethodName(first: true, descending: false) == nameof(Queryable.OrderBy) &&
             RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeGetOrderMethodName(first: true, descending: true) == nameof(Queryable.OrderByDescending) &&

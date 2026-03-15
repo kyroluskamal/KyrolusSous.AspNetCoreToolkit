@@ -362,6 +362,16 @@ internal sealed class RuntimeVersionProbeMetadata
     public string? ETag { get; init; }
 }
 
+internal sealed class RuntimeDocumentVersionProbeMetadata
+{
+    public string? DocumentVersion { get; init; }
+}
+
+internal sealed class RuntimeCurrentVersionProbeMetadata
+{
+    public Guid? CurrentVersion { get; init; }
+}
+
 internal sealed class RuntimeStringIdDocument
 {
     public string Id { get; set; } = string.Empty;
