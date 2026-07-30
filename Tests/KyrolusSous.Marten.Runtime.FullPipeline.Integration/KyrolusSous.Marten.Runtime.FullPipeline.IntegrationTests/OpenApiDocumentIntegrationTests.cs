@@ -52,7 +52,7 @@ public sealed class OpenApiDocumentIntegrationTests(TestAppFactory factory) : IC
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK, body);
         response.Content.Headers.ContentType.ShouldNotBeNull();
-        response.Content.Headers.ContentType!.MediaType.ShouldContain("json");
+        response.Content.Headers.ContentType!.MediaType!.ShouldContain("json");
     }
 
     [Fact(DisplayName = "OpenAPI document endpoint - includes core menu and order paths")]

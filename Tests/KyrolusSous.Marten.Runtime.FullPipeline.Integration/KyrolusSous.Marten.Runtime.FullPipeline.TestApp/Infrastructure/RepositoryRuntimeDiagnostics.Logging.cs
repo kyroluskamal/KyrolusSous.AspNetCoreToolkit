@@ -11,6 +11,7 @@ using Serilog.Core;
 using Serilog.Events;
 using Serilog.Parsing;
 using Serilog.Sinks.SystemConsole.Themes;
+using System.Reflection;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Infrastructure;
 
@@ -165,6 +166,174 @@ public static partial class RepositoryRuntimeDiagnostics
                 reflectionEvents[0].Properties.ContainsKey("ProbeEnricher") &&
                 Directory.GetFiles(Path.Combine(tempRoot, "Logs"), "reflection-log-*.txt", SearchOption.TopDirectoryOnly).Length > 0,
                 "Reflection logging should apply custom sinks, enrichers, filters, and file path normalization.",
+                ref checks);
+
+            var builderType = typeof(KyrolusSous.Logging.Serilog.LoggerConfigurationBuilder);
+            var convertOptionsToDictionaryMethod = builderType.GetMethod("ConvertOptionsToDictionary", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ConvertOptionsToDictionary method was not found.");
+            var prepareSinkParametersMethod = builderType.GetMethod("PrepareSinkParameters", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("PrepareSinkParameters method was not found.");
+            var getSinkDetailsMethod = builderType.GetMethod("GetSinkDetails", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("GetSinkDetails method was not found.");
+            var getSinkKeyMethod = builderType.GetMethod("GetSinkKey", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("GetSinkKey method was not found.");
+            var tryConvertParameterMethod = builderType.GetMethod("TryConvertParameter", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("TryConvertParameter method was not found.");
+            var tryGetArgumentsForMethodMethod = builderType.GetMethod("TryGetArgumentsForMethod", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("TryGetArgumentsForMethod method was not found.");
+            var findBestMethodOverloadMethod = builderType.GetMethod("FindBestMethodOverload", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("FindBestMethodOverload method was not found.");
+            var toCamelCaseMethod = builderType.GetMethod("ToCamelCase", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ToCamelCase method was not found.");
+
+            var nullOptionsDictionary = (Dictionary<string, object?>)convertOptionsToDictionaryMethod.Invoke(null, [null])!;
+            var rawOptionsDictionary = (Dictionary<string, object?>)convertOptionsToDictionaryMethod.Invoke(
+                null,
+                [new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase) { ["Path"] = "logs/runtime.txt" }])!;
+            var typedOptionsDictionary = (Dictionary<string, object?>)convertOptionsToDictionaryMethod.Invoke(
+                null,
+                [new LoggingOptions.FileSinkOptions
+                {
+                    Path = "Logs/probe-.txt",
+                    OutputTemplate = "[{Level}] {Message:lj}"
+                }])!;
+            Require(
+                nullOptionsDictionary.Count == 0 &&
+                rawOptionsDictionary.TryGetValue("Path", out var rawPathValue) &&
+                (string?)rawPathValue == "logs/runtime.txt" &&
+                typedOptionsDictionary.TryGetValue("path", out var typedPathValue) &&
+                (string?)typedPathValue == "Logs/probe-.txt" &&
+                typedOptionsDictionary.ContainsKey("outputTemplate"),
+                "Logger configuration builder should normalize null, dictionary, and typed sink options into a consistent dictionary shape.",
+                ref checks);
+
+            var relativeFileParameters = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["path"] = "Logs/relative-file-.txt"
+            };
+            prepareSinkParametersMethod.Invoke(null, [relativeFileParameters, LoggingOptions.CommonSinkType.File, aotEnvironment, reflectionOptions]);
+            var consoleParameters = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["formatter"] = new CustomTextFormatter(reflectionOptions.DefaultFormatterOptions)
+            };
+            prepareSinkParametersMethod.Invoke(null, [consoleParameters, LoggingOptions.CommonSinkType.Console, aotEnvironment, reflectionOptions]);
+            Require(
+                relativeFileParameters.TryGetValue("outputTemplate", out var defaultTemplateValue) &&
+                (string?)defaultTemplateValue == reflectionOptions.DefaultOutputTemplate &&
+                relativeFileParameters.TryGetValue("path", out var relativePathValue) &&
+                string.Equals((string?)relativePathValue, Path.Combine(tempRoot, "Logs/relative-file-.txt"), StringComparison.OrdinalIgnoreCase) &&
+                !consoleParameters.ContainsKey("outputTemplate"),
+                "Logger configuration builder should inject default templates only when needed and normalize relative file paths.",
+                ref checks);
+
+            var commonSinkDetails = ((string? MethodName, string? PackageName))getSinkDetailsMethod.Invoke(
+                null,
+                [new LoggingOptions.SinkConfiguration { CommonType = LoggingOptions.CommonSinkType.Console }])!;
+            var manualSinkDetails = ((string? MethodName, string? PackageName))getSinkDetailsMethod.Invoke(
+                null,
+                [new LoggingOptions.SinkConfiguration
+                {
+                    CommonType = LoggingOptions.CommonSinkType.None,
+                    SinkMethodName = "CustomSink",
+                    SinkPackageName = "Custom.Package"
+                }])!;
+            var missingSinkDetails = ((string? MethodName, string? PackageName))getSinkDetailsMethod.Invoke(
+                null,
+                [new LoggingOptions.SinkConfiguration()])!;
+            Require(
+                commonSinkDetails == ("Console", "Serilog.Sinks.Console") &&
+                manualSinkDetails == ("CustomSink", "Custom.Package") &&
+                missingSinkDetails == (null, null),
+                "Logger configuration builder should resolve common, manual, and missing sink metadata correctly.",
+                ref checks);
+
+            var sinkKeys = new[]
+            {
+                (string)getSinkKeyMethod.Invoke(null, [new LoggingOptions.SinkConfiguration { CommonType = LoggingOptions.CommonSinkType.File }])!,
+                (string)getSinkKeyMethod.Invoke(null, [new LoggingOptions.SinkConfiguration { SinkMethodName = "Seq" }])!,
+                (string)getSinkKeyMethod.Invoke(null, [new LoggingOptions.SinkConfiguration { CustomType = typeof(LoggingProbeSink) }])!,
+                (string)getSinkKeyMethod.Invoke(null, [new LoggingOptions.SinkConfiguration()])!
+            };
+            Require(
+                sinkKeys.SequenceEqual(["File", "Seq", nameof(LoggingProbeSink), "default"]),
+                "Logger configuration builder should derive sink keys from common, manual, custom, and fallback configurations.",
+                ref checks);
+
+            var enumConversionArgs = new object?[] { (int)RollingInterval.Day, typeof(RollingInterval), null };
+            var enumConversionSucceeded = (bool)tryConvertParameterMethod.Invoke(null, enumConversionArgs)!;
+            var directConversionArgs = new object?[] { "text", typeof(string), null };
+            var directConversionSucceeded = (bool)tryConvertParameterMethod.Invoke(null, directConversionArgs)!;
+            var invalidConversionArgs = new object?[] { "bad-number", typeof(int), null };
+            var invalidConversionSucceeded = (bool)tryConvertParameterMethod.Invoke(null, invalidConversionArgs)!;
+            Require(
+                enumConversionSucceeded &&
+                enumConversionArgs[2] is RollingInterval.Day &&
+                directConversionSucceeded &&
+                (string?)directConversionArgs[2] == "text" &&
+                !invalidConversionSucceeded,
+                "Logger configuration builder should convert enum and direct parameter values while rejecting invalid conversions.",
+                ref checks);
+
+            var requiredAndOptionalMethod = typeof(RuntimeLoggingMethodHolder).GetMethod(nameof(RuntimeLoggingMethodHolder.RequiredAndOptional))
+                ?? throw new InvalidOperationException("RequiredAndOptional method was not found.");
+            var methodArgs = new object?[]
+            {
+                requiredAndOptionalMethod,
+                new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["required"] = 7
+                },
+                null,
+                0
+            };
+            var matchedRequiredAndOptional = (bool)tryGetArgumentsForMethodMethod.Invoke(null, methodArgs)!;
+            var missingRequiredArgs = new object?[]
+            {
+                requiredAndOptionalMethod,
+                new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase),
+                null,
+                0
+            };
+            var matchedMissingRequired = (bool)tryGetArgumentsForMethodMethod.Invoke(null, missingRequiredArgs)!;
+            Require(
+                matchedRequiredAndOptional &&
+                methodArgs[2] is List<object?> resolvedArguments &&
+                resolvedArguments.Count == 2 &&
+                resolvedArguments[0] is int requiredValue && requiredValue == 7 &&
+                (string?)resolvedArguments[1] == "fallback" &&
+                (int)methodArgs[3]! == 1 &&
+                !matchedMissingRequired,
+                "Logger configuration builder should build optional argument lists only when required parameters are present.",
+                ref checks);
+
+            var overloads = typeof(RuntimeLoggingMethodHolder)
+                .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .Where(static method => method.Name == nameof(RuntimeLoggingMethodHolder.Overload))
+                .ToList();
+            var overloadResolution = ((MethodInfo? BestMethod, List<object?>? SortedArgs))findBestMethodOverloadMethod.Invoke(
+                null,
+                [
+                    overloads,
+                    new object(),
+                    new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["required"] = 9,
+                        ["extra"] = "picked"
+                    }
+                ])!;
+            Require(
+                overloadResolution.BestMethod?.GetParameters().Length == 3 &&
+                overloadResolution.SortedArgs is { Count: 3 } overloadArgs &&
+                (int)overloadArgs[1]! == 9 &&
+                (string?)overloadArgs[2] == "picked",
+                "Logger configuration builder should choose the overload that satisfies the most provided parameters.",
+                ref checks);
+
+            Require(
+                (string)toCamelCaseMethod.Invoke(null, ["OutputTemplate"])! == "outputTemplate" &&
+                (string)toCamelCaseMethod.Invoke(null, ["alreadyCamel"])! == "alreadyCamel" &&
+                (string)toCamelCaseMethod.Invoke(null, [""])! == string.Empty,
+                "Logger configuration builder should preserve empty and camelCase names while lowering PascalCase names.",
                 ref checks);
 
             var manualOptions = new LoggingOptions
@@ -470,5 +639,28 @@ internal sealed class LoggingBrokenSink(string value) : ILogEventSink
     public void Emit(LogEvent logEvent)
     {
         _ = value;
+    }
+}
+
+internal static class RuntimeLoggingMethodHolder
+{
+    public static void RequiredAndOptional(object configuration, int required, string optional = "fallback")
+    {
+        _ = configuration;
+        _ = required;
+        _ = optional;
+    }
+
+    public static void Overload(object configuration, int required)
+    {
+        _ = configuration;
+        _ = required;
+    }
+
+    public static void Overload(object configuration, int required, string extra = "extra")
+    {
+        _ = configuration;
+        _ = required;
+        _ = extra;
     }
 }

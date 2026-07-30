@@ -1086,6 +1086,111 @@ public static partial class RepositoryRuntimeDiagnostics
             "Seek handler should build Marten query options with merged includes and soft-delete flags.",
             ref checks);
 
+        var stubItems = new[]
+        {
+            new RuntimeSeekProbe
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000011"),
+                Sequence = 11,
+                Scope = scope,
+                TenantId = tenantId,
+                Status = RuntimeSeekProbeStatus.New
+            },
+            new RuntimeSeekProbe
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000022"),
+                Sequence = 22,
+                Scope = scope,
+                TenantId = tenantId,
+                Status = RuntimeSeekProbeStatus.Active
+            }
+        };
+        var softRepository = new RuntimeSeekRepositoryStub<RuntimeSeekProbe>(
+            stubItems,
+            totalCount: 2,
+            deletedItems:
+            [
+                .. stubItems,
+                new RuntimeSeekProbe
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000033"),
+                    Sequence = 33,
+                    Scope = scope,
+                    TenantId = tenantId,
+                    Status = RuntimeSeekProbeStatus.Active
+                }
+            ]);
+        var softDeleteHandler = new GetSeekQueryHandler<IDocumentSession, RuntimeSeekProbe, Guid>(
+            new RuntimeSeekUnitOfWork<RuntimeSeekProbe>(softRepository, exposeSoftDeleteRepository: true));
+        var softDeleteResult = await softDeleteHandler.Handle(
+            new GetSeekQuery<RuntimeSeekProbe, Guid>(2)
+            {
+                IncludeDeleted = true,
+                IncludeTotalCount = true,
+                Selector = x => new RuntimeSeekProbe
+                {
+                    Id = x.Id,
+                    Sequence = x.Sequence,
+                    Scope = x.Scope,
+                    TenantId = x.TenantId,
+                    Status = x.Status
+                },
+                SeekPropertyNames = [nameof(RuntimeSeekProbe.Sequence), nameof(RuntimeSeekProbe.Id)]
+            },
+            cancellationToken).ConfigureAwait(false);
+        Require(
+            softDeleteResult.Items.Count == 2 &&
+            softDeleteResult.TotalCount == 3 &&
+            softRepository.QueryCalls == 1 &&
+            softRepository.PageCalls == 0 &&
+            softRepository.SoftDeletedCalls == 1 &&
+            !string.IsNullOrWhiteSpace(softDeleteResult.NextToken),
+            "Seek handler should use the soft-delete repository total-count path and selector branch when both are configured.",
+            ref checks);
+
+        var fallbackRepository = new RuntimeSeekRepositoryStub<RuntimeSeekProbe>(stubItems, totalCount: 2);
+        var fallbackHandler = new GetSeekQueryHandler<IDocumentSession, RuntimeSeekProbe, Guid>(
+            new RuntimeSeekUnitOfWork<RuntimeSeekProbe>(fallbackRepository, exposeSoftDeleteRepository: false));
+        var fallbackResult = await fallbackHandler.Handle(
+            new GetSeekQuery<RuntimeSeekProbe, Guid>(1)
+            {
+                IncludeDeleted = true,
+                IncludeTotalCount = true,
+                SeekPropertyNames = [nameof(RuntimeSeekProbe.Sequence), nameof(RuntimeSeekProbe.Id)]
+            },
+            cancellationToken).ConfigureAwait(false);
+        Require(
+            fallbackResult.Items.Count == 2 &&
+            fallbackResult.TotalCount == 2 &&
+            fallbackRepository.QueryCalls == 1 &&
+            fallbackRepository.PageCalls == 1 &&
+            fallbackRepository.SoftDeletedCalls == 0,
+            "Seek handler should fall back to page counting when the soft-delete repository is unavailable.",
+            ref checks);
+
+        var noTotalCountRepository = new RuntimeSeekRepositoryStub<RuntimeSeekProbe>(stubItems, totalCount: 9);
+        var noTotalCountHandler = new GetSeekQueryHandler<IDocumentSession, RuntimeSeekProbe, Guid>(
+            new RuntimeSeekUnitOfWork<RuntimeSeekProbe>(noTotalCountRepository, exposeSoftDeleteRepository: false));
+        var noTotalCountResult = await noTotalCountHandler.Handle(
+            new GetSeekQuery<RuntimeSeekProbe, Guid>(1)
+            {
+                IncludeTotalCount = false,
+                SeekPropertyNames = [nameof(RuntimeSeekProbe.Sequence), nameof(RuntimeSeekProbe.Id)]
+            },
+            cancellationToken).ConfigureAwait(false);
+        Require(
+            noTotalCountResult.TotalCount is null &&
+            noTotalCountRepository.PageCalls == 0 &&
+            noTotalCountRepository.QueryCalls == 1,
+            "Seek handler should skip total-count resolution when the caller does not request it.",
+            ref checks);
+
+        Require(
+            RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeVisitParameterBranch(visitSourceParameter: true) &&
+            RuntimeGetSeekHandlerProbe<RuntimeSeekProbe>.ProbeVisitParameterBranch(visitSourceParameter: false),
+            "Seek handler parameter replacement should replace only the source parameter and leave unrelated parameters untouched.",
+            ref checks);
+
         return checks;
     }
 }

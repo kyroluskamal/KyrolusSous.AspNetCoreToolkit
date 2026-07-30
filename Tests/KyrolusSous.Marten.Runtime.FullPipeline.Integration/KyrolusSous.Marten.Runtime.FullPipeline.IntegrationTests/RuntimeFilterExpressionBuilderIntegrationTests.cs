@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Contracts;
@@ -84,7 +84,7 @@ public sealed class RuntimeFilterExpressionBuilderIntegrationTests(TestAppFactor
         payload!.Count.ShouldBe(expectedCount.Value, body);
     }
 
-    public static IEnumerable<object[]> MenuExpressionCases()
+    public static IEnumerable<object?[]> MenuExpressionCases()
     {
         var eqOps = new[] { "eq", "==", "=" };
         var neqOps = new[] { "neq", "!=", "<>" };
@@ -170,7 +170,7 @@ public sealed class RuntimeFilterExpressionBuilderIntegrationTests(TestAppFactor
         yield return MenuCase("invalid-operator-missing", "Name", HttpStatusCode.BadRequest, null, "Operator is required.");
     }
 
-    public static IEnumerable<object[]> OrderExpressionCases()
+    public static IEnumerable<object?[]> OrderExpressionCases()
     {
         var eqOps = new[] { "eq", "==", "=" };
 
@@ -242,7 +242,7 @@ public sealed class RuntimeFilterExpressionBuilderIntegrationTests(TestAppFactor
         yield return OrderCase("invalid-lines-group-empty-second", "Lines any Quantity>2,", HttpStatusCode.BadRequest, null, null);
     }
 
-    private static object[] MenuCase(
+    private static object?[] MenuCase(
         string caseName,
         string filter,
         HttpStatusCode expectedStatus,
@@ -251,7 +251,7 @@ public sealed class RuntimeFilterExpressionBuilderIntegrationTests(TestAppFactor
         bool caseInsensitive = false)
         => [caseName, filter, caseInsensitive, expectedStatus, expectedCount, expectedFragment];
 
-    private static object[] OrderCase(
+    private static object?[] OrderCase(
         string caseName,
         string filter,
         HttpStatusCode expectedStatus,

@@ -94,7 +94,7 @@ public sealed class FilterBuilderDiagnosticsIntegrationTests(TestAppFactory fact
         orders!.Count.ShouldBe(expectedCount.Value, body);
     }
 
-    public static IEnumerable<object[]> StringModeCases()
+    public static IEnumerable<object?[]> StringModeCases()
     {
         yield return [new FilterBuilderRequest(Filter: "Name==\"alpha\"", CaseInsensitive: true), HttpStatusCode.OK, 1];
         yield return [new FilterBuilderRequest(Filter: "Name in [alpha,beta]", CaseInsensitive: true), HttpStatusCode.OK, 2];
@@ -107,7 +107,7 @@ public sealed class FilterBuilderDiagnosticsIntegrationTests(TestAppFactory fact
         yield return [new FilterBuilderRequest(Filter: "Price contains 1"), HttpStatusCode.BadRequest, (int?)null];
     }
 
-    public static IEnumerable<object[]> ClausesModeCases()
+    public static IEnumerable<object?[]> ClausesModeCases()
     {
         yield return
         [
@@ -186,7 +186,7 @@ public sealed class FilterBuilderDiagnosticsIntegrationTests(TestAppFactory fact
         ];
     }
 
-    public static IEnumerable<object[]> AnyAllFilterCases()
+    public static IEnumerable<object?[]> AnyAllFilterCases()
     {
         yield return [new FilterBuilderRequest(Filter: "CustomerEmail==\"two@local.test\""), HttpStatusCode.OK, 1];
         yield return [new FilterBuilderRequest(Filter: "Lines any Quantity>1"), HttpStatusCode.OK, 1];

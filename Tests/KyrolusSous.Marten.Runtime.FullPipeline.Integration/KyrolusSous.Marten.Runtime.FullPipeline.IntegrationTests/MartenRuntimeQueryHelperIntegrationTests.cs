@@ -279,7 +279,7 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         orders!.Count.ShouldBe(expectedCount.Value, body);
     }
 
-    public static IEnumerable<object[]> ScalarFilterCases()
+    public static IEnumerable<object?[]> ScalarFilterCases()
     {
         yield return [new QueryHelperFilter("Category", "eq", "Main"), 2];
         yield return [new QueryHelperFilter("Price", "gt", "20"), 2];
@@ -292,7 +292,7 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return [new QueryHelperFilter("Name", "endswith", "a"), 3];
     }
 
-    public static IEnumerable<object[]> InvalidScalarFilterCases()
+    public static IEnumerable<object?[]> InvalidScalarFilterCases()
     {
         yield return [new QueryHelperFilter("Unknown", "eq", "x")];
         yield return [new QueryHelperFilter("Name", "any", "x")];
@@ -300,7 +300,7 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return [new QueryHelperFilter("Price", "gt", "abc")];
     }
 
-    public static IEnumerable<object[]> MenuQueryRequestCases()
+    public static IEnumerable<object?[]> MenuQueryRequestCases()
     {
         yield return [null, HttpStatusCode.OK, 3];
         yield return [new QueryHelperRequest(), HttpStatusCode.OK, 3];
@@ -343,7 +343,7 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return [new QueryHelperRequest(OrderBy: [new QueryHelperOrder("", Desc: true)]), HttpStatusCode.BadRequest, (int?)null];
     }
 
-    public static IEnumerable<object[]> OrderLineAnyAllMatrixCases()
+    public static IEnumerable<object?[]> OrderLineAnyAllMatrixCases()
     {
         yield return [new QueryHelperFilter("Lines", "any", "Quantity>2"), HttpStatusCode.OK, 1];
         yield return [new QueryHelperFilter("Lines", "any", "Quantity>=2"), HttpStatusCode.OK, 2];
@@ -362,7 +362,7 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return [new QueryHelperFilter("Lines", "all", "Quantity>"), HttpStatusCode.BadRequest, (int?)null];
     }
 
-    public static IEnumerable<object[]> MenuBulkBurstCases()
+    public static IEnumerable<object?[]> MenuBulkBurstCases()
     {
         var eqOps = new[] { "eq", "==", "=" };
         var neqOps = new[] { "neq", "!=", "<>" };
@@ -476,7 +476,7 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return MenuBurstCase("invalid-double-filter-second-bad", [new("Category", "eq", "Main"), new("Price", "gt", "bad")], HttpStatusCode.BadRequest, null, "Invalid filter");
     }
 
-    public static IEnumerable<object[]> OrderBulkBurstCases()
+    public static IEnumerable<object?[]> OrderBulkBurstCases()
     {
         var eqOps = new[] { "eq", "==", "=" };
         var neqOps = new[] { "neq", "!=", "<>" };
@@ -657,7 +657,7 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
             [new OrderLine { MenuItemId = Guid.NewGuid(), Name = "MidQty", UnitPrice = 20, Quantity = 2 }]);
     }
 
-    private static object[] MenuBurstCase(
+    private static object?[] MenuBurstCase(
         string caseName,
         QueryHelperFilter[] filters,
         HttpStatusCode expectedStatus,
@@ -665,7 +665,7 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         string? expectedFragment = null)
         => [caseName, filters, expectedStatus, expectedCount, expectedFragment];
 
-    private static object[] OrderBurstCase(
+    private static object?[] OrderBurstCase(
         string caseName,
         QueryHelperFilter[] filters,
         HttpStatusCode expectedStatus,

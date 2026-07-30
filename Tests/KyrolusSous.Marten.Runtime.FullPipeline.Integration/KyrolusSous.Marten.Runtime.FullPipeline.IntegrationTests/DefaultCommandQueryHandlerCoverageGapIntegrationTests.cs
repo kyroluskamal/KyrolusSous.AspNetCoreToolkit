@@ -920,7 +920,9 @@ public sealed class DefaultCommandQueryHandlerCoverageGapIntegrationTests(TestAp
             builder.ConfigureTestServices(services =>
             {
                 var config = ResolveMenuItemMartenConfig(services);
-                config.KeyPropertyName = null;
+                // Deliberately null despite the non-nullable contract: exercises the
+                // IsNullOrWhiteSpace guard in DefaultCommandQueryHandler.
+                config.KeyPropertyName = null!;
                 config.CompositeKeyPropertyNames = [];
             });
         });
@@ -1017,7 +1019,7 @@ public sealed class DefaultCommandQueryHandlerCoverageGapIntegrationTests(TestAp
     }
 
 
-    public static IEnumerable<object[]> IncludeGraphValidationCases()
+    public static IEnumerable<object?[]> IncludeGraphValidationCases()
     {
         yield return ["valid-scalar-path", "Category", true, new[] { "Category" }, 1, HttpStatusCode.OK, null];
         yield return ["strict-disallowed", "Price", true, new[] { "Category" }, 1, HttpStatusCode.BadRequest, "not allowed"];
@@ -1025,33 +1027,33 @@ public sealed class DefaultCommandQueryHandlerCoverageGapIntegrationTests(TestAp
         yield return ["strict-missing", "Missing", true, null, 1, HttpStatusCode.BadRequest, "does not exist"];
         yield return ["strict-depth", "Category.Length", true, null, 1, HttpStatusCode.BadRequest, "exceeds max depth"];
     }
-    public static IEnumerable<object[]> BatchUpdateExceptionCases()
+    public static IEnumerable<object?[]> BatchUpdateExceptionCases()
     {
         yield return [true, "CONCURRENCY_CONFLICT"];
         yield return [false, "INTERNAL_ERROR"];
     }
 
-    public static IEnumerable<object[]> CompositeKeyFailureCases()
+    public static IEnumerable<object?[]> CompositeKeyFailureCases()
     {
         yield return ["parser-throws", "parser-failure"];
         yield return ["parser-empty", "Composite key is required."];
         yield return ["type-count-mismatch", "Composite key expects 2 values."];
     }
 
-    public static IEnumerable<object[]> StrictSelectFieldCases()
+    public static IEnumerable<object?[]> StrictSelectFieldCases()
     {
         yield return [new[] { "Name" }, "Price", "is not allowed"];
         yield return [null, "UnknownField", "does not exist"];
     }
 
-    public static IEnumerable<object[]> ContextGuardCases()
+    public static IEnumerable<object?[]> ContextGuardCases()
     {
         yield return ["missing-property", HttpStatusCode.BadRequest, "was not found"];
         yield return ["invalid-value", HttpStatusCode.BadRequest, "Invalid scope value."];
         yield return ["mismatch", HttpStatusCode.NotFound, null];
     }
 
-    public static IEnumerable<object[]> EndpointConcurrencyCases()
+    public static IEnumerable<object?[]> EndpointConcurrencyCases()
     {
         yield return ["update-id"];
         yield return ["update-by-keys"];
@@ -1064,13 +1066,13 @@ public sealed class DefaultCommandQueryHandlerCoverageGapIntegrationTests(TestAp
         yield return ["restore-by-keys"];
     }
 
-    public static IEnumerable<object[]> WrappedConcurrencyCases()
+    public static IEnumerable<object?[]> WrappedConcurrencyCases()
     {
         yield return ["target-invocation"];
         yield return ["aggregate"];
     }
 
-    public static IEnumerable<object[]> BatchOperationGuardCases()
+    public static IEnumerable<object?[]> BatchOperationGuardCases()
     {
         yield return ["update-missing-data", "MISSING_DATA"];
         yield return ["update-validation", "VALIDATION_ERROR"];
@@ -1079,7 +1081,7 @@ public sealed class DefaultCommandQueryHandlerCoverageGapIntegrationTests(TestAp
         yield return ["create-missing-data", "MISSING_DATA"];
     }
 
-    public static IEnumerable<object[]> ProjectionSelectorCases()
+    public static IEnumerable<object?[]> ProjectionSelectorCases()
     {
         yield return ["paged"];
         yield return ["seek"];

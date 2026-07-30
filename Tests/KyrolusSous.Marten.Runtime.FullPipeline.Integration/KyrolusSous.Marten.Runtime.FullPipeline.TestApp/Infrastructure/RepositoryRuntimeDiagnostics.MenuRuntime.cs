@@ -893,10 +893,10 @@ public static partial class RepositoryRuntimeDiagnostics
             QueryPageCount: queryPage.Items.Count,
             PageCount: page.Items.Count,
             StreamCount: streamCount,
-            IncludedPayment: byId?.Entity.Payment is not null,
-            IncludedPaymentsCount: byId?.Entity.Payments?.Count ?? 0,
-            IncludedPaymentArrayCount: byId?.Entity.PaymentArray?.Length ?? 0,
-            IncludedPaymentSetCount: byId?.Entity.PaymentSet?.Count ?? 0,
+            IncludedPayment: byId?.Entity?.Payment is not null,
+            IncludedPaymentsCount: byId?.Entity?.Payments?.Count ?? 0,
+            IncludedPaymentArrayCount: byId?.Entity?.PaymentArray?.Length ?? 0,
+            IncludedPaymentSetCount: byId?.Entity?.PaymentSet?.Count ?? 0,
             NullIncludeHandled: nullIncludeHandled);
     }
 }

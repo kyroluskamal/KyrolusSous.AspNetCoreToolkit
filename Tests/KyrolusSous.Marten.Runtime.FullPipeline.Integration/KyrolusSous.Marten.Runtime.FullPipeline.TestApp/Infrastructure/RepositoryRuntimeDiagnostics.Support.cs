@@ -389,7 +389,7 @@ internal sealed class RuntimeNoIdDocument
 
 internal sealed class RuntimeRepositoryUtilityProbe<TEntity>(
     IDocumentSession session,
-    KyrolusMartenRepositoryDependencies dependencies)
+    KyrolusMartenRepositoryDependencies? dependencies = null)
     : KyrolusMartenRepositoryAsync<IDocumentSession, TEntity, Guid>(session, dependencies)
     where TEntity : class
 {
@@ -420,6 +420,13 @@ internal sealed class RuntimeRepositoryUtilityProbe<TEntity>(
 
     public IDocumentSession ProbeResolveSession(string? tenantId)
         => ResolveSession(tenantId);
+
+    public string? ProbeResolveTenantIdString(string? tenantId)
+    {
+        return (string?)typeof(KyrolusMartenRepositoryAsync<IDocumentSession, TEntity, Guid>)
+            .GetMethod("ResolveTenantId", BindingFlags.Instance | BindingFlags.NonPublic, binder: null, [typeof(string)], modifiers: null)!
+            .Invoke(this, [tenantId]);
+    }
 
     public Task ProbeInvalidateCacheByIdAsync(Guid id, string? tenantId, CancellationToken cancellationToken)
     {
@@ -564,6 +571,13 @@ internal sealed class RuntimeRepositoryUtilityProbe<TEntity>(
             .GetMethod("TryResolveSessionTenantId", BindingFlags.Static | BindingFlags.NonPublic)!
             .Invoke(null, [session]);
     }
+
+    public static string ProbeEscapeKeyPart(object? value)
+    {
+        return (string)typeof(KyrolusMartenRepositoryAsync<IDocumentSession, TEntity, Guid>)
+            .GetMethod("EscapeKeyPart", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, [value])!;
+    }
 }
 
 internal static class RuntimeGetSeekHandlerProbe<TResponse>
@@ -682,6 +696,21 @@ internal static class RuntimeGetSeekHandlerProbe<TResponse>
             .Invoke(null, args)!;
         result = args[2];
         return success;
+    }
+
+    public static bool ProbeVisitParameterBranch(bool visitSourceParameter)
+    {
+        var source = Expression.Parameter(typeof(TResponse), "source");
+        var target = Expression.Parameter(typeof(TResponse), "target");
+        var different = Expression.Parameter(typeof(TResponse), "different");
+        var visitor = (ExpressionVisitor)HandlerType
+            .GetNestedType("ReplaceParameterVisitor", BindingFlags.NonPublic)!
+            .GetConstructor(BindingFlags.Instance | BindingFlags.NonPublic, binder: null, [typeof(ParameterExpression), typeof(ParameterExpression)], modifiers: null)!
+            .Invoke([source, target]);
+        var visited = visitor.Visit(visitSourceParameter ? source : different);
+        return visitSourceParameter
+            ? ReferenceEquals(visited, target)
+            : ReferenceEquals(visited, different);
     }
 }
 
@@ -803,6 +832,169 @@ internal static class RuntimeMartenQueryHelperProbe<TEntity>
         value = args[2];
         return success;
     }
+}
+
+internal sealed class RuntimeSeekRepositoryStub<TEntity>(
+    IReadOnlyList<TEntity> queryItems,
+    long totalCount,
+    IReadOnlyList<TEntity>? deletedItems = null)
+    : IKyrolusMartenSoftDeleteRepositoryAsync<IDocumentSession, TEntity, Guid>
+    where TEntity : class
+{
+    public int QueryCalls { get; private set; }
+    public int PageCalls { get; private set; }
+    public int SoftDeletedCalls { get; private set; }
+
+    public IKyrolusMartenObserver? Observer => null;
+    public IKyrolusMartenAuthorization? Authorization => null;
+    public IKyrolusMartenValidation? Validation => null;
+    public IKyrolusMartenSoftDeletePolicy? SoftDeletePolicy => null;
+    public ICacheProvider? CacheProvider => null;
+    public IKyrolusMartenResiliencePolicy? ResiliencePolicy => null;
+    public IKyrolusMartenTracing? Tracing => null;
+
+    public void SetObserver(IKyrolusMartenObserver? observer)
+    {
+    }
+
+    public string? ResolveTenantId(ITenantResolver? resolver) => resolver?.ResolveTenantId();
+
+    public Task<IEnumerable<TProjection>> QueryAsync<TProjection>(
+        MartenQueryOptions<TEntity>? options,
+        Func<IMartenQueryable<TEntity>, IMartenQueryable<TProjection>> selector,
+        CancellationToken cancellationToken = default) where TProjection : notnull
+    {
+        QueryCalls++;
+        return Task.FromResult(queryItems.Cast<TProjection>());
+    }
+
+    public Task<PageResult<TEntity>> GetPageAsync(
+        MartenQueryOptions<TEntity>? options = null,
+        MartenPageRequest? page = null,
+        CancellationToken cancellationToken = default)
+    {
+        PageCalls++;
+        var pageRequest = page ?? new MartenPageRequest(1, queryItems.Count);
+        return Task.FromResult(new PageResult<TEntity>(queryItems.ToList(), totalCount, pageRequest.PageNumber, pageRequest.PageSize));
+    }
+
+    public Task<IEnumerable<TEntity>> GetAllIncludingDeletedAsync(
+        MartenQueryOptions<TEntity>? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        SoftDeletedCalls++;
+        return Task.FromResult<IEnumerable<TEntity>>(deletedItems ?? queryItems);
+    }
+
+    public Task<IEnumerable<TEntity>> GetAllAsync(MartenQueryOptions<TEntity>? options = null, CancellationToken cancellationToken = default)
+        => Task.FromResult<IEnumerable<TEntity>>(queryItems);
+
+    public Task<MartenEntityResult<TEntity>?> GetByIdAsync(Guid id, MartenQueryOptions<TEntity>? options = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<PageResult<TProjection>> QueryPageAsync<TProjection>(
+        MartenQueryOptions<TEntity>? options,
+        Func<IMartenQueryable<TEntity>, IMartenQueryable<TProjection>> selector,
+        MartenPageRequest? page = null,
+        CancellationToken cancellationToken = default) where TProjection : notnull
+        => throw new NotSupportedException();
+
+    public Task<TEntity> AddAsync(TEntity entity, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<IEnumerable<TEntity>> AddRangeAsync(IEnumerable<TEntity> entities, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<TEntity> UpsertAsync(TEntity entity, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<IEnumerable<TEntity>> UpsertRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<TEntity?> UpdateAsync(TEntity entity, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<IEnumerable<TEntity>> UpdateRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<MartenEntityResult<TEntity>?> PatchAsync(Guid id, Dictionary<string, object> updates, string? tenantId = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<int> PatchWhereAsync(Expression<Func<TEntity, bool>> filter, Dictionary<string, object> updates, string? tenantId = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<bool> RemoveAsync(TEntity entity, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<bool> RemoveAsync(Guid id, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<int> DeleteWhereAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<bool> RemoveRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<bool> ExistAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public IAsyncEnumerable<TEntity> StreamAsync(MartenQueryOptions<TEntity>? options = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<TResult> ExecuteCompiledQueryAsync<TCompiled, TResult>(TCompiled query, CancellationToken cancellationToken = default)
+        where TCompiled : ICompiledQuery<TEntity, TResult>
+        => throw new NotSupportedException();
+
+    public Task<TResult> WithSessionAsync<TResult>(MartenSessionMode mode, Func<IDocumentSession, Task<TResult>> work, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<int> TransformWhereAsync(Expression<Func<TEntity, bool>> filter, string transformName, object? arguments = null, string? tenantId = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<IEnumerable<TEntity>> GetDeletedOnlyAsync(MartenQueryOptions<TEntity>? options = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<MartenEntityResult<TEntity>?> GetByIdIncludingDeletedAsync(Guid id, MartenQueryOptions<TEntity>? options = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<bool> RestoreAsync(Guid id, string? tenantId = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<bool> RestoreRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<int> RestoreWhereAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+}
+
+internal sealed class RuntimeSeekUnitOfWork<TEntity>(
+    RuntimeSeekRepositoryStub<TEntity> repository,
+    bool exposeSoftDeleteRepository)
+    : IKyrolusMartenUnitOfWork<IDocumentSession>
+    where TEntity : class
+{
+    public TRepo GetRepository<TRepo>() where TRepo : class
+    {
+        if (typeof(TRepo) == typeof(IKyrolusMartenRepositoryAsync<IDocumentSession, TEntity, Guid>))
+        {
+            return (TRepo)(object)repository;
+        }
+
+        if (typeof(TRepo) == typeof(IKyrolusMartenSoftDeleteRepositoryAsync<IDocumentSession, TEntity, Guid>) && exposeSoftDeleteRepository)
+        {
+            return (TRepo)(object)repository;
+        }
+
+        throw new InvalidOperationException($"Repository '{typeof(TRepo).Name}' was not registered.");
+    }
+
+    public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(0);
+
+    public void Dispose()
+    {
+    }
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
 internal sealed class RuntimeValidationProbeRequest : IKyrolusValidationCacheable, IKyrolusValidationNegativeCacheable
@@ -1339,6 +1531,17 @@ internal sealed class RuntimeStringShardMethodHolder
     }
 }
 
+internal sealed class RuntimeCtorlessShard;
+
+internal sealed class RuntimeCtorlessShardMethodHolder
+{
+    public void StartShard(RuntimeCtorlessShard shardName, CancellationToken cancellationToken)
+    {
+        _ = shardName;
+        _ = cancellationToken;
+    }
+}
+
 internal sealed class RuntimeShardName(string name)
 {
     public string Name { get; } = name;
@@ -1429,6 +1632,16 @@ internal sealed class RuntimeParameterlessWaitDaemon
 
 internal sealed class RuntimeNoWaitProjectionDaemon;
 
+internal sealed class RuntimeVoidWaitDaemon
+{
+    public int WaitCalls { get; private set; }
+
+    public void WaitForNonStaleData()
+    {
+        WaitCalls++;
+    }
+}
+
 internal sealed class RuntimeSingleArgRebuildDaemon
 {
     public List<string> RebuiltProjectionNames { get; } = [];
@@ -1452,6 +1665,18 @@ internal sealed class RuntimeTwoArgRebuildDaemon
 }
 
 internal sealed class RuntimeNoRebuildProjectionDaemon;
+
+internal sealed class RuntimeVoidRebuildDaemon
+{
+    public List<string> RebuiltProjectionNames { get; } = [];
+
+    public void RebuildProjection(string projectionName)
+    {
+        RebuiltProjectionNames.Add(projectionName);
+    }
+}
+
+internal sealed class RuntimeNoStartDaemon;
 
 internal sealed class RuntimeCustomRepository;
 

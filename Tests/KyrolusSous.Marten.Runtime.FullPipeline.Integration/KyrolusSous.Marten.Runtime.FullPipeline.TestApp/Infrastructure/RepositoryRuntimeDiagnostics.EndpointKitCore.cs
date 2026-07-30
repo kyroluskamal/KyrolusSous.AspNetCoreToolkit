@@ -583,7 +583,7 @@ public static partial class RepositoryRuntimeDiagnostics
 
             if (operation.Parameters.All(parameter => !string.IsNullOrWhiteSpace(parameter.Description)) &&
                 !string.IsNullOrWhiteSpace(operation.Description) &&
-                operation.RequestBody.Content["application/json"].Example is not null)
+                operation.RequestBody?.Content?["application/json"].Example is not null)
             {
                 checks++;
             }
@@ -600,7 +600,7 @@ public static partial class RepositoryRuntimeDiagnostics
             };
 
             requestExamplesMethod.Invoke(null, [nonQueryOperation, EndpointNames.GetAll]);
-            if (nonQueryOperation.RequestBody.Content["application/json"].Example is null)
+            if (nonQueryOperation.RequestBody?.Content?["application/json"].Example is null)
             {
                 checks++;
             }
@@ -685,7 +685,7 @@ public static partial class RepositoryRuntimeDiagnostics
             await transformer.TransformAsync(transformerOperation, transformerContext, cancellationToken).ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(transformerOperation.OperationId) &&
                 !string.IsNullOrWhiteSpace(transformerOperation.Parameters[0].Description) &&
-                transformerOperation.RequestBody.Content["application/json"].Example is not null)
+                transformerOperation.RequestBody?.Content?["application/json"].Example is not null)
             {
                 checks++;
             }

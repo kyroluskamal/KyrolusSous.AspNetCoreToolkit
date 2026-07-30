@@ -530,6 +530,13 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
+        var ctorlessShardMethod = typeof(RuntimeCtorlessShardMethodHolder).GetMethod(nameof(RuntimeCtorlessShardMethodHolder.StartShard))
+            ?? throw new InvalidOperationException("Ctorless StartShard method was not found.");
+        if ((string?)buildShardArgumentMethod.Invoke(null, [ctorlessShardMethod, "fallback-shard"]) == "fallback-shard")
+        {
+            checks++;
+        }
+
         var invokePossiblyAsyncMethod = typeof(KyrolusMartenProjectionOrchestrator).GetMethod(
             "InvokePossiblyAsync",
             BindingFlags.Static | BindingFlags.NonPublic)
@@ -627,6 +634,18 @@ public static partial class RepositoryRuntimeDiagnostics
             "daemon",
             BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("Projection orchestrator daemon field was not found.");
+        var getDaemonAsyncMethod = typeof(KyrolusMartenProjectionOrchestrator).GetMethod(
+            "GetDaemonAsync",
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("GetDaemonAsync method was not found.");
+
+        var cachedDaemonOrchestrator = new KyrolusMartenProjectionOrchestrator(store);
+        var cachedDaemonInstance = new object();
+        daemonField.SetValue(cachedDaemonOrchestrator, cachedDaemonInstance);
+        if (ReferenceEquals(await ((Task<object>)getDaemonAsyncMethod.Invoke(cachedDaemonOrchestrator, [])!).ConfigureAwait(false), cachedDaemonInstance))
+        {
+            checks++;
+        }
 
         var waitWithTokenDaemon = new RuntimeWaitForNonStaleTokenDaemon();
         var waitWithTokenOrchestrator = new KyrolusMartenProjectionOrchestrator(
@@ -647,6 +666,15 @@ public static partial class RepositoryRuntimeDiagnostics
         daemonField.SetValue(parameterlessWaitOrchestrator, parameterlessWaitDaemon);
         await parameterlessWaitOrchestrator.EnsureUpToDateAsync("parameterless-wait", cancellationToken).ConfigureAwait(false);
         if (parameterlessWaitDaemon.WaitCalls == 1)
+        {
+            checks++;
+        }
+
+        var voidWaitDaemon = new RuntimeVoidWaitDaemon();
+        var voidWaitOrchestrator = new KyrolusMartenProjectionOrchestrator(store);
+        daemonField.SetValue(voidWaitOrchestrator, voidWaitDaemon);
+        await voidWaitOrchestrator.EnsureUpToDateAsync("void-wait", cancellationToken).ConfigureAwait(false);
+        if (voidWaitDaemon.WaitCalls == 1)
         {
             checks++;
         }
@@ -679,6 +707,15 @@ public static partial class RepositoryRuntimeDiagnostics
         await ExpectThrowsAsync<NotSupportedException>(() => unsupportedRebuildOrchestrator.EnqueueRebuildAsync("unsupported", cancellationToken)).ConfigureAwait(false);
         checks++;
 
+        var voidRebuildDaemon = new RuntimeVoidRebuildDaemon();
+        var voidRebuildOrchestrator = new KyrolusMartenProjectionOrchestrator(store);
+        daemonField.SetValue(voidRebuildOrchestrator, voidRebuildDaemon);
+        await voidRebuildOrchestrator.EnqueueRebuildAsync("void-rebuild", cancellationToken).ConfigureAwait(false);
+        if (voidRebuildDaemon.RebuiltProjectionNames.SequenceEqual(["void-rebuild"]))
+        {
+            checks++;
+        }
+
         var startAllWithTokenProbe = new RuntimeDaemonLifecycleWithTokenProbe();
         var startAllWithTokenOrchestrator = new KyrolusMartenProjectionOrchestrator(
             store,
@@ -705,6 +742,15 @@ public static partial class RepositoryRuntimeDiagnostics
         {
             checks++;
         }
+
+        var noStartOrchestrator = new KyrolusMartenProjectionOrchestrator(
+            store,
+            Options.Create(new KyrolusMartenDaemonOptions
+            {
+                AutoStart = true
+            }));
+        await ((Task)startDaemonAsyncMethod.Invoke(noStartOrchestrator, [new RuntimeNoStartDaemon()])!).ConfigureAwait(false);
+        checks++;
 
         return checks;
     }
@@ -733,8 +779,8 @@ public static partial class RepositoryRuntimeDiagnostics
         var daemonOptions = scopedProvider.GetRequiredService<IOptions<KyrolusMartenDaemonOptions>>().Value;
         if (daemonOptions.AutoStart &&
             daemonOptions.WaitForNonStaleTimeout == TimeSpan.FromSeconds(1) &&
-            daemonOptions.ShardsToStart.SequenceEqual(["alpha"]) &&
-            daemonOptions.RebuildProjections.SequenceEqual(["beta"]))
+            (daemonOptions.ShardsToStart ?? []).SequenceEqual(["alpha"]) &&
+            (daemonOptions.RebuildProjections ?? []).SequenceEqual(["beta"]))
         {
             checks++;
         }
@@ -961,6 +1007,21 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
+        var bareRepositoryProbe = new RuntimeRepositoryUtilityProbe<MenuItem>(repositorySession);
+        if (bareRepositoryProbe.Observer is null &&
+            bareRepositoryProbe.Authorization is null &&
+            bareRepositoryProbe.Validation is null &&
+            bareRepositoryProbe.SoftDeletePolicy is null &&
+            bareRepositoryProbe.CacheProvider is null &&
+            bareRepositoryProbe.ResiliencePolicy is null &&
+            bareRepositoryProbe.Tracing is null &&
+            bareRepositoryProbe.ResolveTenantId(new StaticTenantResolver("resolver-tenant")) == "resolver-tenant" &&
+            bareRepositoryProbe.ProbeResolveTenantIdString(null) is null &&
+            bareRepositoryProbe.ProbeResolveTenantIdString("   ") is null)
+        {
+            checks++;
+        }
+
         repositorySession.Store(new RuntimeStringIdDocument { Id = "runtime-doc-a" });
         repositorySession.Store(new RuntimeGuidIdDocument { Id = repositoryProbeId });
         repositorySession.Store(new MenuItem
@@ -1168,12 +1229,21 @@ public static partial class RepositoryRuntimeDiagnostics
             new { Payload = new StringBuilder("opaque") },
             null,
             null);
+        var mixedCompiledQueryKey = repositoryProbe.ProbeBuildCompiledQueryCacheKey(
+            new
+            {
+                Codes = new object?[] { "alpha", null, 3 },
+                Scope = (string?)null
+            },
+            null,
+            "suffix");
         var fallbackRegionProbe = new RuntimeRepositoryUtilityProbe<MenuItem>(
             repositorySession,
             new KyrolusMartenRepositoryDependencies(
                 CacheProvider: repositoryCache,
                 CacheKeyContext: new RuntimeCacheKeyContext(null, null, "tenant-fallback")));
         var fallbackEntryOptions = fallbackRegionProbe.ProbeBuildCacheEntryOptions(new KyrolusCachePolicy(Enabled: true), null);
+        var explicitTenantEntryOptions = fallbackRegionProbe.ProbeBuildCacheEntryOptions(new KyrolusCachePolicy(Enabled: true), "tenant-explicit");
         var stringKeyProbe = new RuntimeRepositoryUtilityProbe<RuntimeStringIdDocument>(repositorySession, repositoryDependencies);
         var removedKeyCountBeforeStringKeyEntity = repositoryCache.RemovedKeys.Count;
         await stringKeyProbe
@@ -1182,7 +1252,11 @@ public static partial class RepositoryRuntimeDiagnostics
         if (pluralIdProperty?.Name == nameof(Order.PaymentId) &&
             pluralIdsProperty?.Name == nameof(Order.PaymentIds) &&
             opaqueCompiledQueryKey.Contains("Payload=opaque", StringComparison.Ordinal) &&
+            mixedCompiledQueryKey.Contains("Codes=%5Balpha,null,3%5D", StringComparison.Ordinal) &&
+            mixedCompiledQueryKey.Contains("Scope=null", StringComparison.Ordinal) &&
             fallbackEntryOptions.Region == "tenant=tenant-fallback" &&
+            explicitTenantEntryOptions.Region == "tenant=tenant-explicit" &&
+            RuntimeRepositoryUtilityProbe<MenuItem>.ProbeEscapeKeyPart(new object?[] { "alpha value", null, 2 }) == "[alpha%20value,null,2]" &&
             repositoryCache.RemovedKeys.Count == removedKeyCountBeforeStringKeyEntity)
         {
             checks++;

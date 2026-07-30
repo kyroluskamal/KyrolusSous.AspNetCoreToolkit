@@ -992,7 +992,7 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
         created.Id.ShouldNotBe(Guid.Empty);
     }
 
-    public static IEnumerable<object[]> PreconditionFailureCases()
+    public static IEnumerable<object?[]> PreconditionFailureCases()
     {
         yield return [KyrolusBatchOperationType.Create, Guid.NewGuid(), (MenuItem?)null!, "MISSING_DATA"];
         yield return [KyrolusBatchOperationType.Update, Guid.NewGuid(), (MenuItem?)null!, "MISSING_DATA"];
@@ -1001,14 +1001,14 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) :
         yield return [KyrolusBatchOperationType.Create, Guid.NewGuid(), InvalidModel(), "VALIDATION_ERROR"];
     }
 
-    public static IEnumerable<object[]> GuidEmptyIdCases()
+    public static IEnumerable<object?[]> GuidEmptyIdCases()
     {
         yield return [KyrolusBatchOperationType.Update, ValidModel("Update-Empty-Id")];
         yield return [KyrolusBatchOperationType.Patch, ValidModel("Patch-Empty-Id")];
         yield return [KyrolusBatchOperationType.Delete, (MenuItem?)null];
     }
 
-    public static IEnumerable<object[]> SuccessPathCases()
+    public static IEnumerable<object?[]> SuccessPathCases()
     {
         yield return [KyrolusBatchOperationType.Create, false, false];
         yield return [KyrolusBatchOperationType.Create, false, true];

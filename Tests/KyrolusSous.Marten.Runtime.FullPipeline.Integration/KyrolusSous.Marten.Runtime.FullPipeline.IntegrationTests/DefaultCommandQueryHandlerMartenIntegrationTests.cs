@@ -2073,7 +2073,7 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         payload!.Count.ShouldBe(3);
     }
 
-    public static IEnumerable<object[]> FilterClauseCases()
+    public static IEnumerable<object?[]> FilterClauseCases()
     {
         yield return [new TestFilterClause("Category", "eq", "Main"), 2];
         yield return [new TestFilterClause("Price", "gt", "20"), 2];
@@ -2083,7 +2083,7 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         yield return [new TestFilterClause("UpdatedAt", "isnull", null), 2];
     }
 
-    public static IEnumerable<object[]> IncludeGraphPayloadCases()
+    public static IEnumerable<object?[]> IncludeGraphPayloadCases()
     {
         yield return ["Name"];
         yield return [new[] { "Name", "Category" }];
@@ -2092,7 +2092,7 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         yield return [ParseJsonElement("42")];
     }
 
-    public static IEnumerable<object[]> SoftDeleteDecisionCases()
+    public static IEnumerable<object?[]> SoftDeleteDecisionCases()
     {
         yield return
         [
@@ -2135,7 +2135,7 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         ];
     }
 
-    public static IEnumerable<object[]> CompositeKeyParserCases()
+    public static IEnumerable<object?[]> CompositeKeyParserCases()
     {
         yield return ["dto", typeof(DateTimeOffset), "2026-01-02T03:04:05+00:00", "invalid-dto"];
         yield return ["dt", typeof(DateTime), "2026-01-02T03:04:05Z", "invalid-dt"];
@@ -2145,14 +2145,14 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         yield return ["converter", typeof(Version), "1.2.3.4", "invalid-version"];
     }
 
-    public static IEnumerable<object[]> StringIfMatchHeaderCases()
+    public static IEnumerable<object?[]> StringIfMatchHeaderCases()
     {
         yield return ["\"etag-token\"", "etag-token"];
         yield return ["W/\"etag-token\"", "etag-token"];
         yield return [" etag-token ", "etag-token"];
     }
 
-    public static IEnumerable<object[]> PatchByIdGuardCases()
+    public static IEnumerable<object?[]> PatchByIdGuardCases()
     {
         yield return ["unauthorized", HttpStatusCode.Forbidden, null];
         yield return ["require-tenant", HttpStatusCode.BadRequest, "Tenant id is required."];
@@ -2162,7 +2162,7 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         yield return ["access-context-mismatch", HttpStatusCode.NotFound, null];
     }
 
-    public static IEnumerable<object[]> PatchByIdIfMatchCases()
+    public static IEnumerable<object?[]> PatchByIdIfMatchCases()
     {
         yield return ["etag-disabled-no-header", false, nameof(MenuItem.Id), true, null, HttpStatusCode.OK];
         yield return ["etag-enabled-no-header", true, nameof(MenuItem.Id), true, null, HttpStatusCode.OK];
@@ -2172,7 +2172,7 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
         yield return ["etag-enabled-stale-conflict", true, nameof(MenuItem.Id), true, "00000000000000000000000000000001", HttpStatusCode.Conflict];
     }
 
-    public static IEnumerable<object[]> ErrorFallbackCases()
+    public static IEnumerable<object?[]> ErrorFallbackCases()
     {
         yield return ["bad-request", HttpStatusCode.BadRequest];
         yield return ["not-found", HttpStatusCode.NotFound];

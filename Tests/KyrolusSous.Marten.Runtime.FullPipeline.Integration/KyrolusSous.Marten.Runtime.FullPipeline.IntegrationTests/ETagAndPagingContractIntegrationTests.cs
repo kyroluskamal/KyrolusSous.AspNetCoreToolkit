@@ -50,6 +50,65 @@ public sealed class ETagAndPagingContractIntegrationTests(TestAppFactory factory
         patchResponse.StatusCode.ShouldBe(expectedStatus, patchBody);
     }
 
+    [Theory(DisplayName = "ETag handling - If-None-Match accepts multi-value and weak validators")]
+    [InlineData("stale,current-weak", HttpStatusCode.NotModified)]
+    [InlineData("stale-only", HttpStatusCode.OK)]
+    public async Task Get_by_id_if_none_match_accepts_multi_value_and_weak_validators(string mode, HttpStatusCode expectedStatus)
+    {
+        using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId($"menuitem-etag-if-none-match-{mode}"));
+        var created = await CreateMenuItemAsync(client, "ETag Multi If-None-Match", "Main", 16);
+
+        var getResponse = await client.GetAsync($"/api/menu-items/{created.Id}");
+        getResponse.EnsureSuccessStatusCode();
+        var currentEtag = getResponse.Headers.ETag?.ToString();
+        currentEtag.ShouldNotBeNullOrWhiteSpace();
+
+        var headerValue = mode switch
+        {
+            "stale,current-weak" => "\"stale-etag\", W/" + currentEtag,
+            "stale-only" => "\"stale-etag\", \"another-stale\"",
+            _ => throw new InvalidOperationException($"Unknown mode '{mode}'.")
+        };
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/menu-items/{created.Id}");
+        request.Headers.TryAddWithoutValidation("If-None-Match", headerValue);
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.ShouldBe(expectedStatus, body);
+    }
+
+    [Theory(DisplayName = "ETag handling - patch endpoint accepts matching token among multi-value If-Match headers")]
+    [InlineData("current-first", HttpStatusCode.OK)]
+    [InlineData("weak-current-second", HttpStatusCode.OK)]
+    [InlineData("all-stale", HttpStatusCode.Conflict)]
+    public async Task Patch_endpoint_accepts_matching_token_among_multi_value_if_match_headers(string mode, HttpStatusCode expectedStatus)
+    {
+        using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId($"menuitem-etag-if-match-multi-{mode}"));
+        var created = await CreateMenuItemAsync(client, "ETag Multi If-Match", "Main", 18);
+
+        var getResponse = await client.GetAsync($"/api/menu-items/{created.Id}");
+        getResponse.EnsureSuccessStatusCode();
+        var currentEtag = getResponse.Headers.ETag?.ToString();
+        currentEtag.ShouldNotBeNullOrWhiteSpace();
+
+        var headerValue = mode switch
+        {
+            "current-first" => currentEtag!,
+            "weak-current-second" => "\"stale-etag\", W/" + currentEtag,
+            "all-stale" => "\"stale-etag\", \"another-stale\"",
+            _ => throw new InvalidOperationException($"Unknown mode '{mode}'.")
+        };
+
+        using var patchRequest = new HttpRequestMessage(HttpMethod.Patch, $"/api/menu-items/{created.Id}")
+        {
+            Content = JsonContent.Create(new Dictionary<string, object> { ["Price"] = 77m })
+        };
+        patchRequest.Headers.TryAddWithoutValidation("If-Match", headerValue);
+        var patchResponse = await client.SendAsync(patchRequest);
+        var patchBody = await patchResponse.Content.ReadAsStringAsync();
+        patchResponse.StatusCode.ShouldBe(expectedStatus, patchBody);
+    }
+
     [Theory(DisplayName = "IncludeGraph validation - disabled include graph returns 400")]
     [InlineData("/api/menu-items/{0}?includeGraph=Category")]
     [InlineData("/api/menu-items/by-keys?keys={0}&includeGraph=Category")]
