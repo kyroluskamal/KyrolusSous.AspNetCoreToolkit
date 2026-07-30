@@ -2,23 +2,28 @@
 """
 Coverage gate checker for Cobertura reports.
 
+Thresholds live in quality-gates.json (the single source of truth). The
+--report/--min-line/--min-branch/--package flags override it when given, which
+keeps ad-hoc local runs possible without editing the config.
+
 Examples:
-  python scripts/coverage-gate.py \
-    --report TestResults/coverage-run/Coverage/coverage.cobertura.xml \
-    --min-line 68 \
-    --min-branch 64 \
-    --package KyrolusSous.Repositories.EF.Runtime:95:85 \
-    --package KyrolusSous.Repositories.EF.Abstractions:65:55
+  python scripts/coverage-gate.py
+  python scripts/coverage-gate.py --config quality-gates.json
+  python scripts/coverage-gate.py --min-line 80 --package KyrolusSous.Swagger:50:40
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_CONFIG = REPO_ROOT / "quality-gates.json"
 
 
 @dataclass(frozen=True)
@@ -29,16 +34,40 @@ class Threshold:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate Cobertura coverage against quality gates.")
-    parser.add_argument("--report", required=True, help="Path to cobertura xml report.")
-    parser.add_argument("--min-line", type=float, default=0.0, help="Minimum overall line coverage percentage.")
-    parser.add_argument("--min-branch", type=float, default=0.0, help="Minimum overall branch coverage percentage.")
+    parser.add_argument(
+        "--config",
+        default=str(DEFAULT_CONFIG),
+        help="Path to quality-gates.json. Defaults to the repo-root file.",
+    )
+    parser.add_argument("--report", help="Path to cobertura xml report. Overrides config.")
+    parser.add_argument("--min-line", type=float, help="Minimum overall line coverage percentage. Overrides config.")
+    parser.add_argument("--min-branch", type=float, help="Minimum overall branch coverage percentage. Overrides config.")
     parser.add_argument(
         "--package",
         action="append",
         default=[],
-        help="Package threshold in format: PackageName:LinePercent:BranchPercent",
+        help="Package threshold in format: PackageName:LinePercent:BranchPercent. Overrides config entry.",
     )
     return parser.parse_args()
+
+
+def load_config(config_path: Path) -> dict:
+    """Read quality-gates.json. A missing file is only fatal if nothing overrides it."""
+    if not config_path.exists():
+        return {}
+    with config_path.open(encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def config_thresholds(config: dict) -> Dict[str, Threshold]:
+    packages = config.get("coverage", {}).get("packages", {})
+    thresholds: Dict[str, Threshold] = {}
+    for name, values in packages.items():
+        try:
+            thresholds[name] = Threshold(line=float(values["line"]), branch=float(values["branch"]))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid coverage.packages entry for '{name}' in config: {values!r}") from exc
+    return thresholds
 
 
 def parse_package_thresholds(raw_values: List[str]) -> Dict[str, Threshold]:
@@ -96,12 +125,48 @@ def fmt(value: float) -> str:
     return f"{value:.2f}%"
 
 
+@dataclass(frozen=True)
+class Settings:
+    report: Path
+    overall: Threshold
+    packages: Dict[str, Threshold]
+
+
+def resolve_settings(args: argparse.Namespace) -> Settings:
+    """Merge quality-gates.json with the CLI overrides. CLI flags always win."""
+    config = load_config(Path(args.config))
+    coverage_cfg = config.get("coverage", {})
+    overall_cfg = coverage_cfg.get("overall", {})
+
+    packages = config_thresholds(config)
+    packages.update(parse_package_thresholds(args.package))
+
+    report_raw = args.report or coverage_cfg.get("report")
+    if not report_raw:
+        raise ValueError("No coverage report path given (pass --report or set coverage.report in the config).")
+
+    report_path = Path(report_raw)
+    if not report_path.is_absolute():
+        report_path = REPO_ROOT / report_path
+
+    return Settings(
+        report=report_path,
+        overall=Threshold(
+            line=args.min_line if args.min_line is not None else float(overall_cfg.get("line", 0.0)),
+            branch=args.min_branch if args.min_branch is not None else float(overall_cfg.get("branch", 0.0)),
+        ),
+        packages=packages,
+    )
+
+
 def main() -> int:
     try:
         args = parse_args()
-        package_thresholds = parse_package_thresholds(args.package)
-        report_path = Path(args.report)
-        root, packages = load_report(report_path)
+        settings = resolve_settings(args)
+        package_thresholds = settings.packages
+        min_line = settings.overall.line
+        min_branch = settings.overall.branch
+        root, packages = load_report(settings.report)
     except Exception as exc:  # pragma: no cover - defensive CLI guard
         print(f"[coverage-gate] ERROR: {exc}")
         return 2
@@ -112,16 +177,16 @@ def main() -> int:
     failures: List[str] = []
 
     print("[coverage-gate] Overall")
-    print(f"  line   : {fmt(overall_line)} (required >= {fmt(args.min_line)})")
-    print(f"  branch : {fmt(overall_branch)} (required >= {fmt(args.min_branch)})")
+    print(f"  line   : {fmt(overall_line)} (required >= {fmt(min_line)})")
+    print(f"  branch : {fmt(overall_branch)} (required >= {fmt(min_branch)})")
 
-    if overall_line < args.min_line:
+    if overall_line < min_line:
         failures.append(
-            f"Overall line coverage {fmt(overall_line)} is below required {fmt(args.min_line)}"
+            f"Overall line coverage {fmt(overall_line)} is below required {fmt(min_line)}"
         )
-    if overall_branch < args.min_branch:
+    if overall_branch < min_branch:
         failures.append(
-            f"Overall branch coverage {fmt(overall_branch)} is below required {fmt(args.min_branch)}"
+            f"Overall branch coverage {fmt(overall_branch)} is below required {fmt(min_branch)}"
         )
 
     if package_thresholds:

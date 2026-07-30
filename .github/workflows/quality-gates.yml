@@ -6,10 +6,93 @@ on:
     branches:
       - main
 
+env:
+  DOTNET_VERSION: 10.0.x
+  DOTNET_NOLOGO: "true"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+
 jobs:
-  postgres-quality:
-    name: PostgreSQL Integration + Coverage Gates
+  # ---------------------------------------------------------------------------
+  # Cheap checks first so an obvious failure does not wait on database services.
+  # ---------------------------------------------------------------------------
+  docs:
+    name: Docs are in sync
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Verifies only. CI never commits back - docs are regenerated locally so
+      # every documentation change shows up in a reviewable diff.
+      - name: Check generated documentation blocks
+        run: python scripts/update-docs.py --check
+
+  build:
+    name: Build solution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # MinVer needs full history + tags to derive the version.
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      - name: Show derived package version
+        run: dotnet pack Src/KyrolusSous.Mediator.Abstractions/KyrolusSous.Mediator.Abstractions.csproj -c Release --no-build -o /tmp/pack && ls /tmp/pack
+
+  # ---------------------------------------------------------------------------
+  # The suite list comes from quality-gates.json, so a suite cannot silently
+  # disappear from CI by being forgotten in this file.
+  # ---------------------------------------------------------------------------
+  matrix:
+    name: Resolve test matrix
+    runs-on: ubuntu-latest
+    outputs:
+      suites: ${{ steps.build-matrix.outputs.suites }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - id: build-matrix
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+
+          with open("quality-gates.json", encoding="utf-8") as handle:
+              config = json.load(handle)
+
+          coverage_target = config["coverage"]["target"]
+          suites = [
+              {
+                  "name": suite["name"],
+                  "project": suite["project"],
+                  "services": suite.get("services", []),
+              }
+              for suite in config["testSuites"]
+              # The coverage job already runs this one.
+              if suite.get("ci") and suite["project"] != coverage_target
+          ]
+          print("suites=" + json.dumps(suites))
+          PY
+
+  coverage:
+    name: Coverage gates (PostgreSQL)
+    runs-on: ubuntu-latest
+    needs: [docs, build]
 
     services:
       postgres:
@@ -26,13 +109,17 @@ jobs:
           --health-retries 12
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v4
         with:
-          dotnet-version: 10.0.x
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - name: Install ReportGenerator
         run: dotnet tool install --global dotnet-reportgenerator-globaltool
@@ -40,7 +127,79 @@ jobs:
       - name: Add .NET tools to PATH
         run: echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
 
-      - name: Run PostgreSQL quality gates
+      - name: Run coverage + gates
         run: |
           chmod +x scripts/*.sh
           bash scripts/library-quality.sh
+
+      - name: Publish coverage summary
+        if: always()
+        run: |
+          {
+            echo '## Coverage'
+            echo '```'
+            python scripts/coverage-gate.py || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: TestResults/coverage-run/Coverage/
+          if-no-files-found: warn
+
+  tests:
+    name: ${{ matrix.suite.name }}
+    runs-on: ubuntu-latest
+    needs: [matrix, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJson(needs.matrix.outputs.suites) }}
+
+    # Service containers cannot be enabled conditionally per matrix entry, so both are
+    # always started. They cost a few seconds and suites that declare no services simply
+    # ignore them. The `services` field in quality-gates.json stays the documented
+    # requirement and is what the generated docs table reports.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Test
+        run: dotnet test "${{ matrix.suite.project }}" -c Debug --logger "trx;LogFileName=results.trx" -m:1
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trx-${{ strategy.job-index }}
+          path: "**/results.trx"
+          if-no-files-found: ignore

@@ -1,0 +1,107 @@
+{
+  "_comment": "Single source of truth for quality gates and test inventory. Consumed by scripts/coverage-gate.py, scripts/library-quality.sh, scripts/update-docs.py and .github/workflows/quality-gates.yml. Never duplicate these numbers anywhere else - docs are generated from this file.",
+
+  "coverage": {
+    "report": "TestResults/coverage-run/Coverage/coverage.cobertura.xml",
+    "target": "Tests/KyrolusSous.Repositories.EF.Runtime/IntegrationTests/IntegrationTests.postgressql/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.csproj",
+    "overall": {
+      "line": 68,
+      "branch": 64
+    },
+    "packages": {
+      "KyrolusSous.Repositories.EF.Runtime": { "line": 95, "branch": 85 },
+      "KyrolusSous.Repositories.EF.Abstractions": { "line": 65, "branch": 55 },
+      "KyrolusSous.Caching.Abstractions": { "line": 10, "branch": 10 }
+    }
+  },
+
+  "testSuites": [
+    {
+      "name": "EF.Runtime - PostgreSQL",
+      "project": "Tests/KyrolusSous.Repositories.EF.Runtime/IntegrationTests/IntegrationTests.postgressql/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.csproj",
+      "kind": "integration",
+      "services": ["postgres"],
+      "ci": true,
+      "notes": "Primary confidence suite; also the coverage target."
+    },
+    {
+      "name": "EF.Runtime - Unit",
+      "project": "Tests/KyrolusSous.Repositories.EF.Runtime/UnitTests/KyrolusSous.Repositories.EF.Runtime.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "EF.Runtime - SQLite",
+      "project": "Tests/KyrolusSous.Repositories.EF.Runtime/IntegrationTests/IntegrationTests.SQLlite/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.SQLlite.csproj",
+      "kind": "integration",
+      "services": [],
+      "ci": true,
+      "notes": "Placeholder suite - no real assertions yet."
+    },
+    {
+      "name": "EF.Runtime - SQL Server",
+      "project": "Tests/KyrolusSous.Repositories.EF.Runtime/IntegrationTests/IntegrationTests.SQLSever/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.SQLSever.csproj",
+      "kind": "integration",
+      "services": [],
+      "ci": true,
+      "notes": "Placeholder suite - add a mssql service to `services` once real tests land."
+    },
+    {
+      "name": "EF.Generator - Integration",
+      "project": "Tests/KyrolusSous.Repositories.EF.Generator/IntegrationTests/KyrolusSous.Repositories.EF.Generator.IntegrationTests.csproj",
+      "kind": "integration",
+      "services": [],
+      "ci": true,
+      "notes": "Runs against an in-process SQLite TestApp."
+    },
+    {
+      "name": "EF.Generator - Unit",
+      "project": "Tests/KyrolusSous.Repositories.EF.Generator/UnitTests/KyrolusSous.Repositories.EF.Generator.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "Marten.Runtime - FullPipeline",
+      "project": "Tests/KyrolusSous.Marten.Runtime.FullPipeline.Integration/KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests/KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests.csproj",
+      "kind": "integration",
+      "services": ["postgres", "redis"],
+      "ci": true
+    },
+    {
+      "name": "Logging",
+      "project": "Tests/KyrolusSous.Logging.Tests/KyrolusSous.Logging.Tests/KyrolusSous.Logging.Tests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "Swagger - Integration",
+      "project": "Tests/KyrolusSous.Swagger.Tests/KyrolusSous.Swagger.IntegrationTests/KyrolusSous.Swagger.IntegrationTests.csproj",
+      "kind": "integration",
+      "services": [],
+      "ci": true
+    }
+  ],
+
+  "docs": {
+    "projectFamilies": [
+      { "prefix": "Logging", "title": "Logging" },
+      { "prefix": "Mediator", "title": "Mediator" },
+      { "prefix": "Validation", "title": "Validation" },
+      { "prefix": "ExceptionHandling", "title": "Exception handling" },
+      { "prefix": "Caching", "title": "Caching" },
+      { "prefix": "Mapping", "title": "Mapping" },
+      { "prefix": "DataProtection", "title": "Data protection" },
+      { "prefix": "Repositories.EF", "title": "Repositories (Entity Framework)" },
+      { "prefix": "Repositories.Marten", "title": "Repositories (Marten)" },
+      { "prefix": "CQRS", "title": "CQRS pipeline" },
+      { "prefix": "EndpointKit", "title": "EndpointKit" },
+      { "prefix": "OpenIddictAuth", "title": "Auth" },
+      { "prefix": "Swagger", "title": "Swagger" },
+      { "prefix": "RabbitMQUtils", "title": "RabbitMQ" },
+      { "prefix": "IRabbitMQUtilsInterfaces", "title": "RabbitMQ" }
+    ]
+  }
+}
