@@ -1,0 +1,82 @@
+<Project>
+
+  <!--
+    Repo-wide defaults. Individual .csproj files must NOT set <Version> - versions come
+    from git tags via MinVer, and a local <Version> would silently win over it.
+    <PackageId> may be overridden per project (a few generators ship under a different id).
+    TargetFramework is deliberately left to each project: source generators target
+    netstandard2.0 while libraries target net10.0.
+  -->
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <!--
+    Everything under Src/ ships as a NuGet package; everything else (Tests/, TestApps,
+    benchmarks) does not. Deriving this from the path means a new project is classified
+    correctly without anyone remembering to set a flag.
+  -->
+  <PropertyGroup>
+    <IsToolkitPackage>false</IsToolkitPackage>
+    <IsToolkitPackage Condition="$([System.String]::Copy('$(MSBuildProjectDirectory)').Replace('\','/').Contains('/Src/'))">true</IsToolkitPackage>
+    <IsPackable>$(IsToolkitPackage)</IsPackable>
+    <GenerateDocumentationFile>$(IsToolkitPackage)</GenerateDocumentationFile>
+    <!-- Missing XML comments: worth surfacing, not worth blocking a build over. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <!-- NuGet package metadata shared by every publishable project. -->
+  <PropertyGroup Condition="'$(IsToolkitPackage)' == 'true'">
+    <Authors>Kyrolus Sous</Authors>
+    <Company>KyrolusSous</Company>
+    <Product>KyrolusSous.AspNetCoreToolkit</Product>
+    <Copyright>Copyright (c) Kyrolus Sous</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/kyroluskamal/KyrolusSous.AspNetCoreToolkit</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/kyroluskamal/KyrolusSous.AspNetCoreToolkit</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>aspnetcore;cqrs;mediator;repository;efcore;marten;caching;validation;aot</PackageTags>
+  </PropertyGroup>
+
+  <!-- Deterministic, source-linked builds so consumers can debug into the packages. -->
+  <PropertyGroup>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <!--
+    VERSIONING POLICY: lockstep. Every package in this repo ships under one version,
+    taken from a single repo-wide `v*` tag. A shared version number here does not mean
+    "this package changed" - it means "this is the snapshot these packages were tested
+    together in". With 73 dependency edges across 41 projects, that guarantee (same
+    version == compatible) is worth more than per-package version accuracy.
+
+    Do NOT introduce per-package tag prefixes without re-reading that trade-off: going
+    lockstep -> per-package later is easy, the reverse requires a version jump you have
+    to explain to consumers.
+
+    MinVer derives the version from the nearest `v*` git tag:
+      tagged commit    -> 1.2.0
+      commits after it -> 1.2.1-alpha.0.3   (never mistaken for a release)
+      no tag at all    -> 0.0.0-alpha.0.N   (N = commits since the repo root)
+  -->
+  <PropertyGroup>
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+    <MinVerDefaultPreReleaseIdentifiers>alpha.0</MinVerDefaultPreReleaseIdentifiers>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsToolkitPackage)' == 'true'">
+    <PackageReference Include="MinVer" Version="6.0.0" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>
