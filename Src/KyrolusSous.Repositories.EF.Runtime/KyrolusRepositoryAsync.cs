@@ -246,7 +246,7 @@ public class KyrolusRepositoryAsync<
     }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
-    protected async Task<TEntity?> PatchInternalAsync(object?[]? keyValues, Dictionary<string, object> updates, CancellationToken cancellationToken = default)
+    protected async Task<TEntity> PatchInternalAsync(object?[]? keyValues, Dictionary<string, object> updates, CancellationToken cancellationToken = default)
     {
         var entity = await MaterializeByIdAsync(new MaterializeByIdCommand(keyValues, false, null, null, [], false, false, cancellationToken)).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException($"{typeof(TEntity).Name} not found for keys {string.Join(',', keyValues!)}");

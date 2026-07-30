@@ -5,7 +5,9 @@ namespace KyrolusSous.Mapping.Mapster;
 
 public sealed class MapsterObjectMapper : IObjectMapper
 {
-    public TTarget Map<TSource, TTarget>(TSource source) => source.Adapt<TTarget>();
+    // Mapster returns null only when source is null; IObjectMapper declares TTarget non-nullable,
+    // so callers are contractually required to pass a non-null source.
+    public TTarget Map<TSource, TTarget>(TSource source) => source.Adapt<TTarget>()!;
 
     public TTarget Map<TTarget>(object source) => source.Adapt<TTarget>();
 

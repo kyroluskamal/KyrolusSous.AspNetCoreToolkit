@@ -576,8 +576,8 @@ internal static class Program
         if (normalized is "managed-identity")
         {
             return string.IsNullOrWhiteSpace(managedIdentityId)
-                ? new ManagedIdentityCredential()
-                : new ManagedIdentityCredential(managedIdentityId);
+                ? new ManagedIdentityCredential(ManagedIdentityId.SystemAssigned)
+                : new ManagedIdentityCredential(ManagedIdentityId.FromUserAssignedClientId(managedIdentityId));
         }
 
         return new DefaultAzureCredential();

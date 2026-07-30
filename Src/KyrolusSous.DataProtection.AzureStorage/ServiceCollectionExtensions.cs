@@ -13,7 +13,7 @@ public static class ServiceCollectionExtensions
         string containerName,
         string blobName = "dataprotection-keys.xml")
     {
-        if (builder is null) throw new ArgumentNullException(nameof(builder));
+        ArgumentNullException.ThrowIfNull(builder);
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             throw new ArgumentException("Connection string is required.", nameof(connectionString));
@@ -39,8 +39,8 @@ public static class ServiceCollectionExtensions
         BlobContainerClient containerClient,
         string blobName = "dataprotection-keys.xml")
     {
-        if (builder is null) throw new ArgumentNullException(nameof(builder));
-        if (containerClient is null) throw new ArgumentNullException(nameof(containerClient));
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(containerClient);
         if (string.IsNullOrWhiteSpace(blobName))
         {
             throw new ArgumentException("Blob name is required.", nameof(blobName));
