@@ -10,6 +10,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Google.Cloud.Kms.V1" Version="3.20.0" />
+    <PackageReference Include="Google.Cloud.Kms.V1" Version="3.26.0" />
   </ItemGroup>
 </Project>
