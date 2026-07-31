@@ -1,4 +1,4 @@
-// MediatorGenerator.cs
+﻿// MediatorGenerator.cs
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
@@ -39,7 +39,7 @@ namespace KyrolusSous.Mediator.Generator
         private const string StreamRequestHandlerInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusStreamRequestHandler`2";
         private const string UnitTypeFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.Unit";
         // This interface is expected to be defined as 'internal' in the KyrolusSous.Mediator.Abstractions library
-        private const string GeneratedDispatcherInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IGeneratedDispatcher";
+        private const string DispatcherInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IMediatorDispatcher";
 
         /// <summary>
         /// Called by the compiler to initialize the incremental generator pipeline.
@@ -102,12 +102,12 @@ namespace KyrolusSous.Mediator.Generator
             INamedTypeSymbol? requestHandlerDef = compilation.GetTypeByMetadataName(RequestHandlerInterfaceFullName);
             INamedTypeSymbol? requestHandlerWithoutResponseDef = compilation.GetTypeByMetadataName(RequestHandlerWithoutResponseInterfaceFullName);
             INamedTypeSymbol? streamRequestHandlerDef = compilation.GetTypeByMetadataName(StreamRequestHandlerInterfaceFullName);
-            INamedTypeSymbol? generatedDispatcherInterfaceSymbol = compilation.GetTypeByMetadataName(GeneratedDispatcherInterfaceFullName);
+            INamedTypeSymbol? dispatcherInterfaceSymbol = compilation.GetTypeByMetadataName(DispatcherInterfaceFullName);
 
             // --- Crucial Check: Ensure all base types/interfaces are resolvable ---
             // If any of these are null, it likely means the consuming project is not referencing
             // the KyrolusSous.Mediator.Abstractions library correctly. Report an error.
-            if (unitSymbol == null || queryHandlerDef == null || commandHandlerDef == null || commandHandlerWithResponseDef == null || requestHandlerDef == null || requestHandlerWithoutResponseDef == null || streamRequestHandlerDef == null || generatedDispatcherInterfaceSymbol == null)
+            if (unitSymbol == null || queryHandlerDef == null || commandHandlerDef == null || commandHandlerWithResponseDef == null || requestHandlerDef == null || requestHandlerWithoutResponseDef == null || streamRequestHandlerDef == null || dispatcherInterfaceSymbol == null)
             {
                 context.ReportDiagnostic(Diagnostic.Create(
                     new DiagnosticDescriptor(
@@ -122,7 +122,7 @@ namespace KyrolusSous.Mediator.Generator
                         UnitTypeFullName, QueryHandlerInterfaceFullName, CommandHandlerInterfaceFullName,
                         CommandHandlerWithResponseInterfaceFullName, RequestHandlerInterfaceFullName,
                         RequestHandlerWithoutResponseInterfaceFullName, StreamRequestHandlerInterfaceFullName,
-                        GeneratedDispatcherInterfaceFullName
+                        DispatcherInterfaceFullName
                     }.Where(s => compilation.GetTypeByMetadataName(s) == null)) // Only show missing ones
                 ));
                 return; // Stop generation if base types are missing
@@ -138,7 +138,7 @@ namespace KyrolusSous.Mediator.Generator
                 "System.Collections.Generic", "System.Runtime.CompilerServices", "Microsoft.Extensions.DependencyInjection",
                 "KyrolusSous.Mediator.Abstractions.Interfaces", // Namespace for IKyrolusCommand, IKyrolusQuery etc.
                 "KyrolusSous.Mediator.Generated", // Namespace for the generated static dispatcher
-                generatedDispatcherInterfaceSymbol.ContainingNamespace.ToDisplayString() // Namespace for IGeneratedDispatcher (e.g., KyrolusMediator)
+                dispatcherInterfaceSymbol.ContainingNamespace.ToDisplayString() // Namespace for IMediatorDispatcher (e.g., KyrolusMediator)
             };
 
             // Iterate through the concrete class symbols identified in the Initialize pipeline
@@ -184,12 +184,12 @@ namespace KyrolusSous.Mediator.Generator
                 string staticDispatcherCode = GenerateStaticDispatcherCode(handlerInfos, unitSymbol, namespaces);
                 context.AddSource("KyrolusSous.Mediator.GeneratedDispatcher.g.cs", SourceText.From(staticDispatcherCode, Encoding.UTF8));
 
-                // 2. Generate the class implementing the internal IGeneratedDispatcher interface
-                string dispatcherImplCode = GenerateDispatcherImplementation(generatedDispatcherInterfaceSymbol);
+                // 2. Generate the class implementing IMediatorDispatcher
+                string dispatcherImplCode = GenerateDispatcherImplementation(dispatcherInterfaceSymbol);
                 context.AddSource("KyrolusSous.Mediator.GeneratedDispatcherImpl.g.cs", SourceText.From(dispatcherImplCode, Encoding.UTF8));
 
                 // 3. Generate the DI extension method to register the implementation
-                string diExtensionCode = GenerateDIRegistration(generatedDispatcherInterfaceSymbol);
+                string diExtensionCode = GenerateDIRegistration(dispatcherInterfaceSymbol);
                 context.AddSource("KyrolusSous.Mediator.GeneratedDIExtensions.g.cs", SourceText.From(diExtensionCode, Encoding.UTF8));
 
                 // 4. Generate the DI extension method for Handler Registration ****
@@ -426,13 +426,13 @@ namespace KyrolusSous.Mediator.Generator
         }
 
         /// <summary>
-        /// Generates the implementation class for the internal IGeneratedDispatcher interface.
+        /// Generates the class implementing IMediatorDispatcher.
         /// </summary>
-        private static string GenerateDispatcherImplementation(INamedTypeSymbol generatedDispatcherInterfaceSymbol)
+        private static string GenerateDispatcherImplementation(INamedTypeSymbol dispatcherInterfaceSymbol)
         {
             var sb = new StringBuilder();
-            string interfaceFullName = generatedDispatcherInterfaceSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            string interfaceNamespace = generatedDispatcherInterfaceSymbol.ContainingNamespace.ToDisplayString();
+            string interfaceFullName = dispatcherInterfaceSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            string interfaceNamespace = dispatcherInterfaceSymbol.ContainingNamespace.ToDisplayString();
 
             sb.AppendLine(AutoGeneratedHeader);
             sb.AppendLine(NullableEnable);
@@ -440,7 +440,7 @@ namespace KyrolusSous.Mediator.Generator
             sb.AppendLine("using System.Collections.Generic;");
             sb.AppendLine("using System.Threading;");
             sb.AppendLine("using System.Threading.Tasks;");
-            sb.AppendLine($"using {interfaceNamespace}; // Namespace of IGeneratedDispatcher");
+            sb.AppendLine($"using {interfaceNamespace}; // Namespace of IMediatorDispatcher");
             sb.AppendLine();
             sb.AppendLine("namespace KyrolusSous.Mediator.Generated"); // Keep in Generated namespace
             sb.AppendLine(OpenBrace);
@@ -462,20 +462,20 @@ namespace KyrolusSous.Mediator.Generator
         }
 
         /// <summary>
-        /// Generates the DI extension method for registering the IGeneratedDispatcher implementation.
+        /// Generates the DI extension method for registering the IMediatorDispatcher implementation.
         /// </summary>
-        private static string GenerateDIRegistration(INamedTypeSymbol generatedDispatcherInterfaceSymbol)
+        private static string GenerateDIRegistration(INamedTypeSymbol dispatcherInterfaceSymbol)
         {
             var sb = new StringBuilder();
-            string interfaceFullName = generatedDispatcherInterfaceSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            string interfaceFullName = dispatcherInterfaceSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             string implementationFullName = "KyrolusSous.Mediator.Generated.GeneratedDispatcher"; // Full name of the implementation class
-            string interfaceNamespace = generatedDispatcherInterfaceSymbol.ContainingNamespace.ToDisplayString();
+            string interfaceNamespace = dispatcherInterfaceSymbol.ContainingNamespace.ToDisplayString();
 
             sb.AppendLine(AutoGeneratedHeader);
             sb.AppendLine(NullableEnable);
             sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
             sb.AppendLine("using Microsoft.Extensions.DependencyInjection.Extensions;");
-            sb.AppendLine($"using {interfaceNamespace}; // Namespace of IGeneratedDispatcher");
+            sb.AppendLine($"using {interfaceNamespace}; // Namespace of IMediatorDispatcher");
             sb.AppendLine($"using KyrolusSous.Mediator.Generated; // Namespace of GeneratedDispatcher implementation");
             sb.AppendLine();
             // Put extensions in a relevant namespace, e.g., Microsoft.Extensions.DependencyInjection for discoverability

@@ -21,4 +21,14 @@ public interface IKyrolusMediatorPublisher
     /// <param name="cancellationToken">An optional cancellation token.</param>
     /// <returns>A task representing the asynchronous publish operation.</returns>
     Task PublishAsync(INotification notification, IKyrolusNotificationPublishStrategy? strategy, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Publishes a notification that arrives as <see cref="object"/>, for callers that only have
+    /// the runtime type - a queue consumer or an outbox drain, for example.
+    /// </summary>
+    /// <param name="notification">The notification. Must implement <see cref="INotification"/>.</param>
+    /// <param name="cancellationToken">An optional cancellation token.</param>
+    /// <returns>A task representing the asynchronous publish operation.</returns>
+    /// <exception cref="ArgumentException">The object does not implement <see cref="INotification"/>.</exception>
+    Task PublishAsync(object notification, CancellationToken cancellationToken = default);
 }

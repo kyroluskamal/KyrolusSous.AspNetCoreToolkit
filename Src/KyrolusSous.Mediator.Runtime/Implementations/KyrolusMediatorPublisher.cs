@@ -18,15 +18,27 @@ public sealed class KyrolusMediatorPublisher(
 {
     private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
     private readonly IKyrolusNotificationPublishStrategy _publishStrategy = publishStrategy ?? throw new ArgumentNullException(nameof(publishStrategy));
-    // Cache MethodInfo for Handle methods per handler type to improve reflection performance.
-    // Key: Concrete handler implementation type (e.g., typeof(MyNotificationHandler))
-    // Value: MethodInfo for its Handle(TNotification, CancellationToken) method
-    private static readonly ConcurrentDictionary<Type, MethodInfo> s_handlerMethodCache = new();
+    // Cache MethodInfo for Handle methods to improve reflection performance.
+    // Key: (concrete handler type, notification type). Both parts are required - one handler
+    // class may implement INotificationHandler<> for several notifications, and keying on the
+    // handler alone would hand back the Handle overload of whichever notification arrived first.
+    private static readonly ConcurrentDictionary<(Type HandlerType, Type NotificationType), MethodInfo> s_handlerMethodCache = new();
 
     /// <inheritdoc />
     public async Task PublishAsync(INotification notification, CancellationToken cancellationToken = default)
+    => await PublishAsync(notification, null, cancellationToken).ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task PublishAsync(object notification, CancellationToken cancellationToken = default)
     {
-        await PublishAsync(notification, null, cancellationToken).ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(notification);
+
+        if (notification is not INotification typed)
+            throw new ArgumentException(
+                $"[KyrolusMediator] {notification.GetType().FullName} does not implement {nameof(INotification)}.",
+                nameof(notification));
+
+        await PublishAsync(typed, null, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -44,7 +56,10 @@ public sealed class KyrolusMediatorPublisher(
 
         if (handlers.Count == 0) return;
 
-        List<Exception> exceptions = [];
+        // Handlers may run concurrently (the default strategy is parallel), so this must be a
+        // thread-safe collection - List<T>.Add from several threads can lose an entry or tear
+        // the backing array.
+        ConcurrentBag<Exception> exceptions = [];
 
         // Local function to process individual handler invocation
         async Task ProcessHandler(object handler, CancellationToken ct)
@@ -53,22 +68,18 @@ public sealed class KyrolusMediatorPublisher(
             try
             {
                 // Get the Handle(TNotification, CancellationToken) method for this handler type, using cache.
-                var handlerMethod = s_handlerMethodCache.GetOrAdd(handler.GetType(), type =>
-                    type.GetMethod("Handle", [notificationType, typeof(CancellationToken)])
-                    ?? throw new InvalidOperationException($"[KyrolusMediator] Could not find Handle({notificationType.Name}, CancellationToken) method on handler type {type.FullName}.")
+                var handlerMethod = s_handlerMethodCache.GetOrAdd((handler.GetType(), notificationType), static key =>
+                    key.HandlerType.GetMethod("Handle", [key.NotificationType, typeof(CancellationToken)])
+                    ?? throw new InvalidOperationException($"[KyrolusMediator] Could not find Handle({key.NotificationType.Name}, CancellationToken) method on handler type {key.HandlerType.FullName}.")
                 );
 
                 // Invoke the Handle method using reflection. Result must be a Task.
-                var task = (Task?)handlerMethod.Invoke(handler, new object[] { notification, ct });
+                var task = (Task?)handlerMethod.Invoke(handler, [notification, ct]);
                 if (task != null)
-                {
                     await task.ConfigureAwait(false);
-                }
                 else
-                {
                     // This should technically not happen if the handler implements the interface correctly.
                     exceptions.Add(new InvalidOperationException($"[KyrolusMediator] Handler {handler.GetType().FullName} Handle method did not return a Task for notification {notificationType.FullName}."));
-                }
             }
             // Catch exceptions thrown directly BY the Handle method implementation
             catch (TargetInvocationException ex) when (ex.InnerException != null)
@@ -89,9 +100,7 @@ public sealed class KyrolusMediatorPublisher(
         await effectiveStrategy.PublishAsync(handlerDelegates, cancellationToken).ConfigureAwait(false);
 
         // If any exceptions were collected during the process, throw them all together.
-        if (exceptions.Count > 0)
-        {
+        if (!exceptions.IsEmpty)
             throw new AggregateException($"[KyrolusMediator] One or more errors occurred while publishing notification '{notificationType.Name}'", exceptions);
-        }
     }
 }

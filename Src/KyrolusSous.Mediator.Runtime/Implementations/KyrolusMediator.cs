@@ -5,7 +5,7 @@ namespace KyrolusSous.Mediator.Runtime.Implementations;
 /// </summary>
 public sealed class KyrolusMediator(
     IKyrolusMediatorSender sender,
-    IKyrolusMediatorPublisher publisher) : IKyrolusMediator, KyrolusSous.Mediator.Abstractions.Compatibility.IMediator
+    IKyrolusMediatorPublisher publisher) : IKyrolusMediator, IMediator
 {
     private readonly IKyrolusMediatorSender _sender = sender ?? throw new ArgumentNullException(nameof(sender));
     private readonly IKyrolusMediatorPublisher _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
@@ -30,4 +30,13 @@ public sealed class KyrolusMediator(
 
     public IAsyncEnumerable<TResponse> StreamAsync<TResponse>(IKyrolusStreamRequest<TResponse> request, CancellationToken cancellationToken = default)
         => _sender.StreamAsync(request, cancellationToken);
+
+    public Task<object?> SendAsync(object request, CancellationToken cancellationToken = default)
+        => _sender.SendAsync(request, cancellationToken);
+
+    public IAsyncEnumerable<object?> StreamAsync(object request, CancellationToken cancellationToken = default)
+        => _sender.StreamAsync(request, cancellationToken);
+
+    public Task PublishAsync(object notification, CancellationToken cancellationToken = default)
+        => _publisher.PublishAsync(notification, cancellationToken);
 }

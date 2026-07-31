@@ -174,7 +174,7 @@ public static partial class RepositoryRuntimeDiagnostics
         var nextCalls = 0;
         var nextResult = await behavior.Handle(
             validRequest,
-            () =>
+            _ =>
             {
                 nextCalls++;
                 return Task.FromResult("validated");
@@ -187,7 +187,7 @@ public static partial class RepositoryRuntimeDiagnostics
 
         await ExpectThrowsAsync<KyrolusSous.Validation.Abstractions.KyrolusValidationException>(() => behavior.Handle(
             invalidRequest,
-            () => Task.FromResult("should-not-run"),
+            _ => Task.FromResult("should-not-run"),
             cancellationToken)).ConfigureAwait(false);
         checks++;
 
@@ -196,7 +196,7 @@ public static partial class RepositoryRuntimeDiagnostics
         var passThroughCalls = 0;
         var passThroughResult = await passThroughBehavior.Handle(
             new RuntimeNoValidatorFluentProbeRequest(),
-            () =>
+            _ =>
             {
                 passThroughCalls++;
                 return Task.FromResult("pass-through");

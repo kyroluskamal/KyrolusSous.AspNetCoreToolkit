@@ -60,6 +60,15 @@ internal sealed class RuntimeMediatorStub : IKyrolusMediatorSender
         await Task.CompletedTask;
         yield break;
     }
+
+    public Task<object?> SendAsync(object request, CancellationToken cancellationToken = default)
+        => Task.FromResult(responder(request));
+
+    public async IAsyncEnumerable<object?> StreamAsync(object request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await Task.CompletedTask;
+        yield break;
+    }
 }
 
 internal static class RuntimeDefaultCommandQueryHandlerProbe<TResponse, TModel, TKey>

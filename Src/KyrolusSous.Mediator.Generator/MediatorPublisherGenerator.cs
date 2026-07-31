@@ -14,7 +14,7 @@ namespace KyrolusSous.Mediator.Generator
 {
     /// <summary>
     /// Source Generator responsible *only* for discovering and generating
-    /// Dependency Injection registration code for INotificationHandler<> implementations.
+    /// Dependency Injection registration code for <c>INotificationHandler&lt;&gt;</c> implementations.
     /// </summary>
     [Generator] // Mark as a generator
     public class MediatorPublisherGenerator : IIncrementalGenerator

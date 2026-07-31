@@ -50,4 +50,24 @@ public interface IKyrolusMediatorSender
     /// <param name="cancellationToken">An optional cancellation token.</param>
     /// <returns>An async stream of responses.</returns>
     IAsyncEnumerable<TResponse> StreamAsync<TResponse>(IKyrolusStreamRequest<TResponse> request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sends a request whose response type is not known at compile time. Use this when the
+    /// request arrives as <see cref="object"/> - from deserialization, a queue consumer, or a
+    /// generic outbox - and the concrete type only exists at runtime.
+    /// </summary>
+    /// <param name="request">The request object. Must implement <see cref="IKyrolusRequest{TResponse}"/>.</param>
+    /// <param name="cancellationToken">An optional cancellation token.</param>
+    /// <returns>The handler's response, boxed.</returns>
+    /// <exception cref="ArgumentException">The object does not implement <see cref="IKyrolusRequest{TResponse}"/>.</exception>
+    Task<object?> SendAsync(object request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Streams a request whose item type is not known at compile time.
+    /// </summary>
+    /// <param name="request">The stream request object. Must implement <see cref="IKyrolusStreamRequest{TResponse}"/>.</param>
+    /// <param name="cancellationToken">An optional cancellation token.</param>
+    /// <returns>An async stream of boxed responses.</returns>
+    /// <exception cref="ArgumentException">The object does not implement <see cref="IKyrolusStreamRequest{TResponse}"/>.</exception>
+    IAsyncEnumerable<object?> StreamAsync(object request, CancellationToken cancellationToken = default);
 }

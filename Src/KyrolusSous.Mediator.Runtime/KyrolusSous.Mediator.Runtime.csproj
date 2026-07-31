@@ -9,6 +9,15 @@
   <ItemGroup>
     <ProjectReference Include="..\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+    <!-- Only used to report an exception action that itself failed. Resolved optionally, so an
+         app without logging registered still works. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Lets the tests assert on what the configuration recorded, without widening the
+         public surface just for testing. -->
+    <InternalsVisibleTo Include="KyrolusSous.Mediator.Tests" />
   </ItemGroup>
 
 </Project>

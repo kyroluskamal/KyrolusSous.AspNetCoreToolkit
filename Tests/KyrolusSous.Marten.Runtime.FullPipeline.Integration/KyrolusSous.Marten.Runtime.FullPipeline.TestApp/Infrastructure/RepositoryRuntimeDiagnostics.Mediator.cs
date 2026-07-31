@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using KyrolusSous.Mediator.Abstractions.Attributes;
 using KyrolusSous.Mediator.Abstractions.Interfaces;
@@ -30,7 +30,7 @@ public static partial class RepositoryRuntimeDiagnostics
         var mediator = provider.GetRequiredService<IKyrolusMediator>();
         var sender = provider.GetRequiredService<IKyrolusMediatorSender>();
         var publisher = provider.GetRequiredService<IKyrolusMediatorPublisher>();
-        var dispatcher = provider.GetRequiredService<IGeneratedDispatcher>();
+        var dispatcher = provider.GetRequiredService<IMediatorDispatcher>();
         var state = provider.GetRequiredService<MediatorRuntimeState>();
 
         Require(

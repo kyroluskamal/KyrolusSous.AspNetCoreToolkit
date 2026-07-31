@@ -38,8 +38,12 @@ public readonly struct Unit : IEquatable<Unit>
 /// This could be the next behavior or the actual request handler.
 /// </summary>
 /// <typeparam name="TResponse">The response type of the request.</typeparam>
+/// <param name="cancellationToken">
+/// Token forwarded to the rest of the pipeline. Optional so that existing behaviors calling
+/// <c>next()</c> keep compiling; pass a token when a behavior needs to narrow cancellation.
+/// </param>
 /// <returns>A task representing the asynchronous operation, yielding the response.</returns>
-public delegate Task<TResponse> RequestHandlerDelegate<TResponse>();
+public delegate Task<TResponse> RequestHandlerDelegate<TResponse>(CancellationToken cancellationToken = default);
 
 /// <summary>
 /// Defines a pipeline behavior for processing requests.

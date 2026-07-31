@@ -372,11 +372,11 @@ public static partial class RepositoryRuntimeDiagnostics
             [new RuntimeMappedCqrsExceptionMapper<string, InvalidOperationException>("mapped-response")]);
         if (await cqrsMappedBehavior.Handle(
                 "mapped-request",
-                () => Task.FromException<string>(new InvalidOperationException("mapped")),
+                _ => Task.FromException<string>(new InvalidOperationException("mapped")),
                 cancellationToken).ConfigureAwait(false) == "mapped-response" &&
             await cqrsMappedBehavior.Handle(
                 "pass-through",
-                () => Task.FromResult("ok"),
+                _ => Task.FromResult("ok"),
                 cancellationToken).ConfigureAwait(false) == "ok")
         {
             checks++;
@@ -385,7 +385,7 @@ public static partial class RepositoryRuntimeDiagnostics
         await ExpectThrowsAsync<ArgumentException>(
             () => cqrsMappedBehavior.Handle(
                 "unmapped-request",
-                () => Task.FromException<string>(new ArgumentException("unmapped")),
+                _ => Task.FromException<string>(new ArgumentException("unmapped")),
                 cancellationToken),
             "CQRS exception mapping behavior should rethrow exceptions that no mapper handles.").ConfigureAwait(false);
         checks++;
