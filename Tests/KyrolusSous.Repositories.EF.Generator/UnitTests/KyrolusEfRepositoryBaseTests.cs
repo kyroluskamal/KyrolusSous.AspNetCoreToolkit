@@ -316,48 +316,120 @@ public class KyrolusEfRepositoryBaseTests
         result.ShouldBeNull();
     }
 
-    [Fact(DisplayName = "TryConvertGuid covers Guid instance branch")]
-    public void TryConvertGuid_GuidInstance_Branch()
-    {
-        var g = Guid.NewGuid();
-        object?[] args = [g, null]; // out param placeholder
-        var ok = (bool)Invoke("TryConvertGuid", args)!;
+    // ConvertToType exists to turn a route or query-string value - which arrives as text - into
+    // the entity's key type. These go through ConvertToType rather than the private converters,
+    // because that is the only way the converters are ever reached in production.
+    //
+    // They replace four earlier tests that invoked TryConvertGuid / TryConvertDateTime /
+    // TryConvertDateTimeOffset / TryConvertTimeSpan directly with an already-converted value and
+    // expected true. Those could never pass: each converter only handles a string, and
+    // ConvertToType returns early via IsInstanceOfType before a same-type value could reach one.
+    // They asserted a branch that does not exist and is not needed.
 
-        ok.ShouldBeTrue();
-        args[1].ShouldBe(g);
+    [Fact(DisplayName = "ConvertToType parses a Guid from its string form")]
+    public void ConvertToType_GuidString_Parses()
+    {
+        var expected = Guid.NewGuid();
+
+        var result = Invoke("ConvertToType", expected.ToString(), typeof(Guid));
+
+        result.ShouldBe(expected);
     }
 
-    [Fact(DisplayName = "TryConvertDateTimeOffset covers DateTimeOffset instance branch")]
-    public void TryConvertDateTimeOffset_Instance_Branch()
+    [Fact(DisplayName = "ConvertToType returns a Guid unchanged")]
+    public void ConvertToType_GuidInstance_ReturnedAsIs()
     {
-        var dto = new DateTimeOffset(2026, 1, 10, 10, 0, 0, TimeSpan.FromHours(1));
-        object?[] args = [dto, null];
-        var ok = (bool)Invoke("TryConvertDateTimeOffset", args)!;
+        var expected = Guid.NewGuid();
 
-        ok.ShouldBeTrue();
-        args[1].ShouldBe(dto);
+        var result = Invoke("ConvertToType", expected, typeof(Guid));
+
+        result.ShouldBe(expected);
     }
 
-    [Fact(DisplayName = "TryConvertDateTime covers DateTime instance branch")]
-    public void TryConvertDateTime_Instance_Branch()
+    [Fact(DisplayName = "ConvertToType parses a Guid for a nullable Guid key")]
+    public void ConvertToType_GuidString_NullableTarget_Parses()
     {
-        var dt = new DateTime(2026, 1, 10, 10, 0, 0, DateTimeKind.Utc);
-        object?[] args = [dt, null];
-        var ok = (bool)Invoke("TryConvertDateTime", args)!;
+        var expected = Guid.NewGuid();
 
-        ok.ShouldBeTrue();
-        args[1].ShouldBe(dt);
+        var result = Invoke("ConvertToType", expected.ToString(), typeof(Guid?));
+
+        result.ShouldBe(expected);
     }
 
-    [Fact(DisplayName = "TryConvertTimeSpan covers TimeSpan instance branch")]
-    public void TryConvertTimeSpan_Instance_Branch()
+    [Fact(DisplayName = "ConvertToType parses a round-trip DateTime string")]
+    public void ConvertToType_DateTimeString_Parses()
     {
-        var ts = TimeSpan.FromMinutes(90);
-        object?[] args = [ts, null];
-        var ok = (bool)Invoke("TryConvertTimeSpan", args)!;
+        var expected = new DateTime(2026, 1, 10, 10, 0, 0, DateTimeKind.Utc);
 
-        ok.ShouldBeTrue();
-        args[1].ShouldBe(ts);
+        var result = Invoke("ConvertToType", expected.ToString("O"), typeof(DateTime));
+
+        result.ShouldBe(expected);
+    }
+
+    [Fact(DisplayName = "ConvertToType parses a round-trip DateTimeOffset string")]
+    public void ConvertToType_DateTimeOffsetString_Parses()
+    {
+        var expected = new DateTimeOffset(2026, 1, 10, 10, 0, 0, TimeSpan.FromHours(1));
+
+        var result = Invoke("ConvertToType", expected.ToString("O"), typeof(DateTimeOffset));
+
+        result.ShouldBe(expected);
+    }
+
+    [Fact(DisplayName = "ConvertToType parses a TimeSpan string")]
+    public void ConvertToType_TimeSpanString_Parses()
+    {
+        var expected = TimeSpan.FromMinutes(90);
+
+        var result = Invoke("ConvertToType", expected.ToString(), typeof(TimeSpan));
+
+        result.ShouldBe(expected);
+    }
+
+    [Fact(DisplayName = "ConvertToType converts a value to string")]
+    public void ConvertToType_ToString_Converts()
+    {
+        var result = Invoke("ConvertToType", 42, typeof(string));
+
+        result.ShouldBe("42");
+    }
+
+    [Fact(DisplayName = "ConvertToType converts a numeric string to int")]
+    public void ConvertToType_NumericString_ConvertsToInt()
+    {
+        var result = Invoke("ConvertToType", "42", typeof(int));
+
+        result.ShouldBe(42);
+    }
+
+    [Fact(DisplayName = "ConvertToType parses an enum name")]
+    public void ConvertToType_EnumName_Parses()
+    {
+        var result = Invoke("ConvertToType", nameof(SampleStatus.Active), typeof(SampleStatus));
+
+        result.ShouldBe(SampleStatus.Active);
+    }
+
+    [Fact(DisplayName = "ConvertToType throws when a string key cannot be converted")]
+    public void ConvertToType_UnparseableGuid_Throws()
+    {
+        // Documents current behaviour, which is worth knowing: TryConvertGuid declines, but every
+        // string is IConvertible, so TryConvertConvertible still calls Convert.ChangeType - and
+        // that throws. The `return value` fallback at the end of ConvertToType is therefore
+        // unreachable for strings.
+        //
+        // Practical consequence: a malformed key in a route ("/users/not-a-guid") surfaces as an
+        // InvalidCastException rather than a clean 400.
+        var exception = Should.Throw<TargetInvocationException>(
+            () => Invoke("ConvertToType", "not-a-guid", typeof(Guid)));
+
+        exception.InnerException.ShouldBeOfType<InvalidCastException>();
+    }
+
+    private enum SampleStatus
+    {
+        Inactive = 0,
+        Active = 1
     }
 
     // -------------------------
