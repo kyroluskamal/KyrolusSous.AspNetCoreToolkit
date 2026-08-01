@@ -84,6 +84,13 @@
       "ci": true
     },
     {
+      "name": "Mediator.Generator - Unit",
+      "project": "Tests/KyrolusSous.Mediator.Generator/UnitTests/KyrolusSous.Mediator.Generator.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
       "name": "Swagger - Integration",
       "project": "Tests/KyrolusSous.Swagger.Tests/KyrolusSous.Swagger.IntegrationTests/KyrolusSous.Swagger.IntegrationTests.csproj",
       "kind": "integration",

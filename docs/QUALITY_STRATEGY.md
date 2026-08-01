@@ -67,8 +67,9 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Marten.Runtime - FullPipeline | integration | 235 | postgres, redis | yes |
 | Logging | unit | 28 | none | yes |
 | Mediator - Unit | unit | 62 | none | yes |
+| Mediator.Generator - Unit | unit | 1 | none | yes |
 | Swagger - Integration | integration | 10 | none | yes |
-| **Total** | | **1074** | | |
+| **Total** | | **1075** | | |
 
 <!-- END:GENERATED:test-suites -->
 
