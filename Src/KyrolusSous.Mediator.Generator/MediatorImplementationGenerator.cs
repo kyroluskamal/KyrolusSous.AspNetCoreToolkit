@@ -2,12 +2,8 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
-using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Linq;
 using System.Text;
-using System.Threading;
 
 // Define the namespace for the generator project
 namespace KyrolusSous.Mediator.Generator
@@ -38,39 +34,76 @@ namespace KyrolusSous.Mediator.Generator
         private const string RequestHandlerWithoutResponseInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusRequestHandler`1";
         private const string StreamRequestHandlerInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusStreamRequestHandler`2";
         private const string UnitTypeFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.Unit";
-        // This interface is expected to be defined as 'internal' in the KyrolusSous.Mediator.Abstractions library
         private const string DispatcherInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IMediatorDispatcher";
+
+        // The forms written into the generated source. Constants rather than values read off a
+        // symbol, so the generation stage needs no Compilation - see the note in Initialize.
+        private const string AbstractionsNamespace = "KyrolusSous.Mediator.Abstractions.Interfaces";
+        private const string DispatcherInterfaceNamespace = AbstractionsNamespace;
+        private const string DispatcherInterfaceQualifiedName = "global::" + DispatcherInterfaceFullName;
+        private const string UnitQualifiedName = "global::" + UnitTypeFullName;
 
         /// <summary>
         /// Called by the compiler to initialize the incremental generator pipeline.
         /// </summary>
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
-            // STEP 1: Define the pipeline stage to find potential handler classes.
-            // Filters syntax nodes for concrete (non-abstract, non-static) classes 
-            // that have a base list (might implement interfaces or inherit).
-            // Transforms the syntax node into its semantic symbol (INamedTypeSymbol).
-            IncrementalValuesProvider<INamedTypeSymbol> handlerClassSymbols = context.SyntaxProvider
+            // STEP 1: For every candidate class, do the semantic analysis here and emit plain data.
+            //
+            // The transform must return value-equatable data, never symbols. The compiler re-runs
+            // this pipeline on every keystroke, and Roslyn decides whether downstream work can be
+            // skipped by comparing a stage's output to what it produced last time. Roslyn symbols
+            // belong to one Compilation and never compare equal to the symbols of the next one, so
+            // returning them makes every stage report "changed" and the caching does nothing.
+            // Records of strings and bools compare by value, so an edit that leaves a file's
+            // handlers alone leaves this stage's output identical and the generation is skipped.
+            IncrementalValuesProvider<ClassHandlerModel> classModels = context.SyntaxProvider
                 .CreateSyntaxProvider(
                     predicate: static (node, _) => node is ClassDeclarationSyntax { BaseList: not null },
-                    transform: static (ctx, ct) => GetSemanticTargetForGeneration(ctx, ct))
-                .Where(static symbol => symbol is not null)!; // Ensure we only pass non-null symbols
+                    transform: static (ctx, ct) => GetClassHandlerModel(ctx, ct))
+                // Named so a test can ask Roslyn whether this step was recomputed or served from
+                // cache, which is the only way to prove the caching above actually works.
+                .WithTrackingName(TrackingNames.HandlerModels)
+                .Where(static model => model is not null)!;
 
-            // STEP 2: Combine the stream of found handler symbols with the Compilation object.
-            // The Compilation object is needed in the execution phase to resolve types.
-            IncrementalValueProvider<(Compilation Compilation, ImmutableArray<INamedTypeSymbol> HandlerSymbols)> compilationAndHandlers
-                = context.CompilationProvider.Combine(handlerClassSymbols.Collect());
+            // STEP 2: Whether the abstractions are referenced at all, as a bool rather than the
+            // Compilation itself.
+            //
+            // This is the other half of the same rule. Combining with CompilationProvider directly
+            // would reintroduce the problem it exists to avoid: the Compilation is a new object on
+            // every keystroke, so anything combined with it is permanently "changed". A bool is
+            // equatable and stays stable across edits, so it costs nothing.
+            IncrementalValueProvider<bool> abstractionsAvailable = context.CompilationProvider
+                .Select(static (compilation, _) => RequiredTypeNames.All(name => compilation.GetTypeByMetadataName(name) is not null));
 
-            // STEP 3: Register the final execution step (Execute method) 
-            // to be called with the combined compilation and handler symbols.
-            context.RegisterSourceOutput(compilationAndHandlers, Execute);
+            // STEP 3: Register the final execution step with the two small, equatable inputs.
+            context.RegisterSourceOutput(
+                abstractionsAvailable.Combine(classModels.Collect()),
+                static (spc, source) => Execute(spc, source.Left, source.Right));
         }
 
+        /// <summary>The types the generated code depends on; all must resolve or nothing is emitted.</summary>
+        private static readonly string[] RequiredTypeNames =
+        [
+            UnitTypeFullName,
+            QueryHandlerInterfaceFullName,
+            CommandHandlerInterfaceFullName,
+            CommandHandlerWithResponseInterfaceFullName,
+            RequestHandlerInterfaceFullName,
+            RequestHandlerWithoutResponseInterfaceFullName,
+            StreamRequestHandlerInterfaceFullName,
+            DispatcherInterfaceFullName
+        ];
+
         /// <summary>
-        /// Semantic filter executed only for nodes passing the predicate.
-        /// Returns the INamedTypeSymbol if it represents a concrete class, otherwise null.
+        /// Semantic analysis for one candidate class, producing plain data rather than symbols.
         /// </summary>
-        private static INamedTypeSymbol? GetSemanticTargetForGeneration(GeneratorSyntaxContext context, CancellationToken cancellationToken)
+        /// <remarks>
+        /// All of the semantic work happens here, in the per-node stage that Roslyn caches, and the
+        /// result is value-equatable. Returning symbols instead would defeat that caching entirely -
+        /// see the note in <c>Initialize</c>.
+        /// </remarks>
+        private static ClassHandlerModel? GetClassHandlerModel(GeneratorSyntaxContext context, CancellationToken cancellationToken)
         {
             var classDeclarationSyntax = (ClassDeclarationSyntax)context.Node;
             // Get the semantic symbol representing the class definition
@@ -78,36 +111,66 @@ namespace KyrolusSous.Mediator.Generator
 
             // Ignore interfaces, structs, enums, delegates, abstract classes, static classes, or if symbol is null
             if (classSymbol == null || classSymbol.TypeKind != TypeKind.Class || classSymbol.IsAbstract || classSymbol.IsStatic)
-            {
                 return null;
+
+            var defs = HandlerInterfaceDefinitions.TryResolve(context.SemanticModel.Compilation);
+            if (defs is null) return null; // Abstractions not referenced; Execute reports SMG001.
+
+            // Open generic handlers are registered by their open type. They get no dispatch entry:
+            // the closed types are only known where they are used.
+            if (classSymbol.IsGenericType && classSymbol.TypeParameters.Length > 0)
+            {
+                var openGenerics = TryGetOpenGenericHandlerRegistrations(classSymbol, defs)
+                    .Select(info => new OpenGenericModel(
+                        GetOpenGenericTypeOf(info.HandlerType),
+                        GetOpenGenericTypeOf(info.InterfaceType)))
+                    .ToImmutableArray();
+
+                return openGenerics.IsEmpty
+                    ? null
+                    : new ClassHandlerModel(default, new EquatableArray<OpenGenericModel>(openGenerics), string.Empty);
             }
-            // Return the symbol for the concrete class
-            return classSymbol;
+
+            var namespaces = new SortedSet<string>(StringComparer.Ordinal);
+            var handlers = ImmutableArray.CreateBuilder<HandlerModel>();
+
+            // One entry per handler interface: a class handling several messages needs a dispatch
+            // entry for each of them.
+            foreach (var info in GetHandlerInfos(classSymbol, defs))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                handlers.Add(new HandlerModel(
+                    info.HandlerType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                    info.RequestType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                    info.ResponseType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                    info.InterfaceFullName,
+                    info.IsStream));
+
+                // Collect namespaces from the types involved for 'using' statements
+                CollectNamespaces(info.HandlerType, namespaces);
+                CollectNamespaces(info.RequestType, namespaces);
+                CollectNamespaces(info.ResponseType, namespaces);
+            }
+
+            if (handlers.Count == 0) return null;
+
+            return new ClassHandlerModel(
+                new EquatableArray<HandlerModel>(handlers.ToImmutable()),
+                default,
+                // Joined into one string so the model stays comparable by value.
+                string.Join(";", namespaces));
         }
 
         /// <summary>
-        /// Main generation method, executed with the compilation and collected handler symbols.
+        /// Main generation method, executed with the collected handler models.
         /// </summary>
-        private static void Execute(SourceProductionContext context, (Compilation Compilation, ImmutableArray<INamedTypeSymbol> HandlerSymbols) source)
+        private static void Execute(SourceProductionContext context, bool abstractionsAvailable, ImmutableArray<ClassHandlerModel> classModels)
         {
-            var (compilation, handlerSymbols) = source; // Deconstruct the tuple
-            if (handlerSymbols.IsDefaultOrEmpty) return; // Exit if no potential handlers found
-
-            // --- Get required base symbols from the compilation context ---
-            // These are needed for analysis and comparison later.
-            INamedTypeSymbol? unitSymbol = compilation.GetTypeByMetadataName(UnitTypeFullName);
-            INamedTypeSymbol? queryHandlerDef = compilation.GetTypeByMetadataName(QueryHandlerInterfaceFullName);
-            INamedTypeSymbol? commandHandlerDef = compilation.GetTypeByMetadataName(CommandHandlerInterfaceFullName);
-            INamedTypeSymbol? commandHandlerWithResponseDef = compilation.GetTypeByMetadataName(CommandHandlerWithResponseInterfaceFullName);
-            INamedTypeSymbol? requestHandlerDef = compilation.GetTypeByMetadataName(RequestHandlerInterfaceFullName);
-            INamedTypeSymbol? requestHandlerWithoutResponseDef = compilation.GetTypeByMetadataName(RequestHandlerWithoutResponseInterfaceFullName);
-            INamedTypeSymbol? streamRequestHandlerDef = compilation.GetTypeByMetadataName(StreamRequestHandlerInterfaceFullName);
-            INamedTypeSymbol? dispatcherInterfaceSymbol = compilation.GetTypeByMetadataName(DispatcherInterfaceFullName);
-
             // --- Crucial Check: Ensure all base types/interfaces are resolvable ---
-            // If any of these are null, it likely means the consuming project is not referencing
-            // the KyrolusSous.Mediator.Abstractions library correctly. Report an error.
-            if (unitSymbol == null || queryHandlerDef == null || commandHandlerDef == null || commandHandlerWithResponseDef == null || requestHandlerDef == null || requestHandlerWithoutResponseDef == null || streamRequestHandlerDef == null || dispatcherInterfaceSymbol == null)
+            // If any are missing, the consuming project is not referencing the
+            // KyrolusSous.Mediator.Abstractions library correctly. Report an error.
+            if (!abstractionsAvailable)
             {
                 context.ReportDiagnostic(Diagnostic.Create(
                     new DiagnosticDescriptor(
@@ -118,78 +181,52 @@ namespace KyrolusSous.Mediator.Generator
                         DiagnosticSeverity.Error,
                         isEnabledByDefault: true),
                     Location.None,
-                    string.Join(", ", new[] { // List the types being checked
-                        UnitTypeFullName, QueryHandlerInterfaceFullName, CommandHandlerInterfaceFullName,
-                        CommandHandlerWithResponseInterfaceFullName, RequestHandlerInterfaceFullName,
-                        RequestHandlerWithoutResponseInterfaceFullName, StreamRequestHandlerInterfaceFullName,
-                        DispatcherInterfaceFullName
-                    }.Where(s => compilation.GetTypeByMetadataName(s) == null)) // Only show missing ones
-                ));
+                    string.Join(", ", RequiredTypeNames)));
                 return; // Stop generation if base types are missing
             }
 
-            // --- Analyze handler symbols and collect detailed information ---
-            var handlerInfos = new List<HandlerInfo>();
-            var openGenericHandlers = new List<OpenGenericHandlerInfo>();
+            if (classModels.IsDefaultOrEmpty) return; // Exit if no handlers found
+
+            var handlerInfos = new List<HandlerModel>();
+            var openGenericHandlers = new List<OpenGenericModel>();
             // HashSet to store unique namespaces required for 'using' statements in generated code
             var namespaces = new HashSet<string>
             {
                 "System", "System.Threading", "System.Threading.Tasks",
                 "System.Collections.Generic", "System.Runtime.CompilerServices", "Microsoft.Extensions.DependencyInjection",
                 "KyrolusSous.Mediator.Abstractions.Interfaces", // Namespace for IKyrolusCommand, IKyrolusQuery etc.
-                "KyrolusSous.Mediator.Generated", // Namespace for the generated static dispatcher
-                dispatcherInterfaceSymbol.ContainingNamespace.ToDisplayString() // Namespace for IMediatorDispatcher (e.g., KyrolusMediator)
+                "KyrolusSous.Mediator.Generated" // Namespace for the generated static dispatcher
             };
 
-            // Iterate through the concrete class symbols identified in the Initialize pipeline
-            var handlerDefinitions = new HandlerInterfaceDefinitions(
-                unitSymbol,
-                queryHandlerDef,
-                commandHandlerDef,
-                commandHandlerWithResponseDef,
-                requestHandlerDef,
-                requestHandlerWithoutResponseDef,
-                streamRequestHandlerDef);
-
-            foreach (var handlerSymbol in handlerSymbols)
+            foreach (var model in classModels)
             {
                 context.CancellationToken.ThrowIfCancellationRequested(); // Check for cancellation
 
-                if (handlerSymbol.IsGenericType && handlerSymbol.TypeParameters.Length > 0)
-                {
-                    foreach (var openGeneric in TryGetOpenGenericHandlerRegistrations(handlerSymbol, handlerDefinitions))
-                    {
-                        openGenericHandlers.Add(openGeneric);
-                    }
-                    continue;
-                }
+                handlerInfos.AddRange(model.Handlers.Items);
+                openGenericHandlers.AddRange(model.OpenGenerics.Items);
 
-                // Call helper method to analyze the symbol and extract handler details
-                var handlerInfo = TryGetHandlerInfo(handlerSymbol, handlerDefinitions);
-                if (handlerInfo != null)
+                if (model.Namespaces.Length > 0)
                 {
-                    handlerInfos.Add(handlerInfo);
-                    // Collect namespaces from the types involved for 'using' statements
-                    CollectNamespaces(handlerInfo.HandlerType, namespaces);
-                    CollectNamespaces(handlerInfo.RequestType, namespaces);
-                    CollectNamespaces(handlerInfo.ResponseType, namespaces);
+                    foreach (var ns in model.Namespaces.Split(';'))
+                    {
+                        namespaces.Add(ns);
+                    }
                 }
-                // Optional: Add diagnostic warning if a class looks like a handler but doesn't match perfectly?
             }
 
             // --- Generate the source code files if any valid handlers were found ---
             if (handlerInfos.Count > 0)
             {
                 // 1. Generate the static dispatcher class (contains the core logic)
-                string staticDispatcherCode = GenerateStaticDispatcherCode(handlerInfos, unitSymbol, namespaces);
+                string staticDispatcherCode = GenerateStaticDispatcherCode(handlerInfos, namespaces);
                 context.AddSource("KyrolusSous.Mediator.GeneratedDispatcher.g.cs", SourceText.From(staticDispatcherCode, Encoding.UTF8));
 
                 // 2. Generate the class implementing IMediatorDispatcher
-                string dispatcherImplCode = GenerateDispatcherImplementation(dispatcherInterfaceSymbol);
+                string dispatcherImplCode = GenerateDispatcherImplementation();
                 context.AddSource("KyrolusSous.Mediator.GeneratedDispatcherImpl.g.cs", SourceText.From(dispatcherImplCode, Encoding.UTF8));
 
                 // 3. Generate the DI extension method to register the implementation
-                string diExtensionCode = GenerateDIRegistration(dispatcherInterfaceSymbol);
+                string diExtensionCode = GenerateDIRegistration();
                 context.AddSource("KyrolusSous.Mediator.GeneratedDIExtensions.g.cs", SourceText.From(diExtensionCode, Encoding.UTF8));
 
                 // 4. Generate the DI extension method for Handler Registration ****
@@ -200,63 +237,127 @@ namespace KyrolusSous.Mediator.Generator
 
         // --- Helper Record ---
         /// <summary>Helper class to store extracted information about a specific handler.</summary>
-        private sealed class HandlerInfo
+        private sealed class HandlerInfo(INamedTypeSymbol handlerType, INamedTypeSymbol requestType, ITypeSymbol responseType, string interfaceFullName, bool isStream)
         {
-            public HandlerInfo(INamedTypeSymbol handlerType, INamedTypeSymbol requestType, ITypeSymbol responseType, string interfaceFullName, bool isStream)
-            {
-                HandlerType = handlerType;
-                RequestType = requestType;
-                ResponseType = responseType;
-                InterfaceFullName = interfaceFullName;
-                IsStream = isStream;
-            }
-
-            public INamedTypeSymbol HandlerType { get; }
-            public INamedTypeSymbol RequestType { get; }
-            public ITypeSymbol ResponseType { get; }
-            public string InterfaceFullName { get; }
-            public bool IsStream { get; }
+            public INamedTypeSymbol HandlerType { get; } = handlerType;
+            public INamedTypeSymbol RequestType { get; } = requestType;
+            public ITypeSymbol ResponseType { get; } = responseType;
+            public string InterfaceFullName { get; } = interfaceFullName;
+            public bool IsStream { get; } = isStream;
         }
 
-        private sealed class OpenGenericHandlerInfo
+        private sealed class OpenGenericHandlerInfo(INamedTypeSymbol handlerType, INamedTypeSymbol interfaceType)
         {
-            public OpenGenericHandlerInfo(INamedTypeSymbol handlerType, INamedTypeSymbol interfaceType)
-            {
-                HandlerType = handlerType;
-                InterfaceType = interfaceType;
-            }
-
-            public INamedTypeSymbol HandlerType { get; }
-            public INamedTypeSymbol InterfaceType { get; }
+            public INamedTypeSymbol HandlerType { get; } = handlerType;
+            public INamedTypeSymbol InterfaceType { get; } = interfaceType;
         }
 
-        private sealed class HandlerInterfaceDefinitions
+        private sealed class HandlerInterfaceDefinitions(
+            INamedTypeSymbol unitSymbol,
+            INamedTypeSymbol queryHandlerDef,
+            INamedTypeSymbol commandHandlerDef,
+            INamedTypeSymbol commandHandlerWithResponseDef,
+            INamedTypeSymbol requestHandlerDef,
+            INamedTypeSymbol requestHandlerWithoutResponseDef,
+            INamedTypeSymbol streamRequestHandlerDef)
         {
-            public HandlerInterfaceDefinitions(
-                INamedTypeSymbol unitSymbol,
-                INamedTypeSymbol queryHandlerDef,
-                INamedTypeSymbol commandHandlerDef,
-                INamedTypeSymbol commandHandlerWithResponseDef,
-                INamedTypeSymbol requestHandlerDef,
-                INamedTypeSymbol requestHandlerWithoutResponseDef,
-                INamedTypeSymbol streamRequestHandlerDef)
-            {
-                UnitSymbol = unitSymbol;
-                QueryHandlerDef = queryHandlerDef;
-                CommandHandlerDef = commandHandlerDef;
-                CommandHandlerWithResponseDef = commandHandlerWithResponseDef;
-                RequestHandlerDef = requestHandlerDef;
-                RequestHandlerWithoutResponseDef = requestHandlerWithoutResponseDef;
-                StreamRequestHandlerDef = streamRequestHandlerDef;
-            }
+            public INamedTypeSymbol UnitSymbol { get; } = unitSymbol;
+            public INamedTypeSymbol QueryHandlerDef { get; } = queryHandlerDef;
+            public INamedTypeSymbol CommandHandlerDef { get; } = commandHandlerDef;
+            public INamedTypeSymbol CommandHandlerWithResponseDef { get; } = commandHandlerWithResponseDef;
+            public INamedTypeSymbol RequestHandlerDef { get; } = requestHandlerDef;
+            public INamedTypeSymbol RequestHandlerWithoutResponseDef { get; } = requestHandlerWithoutResponseDef;
+            public INamedTypeSymbol StreamRequestHandlerDef { get; } = streamRequestHandlerDef;
 
-            public INamedTypeSymbol UnitSymbol { get; }
-            public INamedTypeSymbol QueryHandlerDef { get; }
-            public INamedTypeSymbol CommandHandlerDef { get; }
-            public INamedTypeSymbol CommandHandlerWithResponseDef { get; }
-            public INamedTypeSymbol RequestHandlerDef { get; }
-            public INamedTypeSymbol RequestHandlerWithoutResponseDef { get; }
-            public INamedTypeSymbol StreamRequestHandlerDef { get; }
+            /// <summary>
+            /// Resolves the interfaces from a compilation, or <see langword="null"/> if any is
+            /// missing - which means the abstractions package is not referenced.
+            /// </summary>
+            /// <remarks>
+            /// Cheap to call per syntax node: <c>GetTypeByMetadataName</c> is served from the
+            /// compilation's own cache.
+            /// </remarks>
+            public static HandlerInterfaceDefinitions? TryResolve(Compilation compilation)
+            {
+                var unit = compilation.GetTypeByMetadataName(UnitTypeFullName);
+                var query = compilation.GetTypeByMetadataName(QueryHandlerInterfaceFullName);
+                var command = compilation.GetTypeByMetadataName(CommandHandlerInterfaceFullName);
+                var commandWithResponse = compilation.GetTypeByMetadataName(CommandHandlerWithResponseInterfaceFullName);
+                var request = compilation.GetTypeByMetadataName(RequestHandlerInterfaceFullName);
+                var requestWithoutResponse = compilation.GetTypeByMetadataName(RequestHandlerWithoutResponseInterfaceFullName);
+                var stream = compilation.GetTypeByMetadataName(StreamRequestHandlerInterfaceFullName);
+                var dispatcher = compilation.GetTypeByMetadataName(DispatcherInterfaceFullName);
+
+                if (unit is null || query is null || command is null || commandWithResponse is null ||
+                    request is null || requestWithoutResponse is null || stream is null || dispatcher is null)
+                {
+                    return null;
+                }
+
+                return new HandlerInterfaceDefinitions(
+                    unit, query, command, commandWithResponse, request, requestWithoutResponse, stream);
+            }
+        }
+
+        // --- Equatable models carried through the incremental pipeline ---
+        // Everything below is plain data. Roslyn compares a pipeline stage's output to decide
+        // whether downstream work can be skipped, and it compares with EqualityComparer<T>.Default,
+        // so anything flowing through must be equal by value. Records of strings and bools are;
+        // Roslyn symbols are not.
+
+        /// <summary>One dispatch entry: which handler serves which request, and what it returns.</summary>
+        private sealed record HandlerModel(
+            string HandlerFullName,
+            string RequestFullName,
+            string ResponseFullName,
+            string InterfaceFullName,
+            bool IsStream);
+
+        /// <summary>An open generic handler, registered by its unbound type.</summary>
+        private sealed record OpenGenericModel(string HandlerOpenName, string InterfaceOpenName);
+
+        /// <summary>Everything one candidate class contributes.</summary>
+        /// <param name="Handlers">Dispatch entries, one per handler interface the class implements.</param>
+        /// <param name="OpenGenerics">Open generic registrations; empty for a closed class.</param>
+        /// <param name="Namespaces">
+        /// Semicolon-joined rather than a collection, so the record stays comparable by value.
+        /// </param>
+        private sealed record ClassHandlerModel(
+            EquatableArray<HandlerModel> Handlers,
+            EquatableArray<OpenGenericModel> OpenGenerics,
+            string Namespaces);
+
+        /// <summary>
+        /// <see cref="ImmutableArray{T}"/> compares by reference, which would make every pipeline
+        /// output look changed. This compares element by element instead.
+        /// </summary>
+        private readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>
+            where T : IEquatable<T>
+        {
+            private readonly ImmutableArray<T> _items;
+
+            public EquatableArray(ImmutableArray<T> items) => _items = items;
+
+            /// <summary>The items, treating the uninitialised struct as empty.</summary>
+            public ImmutableArray<T> Items => _items.IsDefault ? ImmutableArray<T>.Empty : _items;
+
+            public bool Equals(EquatableArray<T> other) => Items.SequenceEqual(other.Items);
+
+            public override bool Equals(object? obj) => obj is EquatableArray<T> other && Equals(other);
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    var hash = 17;
+                    foreach (var item in Items)
+                    {
+                        hash = (hash * 31) + (item?.GetHashCode() ?? 0);
+                    }
+
+                    return hash;
+                }
+            }
         }
 
         // --- Helper Methods ---
@@ -265,8 +366,26 @@ namespace KyrolusSous.Mediator.Generator
         /// Analyzes a class symbol to determine if it implements one of the KyrolusMediator handler interfaces
         /// and extracts the request and response types.
         /// </summary>
-        private static HandlerInfo? TryGetHandlerInfo(INamedTypeSymbol handlerSymbol, HandlerInterfaceDefinitions defs)
+        /// <summary>
+        /// Yields one <see cref="HandlerInfo"/> per handler interface the class implements.
+        /// </summary>
+        /// <remarks>
+        /// Every match is returned, not just the first. A single class may legitimately handle
+        /// several messages - <c>class Foo : IKyrolusRequestHandler&lt;A, string&gt;,
+        /// IKyrolusRequestHandler&lt;B, string&gt;</c> - and returning after the first match left
+        /// the rest with no generated dispatch entry at all, so sending them fell through to the
+        /// reflection fallback or failed outright.
+        /// </remarks>
+        private static IEnumerable<HandlerInfo> GetHandlerInfos(INamedTypeSymbol handlerSymbol, HandlerInterfaceDefinitions defs)
         {
+            // One dispatch entry per (request, response, isStream). AllInterfaces reports inherited
+            // interfaces too, and the handler interfaces form a hierarchy - IKyrolusQueryHandler<T,R>
+            // derives from IKyrolusRequestHandler<T,R> - so a single query handler matches twice for
+            // the same message. Both matches would emit the same dictionary key and the same call,
+            // making the second assignment dead code.
+            var emitted = new HashSet<(ISymbol Request, ISymbol Response, bool IsStream)>(
+                RequestResponseComparer.Instance);
+
             // Iterate through all interfaces (including inherited ones)
             foreach (var iface in handlerSymbol.AllInterfaces)
             {
@@ -280,12 +399,37 @@ namespace KyrolusSous.Mediator.Generator
                 string ifaceName = iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat); // Get full name like IKyrolusCommandHandler<NS.Req, NS.Resp>
 
                 // If a match was found and types were extracted successfully
-                if (reqType != null && resType != null)
+                if (reqType != null && resType != null && emitted.Add((reqType, resType, isStream)))
                 {
-                    return new HandlerInfo(handlerSymbol, reqType, resType, ifaceName, isStream);
+                    yield return new HandlerInfo(handlerSymbol, reqType, resType, ifaceName, isStream);
                 }
             }
-            return null; // Not a recognized handler interface implementation
+        }
+
+        /// <summary>
+        /// Compares (request, response, isStream) triples, using Roslyn's symbol comparison for the
+        /// two type symbols - reference equality is not reliable for them.
+        /// </summary>
+        private sealed class RequestResponseComparer : IEqualityComparer<(ISymbol Request, ISymbol Response, bool IsStream)>
+        {
+            public static readonly RequestResponseComparer Instance = new();
+
+            public bool Equals(
+                (ISymbol Request, ISymbol Response, bool IsStream) x,
+                (ISymbol Request, ISymbol Response, bool IsStream) y)
+                => x.IsStream == y.IsStream
+                   && SymbolEqualityComparer.Default.Equals(x.Request, y.Request)
+                   && SymbolEqualityComparer.Default.Equals(x.Response, y.Response);
+
+            public int GetHashCode((ISymbol Request, ISymbol Response, bool IsStream) obj)
+            {
+                unchecked
+                {
+                    var hash = SymbolEqualityComparer.Default.GetHashCode(obj.Request);
+                    hash = (hash * 397) ^ SymbolEqualityComparer.Default.GetHashCode(obj.Response);
+                    return (hash * 397) ^ obj.IsStream.GetHashCode();
+                }
+            }
         }
 
         private static bool TryMatchHandlerInterface(
@@ -356,7 +500,7 @@ namespace KyrolusSous.Mediator.Generator
         /// <summary>
         /// Generates the source code for the static GeneratedMediatorDispatcher class.
         /// </summary>
-        private static string GenerateStaticDispatcherCode(List<HandlerInfo> handlerInfos, INamedTypeSymbol unitSymbol, HashSet<string> namespaces)
+        private static string GenerateStaticDispatcherCode(List<HandlerModel> handlerInfos, HashSet<string> namespaces)
         {
             var sb = new StringBuilder();
             // --- File Header ---
@@ -377,9 +521,13 @@ namespace KyrolusSous.Mediator.Generator
 
             // --- Dictionaries ---
             var streamHandlerCount = handlerInfos.Count(info => info.IsStream);
+            sb.AppendLine("        // Commands carry no response type, so the request type alone identifies them.");
             sb.AppendLine($"        private static readonly Dictionary<Type, Func<object, IServiceProvider, CancellationToken, Task>> s_commandDispatchers = new({handlerInfos.Count});");
-            sb.AppendLine($"        private static readonly Dictionary<Type, Func<object, IServiceProvider, CancellationToken, Task<object>>> s_requestDispatchers = new({handlerInfos.Count});");
-            sb.AppendLine($"        private static readonly Dictionary<Type, Func<object, IServiceProvider, CancellationToken, IAsyncEnumerable<object>>> s_streamDispatchers = new({streamHandlerCount});");
+            sb.AppendLine("        // Keyed on (request type, response type). The request type alone is not enough:");
+            sb.AppendLine("        // one request may declare IKyrolusRequest<> for more than one response, and a");
+            sb.AppendLine("        // single key would silently keep whichever entry was written last.");
+            sb.AppendLine($"        private static readonly Dictionary<(Type RequestType, Type ResponseType), Func<object, IServiceProvider, CancellationToken, Task<object>>> s_requestDispatchers = new({handlerInfos.Count});");
+            sb.AppendLine($"        private static readonly Dictionary<(Type RequestType, Type ResponseType), Func<object, IServiceProvider, CancellationToken, IAsyncEnumerable<object>>> s_streamDispatchers = new({streamHandlerCount});");
             sb.AppendLine();
 
             // --- Static Constructor ---
@@ -389,15 +537,16 @@ namespace KyrolusSous.Mediator.Generator
             // --- Populate Dictionaries ---
             foreach (var info in handlerInfos)
             {
-                string hFullName = info.HandlerType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                string rFullName = info.RequestType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                string hFullName = info.HandlerFullName;
+                string rFullName = info.RequestFullName;
+                string respFullName = info.ResponseFullName;
                 string iFullName = info.InterfaceFullName;
-                bool isCmd = info.ResponseType.Equals(unitSymbol, SymbolEqualityComparer.Default);
+                bool isCmd = respFullName == UnitQualifiedName;
 
                 sb.AppendLine($"            // Handler: {hFullName} Request: {rFullName}");
                 if (info.IsStream)
                 {
-                    sb.AppendLine($"            s_streamDispatchers[typeof({rFullName})] = (req, sp, ct) =>");
+                    sb.AppendLine($"            s_streamDispatchers[(typeof({rFullName}), typeof({respFullName}))] = (req, sp, ct) =>");
                     sb.AppendLine($"            {{ var handler = ({iFullName})sp.GetRequiredService<{hFullName}>(); return CastStreamToObject(handler.Handle(({rFullName})req, ct), ct); }};");
                 }
                 else if (isCmd)
@@ -407,7 +556,7 @@ namespace KyrolusSous.Mediator.Generator
                 }
                 else
                 {
-                    sb.AppendLine($"            s_requestDispatchers[typeof({rFullName})] = async (req, sp, ct) =>");
+                    sb.AppendLine($"            s_requestDispatchers[(typeof({rFullName}), typeof({respFullName}))] = async (req, sp, ct) =>");
                     sb.AppendLine($"            {{ var handler = ({iFullName})sp.GetRequiredService<{hFullName}>(); var result = await handler.Handle(({rFullName})req, ct); return (object)result!; }};");
                 }
                 sb.AppendLine();
@@ -416,8 +565,8 @@ namespace KyrolusSous.Mediator.Generator
             sb.AppendLine();
 
             // --- Dispatch Methods ---
-            GenerateDispatchMethod(sb, isCommand: true, unitSymbol);
-            GenerateDispatchMethod(sb, isCommand: false, unitSymbol);
+            GenerateDispatchMethod(sb, isCommand: true);
+            GenerateDispatchMethod(sb, isCommand: false);
             GenerateStreamDispatchMethod(sb);
 
             sb.AppendLine(Indent4CloseBrace); // End class
@@ -428,11 +577,11 @@ namespace KyrolusSous.Mediator.Generator
         /// <summary>
         /// Generates the class implementing IMediatorDispatcher.
         /// </summary>
-        private static string GenerateDispatcherImplementation(INamedTypeSymbol dispatcherInterfaceSymbol)
+        private static string GenerateDispatcherImplementation()
         {
             var sb = new StringBuilder();
-            string interfaceFullName = dispatcherInterfaceSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            string interfaceNamespace = dispatcherInterfaceSymbol.ContainingNamespace.ToDisplayString();
+            string interfaceFullName = DispatcherInterfaceQualifiedName;
+            string interfaceNamespace = DispatcherInterfaceNamespace;
 
             sb.AppendLine(AutoGeneratedHeader);
             sb.AppendLine(NullableEnable);
@@ -464,12 +613,12 @@ namespace KyrolusSous.Mediator.Generator
         /// <summary>
         /// Generates the DI extension method for registering the IMediatorDispatcher implementation.
         /// </summary>
-        private static string GenerateDIRegistration(INamedTypeSymbol dispatcherInterfaceSymbol)
+        private static string GenerateDIRegistration()
         {
             var sb = new StringBuilder();
-            string interfaceFullName = dispatcherInterfaceSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            string interfaceFullName = DispatcherInterfaceQualifiedName;
             string implementationFullName = "KyrolusSous.Mediator.Generated.GeneratedDispatcher"; // Full name of the implementation class
-            string interfaceNamespace = dispatcherInterfaceSymbol.ContainingNamespace.ToDisplayString();
+            string interfaceNamespace = DispatcherInterfaceNamespace;
 
             sb.AppendLine(AutoGeneratedHeader);
             sb.AppendLine(NullableEnable);
@@ -502,7 +651,7 @@ namespace KyrolusSous.Mediator.Generator
         /// <summary>
         /// Generates the DI extension method for registering all discovered concrete handlers.
         /// </summary>
-        private static string GenerateHandlerRegistrationMethod(List<HandlerInfo> handlerInfos, List<OpenGenericHandlerInfo> openGenericHandlers, HashSet<string> namespaces)
+        private static string GenerateHandlerRegistrationMethod(List<HandlerModel> handlerInfos, List<OpenGenericModel> openGenericHandlers, HashSet<string> namespaces)
         {
             var sb = new StringBuilder();
             sb.AppendLine(AutoGeneratedHeader);
@@ -532,10 +681,15 @@ namespace KyrolusSous.Mediator.Generator
             sb.AppendLine("        public static IServiceCollection AddKyrolusMediatorHandlers(this IServiceCollection services)");
             sb.AppendLine(Indent8OpenBrace);
 
-            // Loop through all discovered handlers and add registration lines
-            foreach (var info in handlerInfos)
+            // Distinct by handler type: a class implementing several handler interfaces has one
+            // HandlerInfo per interface, but the concrete type only needs registering once.
+            var distinctHandlerTypes = handlerInfos
+                .Select(info => info.HandlerFullName)
+                .Distinct()
+                .OrderBy(name => name, StringComparer.Ordinal);
+
+            foreach (var handlerFullName in distinctHandlerTypes)
             {
-                string handlerFullName = info.HandlerType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                 // Register the concrete handler type. Transient lifetime is typical for handlers.
                 sb.AppendLine($"            services.TryAddTransient<{handlerFullName}>();");
 
@@ -552,9 +706,7 @@ namespace KyrolusSous.Mediator.Generator
             // Register open generic handlers
             foreach (var info in openGenericHandlers)
             {
-                string interfaceType = GetOpenGenericTypeOf(info.InterfaceType);
-                string handlerType = GetOpenGenericTypeOf(info.HandlerType);
-                sb.AppendLine($"            services.TryAddTransient(typeof({interfaceType}), typeof({handlerType}));");
+                sb.AppendLine($"            services.TryAddTransient(typeof({info.InterfaceOpenName}), typeof({info.HandlerOpenName}));");
             }
             sb.AppendLine();
             sb.AppendLine("            return services;");
@@ -575,7 +727,7 @@ namespace KyrolusSous.Mediator.Generator
         /// <summary>
         /// Helper method to generate the body of the static dispatch methods.
         /// </summary>
-        private static void GenerateDispatchMethod(StringBuilder sb, bool isCommand, INamedTypeSymbol unitSymbol)
+        private static void GenerateDispatchMethod(StringBuilder sb, bool isCommand)
         {
             string dictionaryName = isCommand ? "s_commandDispatchers" : "s_requestDispatchers";
             string inputParamName = isCommand ? "command" : "request";
@@ -586,7 +738,7 @@ namespace KyrolusSous.Mediator.Generator
             string taskResultVar = "result";
             string awaitPrefix = isCommand ? "" : "async ";
             string inputParameterType = "object";
-            string unitFullName = unitSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            string unitFullName = UnitQualifiedName;
             string localRequestVarName = isCommand ? "commandType" : "requestType";
 
             sb.AppendLine($"        /// <summary>Dispatches a {(isCommand ? "command (Task return)" : "request (TResponse return)")}.</summary>");
@@ -595,7 +747,9 @@ namespace KyrolusSous.Mediator.Generator
             sb.AppendLine($"            var {localRequestVarName} = {inputParamName}.GetType();"); // Get runtime type
             sb.AppendLine();
             sb.AppendLine($"            // Try finding the handler in the primary dictionary");
-            sb.AppendLine($"            if ({dictionaryName}.TryGetValue({localRequestVarName}, out var handlerFunc))");
+            sb.AppendLine(isCommand
+                ? $"            if ({dictionaryName}.TryGetValue({localRequestVarName}, out var handlerFunc))"
+                : $"            if ({dictionaryName}.TryGetValue(({localRequestVarName}, typeof(TResponse)), out var handlerFunc))");
             sb.AppendLine(Indent12OpenBrace);
             if (isCommand)
             { sb.AppendLine($"                return handlerFunc({inputParamName}, serviceProvider, cancellationToken);"); }
@@ -615,7 +769,7 @@ namespace KyrolusSous.Mediator.Generator
             if (isCommand)
             {
                 // If DispatchCommandAsync called for something that returns Unit but was registered as Request
-                sb.AppendLine($"            if (s_requestDispatchers.TryGetValue({localRequestVarName}, out var reqFunc))");
+                sb.AppendLine($"            if (s_requestDispatchers.TryGetValue(({localRequestVarName}, typeof({unitFullName})), out var reqFunc))");
                 sb.AppendLine(Indent12OpenBrace);
                 sb.AppendLine($"                 // Found in request dispatcher (likely returns Unit); execute and return Task.");
                 sb.AppendLine($"                 return reqFunc({inputParamName}, serviceProvider, cancellationToken); // Return Task<object> as Task");
@@ -652,7 +806,7 @@ namespace KyrolusSous.Mediator.Generator
             sb.AppendLine(Indent8OpenBrace);
             sb.AppendLine("            var requestType = request.GetType();");
             sb.AppendLine();
-            sb.AppendLine("            if (s_streamDispatchers.TryGetValue(requestType, out var handlerFunc))");
+            sb.AppendLine("            if (s_streamDispatchers.TryGetValue((requestType, typeof(TResponse)), out var handlerFunc))");
             sb.AppendLine(Indent12OpenBrace);
             sb.AppendLine("                return CastStreamFromObject<TResponse>(handlerFunc(request, serviceProvider, cancellationToken), requestType, cancellationToken);");
             sb.AppendLine(Indent12CloseBrace);
@@ -752,7 +906,7 @@ namespace KyrolusSous.Mediator.Generator
         /// <summary>
         /// Recursively collects namespaces from type symbols for 'using' statements.
         /// </summary>
-        private static void CollectNamespaces(ITypeSymbol typeSymbol, HashSet<string> namespaces)
+        private static void CollectNamespaces(ITypeSymbol typeSymbol, ISet<string> namespaces)
         {
             if (typeSymbol is null)
             {
@@ -784,7 +938,7 @@ namespace KyrolusSous.Mediator.Generator
             AddNamespace(typeSymbol, namespaces);
         }
 
-        private static void AddNamespace(ITypeSymbol typeSymbol, HashSet<string> namespaces)
+        private static void AddNamespace(ITypeSymbol typeSymbol, ISet<string> namespaces)
         {
             if (typeSymbol.ContainingNamespace is not null && !typeSymbol.ContainingNamespace.IsGlobalNamespace)
             {
