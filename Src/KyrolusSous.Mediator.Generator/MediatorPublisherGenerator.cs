@@ -22,6 +22,14 @@ namespace KyrolusSous.Mediator.Generator
         // --- Constants ---
         private const string NotificationHandlerInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.INotificationHandler`1";
 
+        // Lives in the runtime package. Its presence decides whether the dispatch table can be
+        // emitted at all: a project referencing only the abstractions has nothing to hand it to.
+        private const string DispatchSourceInterfaceFullName = "KyrolusSous.Mediator.Runtime.GeneratorIntegration.IKyrolusNotificationDispatchSource";
+        private const string DispatchSourceInterfaceQualifiedName = "global::" + DispatchSourceInterfaceFullName;
+        private const string DispatchSourceImplQualifiedName = "global::KyrolusSous.Mediator.Generated.GeneratedNotificationDispatchSource";
+        private const string NotificationInterfaceQualifiedName = "global::KyrolusSous.Mediator.Abstractions.Interfaces.INotification";
+        private const string NotificationHandlerQualifiedName = "global::KyrolusSous.Mediator.Abstractions.Interfaces.INotificationHandler";
+
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
             // Pipeline to find concrete classes that might be notification handlers
@@ -90,8 +98,7 @@ namespace KyrolusSous.Mediator.Generator
                     continue;
                 }
                 // Use the specific helper for notification handlers
-                var notifInfo = TryGetNotificationHandlerInfo(handlerSymbol, notificationHandlerDef);
-                if (notifInfo != null)
+                foreach (var notifInfo in GetNotificationHandlerInfos(handlerSymbol, notificationHandlerDef))
                 {
                     notificationHandlerInfos.Add(notifInfo);
                     // Collect namespaces from handler and notification types
@@ -100,12 +107,25 @@ namespace KyrolusSous.Mediator.Generator
                 }
             }
 
+            // The dispatch table calls into the runtime package; without it there is nothing to
+            // implement and the file would not compile.
+            var runtimeAvailable = compilation.GetTypeByMetadataName(DispatchSourceInterfaceFullName) is not null;
+
             // --- Generate DI registration code if handlers were found ---
             if (notificationHandlerInfos.Count > 0 || openGenericHandlerInfos.Count > 0)
             {
-                string diExtensionCode = GenerateNotificationHandlerRegistrationMethod(notificationHandlerInfos, openGenericHandlerInfos, namespaces);
+                string diExtensionCode = GenerateNotificationHandlerRegistrationMethod(
+                    notificationHandlerInfos, openGenericHandlerInfos, namespaces, runtimeAvailable);
                 // Use a distinct file name for this generator's output
                 context.AddSource("KyrolusSous.Mediator.GeneratedNotificationHandlersDI.g.cs", SourceText.From(diExtensionCode, Encoding.UTF8));
+            }
+
+            // The publisher otherwise reaches every handler through MakeGenericType and
+            // MethodInfo.Invoke, neither of which survives NativeAOT.
+            if (runtimeAvailable && notificationHandlerInfos.Count > 0)
+            {
+                string dispatchSourceCode = GenerateNotificationDispatchSource(notificationHandlerInfos);
+                context.AddSource("KyrolusSous.Mediator.GeneratedNotificationDispatch.g.cs", SourceText.From(dispatchSourceCode, Encoding.UTF8));
             }
         }
 
@@ -139,25 +159,37 @@ namespace KyrolusSous.Mediator.Generator
 
         // --- Helper Methods (Duplicated or moved to a shared location) ---
 
-        // Analyzes a class symbol to see if it implements INotificationHandler<>
-        private static NotificationHandlerInfo? TryGetNotificationHandlerInfo(
+        /// <summary>
+        /// Yields one <see cref="NotificationHandlerInfo"/> per notification the class handles.
+        /// </summary>
+        /// <remarks>
+        /// Every match is returned, not just the first. A class subscribing to several
+        /// notifications - <c>class Auditor : INotificationHandler&lt;UserCreated&gt;,
+        /// INotificationHandler&lt;UserDeleted&gt;</c> - is ordinary, and returning after the first
+        /// left the rest with no registration at all, so publishing them reached this handler for
+        /// one notification and silently skipped it for the others.
+        /// </remarks>
+        private static IEnumerable<NotificationHandlerInfo> GetNotificationHandlerInfos(
             INamedTypeSymbol handlerSymbol,
             INamedTypeSymbol notificationHandlerDefinition)
         {
+            // INotificationHandler<in TNotification> is contravariant, so AllInterfaces can report
+            // the same notification through more than one route. A repeated entry would emit a
+            // duplicate registration and a duplicate dictionary key.
+            var emitted = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
+
             foreach (var iface in handlerSymbol.AllInterfaces)
             {
-                if (iface.IsGenericType && iface.TypeArguments.Length == 1 && SymbolEqualityComparer.Default.Equals(iface.OriginalDefinition, notificationHandlerDefinition))
-                {
-                    var notificationType = iface.TypeArguments[0] as INamedTypeSymbol;
-                    // Get the specific constructed interface name like INotificationHandler<MyNotification>
-                    var interfaceFullName = iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                    if (notificationType != null)
-                    {
-                        return new NotificationHandlerInfo(handlerSymbol, notificationType, interfaceFullName);
-                    }
-                }
+                if (!iface.IsGenericType || iface.TypeArguments.Length != 1) continue;
+                if (!SymbolEqualityComparer.Default.Equals(iface.OriginalDefinition, notificationHandlerDefinition)) continue;
+
+                if (iface.TypeArguments[0] is not INamedTypeSymbol notificationType) continue;
+                if (!emitted.Add(notificationType)) continue;
+
+                // Get the specific constructed interface name like INotificationHandler<MyNotification>
+                var interfaceFullName = iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                yield return new NotificationHandlerInfo(handlerSymbol, notificationType, interfaceFullName);
             }
-            return null;
         }
 
         private static IEnumerable<OpenGenericNotificationHandlerInfo> TryGetOpenGenericNotificationHandlerInfos(
@@ -178,7 +210,8 @@ namespace KyrolusSous.Mediator.Generator
         private static string GenerateNotificationHandlerRegistrationMethod(
             List<NotificationHandlerInfo> notificationHandlerInfos,
             List<OpenGenericNotificationHandlerInfo> openGenericHandlerInfos,
-            HashSet<string> namespaces)
+            HashSet<string> namespaces,
+            bool runtimeAvailable)
         {
             var sb = new StringBuilder();
             sb.AppendLine("// <auto-generated/>");
@@ -237,9 +270,80 @@ namespace KyrolusSous.Mediator.Generator
                 string handlerType = GetOpenGenericTypeOf(info.HandlerType);
                 sb.AppendLine($"            services.TryAddEnumerable(ServiceDescriptor.Transient({interfaceType}, {handlerType}));");
             }
+            if (runtimeAvailable && notificationHandlerInfos.Count > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine("            // Lets the publisher call each handler directly instead of closing");
+                sb.AppendLine("            // INotificationHandler<> with MakeGenericType, which NativeAOT cannot do.");
+                sb.AppendLine($"            services.TryAddSingleton<{DispatchSourceInterfaceQualifiedName}, {DispatchSourceImplQualifiedName}>();");
+            }
             sb.AppendLine();
             sb.AppendLine("            return services;");
             sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Generates the notification dispatch table: one entry per notification type, each binding
+        /// its handlers through ordinary generic calls rather than reflection.
+        /// </summary>
+        /// <remarks>
+        /// <c>Bind&lt;TNotification&gt;</c> is written once and instantiated per notification by the
+        /// table below. Because every instantiation appears as a concrete static call, the compiler
+        /// can emit them ahead of time - which is exactly what <c>MakeGenericType</c> plus
+        /// <c>MethodInfo.Invoke</c> made impossible.
+        /// </remarks>
+        private static string GenerateNotificationDispatchSource(List<NotificationHandlerInfo> notificationHandlerInfos)
+        {
+            // One entry per notification, not per handler: several handlers for the same
+            // notification share a single table entry, and GetServices returns all of them.
+            var notificationTypes = notificationHandlerInfos
+                .Select(info => info.NotificationType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+                .Distinct()
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToList();
+
+            var sb = new StringBuilder();
+            sb.AppendLine("// <auto-generated/>");
+            sb.AppendLine("#nullable enable");
+            sb.AppendLine("using System;");
+            sb.AppendLine("using System.Collections.Generic;");
+            sb.AppendLine("using System.Threading;");
+            sb.AppendLine("using System.Threading.Tasks;");
+            sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
+            sb.AppendLine();
+            sb.AppendLine("namespace KyrolusSous.Mediator.Generated");
+            sb.AppendLine("{");
+            sb.AppendLine("    /// <summary>Notification handler calls bound at compile time, so none is found by reflection.</summary>");
+            sb.AppendLine("    [System.Runtime.CompilerServices.CompilerGenerated]");
+            sb.AppendLine($"    internal sealed class GeneratedNotificationDispatchSource : {DispatchSourceInterfaceQualifiedName}");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        private static readonly Dictionary<Type, Func<object, IServiceProvider, IReadOnlyList<Func<CancellationToken, Task>>>> s_dispatchers = new({notificationTypes.Count})");
+            sb.AppendLine("        {");
+            foreach (var notificationType in notificationTypes)
+            {
+                sb.AppendLine($"            [typeof({notificationType})] = static (notification, serviceProvider) => Bind<{notificationType}>(notification, serviceProvider),");
+            }
+            sb.AppendLine("        };");
+            sb.AppendLine();
+            sb.AppendLine("        /// <summary>Resolves the handlers for one notification and binds each to a call.</summary>");
+            sb.AppendLine("        private static IReadOnlyList<Func<CancellationToken, Task>> Bind<TNotification>(object notification, IServiceProvider serviceProvider)");
+            sb.AppendLine($"            where TNotification : {NotificationInterfaceQualifiedName}");
+            sb.AppendLine("        {");
+            sb.AppendLine("            var typed = (TNotification)notification;");
+            sb.AppendLine("            var invocations = new List<Func<CancellationToken, Task>>();");
+            sb.AppendLine($"            foreach (var handler in serviceProvider.GetServices<{NotificationHandlerQualifiedName}<TNotification>>())");
+            sb.AppendLine("            {");
+            sb.AppendLine("                invocations.Add(cancellationToken => handler.Handle(typed, cancellationToken));");
+            sb.AppendLine("            }");
+            sb.AppendLine();
+            sb.AppendLine("            return invocations;");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+            sb.AppendLine("        public IReadOnlyList<Func<CancellationToken, Task>>? CreateHandlerInvocations(object notification, IServiceProvider serviceProvider)");
+            sb.AppendLine("            => s_dispatchers.TryGetValue(notification.GetType(), out var bind) ? bind(notification, serviceProvider) : null;");
             sb.AppendLine("    }");
             sb.AppendLine("}");
             return sb.ToString();

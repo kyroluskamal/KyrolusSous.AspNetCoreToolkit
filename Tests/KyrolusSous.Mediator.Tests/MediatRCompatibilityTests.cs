@@ -80,6 +80,7 @@ public sealed class MediatRCompatibilityTests
     {
         var services = new ServiceCollection();
         services.AddKyrolusMediator();
+        services.AddKyrolusMediatorReflection();
         services.AddTransient<IKyrolusRequestHandler<PortedRequest, string>, PortedRequestHandler>();
 
         await using var provider = services.BuildServiceProvider();
@@ -96,6 +97,7 @@ public sealed class MediatRCompatibilityTests
         var services = new ServiceCollection();
         services.AddSingleton(recorder);
         services.AddKyrolusMediator();
+        services.AddKyrolusMediatorReflection();
         services.AddTransient<INotificationHandler<PortedNotification>, PortedNotificationHandler>();
 
         await using var provider = services.BuildServiceProvider();
@@ -111,6 +113,7 @@ public sealed class MediatRCompatibilityTests
     {
         var services = new ServiceCollection();
         services.AddKyrolusMediator();
+        services.AddKyrolusMediatorReflection();
         using var provider = services.BuildServiceProvider();
 
         provider.GetService<IMediator>().ShouldNotBeNull();

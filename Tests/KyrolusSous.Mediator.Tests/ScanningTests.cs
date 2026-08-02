@@ -20,6 +20,10 @@ public sealed class ScanningTests
             configure?.Invoke(configuration);
         });
 
+        // Scanning lives in the reflection package - it is the thing the generator replaces - so
+        // this is what actually walks the assembly.
+        services.AddKyrolusMediatorReflection();
+
         return services;
     }
 
@@ -144,7 +148,9 @@ public sealed class ScanningTests
     {
         var services = new ServiceCollection();
         services.AddKyrolusMediator();
+        services.AddKyrolusMediatorReflection();
         services.AddKyrolusMediator();
+        services.AddKyrolusMediatorReflection();
 
         var exceptionBehaviors = services.Count(d =>
             d.ImplementationType == typeof(KyrolusSous.Mediator.Runtime.Implementations.KyrolusRequestExceptionProcessorBehavior<,>));

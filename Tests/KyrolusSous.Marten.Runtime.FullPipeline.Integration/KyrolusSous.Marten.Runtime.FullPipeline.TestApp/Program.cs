@@ -25,6 +25,7 @@ using KyrolusSous.ExceptionHandling.FluentValidation;
 using KyrolusSous.ExceptionHandling.Redis;
 using KyrolusSous.Logging.Serilog;
 using KyrolusSous.Mediator.Abstractions.Interfaces;
+using KyrolusSous.Mediator.Reflection;
 using KyrolusSous.Mediator.Runtime.Config;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Auth;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Contracts;

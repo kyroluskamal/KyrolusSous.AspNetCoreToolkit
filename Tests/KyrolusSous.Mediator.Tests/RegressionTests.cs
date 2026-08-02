@@ -19,6 +19,7 @@ public sealed class RegressionTests
         var services = new ServiceCollection();
         services.AddSingleton(recorder);
         services.AddKyrolusMediator();
+        services.AddKyrolusMediatorReflection();
         services.AddTransient<INotificationHandler<SomethingHappened>, DualNotificationHandler>();
         services.AddTransient<INotificationHandler<SomethingElseHappened>, DualNotificationHandler>();
 
@@ -56,6 +57,7 @@ public sealed class RegressionTests
     {
         var services = new ServiceCollection();
         services.AddKyrolusMediator();
+        services.AddKyrolusMediatorReflection();
         services.AddTransient<INotificationHandler<SomethingHappened>, ThrowingNotificationHandler>();
         services.AddTransient<INotificationHandler<SomethingHappened>, SecondThrowingNotificationHandler>();
 
@@ -77,6 +79,7 @@ public sealed class RegressionTests
     {
         var services = new ServiceCollection();
         services.AddKyrolusMediator();
+        services.AddKyrolusMediatorReflection();
         services.AddTransient<INotificationHandler<SomethingHappened>, ThrowingNotificationHandler>();
         services.AddTransient<INotificationHandler<SomethingHappened>, SecondThrowingNotificationHandler>();
 
@@ -143,9 +146,12 @@ public sealed class RegressionTests
         var services = new ServiceCollection();
         services.AddSingleton(new Recorder());
 
-        var exception = Should.Throw<InvalidOperationException>(() =>
-            services.AddKyrolusMediator(configuration =>
-                configuration.RegisterServicesFromAssemblyContaining<Ambiguous>()));
+        services.AddKyrolusMediator(configuration =>
+            configuration.RegisterServicesFromAssemblyContaining<Ambiguous>());
+
+        // The scan is what detects the duplicate, and the scan runs here rather than in
+        // AddKyrolusMediator now that it lives in the reflection package.
+        var exception = Should.Throw<InvalidOperationException>(services.AddKyrolusMediatorReflection);
 
         exception.Message.ShouldContain(nameof(AmbiguousHandlerOne));
         exception.Message.ShouldContain(nameof(AmbiguousHandlerTwo));
@@ -158,11 +164,13 @@ public sealed class RegressionTests
         var services = new ServiceCollection();
         services.AddSingleton(new Recorder());
 
-        Should.NotThrow(() => services.AddKyrolusMediator(configuration =>
+        services.AddKyrolusMediator(configuration =>
         {
             configuration.RegisterServicesFromAssemblyContaining<Ambiguous>();
             configuration.ThrowOnDuplicateRequestHandlers = false;
-        }));
+        });
+
+        Should.NotThrow(services.AddKyrolusMediatorReflection);
     }
 
     /// <summary>
@@ -173,6 +181,7 @@ public sealed class RegressionTests
     {
         var services = new ServiceCollection();
         services.AddKyrolusMediator();
+        services.AddKyrolusMediatorReflection();
         services.UseKyrolusMediatorSequentialNotifications();
         services.UseKyrolusMediatorParallelNotifications();
         services.UseKyrolusMediatorSequentialNotifications();

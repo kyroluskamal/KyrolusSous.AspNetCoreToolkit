@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace KyrolusSous.Mediator.Runtime.Config;
 
 /// <summary>
@@ -19,6 +21,13 @@ public enum NotificationPublishMode
 /// </summary>
 public sealed class KyrolusMediatorConfiguration
 {
+    /// <summary>
+    /// What a behavior type must keep for these methods to work after trimming: its interfaces, to
+    /// recognise which behavior it is, and its constructors, so the container can build it.
+    /// </summary>
+    private const DynamicallyAccessedMemberTypes BehaviorMembers =
+        DynamicallyAccessedMemberTypes.Interfaces | DynamicallyAccessedMemberTypes.PublicConstructors;
+
     internal List<Assembly> AssembliesToScan { get; } = [];
     internal List<(Type Service, Type Implementation)> ClosedBehaviors { get; } = [];
     internal List<(Type Service, Type Implementation)> OpenBehaviors { get; } = [];
@@ -85,11 +94,13 @@ public sealed class KyrolusMediatorConfiguration
     /// Behaviors run in the order they are added, unless they carry
     /// <see cref="PipelineOrderAttribute"/>.
     /// </summary>
-    public KyrolusMediatorConfiguration AddBehavior<TImplementation>()
+    public KyrolusMediatorConfiguration AddBehavior<
+        [DynamicallyAccessedMembers(BehaviorMembers)] TImplementation>()
         => AddBehavior(typeof(TImplementation));
 
     /// <inheritdoc cref="AddBehavior{TImplementation}()"/>
-    public KyrolusMediatorConfiguration AddBehavior(Type implementationType)
+    public KyrolusMediatorConfiguration AddBehavior(
+        [DynamicallyAccessedMembers(BehaviorMembers)] Type implementationType)
     {
         ArgumentNullException.ThrowIfNull(implementationType);
 
@@ -125,7 +136,8 @@ public sealed class KyrolusMediatorConfiguration
     /// Adds an open-generic pipeline behavior that applies to every request, such as
     /// <c>LoggingBehavior&lt;,&gt;</c>.
     /// </summary>
-    public KyrolusMediatorConfiguration AddOpenBehavior(Type openBehaviorType)
+    public KyrolusMediatorConfiguration AddOpenBehavior(
+        [DynamicallyAccessedMembers(BehaviorMembers)] Type openBehaviorType)
     {
         ArgumentNullException.ThrowIfNull(openBehaviorType);
 

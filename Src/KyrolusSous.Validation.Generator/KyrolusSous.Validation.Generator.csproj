@@ -9,6 +9,13 @@
     <IsPackable>true</IsPackable>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <IsRoslynComponent>true</IsRoslynComponent>
+    <!-- With no lib/ assembly there is nothing for a symbols package to describe, and packing an
+         empty .snupkg fails the whole `dotnet pack` with NU5017. Repo-wide IncludeSymbols is
+         right for libraries and wrong for analyzer-only projects, so it is turned off here. -->
+    <IncludeSymbols>false</IncludeSymbols>
+    <!-- NU5128 wants a lib/ folder to match the declared target framework. An analyzer package
+         legitimately has none. -->
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
     <PackageId>KyrolusSous.Validation.Generator</PackageId>
   </PropertyGroup>
 

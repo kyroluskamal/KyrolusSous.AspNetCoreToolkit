@@ -194,6 +194,7 @@ public sealed class MediatorBehaviourTests
     {
         var services = new ServiceCollection();
         services.AddKyrolusMediator();
+        services.AddKyrolusMediatorReflection();
         await using var provider = services.BuildServiceProvider();
         var mediator = provider.GetRequiredService<IKyrolusMediator>();
 
@@ -207,6 +208,7 @@ public sealed class MediatorBehaviourTests
         var services = new ServiceCollection();
         services.AddSingleton(recorder);
         services.AddKyrolusMediator();
+        services.AddKyrolusMediatorReflection();
         services.AddTransient<INotificationHandler<SomethingHappened>, ThrowingNotificationHandler>();
         services.AddTransient<INotificationHandler<SomethingHappened>, RecordingNotificationHandler>();
 
@@ -225,6 +227,7 @@ public sealed class MediatorBehaviourTests
         services.AddSingleton(recorder);
         services.AddKyrolusMediator(configuration =>
             configuration.NotificationPublishMode = NotificationPublishMode.Sequential);
+        services.AddKyrolusMediatorReflection();
         services.AddTransient<INotificationHandler<SomethingHappened>, RecordingNotificationHandler>();
         services.AddTransient<INotificationHandler<SomethingHappened>, SecondRecordingNotificationHandler>();
 
@@ -243,6 +246,7 @@ public sealed class MediatorBehaviourTests
         var services = new ServiceCollection();
         services.AddSingleton(recorder);
         services.AddKyrolusMediator();
+        services.AddKyrolusMediatorReflection();
         services.AddTransient<INotificationHandler<SomethingHappened>, RecordingNotificationHandler>();
         services.AddTransient<INotificationHandler<SomethingHappened>, SecondRecordingNotificationHandler>();
 

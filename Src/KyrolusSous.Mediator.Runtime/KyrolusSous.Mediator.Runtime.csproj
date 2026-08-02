@@ -4,6 +4,22 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!--
+      Turns on the trim and AOT Roslyn analyzers, and this project builds with zero warnings from
+      them. That is not decoration: it is what keeps the "aot" tag honest. Reintroduce a
+      MakeGenericType here and the build says so, rather than an application failing on its first
+      request months later.
+
+      Everything that needs types built at runtime - reflective dispatch, assembly scanning - lives
+      in KyrolusSous.Mediator.Reflection, a separate package. An application that wants to be
+      published ahead of time simply does not reference it, so the code is not in the graph to be
+      analysed, trimmed, or warned about. That is why nothing here is suppressed.
+
+      Dispatch itself comes from whichever IKyrolusPipelineWrapperSource is registered: the
+      generator emits one from types it saw at compile time, the reflection package supplies one
+      that closes them on demand. Verified end to end by Tests/KyrolusSous.Mediator.Aot.
+    -->
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,6 +34,10 @@
     <!-- Lets the tests assert on what the configuration recorded, without widening the
          public surface just for testing. -->
     <InternalsVisibleTo Include="KyrolusSous.Mediator.Tests" />
+    <!-- The reflection package closes the pipeline wrapper types on demand. They stay internal:
+         making them public to serve one sibling assembly would put an implementation detail in
+         the public API of every consumer. -->
+    <InternalsVisibleTo Include="KyrolusSous.Mediator.Reflection" />
   </ItemGroup>
 
 </Project>

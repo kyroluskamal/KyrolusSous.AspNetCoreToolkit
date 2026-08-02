@@ -1,4 +1,4 @@
-﻿// MediatorGenerator.cs
+// MediatorGenerator.cs
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
@@ -35,6 +35,41 @@ namespace KyrolusSous.Mediator.Generator
         private const string StreamRequestHandlerInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusStreamRequestHandler`2";
         private const string UnitTypeFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.Unit";
         private const string DispatcherInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IMediatorDispatcher";
+
+        // Lives in the runtime package, not the abstractions, because closing the wrapper types
+        // needs the wrapper types - and those stay internal to the runtime. Its presence is what
+        // decides whether the AOT wrapper table below can be emitted at all: a project referencing
+        // only the abstractions has nothing to hand the table to.
+        private const string PipelineWrapperFactoryFullName = "KyrolusSous.Mediator.Runtime.GeneratorIntegration.KyrolusPipelineWrapperFactory";
+        private const string PipelineWrapperSourceInterfaceFullName = "KyrolusSous.Mediator.Runtime.GeneratorIntegration.IKyrolusPipelineWrapperSource";
+        private const string PipelineWrapperFactoryQualifiedName = "global::" + PipelineWrapperFactoryFullName;
+        private const string PipelineWrapperSourceInterfaceQualifiedName = "global::" + PipelineWrapperSourceInterfaceFullName;
+        private const string PipelineWrapperSourceImplName = "KyrolusSous.Mediator.Generated.GeneratedPipelineWrapperSource";
+
+        // The four behaviors every pipeline gets. The runtime registers them as open generics and
+        // lets the container close them; that is what an ahead-of-time published application cannot
+        // do, so the same four are emitted here already closed over each pair.
+        private const string PipelineBehaviorInterface = "global::KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusPipelineBehavior";
+        private const string StreamPipelineBehaviorInterface = "global::KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusStreamPipelineBehavior";
+        private const string RuntimeImplementationsNamespace = "global::KyrolusSous.Mediator.Runtime.Implementations";
+
+        private static readonly string[] BuiltInRequestBehaviors =
+        [
+            RuntimeImplementationsNamespace + ".KyrolusRequestExceptionProcessorBehavior",
+            RuntimeImplementationsNamespace + ".KyrolusRequestPreProcessorBehavior",
+            RuntimeImplementationsNamespace + ".KyrolusRequestPostProcessorBehavior"
+        ];
+
+        private const string BuiltInStreamBehavior = RuntimeImplementationsNamespace + ".KyrolusStreamPassThroughBehavior";
+
+        private const string ExceptionActionInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusRequestExceptionAction`2";
+        private const string ExceptionHandlerInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusRequestExceptionHandler`3";
+        private const string ExceptionDispatchSourceInterfaceFullName = "KyrolusSous.Mediator.Runtime.GeneratorIntegration.IKyrolusRequestExceptionDispatchSource";
+        private const string ExceptionDispatchSourceInterfaceQualifiedName = "global::" + ExceptionDispatchSourceInterfaceFullName;
+        private const string ExceptionDispatchSourceImplName = "KyrolusSous.Mediator.Generated.GeneratedRequestExceptionDispatchSource";
+        private const string ExceptionActionQualifiedName = "global::KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusRequestExceptionAction";
+        private const string ExceptionHandlerQualifiedName = "global::KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusRequestExceptionHandler";
+        private const string ExceptionHandlerStateQualifiedName = "global::KyrolusSous.Mediator.Abstractions.Interfaces.KyrolusRequestExceptionHandlerState";
 
         // The forms written into the generated source. Constants rather than values read off a
         // symbol, so the generation stage needs no Compilation - see the note in Initialize.
@@ -73,12 +108,19 @@ namespace KyrolusSous.Mediator.Generator
             // would reintroduce the problem it exists to avoid: the Compilation is a new object on
             // every keystroke, so anything combined with it is permanently "changed". A bool is
             // equatable and stays stable across edits, so it costs nothing.
-            IncrementalValueProvider<bool> abstractionsAvailable = context.CompilationProvider
-                .Select(static (compilation, _) => RequiredTypeNames.All(name => compilation.GetTypeByMetadataName(name) is not null));
+            // Two bools rather than one, because the two packages answer different questions:
+            // the abstractions decide whether anything can be generated at all, the runtime decides
+            // whether the AOT wrapper table can be. A ValueTuple of bools is equatable by value, so
+            // this stays as cheap to compare as the single bool it replaced.
+            IncrementalValueProvider<(bool Abstractions, bool Runtime)> availability = context.CompilationProvider
+                .Select(static (compilation, _) => (
+                    Abstractions: RequiredTypeNames.All(name => compilation.GetTypeByMetadataName(name) is not null),
+                    Runtime: compilation.GetTypeByMetadataName(PipelineWrapperFactoryFullName) is not null
+                            && compilation.GetTypeByMetadataName(PipelineWrapperSourceInterfaceFullName) is not null));
 
             // STEP 3: Register the final execution step with the two small, equatable inputs.
             context.RegisterSourceOutput(
-                abstractionsAvailable.Combine(classModels.Collect()),
+                availability.Combine(classModels.Collect()),
                 static (spc, source) => Execute(spc, source.Left, source.Right));
         }
 
@@ -128,7 +170,7 @@ namespace KyrolusSous.Mediator.Generator
 
                 return openGenerics.IsEmpty
                     ? null
-                    : new ClassHandlerModel(default, new EquatableArray<OpenGenericModel>(openGenerics), string.Empty);
+                    : new ClassHandlerModel(default, new EquatableArray<OpenGenericModel>(openGenerics), string.Empty, default, default);
             }
 
             var namespaces = new SortedSet<string>(StringComparer.Ordinal);
@@ -153,24 +195,38 @@ namespace KyrolusSous.Mediator.Generator
                 CollectNamespaces(info.ResponseType, namespaces);
             }
 
-            if (handlers.Count == 0) return null;
+            // Exception actions and handlers are collected from the same pass. They are not handlers
+            // and get no dispatch entry; the generated table only records that the combination
+            // exists, so the behavior can resolve it without closing a type at runtime.
+            var exceptionActions = ImmutableArray.CreateBuilder<ExceptionActionModel>();
+            var exceptionHandlers = ImmutableArray.CreateBuilder<ExceptionHandlerModel>();
+            CollectExceptionParticipants(classSymbol, defs, exceptionActions, exceptionHandlers);
+
+            // A class can be an exception action and nothing else, so the handler count alone is not
+            // enough to decide the class contributes nothing.
+            if (handlers.Count == 0 && exceptionActions.Count == 0 && exceptionHandlers.Count == 0) return null;
 
             return new ClassHandlerModel(
                 new EquatableArray<HandlerModel>(handlers.ToImmutable()),
                 default,
                 // Joined into one string so the model stays comparable by value.
-                string.Join(";", namespaces));
+                string.Join(";", namespaces),
+                new EquatableArray<ExceptionActionModel>(exceptionActions.ToImmutable()),
+                new EquatableArray<ExceptionHandlerModel>(exceptionHandlers.ToImmutable()));
         }
 
         /// <summary>
         /// Main generation method, executed with the collected handler models.
         /// </summary>
-        private static void Execute(SourceProductionContext context, bool abstractionsAvailable, ImmutableArray<ClassHandlerModel> classModels)
+        private static void Execute(
+            SourceProductionContext context,
+            (bool Abstractions, bool Runtime) availability,
+            ImmutableArray<ClassHandlerModel> classModels)
         {
             // --- Crucial Check: Ensure all base types/interfaces are resolvable ---
             // If any are missing, the consuming project is not referencing the
             // KyrolusSous.Mediator.Abstractions library correctly. Report an error.
-            if (!abstractionsAvailable)
+            if (!availability.Abstractions)
             {
                 context.ReportDiagnostic(Diagnostic.Create(
                     new DiagnosticDescriptor(
@@ -189,6 +245,8 @@ namespace KyrolusSous.Mediator.Generator
 
             var handlerInfos = new List<HandlerModel>();
             var openGenericHandlers = new List<OpenGenericModel>();
+            var exceptionActions = new List<ExceptionActionModel>();
+            var exceptionHandlers = new List<ExceptionHandlerModel>();
             // HashSet to store unique namespaces required for 'using' statements in generated code
             var namespaces = new HashSet<string>
             {
@@ -204,6 +262,8 @@ namespace KyrolusSous.Mediator.Generator
 
                 handlerInfos.AddRange(model.Handlers.Items);
                 openGenericHandlers.AddRange(model.OpenGenerics.Items);
+                exceptionActions.AddRange(model.ExceptionActions.Items);
+                exceptionHandlers.AddRange(model.ExceptionHandlers.Items);
 
                 if (model.Namespaces.Length > 0)
                 {
@@ -226,12 +286,29 @@ namespace KyrolusSous.Mediator.Generator
                 context.AddSource("KyrolusSous.Mediator.GeneratedDispatcherImpl.g.cs", SourceText.From(dispatcherImplCode, Encoding.UTF8));
 
                 // 3. Generate the DI extension method to register the implementation
-                string diExtensionCode = GenerateDIRegistration();
+                string diExtensionCode = GenerateDIRegistration(availability.Runtime);
                 context.AddSource("KyrolusSous.Mediator.GeneratedDIExtensions.g.cs", SourceText.From(diExtensionCode, Encoding.UTF8));
 
                 // 4. Generate the DI extension method for Handler Registration ****
-                string handlersDiExtensionCode = GenerateHandlerRegistrationMethod(handlerInfos, openGenericHandlers, namespaces);
+                string handlersDiExtensionCode = GenerateHandlerRegistrationMethod(handlerInfos, openGenericHandlers, namespaces, availability.Runtime);
                 context.AddSource("KyrolusSous.Mediator.GeneratedHandlersDIExtensions.g.cs", SourceText.From(handlersDiExtensionCode, Encoding.UTF8));
+
+                // 5. Generate the closed pipeline wrappers, which is what makes the send path
+                //    publishable with NativeAOT. Skipped when the runtime package is absent: the
+                //    factory and the interface it implements both live there, so the file would
+                //    simply fail to compile.
+                if (availability.Runtime)
+                {
+                    string wrapperSourceCode = GeneratePipelineWrapperSource(handlerInfos);
+                    context.AddSource("KyrolusSous.Mediator.GeneratedPipelineWrappers.g.cs", SourceText.From(wrapperSourceCode, Encoding.UTF8));
+
+                    // 6. Exception actions and handlers, bound the same way. Emitted even when both
+                    //    lists are empty, because a miss is not an error here: the behavior falls
+                    //    back to reflection where that is possible, which keeps actions declared in
+                    //    a referenced assembly working exactly as they do today.
+                    string exceptionSourceCode = GenerateExceptionDispatchSource(exceptionActions, exceptionHandlers);
+                    context.AddSource("KyrolusSous.Mediator.GeneratedExceptionDispatch.g.cs", SourceText.From(exceptionSourceCode, Encoding.UTF8));
+                }
             }
         }
 
@@ -259,8 +336,15 @@ namespace KyrolusSous.Mediator.Generator
             INamedTypeSymbol commandHandlerWithResponseDef,
             INamedTypeSymbol requestHandlerDef,
             INamedTypeSymbol requestHandlerWithoutResponseDef,
-            INamedTypeSymbol streamRequestHandlerDef)
+            INamedTypeSymbol streamRequestHandlerDef,
+            INamedTypeSymbol? exceptionActionDef,
+            INamedTypeSymbol? exceptionHandlerDef)
         {
+            /// <summary>Null only if the abstractions predate exception actions; collection is then skipped.</summary>
+            public INamedTypeSymbol? ExceptionActionDef { get; } = exceptionActionDef;
+
+            public INamedTypeSymbol? ExceptionHandlerDef { get; } = exceptionHandlerDef;
+
             public INamedTypeSymbol UnitSymbol { get; } = unitSymbol;
             public INamedTypeSymbol QueryHandlerDef { get; } = queryHandlerDef;
             public INamedTypeSymbol CommandHandlerDef { get; } = commandHandlerDef;
@@ -295,7 +379,9 @@ namespace KyrolusSous.Mediator.Generator
                 }
 
                 return new HandlerInterfaceDefinitions(
-                    unit, query, command, commandWithResponse, request, requestWithoutResponse, stream);
+                    unit, query, command, commandWithResponse, request, requestWithoutResponse, stream,
+                    compilation.GetTypeByMetadataName(ExceptionActionInterfaceFullName),
+                    compilation.GetTypeByMetadataName(ExceptionHandlerInterfaceFullName));
             }
         }
 
@@ -316,27 +402,46 @@ namespace KyrolusSous.Mediator.Generator
         /// <summary>An open generic handler, registered by its unbound type.</summary>
         private sealed record OpenGenericModel(string HandlerOpenName, string InterfaceOpenName);
 
+        /// <summary>
+        /// One (request, exception) pair an exception action was declared for.
+        /// </summary>
+        /// <remarks>
+        /// The implementing class is deliberately absent. The table only needs to know the
+        /// combination exists; which implementations answer to it is the container's business, and
+        /// asking it at runtime keeps registrations made by hand working too.
+        /// </remarks>
+        private sealed record ExceptionActionModel(string RequestFullName, string ExceptionFullName);
+
+        /// <summary>One (request, exception, response) triple an exception handler was declared for.</summary>
+        private sealed record ExceptionHandlerModel(
+            string RequestFullName,
+            string ExceptionFullName,
+            string ResponseFullName);
+
         /// <summary>Everything one candidate class contributes.</summary>
         /// <param name="Handlers">Dispatch entries, one per handler interface the class implements.</param>
         /// <param name="OpenGenerics">Open generic registrations; empty for a closed class.</param>
         /// <param name="Namespaces">
         /// Semicolon-joined rather than a collection, so the record stays comparable by value.
         /// </param>
+        /// <param name="ExceptionActions">Exception action declarations; usually empty.</param>
+        /// <param name="ExceptionHandlers">Exception handler declarations; usually empty.</param>
         private sealed record ClassHandlerModel(
             EquatableArray<HandlerModel> Handlers,
             EquatableArray<OpenGenericModel> OpenGenerics,
-            string Namespaces);
+            string Namespaces,
+            EquatableArray<ExceptionActionModel> ExceptionActions,
+            EquatableArray<ExceptionHandlerModel> ExceptionHandlers);
 
         /// <summary>
         /// <see cref="ImmutableArray{T}"/> compares by reference, which would make every pipeline
         /// output look changed. This compares element by element instead.
         /// </summary>
-        private readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>
+        private readonly struct EquatableArray<T>(ImmutableArray<T> items) : IEquatable<EquatableArray<T>>
             where T : IEquatable<T>
         {
-            private readonly ImmutableArray<T> _items;
+            private readonly ImmutableArray<T> _items = items;
 
-            public EquatableArray(ImmutableArray<T> items) => _items = items;
 
             /// <summary>The items, treating the uninitialised struct as empty.</summary>
             public ImmutableArray<T> Items => _items.IsDefault ? ImmutableArray<T>.Empty : _items;
@@ -476,6 +581,48 @@ namespace KyrolusSous.Mediator.Generator
             return false;
         }
 
+        /// <summary>
+        /// Records the (request, exception) and (request, exception, response) combinations this
+        /// class participates in.
+        /// </summary>
+        /// <remarks>
+        /// A class may implement several of each - one action per exception type is common - so
+        /// every match is recorded rather than the first.
+        /// </remarks>
+        private static void CollectExceptionParticipants(
+            INamedTypeSymbol classSymbol,
+            HandlerInterfaceDefinitions defs,
+            ImmutableArray<ExceptionActionModel>.Builder actions,
+            ImmutableArray<ExceptionHandlerModel>.Builder handlers)
+        {
+            foreach (var iface in classSymbol.AllInterfaces)
+            {
+                if (!iface.IsGenericType) continue;
+
+                var originalDef = iface.OriginalDefinition;
+
+                if (defs.ExceptionActionDef is not null
+                    && iface.TypeArguments.Length == 2
+                    && SymbolEqualityComparer.Default.Equals(originalDef, defs.ExceptionActionDef))
+                {
+                    actions.Add(new ExceptionActionModel(
+                        iface.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                        iface.TypeArguments[1].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+                    continue;
+                }
+
+                if (defs.ExceptionHandlerDef is not null
+                    && iface.TypeArguments.Length == 3
+                    && SymbolEqualityComparer.Default.Equals(originalDef, defs.ExceptionHandlerDef))
+                {
+                    handlers.Add(new ExceptionHandlerModel(
+                        iface.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                        iface.TypeArguments[1].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                        iface.TypeArguments[2].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+                }
+            }
+        }
+
         private static IEnumerable<OpenGenericHandlerInfo> TryGetOpenGenericHandlerRegistrations(
             INamedTypeSymbol handlerSymbol,
             HandlerInterfaceDefinitions defs)
@@ -613,7 +760,7 @@ namespace KyrolusSous.Mediator.Generator
         /// <summary>
         /// Generates the DI extension method for registering the IMediatorDispatcher implementation.
         /// </summary>
-        private static string GenerateDIRegistration()
+        private static string GenerateDIRegistration(bool runtimeAvailable)
         {
             var sb = new StringBuilder();
             string interfaceFullName = DispatcherInterfaceQualifiedName;
@@ -641,17 +788,246 @@ namespace KyrolusSous.Mediator.Generator
             sb.AppendLine(Indent8OpenBrace);
             // Replace any existing dispatcher (e.g., reflection-based) with the generated one
             sb.AppendLine($"            services.Replace(ServiceDescriptor.Singleton<{interfaceFullName}, {implementationFullName}>());");
+            if (runtimeAvailable)
+            {
+                sb.AppendLine();
+                sb.AppendLine("            // Lets the sender take every pipeline wrapper from the table below instead of");
+                sb.AppendLine("            // closing the wrapper types with MakeGenericType, which NativeAOT cannot do.");
+                sb.AppendLine($"            services.TryAddSingleton<{PipelineWrapperSourceInterfaceQualifiedName}, global::{PipelineWrapperSourceImplName}>();");
+                sb.AppendLine();
+                sb.AppendLine("            // Same idea for the exception behavior: bound calls instead of a handler interface");
+                sb.AppendLine("            // closed over the response type, which is the part NativeAOT cannot do.");
+                sb.AppendLine($"            services.TryAddSingleton<{ExceptionDispatchSourceInterfaceQualifiedName}, global::{ExceptionDispatchSourceImplName}>();");
+            }
             sb.AppendLine("            return services;");
             sb.AppendLine(Indent8CloseBrace);
             sb.AppendLine(Indent4CloseBrace);
             sb.AppendLine(CloseBrace);
             return sb.ToString();
         }
+        /// <summary>
+        /// Generates the table of pipeline wrappers, one entry per (request, response) pair.
+        /// </summary>
+        /// <remarks>
+        /// This is the file that makes the send path publishable with NativeAOT. Each entry closes
+        /// the wrapper through a static generic call with concrete type arguments, so the compiler
+        /// sees the instantiation and emits it ahead of time. What it replaces - closing the type
+        /// with <c>MakeGenericType</c> - works only where the runtime can produce code on demand,
+        /// and for a value-type response it cannot.
+        /// </remarks>
+        private static string GeneratePipelineWrapperSource(List<HandlerModel> handlerInfos)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine(AutoGeneratedHeader);
+            sb.AppendLine(NullableEnable);
+            sb.AppendLine("using System;");
+            sb.AppendLine("using System.Collections.Generic;");
+            sb.AppendLine();
+            sb.AppendLine("namespace KyrolusSous.Mediator.Generated");
+            sb.AppendLine(OpenBrace);
+            sb.AppendLine("    /// <summary>Pipeline wrappers closed at compile time, so none has to be built at runtime.</summary>");
+            sb.AppendLine(CompilerGeneratedAttribute);
+            sb.AppendLine($"    internal sealed class GeneratedPipelineWrapperSource : {PipelineWrapperSourceInterfaceQualifiedName}");
+            sb.AppendLine(Indent4OpenBrace);
+
+            AppendWrapperTable(sb, "s_requestWrappers", "CreateRequest", DistinctPairs(handlerInfos, isStream: false));
+            AppendWrapperTable(sb, "s_streamWrappers", "CreateStream", DistinctPairs(handlerInfos, isStream: true));
+            AppendResponseTypeTable(sb, "s_requestResponses", DistinctPairs(handlerInfos, isStream: false));
+            AppendResponseTypeTable(sb, "s_streamResponses", DistinctPairs(handlerInfos, isStream: true));
+
+            // Null rather than an exception for a miss: an open generic handler is closed only where
+            // it is used, so the generator never sees the pair. The sender decides what to do about
+            // that, and only it knows whether a runtime fallback is available.
+            sb.AppendLine("        public object? CreateRequestWrapper(Type requestType, Type responseType)");
+            sb.AppendLine("            => s_requestWrappers.TryGetValue((requestType, responseType), out var factory) ? factory() : null;");
+            sb.AppendLine();
+            sb.AppendLine("        public object? CreateStreamWrapper(Type requestType, Type responseType)");
+            sb.AppendLine("            => s_streamWrappers.TryGetValue((requestType, responseType), out var factory) ? factory() : null;");
+            sb.AppendLine();
+            sb.AppendLine("        public Type? GetResponseType(Type requestType, bool stream)");
+            sb.AppendLine("            => (stream ? s_streamResponses : s_requestResponses).TryGetValue(requestType, out var responseType) ? responseType : null;");
+
+            sb.AppendLine(Indent4CloseBrace);
+            sb.AppendLine(CloseBrace);
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Generates the exception action and handler tables.
+        /// </summary>
+        /// <remarks>
+        /// The two <c>Bind</c> helpers are written once and instantiated per combination by the
+        /// tables, so each instantiation is a concrete static call the compiler emits ahead of time.
+        /// The handler table is the one that matters for NativeAOT: its third type argument is the
+        /// response, and a response of <c>int</c> is exactly what <c>MakeGenericType</c> cannot
+        /// produce in an application published ahead of time.
+        /// </remarks>
+        private static string GenerateExceptionDispatchSource(
+            List<ExceptionActionModel> actions,
+            List<ExceptionHandlerModel> handlers)
+        {
+            var distinctActions = actions
+                .Distinct()
+                .OrderBy(a => a.RequestFullName, StringComparer.Ordinal)
+                .ThenBy(a => a.ExceptionFullName, StringComparer.Ordinal)
+                .ToList();
+
+            var distinctHandlers = handlers
+                .Distinct()
+                .OrderBy(h => h.RequestFullName, StringComparer.Ordinal)
+                .ThenBy(h => h.ExceptionFullName, StringComparer.Ordinal)
+                .ThenBy(h => h.ResponseFullName, StringComparer.Ordinal)
+                .ToList();
+
+            const string ActionListType = "IReadOnlyList<(Type ActionType, Func<CancellationToken, Task> Invoke)>";
+            const string HandlerListType = "IReadOnlyList<Func<CancellationToken, Task>>";
+
+            var sb = new StringBuilder();
+            sb.AppendLine(AutoGeneratedHeader);
+            sb.AppendLine(NullableEnable);
+            sb.AppendLine("using System;");
+            sb.AppendLine("using System.Collections.Generic;");
+            sb.AppendLine("using System.Threading;");
+            sb.AppendLine("using System.Threading.Tasks;");
+            sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
+            sb.AppendLine();
+            sb.AppendLine("namespace KyrolusSous.Mediator.Generated");
+            sb.AppendLine(OpenBrace);
+            sb.AppendLine("    /// <summary>Exception actions and handlers bound at compile time.</summary>");
+            sb.AppendLine(CompilerGeneratedAttribute);
+            sb.AppendLine($"    internal sealed class GeneratedRequestExceptionDispatchSource : {ExceptionDispatchSourceInterfaceQualifiedName}");
+            sb.AppendLine(Indent4OpenBrace);
+
+            sb.AppendLine($"        private static readonly Dictionary<(Type RequestType, Type ExceptionType), Func<object, Exception, IServiceProvider, {ActionListType}>> s_actions = new({distinctActions.Count})");
+            sb.AppendLine(Indent8OpenBrace);
+            foreach (var action in distinctActions)
+            {
+                sb.AppendLine($"            [(typeof({action.RequestFullName}), typeof({action.ExceptionFullName}))] = static (request, exception, serviceProvider) => BindActions<{action.RequestFullName}, {action.ExceptionFullName}>(request, exception, serviceProvider),");
+            }
+            sb.AppendLine("        };");
+            sb.AppendLine();
+
+            sb.AppendLine($"        private static readonly Dictionary<(Type RequestType, Type ExceptionType, Type ResponseType), Func<object, Exception, object, IServiceProvider, {HandlerListType}>> s_handlers = new({distinctHandlers.Count})");
+            sb.AppendLine(Indent8OpenBrace);
+            foreach (var handler in distinctHandlers)
+            {
+                sb.AppendLine($"            [(typeof({handler.RequestFullName}), typeof({handler.ExceptionFullName}), typeof({handler.ResponseFullName}))] = static (request, exception, state, serviceProvider) => BindHandlers<{handler.RequestFullName}, {handler.ExceptionFullName}, {handler.ResponseFullName}>(request, exception, state, serviceProvider),");
+            }
+            sb.AppendLine("        };");
+            sb.AppendLine();
+
+            sb.AppendLine($"        private static {ActionListType} BindActions<TRequest, TException>(object request, Exception exception, IServiceProvider serviceProvider)");
+            sb.AppendLine("            where TException : Exception");
+            sb.AppendLine(Indent8OpenBrace);
+            sb.AppendLine("            var typedRequest = (TRequest)request;");
+            sb.AppendLine("            var typedException = (TException)exception;");
+            sb.AppendLine("            var invocations = new List<(Type, Func<CancellationToken, Task>)>();");
+            sb.AppendLine($"            foreach (var action in serviceProvider.GetServices<{ExceptionActionQualifiedName}<TRequest, TException>>())");
+            sb.AppendLine(Indent12OpenBrace);
+            sb.AppendLine("                invocations.Add((action.GetType(), cancellationToken => action.Execute(typedRequest, typedException, cancellationToken)));");
+            sb.AppendLine(Indent12CloseBrace);
+            sb.AppendLine();
+            sb.AppendLine("            return invocations;");
+            sb.AppendLine(Indent8CloseBrace);
+            sb.AppendLine();
+
+            sb.AppendLine($"        private static {HandlerListType} BindHandlers<TRequest, TException, TResponse>(object request, Exception exception, object state, IServiceProvider serviceProvider)");
+            sb.AppendLine("            where TException : Exception");
+            sb.AppendLine(Indent8OpenBrace);
+            sb.AppendLine("            var typedRequest = (TRequest)request;");
+            sb.AppendLine("            var typedException = (TException)exception;");
+            sb.AppendLine($"            var typedState = ({ExceptionHandlerStateQualifiedName}<TResponse>)state;");
+            sb.AppendLine("            var invocations = new List<Func<CancellationToken, Task>>();");
+            sb.AppendLine($"            foreach (var handler in serviceProvider.GetServices<{ExceptionHandlerQualifiedName}<TRequest, TException, TResponse>>())");
+            sb.AppendLine(Indent12OpenBrace);
+            sb.AppendLine("                invocations.Add(cancellationToken => handler.Handle(typedRequest, typedException, typedState, cancellationToken));");
+            sb.AppendLine(Indent12CloseBrace);
+            sb.AppendLine();
+            sb.AppendLine("            return invocations;");
+            sb.AppendLine(Indent8CloseBrace);
+            sb.AppendLine();
+
+            sb.AppendLine($"        public {ActionListType}? CreateActionInvocations(Type requestType, Type exceptionType, object request, Exception exception, IServiceProvider serviceProvider)");
+            sb.AppendLine("            => s_actions.TryGetValue((requestType, exceptionType), out var bind) ? bind(request, exception, serviceProvider) : null;");
+            sb.AppendLine();
+            sb.AppendLine($"        public {HandlerListType}? CreateHandlerInvocations(Type requestType, Type exceptionType, Type responseType, object request, Exception exception, object state, IServiceProvider serviceProvider)");
+            sb.AppendLine("            => s_handlers.TryGetValue((requestType, exceptionType, responseType), out var bind) ? bind(request, exception, state, serviceProvider) : null;");
+
+            sb.AppendLine(Indent4CloseBrace);
+            sb.AppendLine(CloseBrace);
+            return sb.ToString();
+        }
+
+        /// <summary>The (request, response) pairs of one dispatch shape, without duplicates.</summary>
+        /// <remarks>
+        /// Distinct because a class handling one message through two interfaces contributes a
+        /// <see cref="HandlerModel"/> for each, while the wrapper is keyed on the pair alone and a
+        /// repeated key would not compile. Ordered so identical input produces an identical file.
+        /// </remarks>
+        private static List<(string Request, string Response)> DistinctPairs(List<HandlerModel> handlerInfos, bool isStream)
+            => handlerInfos
+                .Where(info => info.IsStream == isStream)
+                .Select(info => (Request: info.RequestFullName, Response: info.ResponseFullName))
+                .Distinct()
+                .OrderBy(pair => pair.Request, StringComparer.Ordinal)
+                .ThenBy(pair => pair.Response, StringComparer.Ordinal)
+                .ToList();
+
+        /// <summary>
+        /// Emits the request-to-response lookup the untyped <c>SendAsync(object)</c> overloads need.
+        /// </summary>
+        /// <remarks>
+        /// A request that declares more than one response is deliberately left out. Reading the
+        /// answer off the type at runtime picks whichever interface comes back first, which is a
+        /// coin toss; omitting it makes the sender say so instead, and the overloads that name the
+        /// response still work.
+        /// </remarks>
+        private static void AppendResponseTypeTable(
+            StringBuilder sb,
+            string fieldName,
+            List<(string Request, string Response)> pairs)
+        {
+            var unambiguous = pairs
+                .GroupBy(pair => pair.Request, StringComparer.Ordinal)
+                .Where(group => group.Count() == 1)
+                .Select(group => group.First())
+                .ToList();
+
+            sb.AppendLine($"        private static readonly Dictionary<Type, Type> {fieldName} = new({unambiguous.Count})");
+            sb.AppendLine(Indent8OpenBrace);
+            foreach (var (request, response) in unambiguous)
+            {
+                sb.AppendLine($"            [typeof({request})] = typeof({response}),");
+            }
+            sb.AppendLine("        };");
+            sb.AppendLine();
+        }
+
+        private static void AppendWrapperTable(
+            StringBuilder sb,
+            string fieldName,
+            string factoryMethod,
+            List<(string Request, string Response)> pairs)
+        {
+            sb.AppendLine($"        private static readonly Dictionary<(Type RequestType, Type ResponseType), Func<object>> {fieldName} = new({pairs.Count})");
+            sb.AppendLine(Indent8OpenBrace);
+            foreach (var (request, response) in pairs)
+            {
+                sb.AppendLine($"            [(typeof({request}), typeof({response}))] = static () => {PipelineWrapperFactoryQualifiedName}.{factoryMethod}<{request}, {response}>(),");
+            }
+            sb.AppendLine("        };");
+            sb.AppendLine();
+        }
+
         // **** NEW HELPER METHOD ****
         /// <summary>
         /// Generates the DI extension method for registering all discovered concrete handlers.
         /// </summary>
-        private static string GenerateHandlerRegistrationMethod(List<HandlerModel> handlerInfos, List<OpenGenericModel> openGenericHandlers, HashSet<string> namespaces)
+        private static string GenerateHandlerRegistrationMethod(
+            List<HandlerModel> handlerInfos,
+            List<OpenGenericModel> openGenericHandlers,
+            HashSet<string> namespaces,
+            bool runtimeAvailable)
         {
             var sb = new StringBuilder();
             sb.AppendLine(AutoGeneratedHeader);
@@ -709,11 +1085,62 @@ namespace KyrolusSous.Mediator.Generator
                 sb.AppendLine($"            services.TryAddTransient(typeof({info.InterfaceOpenName}), typeof({info.HandlerOpenName}));");
             }
             sb.AppendLine();
+            if (runtimeAvailable)
+            {
+                AppendClosedBuiltInBehaviors(sb, handlerInfos);
+            }
             sb.AppendLine("            return services;");
             sb.AppendLine(Indent8CloseBrace);
             sb.AppendLine(Indent4CloseBrace);
             sb.AppendLine(CloseBrace);
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// Emits the four built-in behaviors closed over every (request, response) pair.
+        /// </summary>
+        /// <remarks>
+        /// The runtime registers the same four as open generics and leaves the container to close
+        /// them, which it does with <c>MakeGenericType</c> - and refuses when a type argument is a
+        /// value type in an application published ahead of time. Naming the closed types here means
+        /// the compiler emits them, so nothing has to be built on demand.
+        /// <para>
+        /// Guarded on the same condition the runtime uses, so exactly one of the two sets is ever
+        /// registered. Registering both would not be caught by <c>TryAddEnumerable</c> - an open
+        /// descriptor and a closed one are different registrations - and every behavior would run
+        /// twice.
+        /// </para>
+        /// </remarks>
+        private static void AppendClosedBuiltInBehaviors(StringBuilder sb, List<HandlerModel> handlerInfos)
+        {
+            var requestPairs = DistinctPairs(handlerInfos, isStream: false);
+            var streamPairs = DistinctPairs(handlerInfos, isStream: true);
+
+            if (requestPairs.Count == 0 && streamPairs.Count == 0) return;
+
+            sb.AppendLine("            // The built-in behaviors, closed at compile time. See AddBuiltInBehaviors in the");
+            sb.AppendLine("            // runtime: it registers the same four as open generics and declines on this exact");
+            sb.AppendLine("            // condition, so only one of the two sets is ever present.");
+            sb.AppendLine("            if (!global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)");
+            sb.AppendLine(Indent12OpenBrace);
+
+            foreach (var (request, response) in requestPairs)
+            {
+                foreach (var behavior in BuiltInRequestBehaviors)
+                {
+                    sb.AppendLine(
+                        $"                services.TryAddEnumerable(ServiceDescriptor.Transient<{PipelineBehaviorInterface}<{request}, {response}>, {behavior}<{request}, {response}>>());");
+                }
+            }
+
+            foreach (var (request, response) in streamPairs)
+            {
+                sb.AppendLine(
+                    $"                services.TryAddEnumerable(ServiceDescriptor.Transient<{StreamPipelineBehaviorInterface}<{request}, {response}>, {BuiltInStreamBehavior}<{request}, {response}>>());");
+            }
+
+            sb.AppendLine(Indent12CloseBrace);
+            sb.AppendLine();
         }
 
         private static string GetOpenGenericTypeOf(INamedTypeSymbol symbol)
@@ -812,6 +1239,7 @@ namespace KyrolusSous.Mediator.Generator
             sb.AppendLine(Indent12CloseBrace);
             sb.AppendLine();
             sb.AppendLine("            // Try resolving open generic stream handlers registered in DI.");
+            AppendDynamicCodeGuard(sb, "stream handler", "requestType");
             sb.AppendLine("            var openHandlerType = typeof(IKyrolusStreamRequestHandler<,>).MakeGenericType(requestType, typeof(TResponse));");
             sb.AppendLine("            var openHandler = serviceProvider.GetService(openHandlerType);");
             sb.AppendLine("            if (openHandler is not null)");
@@ -862,9 +1290,33 @@ namespace KyrolusSous.Mediator.Generator
             sb.AppendLine();
         }
 
+        /// <summary>
+        /// Emits the bail-out that stands in front of every open generic lookup.
+        /// </summary>
+        /// <remarks>
+        /// An open generic handler is closed only where it is used, so the generator never sees the
+        /// closed type and cannot put it in the dispatch table. Resolving one therefore needs
+        /// <c>MakeGenericType</c>, which an application published ahead of time cannot do.
+        /// <para>
+        /// Written as an early throw rather than an <c>if</c> around the block for two reasons: the
+        /// trimming and AOT analyzers recognise it as a feature guard and stop warning about the
+        /// code that follows, and the message names the request instead of letting the failure
+        /// surface from inside <c>MakeGenericType</c>, which names nothing useful.
+        /// </para>
+        /// </remarks>
+        private static void AppendDynamicCodeGuard(StringBuilder sb, string what, string requestTypeVarName)
+        {
+            sb.AppendLine("            if (!System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)");
+            sb.AppendLine(Indent12OpenBrace);
+            sb.AppendLine($"                throw new InvalidOperationException($\"[KyrolusMediator] No generated {what} for {{{requestTypeVarName}.FullName}}, and this application was published without runtime code generation, so an open generic handler cannot be resolved either. Give the message a concrete, non-generic handler the generator can see.\");");
+            sb.AppendLine(Indent12CloseBrace);
+            sb.AppendLine();
+        }
+
         private static void AppendOpenGenericDispatchFallback(StringBuilder sb, bool isCommand, string inputParamName, string localRequestVarName)
         {
             sb.AppendLine("            // Try resolving open generic handlers registered in DI.");
+            AppendDynamicCodeGuard(sb, "handler", localRequestVarName);
             if (isCommand)
             {
                 sb.AppendLine($"            var commandHandlerType = typeof(IKyrolusCommandHandler<>).MakeGenericType({localRequestVarName});");
@@ -908,23 +1360,16 @@ namespace KyrolusSous.Mediator.Generator
         /// </summary>
         private static void CollectNamespaces(ITypeSymbol typeSymbol, ISet<string> namespaces)
         {
-            if (typeSymbol is null)
-            {
-                return;
-            }
+            if (typeSymbol is null) return;
 
             if (typeSymbol is INamedTypeSymbol namedType)
             {
                 AddNamespace(namedType, namespaces);
                 foreach (var arg in namedType.TypeArguments)
-                {
                     CollectNamespaces(arg, namespaces);
-                }
 
                 if (namedType.ContainingType is not null)
-                {
                     CollectNamespaces(namedType.ContainingType, namespaces);
-                }
 
                 return;
             }
@@ -941,9 +1386,7 @@ namespace KyrolusSous.Mediator.Generator
         private static void AddNamespace(ITypeSymbol typeSymbol, ISet<string> namespaces)
         {
             if (typeSymbol.ContainingNamespace is not null && !typeSymbol.ContainingNamespace.IsGlobalNamespace)
-            {
-                namespaces.Add(typeSymbol.ContainingNamespace.ToDisplayString());
-            }
+               namespaces.Add(typeSymbol.ContainingNamespace.ToDisplayString());
         }
     } // End Generator class
 } // End namespace

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The opt-in half of the mediator: discovering handlers by scanning assemblies, and reaching them
+    by closing generic types at runtime. Both are convenient and neither survives NativeAOT, so
+    they live here rather than in the runtime package - an application that wants to be published
+    ahead of time simply does not reference this, and the code is not in its graph to warn about.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Deliberately NOT IsAotCompatible. The whole point of this package is the reflection the
+         runtime package refuses to contain, so the annotations here describe that honestly
+         instead of pretending it can be trimmed. -->
+    <PackageTags>aspnetcore;cqrs;mediator;reflection</PackageTags>
+    <Description>Reflection-based handler discovery and dispatch for KyrolusSous.Mediator. Use this when you do not want the source generator. Not compatible with NativeAOT.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj" />
+    <ProjectReference Include="..\KyrolusSous.Mediator.Runtime\KyrolusSous.Mediator.Runtime.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -13,6 +13,7 @@ public sealed class ExceptionActionIsolationTests
         var services = new ServiceCollection();
         services.AddSingleton(recorder);
         services.AddKyrolusMediator();
+        services.AddKyrolusMediatorReflection();
         services.AddTransient<IKyrolusQueryHandler<Explode, string>, ExplodeHandler>();
 
         // Registration order matters: the failing one sits in the middle.

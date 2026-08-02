@@ -1,31 +1,45 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using KyrolusSous.Mediator.Runtime.GeneratorIntegration;
 using KyrolusSous.Mediator.Runtime.Internal;
 
 namespace KyrolusSous.Mediator.Runtime.Implementations;
 
 /// <summary>
 /// Concrete implementation of <see cref="IKyrolusMediatorSender"/>.
-/// Resolves the dispatcher (generated or reflection-based) and runs the registered pipeline
-/// behaviors around it.
+/// Resolves the dispatcher and runs the registered pipeline behaviors around it.
 /// </summary>
 /// <remarks>
 /// The pipeline is built once per (request type, response type) pair and cached as a closed
-/// generic wrapper, so sending a request costs one dictionary lookup plus one virtual call -
-/// not a <see cref="MethodInfo"/> invoke and an attribute scan per send.
+/// generic wrapper, so sending a request costs one dictionary lookup plus one virtual call.
+/// <para>
+/// Every wrapper comes from <see cref="IKyrolusPipelineWrapperSource"/> - this class never builds
+/// one itself. That is what keeps it free of <c>MakeGenericType</c>, which an application published
+/// ahead of time cannot use when the response is a value type. The generator supplies a source
+/// built from types it saw at compile time; <c>KyrolusSous.Mediator.Reflection</c> supplies one
+/// that closes the types on demand. Neither is referenced from here.
+/// </para>
 /// </remarks>
-/// <param name="serviceProvider">The service provider instance.</param>
-/// <param name="dispatcher">The dispatcher implementation (generated or reflection-based).</param>
-/// <exception cref="ArgumentNullException">Thrown if serviceProvider or dispatcher is null.</exception>
-public sealed class KyrolusMediatorSender(IServiceProvider serviceProvider, IMediatorDispatcher dispatcher) : IKyrolusMediatorSender
+public sealed class KyrolusMediatorSender : IKyrolusMediatorSender
 {
     private static readonly ConcurrentDictionary<(Type RequestType, Type ResponseType), RequestPipelineWrapper> s_requestWrappers = new();
     private static readonly ConcurrentDictionary<(Type RequestType, Type ResponseType), StreamPipelineWrapper> s_streamWrappers = new();
 
-    /// <summary>Caches the response type declared by a request type, for the untyped overloads.</summary>
-    private static readonly ConcurrentDictionary<(Type RequestType, Type OpenInterface), Type> s_responseTypeCache = new();
+    private readonly IServiceProvider _serviceProvider;
+    private readonly IMediatorDispatcher _dispatcher;
+    private readonly IKyrolusPipelineWrapperSource? _wrapperSource;
 
-    private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
-    private readonly IMediatorDispatcher _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+    /// <param name="serviceProvider">The service provider instance.</param>
+    /// <param name="dispatcher">The dispatcher implementation (generated or reflection-based).</param>
+    /// <exception cref="ArgumentNullException">Thrown if serviceProvider or dispatcher is null.</exception>
+    public KyrolusMediatorSender(IServiceProvider serviceProvider, IMediatorDispatcher dispatcher)
+    {
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+
+        // Resolved rather than declared as a constructor parameter: the built-in container has no
+        // notion of an optional dependency, and a missing source should be reported as the setup
+        // mistake it is rather than as a failure to construct the sender.
+        _wrapperSource = serviceProvider.GetService<IKyrolusPipelineWrapperSource>();
+    }
 
     // --- Typed overloads ---
 
@@ -62,10 +76,7 @@ public sealed class KyrolusMediatorSender(IServiceProvider serviceProvider, IMed
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var wrapper = (StreamPipelineWrapper<TResponse>)s_streamWrappers.GetOrAdd(
-            (request.GetType(), typeof(TResponse)),
-            static key => CreateWrapper<StreamPipelineWrapper>(typeof(StreamPipelineWrapperImpl<,>), key));
-
+        var wrapper = (StreamPipelineWrapper<TResponse>)GetStreamWrapper(request.GetType(), typeof(TResponse));
         return wrapper.Handle(request, _serviceProvider, _dispatcher, cancellationToken);
     }
 
@@ -76,10 +87,9 @@ public sealed class KyrolusMediatorSender(IServiceProvider serviceProvider, IMed
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var responseType = GetResponseType(request.GetType(), typeof(IKyrolusRequest<>), "a request");
-        var wrapper = s_requestWrappers.GetOrAdd(
-            (request.GetType(), responseType),
-            static key => CreateWrapper<RequestPipelineWrapper>(typeof(RequestPipelineWrapperImpl<,>), key));
+        var requestType = request.GetType();
+        var responseType = GetResponseType(requestType, stream: false);
+        var wrapper = GetRequestWrapper(requestType, responseType);
 
         return wrapper.HandleUntyped(request, _serviceProvider, _dispatcher, cancellationToken);
     }
@@ -89,10 +99,9 @@ public sealed class KyrolusMediatorSender(IServiceProvider serviceProvider, IMed
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var responseType = GetResponseType(request.GetType(), typeof(IKyrolusStreamRequest<>), "a stream request");
-        var wrapper = s_streamWrappers.GetOrAdd(
-            (request.GetType(), responseType),
-            static key => CreateWrapper<StreamPipelineWrapper>(typeof(StreamPipelineWrapperImpl<,>), key));
+        var requestType = request.GetType();
+        var responseType = GetResponseType(requestType, stream: true);
+        var wrapper = GetStreamWrapper(requestType, responseType);
 
         return wrapper.HandleUntyped(request, _serviceProvider, _dispatcher, cancellationToken);
     }
@@ -100,35 +109,44 @@ public sealed class KyrolusMediatorSender(IServiceProvider serviceProvider, IMed
     // --- Internals ---
     private Task<TResponse> ExecuteAsync<TResponse>(object request, CancellationToken cancellationToken)
     {
-        var wrapper = (RequestPipelineWrapper<TResponse>)s_requestWrappers.GetOrAdd(
-            (request.GetType(), typeof(TResponse)),
-            static key => CreateWrapper<RequestPipelineWrapper>(typeof(RequestPipelineWrapperImpl<,>), key));
-
+        var wrapper = (RequestPipelineWrapper<TResponse>)GetRequestWrapper(request.GetType(), typeof(TResponse));
         return wrapper.Handle(request, _serviceProvider, _dispatcher, cancellationToken);
     }
 
-    [UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode",
-        Justification = "Wrapper types are closed over request/response types that already exist in the closure of the caller's generic instantiation.")]
-    private static TWrapper CreateWrapper<TWrapper>(Type openWrapperType, (Type RequestType, Type ResponseType) key)
-        where TWrapper : class
-    {
-        var closedType = openWrapperType.MakeGenericType(key.RequestType, key.ResponseType);
-        return (TWrapper)(Activator.CreateInstance(closedType)
-            ?? throw new InvalidOperationException(
-                $"[KyrolusMediator] Could not create a pipeline wrapper for {key.RequestType.FullName}."));
-    }
+    private RequestPipelineWrapper GetRequestWrapper(Type requestType, Type responseType)
+        => s_requestWrappers.GetOrAdd(
+            (requestType, responseType),
+            static (key, source) => (RequestPipelineWrapper)(
+                RequireSource(source).CreateRequestWrapper(key.RequestType, key.ResponseType)
+                ?? throw NoWrapper(key.RequestType, key.ResponseType)),
+            _wrapperSource);
 
-    private static Type GetResponseType(Type requestType, Type openRequestInterface, string label)
-    {
-        return s_responseTypeCache.GetOrAdd((requestType, openRequestInterface), static key =>
-        {
-            var closed = Array.Find(
-                key.RequestType.GetInterfaces(),
-                i => i.IsGenericType && i.GetGenericTypeDefinition() == key.OpenInterface);
+    private StreamPipelineWrapper GetStreamWrapper(Type requestType, Type responseType)
+        => s_streamWrappers.GetOrAdd(
+            (requestType, responseType),
+            static (key, source) => (StreamPipelineWrapper)(
+                RequireSource(source).CreateStreamWrapper(key.RequestType, key.ResponseType)
+                ?? throw NoWrapper(key.RequestType, key.ResponseType)),
+            _wrapperSource);
 
-            return closed?.GetGenericArguments()[0]
-                ?? throw new ArgumentException(
-                    $"[KyrolusMediator] {key.RequestType.FullName} does not implement {key.OpenInterface.Name}.");
-        });
-    }
+    private Type GetResponseType(Type requestType, bool stream)
+        => RequireSource(_wrapperSource).GetResponseType(requestType, stream)
+           ?? throw new ArgumentException(
+               $"[KyrolusMediator] Could not determine the response type of {requestType.FullName}. " +
+               "Either it does not declare one, or it declares more than one and the untyped overload " +
+               "cannot choose - call the overload that names the response instead.",
+               nameof(requestType));
+
+    private static IKyrolusPipelineWrapperSource RequireSource(IKyrolusPipelineWrapperSource? source)
+        => source ?? throw new InvalidOperationException(
+            "[KyrolusMediator] No pipeline wrapper source is registered. Reference " +
+            "KyrolusSous.Mediator.Generator and call AddKyrolusMediatorGeneratedDispatcher(), or " +
+            "reference KyrolusSous.Mediator.Reflection and call AddKyrolusMediatorReflection().");
+
+    private static InvalidOperationException NoWrapper(Type requestType, Type responseType)
+        => new(
+            $"[KyrolusMediator] No pipeline wrapper for {requestType.FullName} -> {responseType.FullName}. " +
+            "The generator emits one per handler it can see; a handler that is generic, or declared in " +
+            "another assembly, is not among them. Add KyrolusSous.Mediator.Reflection to close the " +
+            "types at runtime instead, which an application published ahead of time cannot do.");
 }

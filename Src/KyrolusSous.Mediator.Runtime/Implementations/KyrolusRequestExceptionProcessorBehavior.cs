@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+using KyrolusSous.Mediator.Runtime.GeneratorIntegration;
+using Microsoft.Extensions.Logging;
 
 namespace KyrolusSous.Mediator.Runtime.Implementations;
 
@@ -6,14 +7,27 @@ namespace KyrolusSous.Mediator.Runtime.Implementations;
 /// Outermost behavior: catches anything thrown by the rest of the pipeline, runs the registered
 /// exception actions, then gives the exception handlers a chance to supply a replacement response.
 /// </summary>
+/// <remarks>
+/// Actions and handlers are bound by <see cref="IKyrolusRequestExceptionDispatchSource"/>. Doing it
+/// here would mean closing <c>IKyrolusRequestExceptionHandler&lt;,,&gt;</c> over the response type
+/// at runtime, and a response of <c>int</c> is exactly what an application published ahead of time
+/// cannot close.
+/// </remarks>
 [PipelineOrder(-2000)]
-public sealed class KyrolusRequestExceptionProcessorBehavior<TRequest, TResponse>(IServiceProvider serviceProvider)
+public sealed class KyrolusRequestExceptionProcessorBehavior<TRequest, TResponse>
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
     /// <summary>Stable logger category, rather than the mangled closed generic type name.</summary>
     private const string LoggerCategory = "KyrolusSous.Mediator.RequestExceptionProcessor";
 
-    private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+    private readonly IServiceProvider _serviceProvider;
+    private readonly IKyrolusRequestExceptionDispatchSource? _dispatchSource;
+
+    public KyrolusRequestExceptionProcessorBehavior(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        _dispatchSource = serviceProvider.GetService<IKyrolusRequestExceptionDispatchSource>();
+    }
 
     public async Task<TResponse> Handle(TRequest request,
         RequestHandlerDelegate<TResponse> next,
@@ -50,24 +64,26 @@ public sealed class KyrolusRequestExceptionProcessorBehavior<TRequest, TResponse
     /// </remarks>
     private async Task ExecuteActionsAsync(TRequest request, Exception exception, CancellationToken cancellationToken)
     {
+        if (_dispatchSource is null) return;
+
         foreach (var exceptionType in GetExceptionTypes(exception))
         {
-            var actionType = typeof(IKyrolusRequestExceptionAction<,>).MakeGenericType(typeof(TRequest), exceptionType);
-            var method = actionType.GetMethod("Execute");
-            if (method is null) continue;
+            // Null is the ordinary answer here: the loop walks the exception's whole base chain and
+            // almost none of those types has an action registered for it.
+            var invocations = _dispatchSource.CreateActionInvocations(
+                typeof(TRequest), exceptionType, request!, exception, _serviceProvider);
 
-            foreach (var action in _serviceProvider.GetServices(actionType))
+            if (invocations is null) continue;
+
+            foreach (var (actionType, invoke) in invocations)
             {
-                if (action is null) continue;
-
                 try
                 {
-                    var task = (Task)method.Invoke(action, [request, exception, cancellationToken])!;
-                    await task.ConfigureAwait(false);
+                    await invoke(cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception actionFailure)
                 {
-                    ReportActionFailure(action, exception, Unwrap(actionFailure));
+                    ReportActionFailure(actionType, exception, actionFailure);
                 }
             }
         }
@@ -78,21 +94,21 @@ public sealed class KyrolusRequestExceptionProcessorBehavior<TRequest, TResponse
         KyrolusRequestExceptionHandlerState<TResponse> state,
         CancellationToken cancellationToken)
     {
+        if (_dispatchSource is null) return;
+
         foreach (var exceptionType in GetExceptionTypes(exception))
         {
-            var handlerType = typeof(IKyrolusRequestExceptionHandler<,,>).MakeGenericType(
-                typeof(TRequest),
-                exceptionType,
-                typeof(TResponse));
-            var handlers = _serviceProvider.GetServices(handlerType);
-            foreach (var handler in handlers)
+            var invocations = _dispatchSource.CreateHandlerInvocations(
+                typeof(TRequest), exceptionType, typeof(TResponse), request!, exception, state, _serviceProvider);
+
+            if (invocations is null) continue;
+
+            foreach (var invocation in invocations)
             {
-                var method = handlerType.GetMethod("Handle");
-                if (method is null) continue;
+                await invocation(cancellationToken).ConfigureAwait(false);
 
-                var task = (Task)method.Invoke(handler, [request, exception, state, cancellationToken])!;
-                await task.ConfigureAwait(false);
-
+                // The first handler to recover wins: there is only one response to return, so a
+                // second one would have nothing left to contribute.
                 if (state.Handled) return;
             }
         }
@@ -102,7 +118,7 @@ public sealed class KyrolusRequestExceptionProcessorBehavior<TRequest, TResponse
     /// Logs an action that threw, if logging is available. Deliberately best-effort: this runs
     /// while an exception is already in flight, so it must not throw a second one.
     /// </summary>
-    private void ReportActionFailure(object action, Exception originalException, Exception actionFailure)
+    private void ReportActionFailure(Type actionType, Exception originalException, Exception actionFailure)
     {
         try
         {
@@ -111,7 +127,7 @@ public sealed class KyrolusRequestExceptionProcessorBehavior<TRequest, TResponse
                 .LogError(
                     actionFailure,
                     "[KyrolusMediator] Exception action {Action} failed while handling {OriginalException} from {Request}. The original exception is unaffected.",
-                    action.GetType().FullName,
+                    actionType.FullName,
                     originalException.GetType().FullName,
                     typeof(TRequest).FullName);
         }
@@ -121,10 +137,6 @@ public sealed class KyrolusRequestExceptionProcessorBehavior<TRequest, TResponse
             // destroy the very exception this behavior exists to preserve.
         }
     }
-
-    /// <summary>Reflection wraps handler exceptions; report the one the action actually threw.</summary>
-    private static Exception Unwrap(Exception exception)
-        => exception is TargetInvocationException { InnerException: { } inner } ? inner : exception;
 
     /// <summary>
     /// Yields the exception's type and every base type up to <see cref="Exception"/>, most specific
@@ -137,5 +149,4 @@ public sealed class KyrolusRequestExceptionProcessorBehavior<TRequest, TResponse
              current = current.BaseType)
             yield return current;
     }
-    
 }

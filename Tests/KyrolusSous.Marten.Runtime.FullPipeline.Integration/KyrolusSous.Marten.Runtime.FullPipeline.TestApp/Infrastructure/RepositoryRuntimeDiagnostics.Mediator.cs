@@ -2,6 +2,7 @@
 using System.Runtime.CompilerServices;
 using KyrolusSous.Mediator.Abstractions.Attributes;
 using KyrolusSous.Mediator.Abstractions.Interfaces;
+using KyrolusSous.Mediator.Reflection;
 using KyrolusSous.Mediator.Runtime.Config;
 using KyrolusSous.Mediator.Runtime.Implementations;
 using Microsoft.Extensions.DependencyInjection;

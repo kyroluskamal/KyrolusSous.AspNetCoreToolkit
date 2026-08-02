@@ -3,9 +3,24 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
-    <LangVersion>latest</LangVersion> 
+    <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-	<EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsPackable>true</IsPackable>
+    <!-- The assembly ships under analyzers/, not lib/ - see the None item below. Without this it
+         would be packed twice, and the copy in lib/ would make NuGet treat a Roslyn component as
+         an ordinary library reference, so the generator would never run in a consuming project. -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <!-- With no lib/ assembly there is nothing for a symbols package to describe, and packing an
+         empty .snupkg fails the whole `dotnet pack` with NU5017. Repo-wide IncludeSymbols is
+         right for libraries and wrong for analyzer-only projects, so it is turned off here. -->
+    <IncludeSymbols>false</IncludeSymbols>
+    <!-- NU5128 wants a lib/ folder to match the declared target framework. An analyzer package
+         legitimately has none. -->
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+    <PackageId>KyrolusSous.Mediator.Generator</PackageId>
+    <Description>Source generator for KyrolusSous.Mediator. Emits the request/command/stream dispatch table and the handler DI registrations at compile time, replacing the reflection-based dispatcher.</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,7 +28,13 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
+    <!-- PrivateAssets: Roslyn is a build-time dependency of the generator itself. Flowing it to
+         consumers would declare the C# compiler as a runtime dependency of their application. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" />
   </ItemGroup>
 
 </Project>

@@ -1,34 +1,31 @@
-﻿namespace KyrolusSous.Mediator.Runtime.Config;
+using System.Diagnostics.CodeAnalysis;
 
+namespace KyrolusSous.Mediator.Runtime.Config;
+
+/// <summary>
+/// Registration entry points for the mediator.
+/// </summary>
+/// <remarks>
+/// Nothing here uses reflection, which is what lets this assembly declare
+/// <c>IsAotCompatible</c> without a single suppression. Discovering handlers by scanning
+/// assemblies, and dispatching to them by closing interfaces at runtime, both live in
+/// <c>KyrolusSous.Mediator.Reflection</c> - a separate package precisely so an application that
+/// never wants them never has the code in its graph.
+/// </remarks>
 public static class MediatorExtensions
 {
-    /// <summary>Handler interfaces where exactly one implementation may claim a given message.</summary>
-    private static readonly HashSet<Type> s_singleHandlerInterfaces =
-    [
-        typeof(IKyrolusRequestHandler<,>),
-        typeof(IKyrolusRequestHandler<>),
-        typeof(IKyrolusQueryHandler<,>),
-        typeof(IKyrolusCommandHandler<,>),
-        typeof(IKyrolusCommandHandler<>),
-        typeof(IKyrolusStreamRequestHandler<,>)
-    ];
-
-    /// <summary>Interfaces where any number of implementations may be registered together.</summary>
-    private static readonly HashSet<Type> s_multiHandlerInterfaces =
-    [
-        typeof(INotificationHandler<>),
-        typeof(IKyrolusPipelineBehavior<,>),
-        typeof(IKyrolusStreamPipelineBehavior<,>),
-        typeof(IKyrolusRequestPreProcessor<>),
-        typeof(IKyrolusRequestPostProcessor<,>),
-        typeof(IKyrolusRequestExceptionAction<,>),
-        typeof(IKyrolusRequestExceptionHandler<,,>)
-    ];
-
     public static void AddKyrolusMediatorSender(this IServiceCollection services)
     {
         services.TryAddScoped<IKyrolusMediatorSender, KyrolusMediatorSender>();
-        services.TryAddSingleton<IMediatorDispatcher, KyrolusReflectionDispatcher>();
+
+        // A placeholder rather than a default implementation. Something has to supply the dispatch,
+        // and both things that can - the generator and the reflection package - replace this
+        // descriptor. Resolving it means neither was set up, and the message says so instead of
+        // letting the container report a missing IMediatorDispatcher.
+        services.TryAddSingleton<IMediatorDispatcher>(static _ => throw new InvalidOperationException(
+            "[KyrolusMediator] No dispatcher is registered. Reference KyrolusSous.Mediator.Generator " +
+            "and call AddKyrolusMediatorGeneratedDispatcher(), or reference " +
+            "KyrolusSous.Mediator.Reflection and call AddKyrolusMediatorReflection()."));
     }
 
     public static void AddKyrolusMediatorPublisher(this IServiceCollection services)
@@ -48,7 +45,9 @@ public static class MediatorExtensions
     public static IServiceCollection UseKyrolusMediatorSequentialNotifications(this IServiceCollection services)
         => services.ReplaceNotificationStrategy<KyrolusSequentialNotificationPublishStrategy>();
 
-    private static IServiceCollection ReplaceNotificationStrategy<TStrategy>(this IServiceCollection services)
+    private static IServiceCollection ReplaceNotificationStrategy<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TStrategy>(
+        this IServiceCollection services)
         where TStrategy : class, IKyrolusNotificationPublishStrategy
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -78,6 +77,11 @@ public static class MediatorExtensions
         var configuration = new KyrolusMediatorConfiguration();
         configure(configuration);
 
+        // Kept in the collection so AddKyrolusMediatorReflection can read the assemblies and
+        // lifetimes it was given. Scanning cannot happen here: it needs reflection, which this
+        // assembly deliberately does not contain.
+        services.TryAddSingleton(configuration);
+
         services.AddKyrolusMediatorSender();
         services.AddKyrolusMediatorPublisher();
 
@@ -91,14 +95,28 @@ public static class MediatorExtensions
 
         RegisterConfiguredBehaviors(services, configuration);
 
-        if (configuration.AssembliesToScan.Count > 0)
-            RegisterKyrolusMediatorHandlers(services, [.. configuration.AssembliesToScan], configuration);
-
         return services;
     }
 
+    /// <summary>
+    /// Registers the behaviors every pipeline gets, as open generics.
+    /// </summary>
+    /// <remarks>
+    /// An open generic registration leaves the container to close the behavior over the request and
+    /// response types the first time one is resolved, and it does that with <c>MakeGenericType</c>.
+    /// An application published ahead of time refuses outright as soon as a type argument is a value
+    /// type - a query returning <c>int</c> is enough - so these are registered only where the
+    /// runtime can still produce code on demand.
+    /// <para>
+    /// The generator emits the same four behaviors closed over every pair it found, and registers
+    /// those instead when this method declines. The two are mutually exclusive on the same
+    /// condition, so exactly one set is ever present and no behavior runs twice.
+    /// </para>
+    /// </remarks>
     private static void AddBuiltInBehaviors(IServiceCollection services)
     {
+        if (!RuntimeFeature.IsDynamicCodeSupported) return;
+
         services.TryAddEnumerable(ServiceDescriptor.Transient(
             typeof(IKyrolusPipelineBehavior<,>),
             typeof(KyrolusRequestExceptionProcessorBehavior<,>)));
@@ -128,106 +146,5 @@ public static class MediatorExtensions
 
         foreach (var (service, implementation) in configuration.OpenStreamBehaviors)
             services.Add(new ServiceDescriptor(service, implementation, configuration.Lifetime));
-    }
-
-    /// <summary>Registers the mediator and scans the given assemblies for handlers.</summary>
-    public static IServiceCollection AddKyrolusMediatorFromAssemblies(this IServiceCollection services, params Assembly[] assemblies)
-    {
-        if (assemblies is null || assemblies.Length == 0)
-            throw new ArgumentException("At least one assembly is required.", nameof(assemblies));
-        return services.AddKyrolusMediator(configuration => configuration.RegisterServicesFromAssemblies(assemblies));
-    }
-
-    private static void RegisterKyrolusMediatorHandlers(
-        IServiceCollection services,
-        Assembly[] assemblies,
-        KyrolusMediatorConfiguration configuration)
-    {
-        // Tracks which implementation already claimed a single-handler service type, so a second
-        // one can be reported with both names instead of silently losing.
-        var claimed = new Dictionary<Type, Type>();
-
-        foreach (var assembly in assemblies)
-        {
-            foreach (var typeInfo in GetLoadableTypes(assembly))
-            {
-                if (!typeInfo.IsClass || typeInfo.IsAbstract) continue;
-
-                var implType = typeInfo.AsType();
-                foreach (var iface in typeInfo.ImplementedInterfaces)
-                {
-                    if (!iface.IsGenericType) continue;
-
-                    var ifaceDef = iface.GetGenericTypeDefinition();
-                    if (s_singleHandlerInterfaces.Contains(ifaceDef))
-                        RegisterHandler(services, iface, ifaceDef, implType, configuration, claimed);
-                    else if (s_multiHandlerInterfaces.Contains(ifaceDef))
-                        RegisterMultiHandler(services, iface, ifaceDef, implType, configuration);
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Enumerates the types an assembly can actually load. One unresolvable dependency would
-    /// otherwise make the entire scan throw.
-    /// </summary>
-    private static IEnumerable<TypeInfo> GetLoadableTypes(Assembly assembly)
-    {
-        try
-        {
-            return assembly.DefinedTypes;
-        }
-        catch (ReflectionTypeLoadException exception)
-        {
-            return exception.Types
-                .Where(type => type is not null)
-                .Select(type => type!.GetTypeInfo());
-        }
-    }
-
-    private static void RegisterHandler(
-        IServiceCollection services,
-        Type iface,
-        Type ifaceDef,
-        Type implType,
-        KyrolusMediatorConfiguration configuration,
-        Dictionary<Type, Type> claimed)
-    {
-        if (implType.ContainsGenericParameters)
-        {
-            services.TryAdd(new ServiceDescriptor(ifaceDef, implType, configuration.Lifetime));
-            return;
-        }
-
-        if (claimed.TryGetValue(iface, out var existing))
-        {
-            if (existing == implType)        return;
-
-            if (configuration.ThrowOnDuplicateRequestHandlers)
-                throw new InvalidOperationException(
-                    $"[KyrolusMediator] Two handlers are registered for {iface}: " +
-                    $"{existing.FullName} and {implType.FullName}. A request must have exactly one handler. " +
-                    $"Remove one, or set {nameof(KyrolusMediatorConfiguration.ThrowOnDuplicateRequestHandlers)} to false to keep the first.");
-            return;
-        }
-        claimed[iface] = implType;
-        services.TryAdd(new ServiceDescriptor(iface, implType, configuration.Lifetime));
-    }
-
-    private static void RegisterMultiHandler(
-        IServiceCollection services,
-        Type iface,
-        Type ifaceDef,
-        Type implType,
-        KyrolusMediatorConfiguration configuration)
-    {
-        if (implType.ContainsGenericParameters)
-        {
-            services.TryAddEnumerable(new ServiceDescriptor(ifaceDef, implType, configuration.Lifetime));
-            return;
-        }
-
-        services.TryAddEnumerable(new ServiceDescriptor(iface, implType, configuration.Lifetime));
     }
 }

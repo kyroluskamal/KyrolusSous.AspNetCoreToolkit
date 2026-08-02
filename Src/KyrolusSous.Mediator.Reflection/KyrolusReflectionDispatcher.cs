@@ -1,8 +1,23 @@
-﻿namespace KyrolusSous.Mediator.Runtime.Implementations;
+﻿using System.Diagnostics.CodeAnalysis;
+
+namespace KyrolusSous.Mediator.Reflection;
 
 /// <summary>
 /// Reflection-based dispatcher used when no generated dispatcher is registered.
 /// </summary>
+/// <remarks>
+/// This is the whole reason the generator exists. Every dispatch here closes a handler interface
+/// with <c>MakeGenericType</c> and calls <c>Handle</c> through a <see cref="MethodInfo"/>, neither
+/// of which an ahead-of-time published application can do. The annotations are on the type rather
+/// than the individual members because there is no safe subset: reaching this class at all means
+/// the generated dispatcher did not replace it.
+/// </remarks>
+[RequiresDynamicCode(
+    "Closes the handler interfaces over the request and response types at runtime. Reference " +
+    "KyrolusSous.Mediator.Generator, which emits a dispatch table and replaces this dispatcher.")]
+[RequiresUnreferencedCode(
+    "Finds each handler's Handle method by name, which trimming cannot see. Reference " +
+    "KyrolusSous.Mediator.Generator, which emits direct calls instead.")]
 public sealed class KyrolusReflectionDispatcher : IMediatorDispatcher
 {
     // Key: (concrete handler type, request type). The request type is part of the key because one

@@ -18,6 +18,11 @@ internal static class TestHost
         services.AddSingleton(recorder);
         services.AddKyrolusMediator(configuration => configure?.Invoke(configuration));
 
+        // These tests exercise the library without the source generator, so the reflection package
+        // is what supplies dispatch. An application using the generator registers its output
+        // instead and never references this.
+        services.AddKyrolusMediatorReflection();
+
         // Request handlers
         services.AddTransient<IKyrolusQueryHandler<Ping, string>, PingHandler>();
         services.AddTransient<IKyrolusRequestHandler<Ping, string>, PingHandler>();
