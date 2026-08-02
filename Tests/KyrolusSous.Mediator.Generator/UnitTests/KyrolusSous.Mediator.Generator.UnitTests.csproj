@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -36,6 +36,7 @@
          compilation the tests build needs metadata references to it, otherwise the generator
          cannot resolve IKyrolusQueryHandler and reports SMG001 instead of generating. -->
     <ProjectReference Include="..\..\..\Src\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\Src\KyrolusSous.Mediator.Runtime\KyrolusSous.Mediator.Runtime.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -30,7 +30,7 @@ public sealed class WiringTests
         }
         """;
 
-    [Fact]
+    [Fact(DisplayName = "The harness runs the generator and its output compiles")]
     public void The_harness_runs_the_generator_and_its_output_compiles()
     {
         var result = GeneratorTestHost.Run(OneHandler);

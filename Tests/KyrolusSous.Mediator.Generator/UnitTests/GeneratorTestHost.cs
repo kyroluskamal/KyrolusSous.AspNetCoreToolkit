@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.Reflection;
 using KyrolusSous.Mediator.Abstractions.Interfaces;
 using Microsoft.CodeAnalysis;
@@ -52,19 +52,19 @@ internal static class GeneratorTestHost
         // reliably do - the compiler can elide it.
         Assembly[] required =
         [
-            typeof(IKyrolusQuery<>).Assembly,     // KyrolusSous.Mediator.Abstractions
-            typeof(IServiceCollection).Assembly   // Microsoft.Extensions.DependencyInjection.Abstractions
+            typeof(IKyrolusQuery<>).Assembly,                                                   // KyrolusSous.Mediator.Abstractions
+            typeof(KyrolusSous.Mediator.Runtime.GeneratorIntegration.KyrolusPipelineWrapperFactory).Assembly, // KyrolusSous.Mediator.Runtime
+            typeof(IServiceCollection).Assembly                                                 // Microsoft.Extensions.DependencyInjection.Abstractions
         ];
 
-        return frameworkAssemblies
+        return [.. frameworkAssemblies
             .Concat(required.Select(assembly => assembly.Location))
             .Concat(AppDomain.CurrentDomain.GetAssemblies()
                 .Where(assembly => !assembly.IsDynamic)
                 .Select(assembly => assembly.Location))
             .Where(location => !string.IsNullOrWhiteSpace(location) && File.Exists(location))
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(location => (MetadataReference)MetadataReference.CreateFromFile(location))
-            .ToImmutableArray();
+            .Select(location => (MetadataReference)MetadataReference.CreateFromFile(location))];
     }
 
     /// <summary>Runs the generator once over <paramref name="source"/>.</summary>
@@ -87,7 +87,10 @@ internal static class GeneratorTestHost
 
         // (3) The driver holds the generator and knows how to run it
         var driver = CSharpGeneratorDriver.Create(
-            generators: [new MediatorGenerator().AsSourceGenerator()],
+            generators: [
+                new MediatorGenerator().AsSourceGenerator(),
+                new MediatorPublisherGenerator().AsSourceGenerator()
+            ],
             additionalTexts: [],
             parseOptions: null,
             optionsProvider: null,
@@ -103,6 +106,40 @@ internal static class GeneratorTestHost
 
         return new GeneratorTestResult(
             resultDriver,
+            outputCompilation,
+            generatorDiagnostics,
+            compilation);
+    }
+
+    /// <summary>Runs the generator without Abstractions assembly references to test SMG001 diagnostic.</summary>
+    public static GeneratorTestResult RunWithoutAbstractions(string source)
+    {
+        var syntaxTree = CSharpSyntaxTree.ParseText(source);
+
+        // Filter out Abstractions assembly
+        var frameworkOnlyReferences = References.Where(r => 
+            !r.Display!.Contains("KyrolusSous.Mediator.Abstractions") &&
+            !r.Display!.Contains("KyrolusSous.Mediator.Runtime")).ToImmutableArray();
+
+        var compilation = CSharpCompilation.Create(
+            assemblyName: "GeneratorTestsWithoutAbstractions",
+            syntaxTrees: [syntaxTree],
+            references: frameworkOnlyReferences,
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        var driver = CSharpGeneratorDriver.Create(
+            generators: [
+                new MediatorGenerator().AsSourceGenerator(),
+                new MediatorPublisherGenerator().AsSourceGenerator()
+            ]);
+
+        driver.RunGeneratorsAndUpdateCompilation(
+            compilation,
+            out var outputCompilation,
+            out var generatorDiagnostics);
+
+        return new GeneratorTestResult(
+            driver,
             outputCompilation,
             generatorDiagnostics,
             compilation);

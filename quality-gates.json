@@ -11,6 +11,7 @@
     "packages": {
       "KyrolusSous.Repositories.EF.Runtime": { "line": 95, "branch": 85 },
       "KyrolusSous.Repositories.EF.Abstractions": { "line": 65, "branch": 55 },
+      "KyrolusSous.Mediator.Generator": { "line": 65, "branch": 45 },
       "KyrolusSous.Caching.Abstractions": { "line": 10, "branch": 10 }
     }
   },

@@ -34,6 +34,7 @@ this table is generated from it by `scripts/update-docs.py`.
 | **Overall** | 68% | 64% |
 | `KyrolusSous.Repositories.EF.Runtime` | 95% | 85% |
 | `KyrolusSous.Repositories.EF.Abstractions` | 65% | 55% |
+| `KyrolusSous.Mediator.Generator` | 65% | 45% |
 | `KyrolusSous.Caching.Abstractions` | 10% | 10% |
 
 <!-- END:GENERATED:thresholds -->
@@ -67,9 +68,9 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Marten.Runtime - FullPipeline | integration | 235 | postgres, redis | yes |
 | Logging | unit | 28 | none | yes |
 | Mediator - Unit | unit | 62 | none | yes |
-| Mediator.Generator - Unit | unit | 1 | none | yes |
+| Mediator.Generator - Unit | unit | 12 | none | yes |
 | Swagger - Integration | integration | 10 | none | yes |
-| **Total** | | **1075** | | |
+| **Total** | | **1086** | | |
 
 <!-- END:GENERATED:test-suites -->
 
