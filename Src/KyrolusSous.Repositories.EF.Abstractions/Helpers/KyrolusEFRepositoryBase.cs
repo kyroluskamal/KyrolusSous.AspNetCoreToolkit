@@ -112,10 +112,14 @@ public class KyrolusEFRepositoryBase<TEntity>
 
     private static bool TryConvertGuid(object value, out object? result)
     {
-        if (value is string s && Guid.TryParse(s, out var parsed))
+        if (value is string s)
         {
-            result = parsed;
-            return true;
+            if (Guid.TryParse(s, out var parsed))
+            {
+                result = parsed;
+                return true;
+            }
+            throw new FormatException($"Value '{s}' is not a valid Guid.");
         }
 
         result = null;
@@ -124,14 +128,18 @@ public class KyrolusEFRepositoryBase<TEntity>
 
     private static bool TryConvertDateTimeOffset(object value, out object? result)
     {
-        if (value is string s && DateTimeOffset.TryParse(
-                s,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.RoundtripKind,
-                out var parsed))
+        if (value is string s)
         {
-            result = parsed;
-            return true;
+            if (DateTimeOffset.TryParse(
+                    s,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind,
+                    out var parsed))
+            {
+                result = parsed;
+                return true;
+            }
+            throw new FormatException($"Value '{s}' is not a valid DateTimeOffset.");
         }
 
         result = null;
@@ -140,14 +148,18 @@ public class KyrolusEFRepositoryBase<TEntity>
 
     private static bool TryConvertDateTime(object value, out object? result)
     {
-        if (value is string s && DateTime.TryParse(
-                s,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.RoundtripKind,
-                out var parsed))
+        if (value is string s)
         {
-            result = parsed;
-            return true;
+            if (DateTime.TryParse(
+                    s,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind,
+                    out var parsed))
+            {
+                result = parsed;
+                return true;
+            }
+            throw new FormatException($"Value '{s}' is not a valid DateTime.");
         }
 
         result = null;
@@ -156,10 +168,14 @@ public class KyrolusEFRepositoryBase<TEntity>
 
     private static bool TryConvertTimeSpan(object value, out object? result)
     {
-        if (value is string s && TimeSpan.TryParse(s, CultureInfo.InvariantCulture, out var parsed))
+        if (value is string s)
         {
-            result = parsed;
-            return true;
+            if (TimeSpan.TryParse(s, CultureInfo.InvariantCulture, out var parsed))
+            {
+                result = parsed;
+                return true;
+            }
+            throw new FormatException($"Value '{s}' is not a valid TimeSpan.");
         }
 
         result = null;

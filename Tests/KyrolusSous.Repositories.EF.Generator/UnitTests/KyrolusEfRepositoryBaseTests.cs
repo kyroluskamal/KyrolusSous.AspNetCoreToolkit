@@ -410,20 +410,13 @@ public class KyrolusEfRepositoryBaseTests
         result.ShouldBe(SampleStatus.Active);
     }
 
-    [Fact(DisplayName = "ConvertToType throws when a string key cannot be converted")]
+    [Fact(DisplayName = "ConvertToType throws FormatException when a string key cannot be converted to Guid")]
     public void ConvertToType_UnparseableGuid_Throws()
     {
-        // Documents current behaviour, which is worth knowing: TryConvertGuid declines, but every
-        // string is IConvertible, so TryConvertConvertible still calls Convert.ChangeType - and
-        // that throws. The `return value` fallback at the end of ConvertToType is therefore
-        // unreachable for strings.
-        //
-        // Practical consequence: a malformed key in a route ("/users/not-a-guid") surfaces as an
-        // InvalidCastException rather than a clean 400.
         var exception = Should.Throw<TargetInvocationException>(
             () => Invoke("ConvertToType", "not-a-guid", typeof(Guid)));
 
-        exception.InnerException.ShouldBeOfType<InvalidCastException>();
+        exception.InnerException.ShouldBeOfType<FormatException>();
     }
 
     private enum SampleStatus

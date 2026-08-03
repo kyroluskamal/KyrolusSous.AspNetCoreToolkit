@@ -28,7 +28,7 @@ Within a phase the order is loose - what matters is not starting a phase before 
 | 1 | `Mediator.Abstractions` | ✅ | 51 types documented. Behaviour covered via `Mediator.Tests` |
 | 2 | `Mediator.Runtime` | ✅ | 62 tests. 3 defects fixed, pipeline cached |
 | 3 | `Mediator.Reflection` | 🔧 | Extracted from Runtime. Covered indirectly - no suite of its own yet |
-| 4 | `Mediator.Generator` | 🔧 | 14 tests incl. incremental caching. 2 defects fixed |
+| 4 | `Mediator.Generator` | ✅ | 14 tests incl. incremental caching. Roslyn component properties verified |
 | 5 | `Validation.Abstractions` | ⚡ | |
 | 6 | `Validation.Runtime` | ⚡ | |
 | 7 | `Validation.DataAnnotations` | ⬜ | |
@@ -53,7 +53,7 @@ Within a phase the order is loose - what matters is not starting a phase before 
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 24 | `Repositories.EF.Abstractions` | 🔧 | Gate 65%/55%. **Open finding:** an unparseable route key throws `InvalidCastException` instead of yielding a 400 - see `ConvertToType_UnparseableGuid_Throws` |
+| 24 | `Repositories.EF.Abstractions` | ✅ | Gate 65%/55%. Unparseable route keys fixed to throw FormatException (yielding 400 instead of 500) |
 | 25 | `Repositories.EF.Runtime` | ✅ | 475 integration + 106 unit. Gate 95%/85% |
 | 26 | `Repositories.EF.Generator` | ✅ | 133 integration + 67 unit |
 | 27 | `Repositories.EF.Cache.Distributed` | ⬜ | 220 lines |
