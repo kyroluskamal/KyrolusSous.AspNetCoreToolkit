@@ -33,7 +33,7 @@
   <ItemGroup>
     <!-- Lets the tests assert on what the configuration recorded, without widening the
          public surface just for testing. -->
-    <InternalsVisibleTo Include="KyrolusSous.Mediator.Tests" />
+    <InternalsVisibleTo Include="KyrolusSous.Mediator.Runtime.UnitTests" />
     <!-- The reflection package closes the pipeline wrapper types on demand. They stay internal:
          making them public to serve one sibling assembly would put an implementation detail in
          the public API of every consumer. -->

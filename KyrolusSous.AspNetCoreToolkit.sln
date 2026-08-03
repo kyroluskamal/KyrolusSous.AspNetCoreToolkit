@@ -195,6 +195,14 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Reflec
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Aot", "Tests\KyrolusSous.Mediator.Aot\KyrolusSous.Mediator.Aot.csproj", "{0B47D7B2-EC65-4F58-9F87-FE662E8B3B66}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "KyrolusSous.Mediator.Runtime", "KyrolusSous.Mediator.Runtime", "{A9D43DBB-4502-1156-36D6-8FF5833A0666}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Runtime.UnitTests", "Tests\KyrolusSous.Mediator.Runtime\UnitTests\KyrolusSous.Mediator.Runtime.UnitTests.csproj", "{E2B22D25-80C0-476B-BED1-BBED83DC02F5}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "KyrolusSous.Mediator.Runtime", "KyrolusSous.Mediator.Runtime", "{CFF80E68-813C-7F29-62E1-6FE60FBCE537}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Runtime.IntegrationTests", "Tests\KyrolusSous.Mediator.Runtime\IntegrationTests\KyrolusSous.Mediator.Runtime.IntegrationTests.csproj", "{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1141,6 +1149,30 @@ Global
 		{0B47D7B2-EC65-4F58-9F87-FE662E8B3B66}.Release|x64.Build.0 = Release|Any CPU
 		{0B47D7B2-EC65-4F58-9F87-FE662E8B3B66}.Release|x86.ActiveCfg = Release|Any CPU
 		{0B47D7B2-EC65-4F58-9F87-FE662E8B3B66}.Release|x86.Build.0 = Release|Any CPU
+		{E2B22D25-80C0-476B-BED1-BBED83DC02F5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E2B22D25-80C0-476B-BED1-BBED83DC02F5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E2B22D25-80C0-476B-BED1-BBED83DC02F5}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E2B22D25-80C0-476B-BED1-BBED83DC02F5}.Debug|x64.Build.0 = Debug|Any CPU
+		{E2B22D25-80C0-476B-BED1-BBED83DC02F5}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E2B22D25-80C0-476B-BED1-BBED83DC02F5}.Debug|x86.Build.0 = Debug|Any CPU
+		{E2B22D25-80C0-476B-BED1-BBED83DC02F5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E2B22D25-80C0-476B-BED1-BBED83DC02F5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E2B22D25-80C0-476B-BED1-BBED83DC02F5}.Release|x64.ActiveCfg = Release|Any CPU
+		{E2B22D25-80C0-476B-BED1-BBED83DC02F5}.Release|x64.Build.0 = Release|Any CPU
+		{E2B22D25-80C0-476B-BED1-BBED83DC02F5}.Release|x86.ActiveCfg = Release|Any CPU
+		{E2B22D25-80C0-476B-BED1-BBED83DC02F5}.Release|x86.Build.0 = Release|Any CPU
+		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Debug|x64.Build.0 = Debug|Any CPU
+		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Debug|x86.Build.0 = Debug|Any CPU
+		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Release|x64.ActiveCfg = Release|Any CPU
+		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Release|x64.Build.0 = Release|Any CPU
+		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Release|x86.ActiveCfg = Release|Any CPU
+		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1240,6 +1272,9 @@ Global
 		{1E15C73C-1977-49DD-8FE5-38CC80371FBD} = {0CE49EF2-5606-F02C-CAFF-CB091FBDAE60}
 		{43EA220B-73D0-46C4-9F85-0C0671238486} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{0B47D7B2-EC65-4F58-9F87-FE662E8B3B66} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{A9D43DBB-4502-1156-36D6-8FF5833A0666} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{E2B22D25-80C0-476B-BED1-BBED83DC02F5} = {A9D43DBB-4502-1156-36D6-8FF5833A0666}
+		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022} = {CFF80E68-813C-7F29-62E1-6FE60FBCE537}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {7773D041-01E7-4025-B7D6-BBEAA5D84FCE}

@@ -78,9 +78,16 @@
       "ci": true
     },
     {
-      "name": "Mediator - Unit",
-      "project": "Tests/KyrolusSous.Mediator.Tests/KyrolusSous.Mediator.Tests.csproj",
+      "name": "Mediator.Runtime - Unit",
+      "project": "Tests/KyrolusSous.Mediator.Runtime/UnitTests/KyrolusSous.Mediator.Runtime.UnitTests.csproj",
       "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "Mediator.Runtime - Integration",
+      "project": "Tests/KyrolusSous.Mediator.Runtime/IntegrationTests/KyrolusSous.Mediator.Runtime.IntegrationTests.csproj",
+      "kind": "integration",
       "services": [],
       "ci": true
     },
