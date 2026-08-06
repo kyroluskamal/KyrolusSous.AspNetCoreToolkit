@@ -22,4 +22,8 @@
     <ProjectReference Include="..\KyrolusSous.Mediator.Runtime\KyrolusSous.Mediator.Runtime.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="KyrolusSous.Mediator.Reflection.UnitTests" />
+  </ItemGroup>
+
 </Project>

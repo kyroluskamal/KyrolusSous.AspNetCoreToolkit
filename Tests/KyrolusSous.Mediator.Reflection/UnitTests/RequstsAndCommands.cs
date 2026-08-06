@@ -86,10 +86,32 @@ internal class TestQueryHandler : IKyrolusQueryHandler<TestQuery, string>
 {
     public Task<string> Handle(TestQuery query, CancellationToken cancellationToken) => Task.FromResult(query.Value);
 }
-internal class TestQueryHandlerWithRequestHandler : IKyrolusRequestHandler<TestQuery, string>
+
+internal class DuplicateTestQuery : IKyrolusQuery<string> { }
+
+internal class DuplicateTestQueryHandler1 : IKyrolusQueryHandler<DuplicateTestQuery, string>
 {
-    public Task<string> Handle(TestQuery query, CancellationToken cancellationToken) => Task.FromResult(query.Value);
+    public Task<string> Handle(DuplicateTestQuery query, CancellationToken cancellationToken) => Task.FromResult("1");
 }
+
+internal class DuplicateTestQueryHandler2 : IKyrolusQueryHandler<DuplicateTestQuery, string>
+{
+    public Task<string> Handle(DuplicateTestQuery query, CancellationToken cancellationToken) => Task.FromResult("2");
+}
+
+#region Notification messages
+internal record TestNotification(string Message) : INotification;
+
+internal class TestNotificationHandler1 : INotificationHandler<TestNotification>
+{
+    public Task Handle(TestNotification notification, CancellationToken cancellationToken) => Task.CompletedTask;
+}
+
+internal class TestNotificationHandler2 : INotificationHandler<TestNotification>
+{
+    public Task Handle(TestNotification notification, CancellationToken cancellationToken) => Task.CompletedTask;
+}
+#endregion
 
 internal class ExplicitHandleRequest : IKyrolusRequest<string> { }
 
@@ -105,5 +127,10 @@ internal class ThrowingRequestHandler : IKyrolusRequestHandler<ThrowingRequest, 
 {
     public Task<string> Handle(ThrowingRequest request, CancellationToken cancellationToken)
         => throw new InvalidOperationException("Custom Handler Error");
+}
+
+internal class TestQueryHandlerWithRequestHandler : IKyrolusRequestHandler<TestQuery, string>
+{
+    public Task<string> Handle(TestQuery query, CancellationToken cancellationToken) => Task.FromResult(query.Value);
 }
 

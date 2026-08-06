@@ -83,7 +83,7 @@ public sealed class KyrolusReflectionDispatcher : IMediatorDispatcher
     {
         if (request is IKyrolusCommandBase)
             return typeof(IKyrolusCommandHandler<,>).MakeGenericType(requestType, typeof(TResponse));
-            
+
         if (request is IKyrolusQueryBase)
             return typeof(IKyrolusQueryHandler<,>).MakeGenericType(requestType, typeof(TResponse));
 
@@ -119,11 +119,14 @@ public sealed class KyrolusReflectionDispatcher : IMediatorDispatcher
         }
         catch (TargetInvocationException exception) when (exception.InnerException is not null)
         {
-            ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
-            return ThrowUnreachable();
+            throw Rethrow(exception.InnerException);
         }
+    }
 
-        [ExcludeFromCodeCoverage]
-        static TResult ThrowUnreachable() => throw null!;
+    [ExcludeFromCodeCoverage(Justification = "When I used throw; to make the compiler does not complain about missing return, it was not covered becasue it is unreachable. This method is only used to rethrow an exception and preserve the stack trace.")]
+    private static Exception Rethrow(Exception inner)
+    {
+        ExceptionDispatchInfo.Capture(inner).Throw();
+        return inner;
     }
 }
