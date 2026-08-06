@@ -142,3 +142,35 @@ internal abstract class AbstractTestQueryHandler : IKyrolusQueryHandler<TestQuer
     public abstract Task<string> Handle(TestQuery query, CancellationToken cancellationToken);
 }
 
+internal class TestTypeLoadExceptionAssembly : Assembly
+{
+    public override IEnumerable<TypeInfo> DefinedTypes
+    {
+        get
+        {
+            throw new ReflectionTypeLoadException(
+                classes: [typeof(TestQueryHandler), null],
+                exceptions: [new Exception("Missing dependency assembly")]);
+        }
+    }
+}
+
+internal class OpenGenericRequestHandler<TRequest, TResponse> : IKyrolusRequestHandler<TRequest, TResponse>
+    where TRequest : IKyrolusRequest<TResponse>
+{
+    public Task<TResponse> Handle(TRequest request, CancellationToken cancellationToken) => Task.FromResult(default(TResponse)!);
+}
+
+internal class OpenGenericNotificationHandler<TNotification> : INotificationHandler<TNotification>
+    where TNotification : INotification
+{
+    public Task Handle(TNotification notification, CancellationToken cancellationToken) => Task.CompletedTask;
+}
+
+internal interface IBaseTestQueryHandler : IKyrolusQueryHandler<TestQuery, string> { }
+
+internal class DuplicateSelfQueryHandler : IBaseTestQueryHandler, IKyrolusQueryHandler<TestQuery, string>
+{
+    public Task<string> Handle(TestQuery query, CancellationToken cancellationToken) => Task.FromResult(query.Value);
+}
+

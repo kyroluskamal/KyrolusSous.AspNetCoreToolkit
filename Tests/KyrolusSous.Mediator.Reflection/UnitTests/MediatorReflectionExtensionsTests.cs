@@ -271,5 +271,64 @@ public class MediatorReflectionExtensionsTests
 
         abstractHandlers.ShouldBeEmpty();
     }
+
+    [Fact(DisplayName = "AddKyrolusMediatorReflection should handle ReflectionTypeLoadException during assembly scanning")]
+    public void AddKyrolusMediatorReflection_ShouldHandleReflectionTypeLoadException_DuringAssemblyScanning()
+    {
+        // Arrange
+        var serviceCollection = new ServiceCollection();
+        var customAssembly = new TestTypeLoadExceptionAssembly();
+
+        // Act
+        serviceCollection.AddKyrolusMediatorFromAssemblies(c => c.ThrowOnDuplicateRequestHandlers = false, customAssembly);
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+
+        // Assert
+        var handler = serviceProvider.GetService<IKyrolusQueryHandler<TestQuery, string>>();
+        handler.ShouldNotBeNull();
+        handler.ShouldBeOfType<TestQueryHandler>();
+    }
+
+    [Fact(DisplayName = "AddKyrolusMediatorReflection should register open generic request handlers")]
+    public void AddKyrolusMediatorReflection_ShouldRegisterOpenGenericRequestHandlers()
+    {
+        // Arrange
+        var serviceCollection = new ServiceCollection();
+        var assemblies = new[] { typeof(MediatorReflectionExtensionsTests).Assembly };
+
+        // Act
+        serviceCollection.AddKyrolusMediatorFromAssemblies(c => c.ThrowOnDuplicateRequestHandlers = false, assemblies);
+
+        // Assert
+        var descriptor = serviceCollection.FirstOrDefault(sd => sd.ServiceType == typeof(IKyrolusRequestHandler<,>));
+        descriptor.ShouldNotBeNull();
+        descriptor.ImplementationType.ShouldBe(typeof(OpenGenericRequestHandler<,>));
+    }
+
+    [Fact(DisplayName = "AddKyrolusMediatorReflection should register open generic notification handlers")]
+    public void AddKyrolusMediatorReflection_ShouldRegisterOpenGenericNotificationHandlers()
+    {
+        // Arrange
+        var serviceCollection = new ServiceCollection();
+        var assemblies = new[] { typeof(MediatorReflectionExtensionsTests).Assembly };
+
+        // Act
+        serviceCollection.AddKyrolusMediatorFromAssemblies(c => c.ThrowOnDuplicateRequestHandlers = false, assemblies);
+
+        // Assert
+        var descriptor = serviceCollection.FirstOrDefault(sd => sd.ServiceType == typeof(INotificationHandler<>) && sd.ImplementationType == typeof(OpenGenericNotificationHandler<>));
+        descriptor.ShouldNotBeNull();
+    }
+
+    [Fact(DisplayName = "AddKyrolusMediatorReflection should ignore duplicate self claimed interfaces without throwing")]
+    public void AddKyrolusMediatorReflection_ShouldIgnoreDuplicateSelfClaimedInterfaces()
+    {
+        // Arrange
+        var serviceCollection = new ServiceCollection();
+        var assemblies = new[] { typeof(MediatorReflectionExtensionsTests).Assembly };
+
+        // Act & Assert (DuplicateSelfQueryHandler implements IKyrolusQueryHandler twice via hierarchy, should not throw)
+        serviceCollection.AddKyrolusMediatorFromAssemblies(c => c.ThrowOnDuplicateRequestHandlers = false, assemblies);
+    }
     #endregion
 }
