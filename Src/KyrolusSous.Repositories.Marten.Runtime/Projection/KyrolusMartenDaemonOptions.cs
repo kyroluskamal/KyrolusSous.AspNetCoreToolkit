@@ -6,7 +6,7 @@ namespace KyrolusSous.Repositories.Marten.Runtime.Projection;
 public sealed class KyrolusMartenDaemonOptions
 {
     /// <summary>
-    /// Optional customization of <see cref="DaemonSettings"/> before the daemon is built.
+    /// Optional customization of daemon settings before the daemon is built.
     /// </summary>
     public Action<object>? ConfigureSettings { get; set; }
 
