@@ -5,3 +5,4 @@ global using System.Runtime.CompilerServices;
 global using System.Reflection;
 global using System.Collections.Concurrent;
 global using KyrolusSous.Mediator.Runtime.Config;
+[assembly: System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]

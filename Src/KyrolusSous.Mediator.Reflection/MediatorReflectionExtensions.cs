@@ -70,12 +70,28 @@ public static class MediatorReflectionExtensions
     /// <summary>Registers the mediator with reflection enabled, scanning the given assemblies.</summary>
     [RequiresDynamicCode("Reflection-based dispatch closes generic types at runtime.")]
     [RequiresUnreferencedCode("Scanning discovers handlers by name and interface, which trimming may remove.")]
-    public static IServiceCollection AddKyrolusMediatorFromAssemblies(this IServiceCollection services, params Assembly[] assemblies)
+    public static IServiceCollection AddKyrolusMediatorFromAssemblies(
+        this IServiceCollection services,
+        params Assembly[] assemblies)
+        => services.AddKyrolusMediatorFromAssemblies(_ => { }, assemblies);
+
+    /// <summary>Registers the mediator with reflection enabled, scanning the given assemblies with custom configuration.</summary>
+    [RequiresDynamicCode("Reflection-based dispatch closes generic types at runtime.")]
+    [RequiresUnreferencedCode("Scanning discovers handlers by name and interface, which trimming may remove.")]
+    public static IServiceCollection AddKyrolusMediatorFromAssemblies(
+        this IServiceCollection services,
+        Action<KyrolusMediatorConfiguration> configure,
+        params Assembly[] assemblies)
     {
+        ArgumentNullException.ThrowIfNull(configure);
         if (assemblies is null || assemblies.Length == 0)
             throw new ArgumentException("At least one assembly is required.", nameof(assemblies));
 
-        services.AddKyrolusMediator(configuration => configuration.RegisterServicesFromAssemblies(assemblies));
+        services.AddKyrolusMediator(configuration =>
+        {
+            configure(configuration);
+            configuration.RegisterServicesFromAssemblies(assemblies);
+        });
         return services.AddKyrolusMediatorReflection();
     }
 

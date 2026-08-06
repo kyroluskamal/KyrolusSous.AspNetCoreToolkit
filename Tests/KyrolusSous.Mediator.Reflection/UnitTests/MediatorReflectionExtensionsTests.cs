@@ -201,10 +201,8 @@ public class MediatorReflectionExtensionsTests
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
-        Assembly[]? assemblies = null;
-
         // Act & Assert
-        var exception = Should.Throw<ArgumentException>(() => serviceCollection.AddKyrolusMediatorFromAssemblies(assemblies!));
+        var exception = Should.Throw<ArgumentException>(() => serviceCollection.AddKyrolusMediatorFromAssemblies((Assembly[])null!));
         exception.ParamName.ShouldBe("assemblies");
     }   
     [Fact(DisplayName = "AddKyrolusMediatorFromAssemblies should throw ArgumentException when assemblies is empty")]
@@ -212,11 +210,31 @@ public class MediatorReflectionExtensionsTests
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
-        var assemblies = Array.Empty<Assembly>();
-
         // Act & Assert
-        var exception = Should.Throw<ArgumentException>(() => serviceCollection.AddKyrolusMediatorFromAssemblies(assemblies));
+        var exception = Should.Throw<ArgumentException>(() => serviceCollection.AddKyrolusMediatorFromAssemblies([]));
         exception.ParamName.ShouldBe("assemblies");
+    }
+    [Fact(DisplayName = "AddKyrolusMediatorFromAssemblies should register handlers from assemblies")]
+    public void AddKyrolusMediatorFromAssemblies_ShouldRegisterHandlersFromAssemblies()
+    {
+        // Arrange
+        var serviceCollection = new ServiceCollection();
+        var assemblies = new[] { typeof(MediatorReflectionExtensionsTests).Assembly };
+
+        // Act
+        serviceCollection.AddKyrolusMediatorFromAssemblies(config => config.ThrowOnDuplicateRequestHandlers = false, typeof(MediatorReflectionExtensionsTests).Assembly);
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+
+        // Assert
+        var queryHandlers = serviceProvider.GetServices<IKyrolusQueryHandler<TestQuery, string>>().ToList();
+        queryHandlers.Count.ShouldBe(1);
+        serviceProvider.GetService<IKyrolusQueryHandler<TestQuery, string>>().ShouldBeOfType<TestQueryHandler>();
+        var commandHandlers = serviceProvider.GetServices<IKyrolusCommandHandler<TestCommand>>().ToList();
+        commandHandlers.Count.ShouldBe(1);
+        serviceProvider.GetService<IKyrolusPipelineWrapperSource>().ShouldBeOfType<ReflectionPipelineWrapperSource>();
+        serviceProvider.GetService<IKyrolusNotificationDispatchSource>().ShouldBeOfType<ReflectionNotificationDispatchSource>();
+        serviceProvider.GetService<IKyrolusRequestExceptionDispatchSource>().ShouldBeOfType<ReflectionRequestExceptionDispatchSource>();
+        
     }
     #endregion
 }

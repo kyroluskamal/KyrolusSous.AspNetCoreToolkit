@@ -77,6 +77,7 @@ internal class TestCommand_With_Respone_And_IKyrolusRequest_Handler : IKyrolusRe
     => Task.FromResult(request.Value);
 }
 #endregion
+#region Query messages
 internal class TestQuery : IKyrolusQuery<string>
 {
     public string Value { get; set; } = "This is a test Query";
@@ -98,7 +99,7 @@ internal class DuplicateTestQueryHandler2 : IKyrolusQueryHandler<DuplicateTestQu
 {
     public Task<string> Handle(DuplicateTestQuery query, CancellationToken cancellationToken) => Task.FromResult("2");
 }
-
+#endregion
 #region Notification messages
 internal record TestNotification(string Message) : INotification;
 
