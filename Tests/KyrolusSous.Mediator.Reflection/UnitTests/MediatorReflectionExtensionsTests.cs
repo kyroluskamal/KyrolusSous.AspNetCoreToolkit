@@ -234,7 +234,23 @@ public class MediatorReflectionExtensionsTests
         serviceProvider.GetService<IKyrolusPipelineWrapperSource>().ShouldBeOfType<ReflectionPipelineWrapperSource>();
         serviceProvider.GetService<IKyrolusNotificationDispatchSource>().ShouldBeOfType<ReflectionNotificationDispatchSource>();
         serviceProvider.GetService<IKyrolusRequestExceptionDispatchSource>().ShouldBeOfType<ReflectionRequestExceptionDispatchSource>();
-        
+    }
+
+    [Fact(DisplayName = "AddKyrolusMediatorFromAssemblies default overload should register dispatcher and sources cleanly")]
+    public void AddKyrolusMediatorFromAssemblies_DefaultOverload_ShouldRegisterDispatcherAndSourcesCleanly()
+    {
+        // Arrange
+        var serviceCollection = new ServiceCollection();
+
+        // Act (Invokes default overload in line 76 without config Action)
+        serviceCollection.AddKyrolusMediatorFromAssemblies(typeof(KyrolusReflectionDispatcher).Assembly);
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+
+        // Assert
+        serviceProvider.GetService<IMediatorDispatcher>().ShouldBeOfType<KyrolusReflectionDispatcher>();
+        serviceProvider.GetService<IKyrolusPipelineWrapperSource>().ShouldBeOfType<ReflectionPipelineWrapperSource>();
+        serviceProvider.GetService<IKyrolusNotificationDispatchSource>().ShouldBeOfType<ReflectionNotificationDispatchSource>();
+        serviceProvider.GetService<IKyrolusRequestExceptionDispatchSource>().ShouldBeOfType<ReflectionRequestExceptionDispatchSource>();
     }
     #endregion
 }
