@@ -82,14 +82,9 @@ public static class MediatorReflectionExtensions
     private static KyrolusMediatorConfiguration? FindConfiguration(IServiceCollection services)
     {
         for (var i = services.Count - 1; i >= 0; i--)
-        {
             if (services[i].ServiceType == typeof(KyrolusMediatorConfiguration)
                 && services[i].ImplementationInstance is KyrolusMediatorConfiguration configuration)
-            {
                 return configuration;
-            }
-        }
-
         return null;
     }
 

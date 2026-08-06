@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 
 namespace KyrolusSous.Mediator.Reflection;
 
@@ -25,23 +25,23 @@ public sealed class KyrolusReflectionDispatcher : IMediatorDispatcher
     // handler alone would return the Handle overload of whichever request was dispatched first.
     private static readonly ConcurrentDictionary<(Type HandlerType, Type RequestType), MethodInfo> s_handleMethodCache = new();
 
-    public Task<TResponse> DispatchRequestAsync<TResponse>(object request, IServiceProvider sp, CancellationToken ct)
+    public Task<TResponse> DispatchRequestAsync<TResponse>(object request, IServiceProvider serviceProvider, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(sp);
+        ArgumentNullException.ThrowIfNull(serviceProvider);
 
         var requestType = request.GetType();
         var handlerInterfaceType = ResolveRequestHandlerInterface<TResponse>(request, requestType);
-        var handler = sp.GetService(handlerInterfaceType) ?? throw new InvalidOperationException($"[KyrolusMediator] No handler registered for {requestType.FullName} returning {typeof(TResponse).FullName}.");
+        var handler = serviceProvider.GetService(handlerInterfaceType) ?? throw new InvalidOperationException($"[KyrolusMediator] No handler registered for {requestType.FullName} returning {typeof(TResponse).FullName}.");
 
         var handleMethod = GetHandleMethod(handler.GetType(), requestType);
         return Invoke<Task<TResponse>>(handleMethod, handler, request, ct);
     }
 
-    public Task DispatchCommandAsync(object command, IServiceProvider sp, CancellationToken ct)
+    public Task DispatchCommandAsync(object command, IServiceProvider serviceProvider, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(command);
-        ArgumentNullException.ThrowIfNull(sp);
+        ArgumentNullException.ThrowIfNull(serviceProvider);
 
         var requestType = command.GetType();
         Type? handlerInterfaceType;
@@ -50,13 +50,13 @@ public sealed class KyrolusReflectionDispatcher : IMediatorDispatcher
         if (command is IKyrolusCommand)
         {
             handlerInterfaceType = typeof(IKyrolusCommandHandler<>).MakeGenericType(requestType);
-            handler = sp.GetService(handlerInterfaceType);
+            handler = serviceProvider.GetService(handlerInterfaceType);
         }
 
         if (handler is null && command is IKyrolusRequest<Unit>)
         {
             handlerInterfaceType = typeof(IKyrolusRequestHandler<>).MakeGenericType(requestType);
-            handler = sp.GetService(handlerInterfaceType);
+            handler = serviceProvider.GetService(handlerInterfaceType);
         }
 
         if (handler is null)
@@ -66,14 +66,14 @@ public sealed class KyrolusReflectionDispatcher : IMediatorDispatcher
         return Invoke<Task>(handleMethod, handler, command, ct);
     }
 
-    public IAsyncEnumerable<TResponse> DispatchStreamAsync<TResponse>(object request, IServiceProvider sp, CancellationToken ct)
+    public IAsyncEnumerable<TResponse> DispatchStreamAsync<TResponse>(object request, IServiceProvider serviceProvider, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(sp);
+        ArgumentNullException.ThrowIfNull(serviceProvider);
 
         var requestType = request.GetType();
         var handlerInterfaceType = typeof(IKyrolusStreamRequestHandler<,>).MakeGenericType(requestType, typeof(TResponse));
-        var handler = sp.GetService(handlerInterfaceType) ?? throw new InvalidOperationException($"[KyrolusMediator] No stream handler registered for {requestType.FullName} producing {typeof(TResponse).FullName}.");
+        var handler = serviceProvider.GetService(handlerInterfaceType) ?? throw new InvalidOperationException($"[KyrolusMediator] No stream handler registered for {requestType.FullName} producing {typeof(TResponse).FullName}.");
 
         var handleMethod = GetHandleMethod(handler.GetType(), requestType);
         return Invoke<IAsyncEnumerable<TResponse>>(handleMethod, handler, request, ct);
@@ -120,7 +120,10 @@ public sealed class KyrolusReflectionDispatcher : IMediatorDispatcher
         catch (TargetInvocationException exception) when (exception.InnerException is not null)
         {
             ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
-            throw;
+            return ThrowUnreachable();
         }
+
+        [ExcludeFromCodeCoverage]
+        static TResult ThrowUnreachable() => throw null!;
     }
 }
