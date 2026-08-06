@@ -135,3 +135,10 @@ internal class TestQueryHandlerWithRequestHandler : IKyrolusRequestHandler<TestQ
     public Task<string> Handle(TestQuery query, CancellationToken cancellationToken) => Task.FromResult(query.Value);
 }
 
+internal interface IDummyTestInterface { }
+
+internal abstract class AbstractTestQueryHandler : IKyrolusQueryHandler<TestQuery, string>
+{
+    public abstract Task<string> Handle(TestQuery query, CancellationToken cancellationToken);
+}
+

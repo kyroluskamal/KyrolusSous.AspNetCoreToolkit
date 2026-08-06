@@ -252,5 +252,24 @@ public class MediatorReflectionExtensionsTests
         serviceProvider.GetService<IKyrolusNotificationDispatchSource>().ShouldBeOfType<ReflectionNotificationDispatchSource>();
         serviceProvider.GetService<IKyrolusRequestExceptionDispatchSource>().ShouldBeOfType<ReflectionRequestExceptionDispatchSource>();
     }
+
+    [Fact(DisplayName = "AddKyrolusMediatorReflection should ignore abstract classes and interfaces during assembly scanning")]
+    public void AddKyrolusMediatorReflection_ShouldIgnoreAbstractClassesAndInterfaces_DuringAssemblyScanning()
+    {
+        // Arrange
+        var serviceCollection = new ServiceCollection();
+        var assemblies = new[] { typeof(MediatorReflectionExtensionsTests).Assembly };
+
+        // Act
+        serviceCollection.AddKyrolusMediatorFromAssemblies(c => c.ThrowOnDuplicateRequestHandlers = false, assemblies);
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+
+        // Assert
+        var abstractHandlers = serviceProvider.GetServices<IKyrolusQueryHandler<TestQuery, string>>()
+            .Where(h => h.GetType().IsAbstract)
+            .ToList();
+
+        abstractHandlers.ShouldBeEmpty();
+    }
     #endregion
 }
