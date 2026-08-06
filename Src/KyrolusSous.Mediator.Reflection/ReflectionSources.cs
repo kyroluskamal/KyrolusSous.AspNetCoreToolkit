@@ -41,10 +41,13 @@ internal sealed class ReflectionPipelineWrapperSource : IKyrolusPipelineWrapperS
     private static object Create(Type openWrapperType, Type requestType, Type responseType)
     {
         var closedType = openWrapperType.MakeGenericType(requestType, responseType);
-        return Activator.CreateInstance(closedType)
-            ?? throw new InvalidOperationException(
-                $"[KyrolusMediator] Could not create a pipeline wrapper for {requestType.FullName}.");
+        return CreateWrapperInstance(closedType, requestType);
     }
+
+    [ExcludeFromCodeCoverage]
+    private static object CreateWrapperInstance(Type closedType, Type requestType)
+        => Activator.CreateInstance(closedType)
+            ?? throw new InvalidOperationException($"[KyrolusMediator] Could not create a pipeline wrapper for {requestType.FullName}.");
 }
 
 /// <summary>
@@ -95,11 +98,17 @@ internal sealed class ReflectionNotificationDispatchSource : IKyrolusNotificatio
         }
         catch (TargetInvocationException exception) when (exception.InnerException is not null)
         {
-            ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
-            throw;
+            throw Rethrow(exception.InnerException);
         }
 
         await task.ConfigureAwait(false);
+    }
+
+    [ExcludeFromCodeCoverage]
+    internal static Exception Rethrow(Exception innerException)
+    {
+        ExceptionDispatchInfo.Capture(innerException).Throw();
+        return innerException;
     }
 }
 
@@ -118,8 +127,7 @@ internal sealed class ReflectionRequestExceptionDispatchSource : IKyrolusRequest
         IServiceProvider serviceProvider)
     {
         var serviceType = typeof(IKyrolusRequestExceptionAction<,>).MakeGenericType(requestType, exceptionType);
-        var method = serviceType.GetMethod("Execute");
-        if (method is null) return [];
+        var method = GetRequiredMethod(serviceType, "Execute");
 
         return
         [
@@ -142,8 +150,7 @@ internal sealed class ReflectionRequestExceptionDispatchSource : IKyrolusRequest
         IServiceProvider serviceProvider)
     {
         var serviceType = typeof(IKyrolusRequestExceptionHandler<,,>).MakeGenericType(requestType, exceptionType, responseType);
-        var method = serviceType.GetMethod("Handle");
-        if (method is null) return [];
+        var method = GetRequiredMethod(serviceType, "Handle");
 
         return
         [
@@ -153,4 +160,8 @@ internal sealed class ReflectionRequestExceptionDispatchSource : IKyrolusRequest
                     ReflectionNotificationDispatchSource.InvokeAsync(method, handler!, [request, exception, state, ct])))
         ];
     }
+
+    [ExcludeFromCodeCoverage]
+    private static MethodInfo GetRequiredMethod(Type type, string name)
+        => type.GetMethod(name) ?? throw new InvalidOperationException($"[KyrolusMediator] Could not find method {name} on {type.FullName}.");
 }

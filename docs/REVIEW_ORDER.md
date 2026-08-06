@@ -27,7 +27,7 @@ Within a phase the order is loose - what matters is not starting a phase before 
 |---|---|---|---|
 | 1 | `Mediator.Abstractions` | ✅ | 51 types documented. Behaviour covered via `Mediator.Tests` |
 | 2 | `Mediator.Runtime` | ✅ | 62 tests. 3 defects fixed, pipeline cached |
-| 3 | `Mediator.Reflection` | ✅ | 23 unit tests covering dispatch, exception unwrapping, Assembly scanning, and caching |
+| 3 | `Mediator.Reflection` | ✅ | 52 unit tests covering dispatch, exception unwrapping, Assembly scanning, open generics, and caching (100% coverage) |
 | 4 | `Mediator.Generator` | ✅ | 14 tests incl. incremental caching. Roslyn component properties verified |
 | 5 | `Validation.Abstractions` | ⚡ | |
 | 6 | `Validation.Runtime` | ⚡ | |

@@ -174,3 +174,40 @@ internal class DuplicateSelfQueryHandler : IBaseTestQueryHandler, IKyrolusQueryH
     public Task<string> Handle(TestQuery query, CancellationToken cancellationToken) => Task.FromResult(query.Value);
 }
 
+internal class MultipleResponseRequest : IKyrolusRequest<string>, IKyrolusRequest<int> { }
+
+internal class NoResponseRequest { }
+
+internal class ExplicitNotificationHandler : INotificationHandler<TestNotification>
+{
+    Task INotificationHandler<TestNotification>.Handle(TestNotification notification, CancellationToken cancellationToken)
+        => Task.CompletedTask;
+}
+
+internal class ThrowingNotificationHandler : INotificationHandler<TestNotification>
+{
+    public Task Handle(TestNotification notification, CancellationToken cancellationToken)
+        => throw new InvalidOperationException("Notification Handler Error");
+}
+
+internal class TestRequestExceptionAction : IKyrolusRequestExceptionAction<TestRequest, InvalidOperationException>
+{
+    public bool Executed { get; set; }
+    public Task Execute(TestRequest request, InvalidOperationException exception, CancellationToken cancellationToken)
+    {
+        Executed = true;
+        return Task.CompletedTask;
+    }
+}
+
+internal class TestRequestExceptionHandler : IKyrolusRequestExceptionHandler<TestRequest, InvalidOperationException, string>
+{
+    public bool Handled { get; set; }
+    public Task Handle(TestRequest request, InvalidOperationException exception, KyrolusRequestExceptionHandlerState<string> state, CancellationToken cancellationToken)
+    {
+        Handled = true;
+        state.SetHandled("HandledByTestException");
+        return Task.CompletedTask;
+    }
+}
+
