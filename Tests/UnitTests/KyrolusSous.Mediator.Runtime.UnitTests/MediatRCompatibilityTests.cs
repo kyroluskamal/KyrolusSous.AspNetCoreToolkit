@@ -1,6 +1,3 @@
-
-using KyrolusSous.Mediator.Abstractions.Compatibility;
-
 namespace KyrolusSous.Mediator.Runtime.UnitTests;
 
 /// <summary>
@@ -9,7 +6,7 @@ namespace KyrolusSous.Mediator.Runtime.UnitTests;
 /// </summary>
 public sealed class MediatRCompatibilityTests
 {
-    [Fact]
+    [Fact(DisplayName = "MediatR Send alias works for request with response")]
     public async Task Send_alias_works_for_a_request_with_a_response()
     {
         var recorder = new Recorder();
@@ -21,7 +18,7 @@ public sealed class MediatRCompatibilityTests
         response.ShouldBe("pong:hi");
     }
 
-    [Fact]
+    [Fact(DisplayName = "MediatR Send alias works for request without response")]
     public async Task Send_alias_works_for_a_request_without_a_response()
     {
         var recorder = new Recorder();
@@ -34,7 +31,7 @@ public sealed class MediatRCompatibilityTests
         recorder.Entries.ShouldContain($"deleted:{id}");
     }
 
-    [Fact]
+    [Fact(DisplayName = "MediatR Send alias works for boxed request object")]
     public async Task Send_alias_works_for_a_boxed_request()
     {
         await using var provider = TestHost.Standard(new Recorder()).BuildServiceProvider();
@@ -44,7 +41,7 @@ public sealed class MediatRCompatibilityTests
         (await mediator.Send(boxed)).ShouldBe("pong:boxed");
     }
 
-    [Fact]
+    [Fact(DisplayName = "MediatR Publish alias dispatches notification to handlers")]
     public async Task Publish_alias_reaches_the_handlers()
     {
         var recorder = new Recorder();
@@ -57,7 +54,7 @@ public sealed class MediatRCompatibilityTests
         recorder.Entries.ShouldContain("second:x");
     }
 
-    [Fact]
+    [Fact(DisplayName = "MediatR CreateStream alias yields every streamed item")]
     public async Task CreateStream_alias_yields_every_item()
     {
         await using var provider = TestHost.Standard(new Recorder()).BuildServiceProvider();
@@ -72,11 +69,7 @@ public sealed class MediatRCompatibilityTests
         items.ShouldBe([1, 2, 3]);
     }
 
-    /// <summary>
-    /// A request and handler declared entirely in MediatR's vocabulary - <c>IRequest</c> and
-    /// <c>IRequestHandler</c> - dispatched through <c>Send</c>.
-    /// </summary>
-    [Fact]
+    [Fact(DisplayName = "Request declared MediatR style with IRequest is handled via Send")]
     public async Task A_request_declared_the_MediatR_way_is_handled()
     {
         var services = new ServiceCollection();
@@ -90,8 +83,7 @@ public sealed class MediatRCompatibilityTests
         (await mediator.Send(new PortedRequest("ported"))).ShouldBe("handled:ported");
     }
 
-    /// <summary>A notification handler declared the MediatR way.</summary>
-    [Fact]
+    [Fact(DisplayName = "Notification declared MediatR style with INotification is handled via Publish")]
     public async Task A_notification_declared_the_MediatR_way_is_handled()
     {
         var recorder = new Recorder();
@@ -109,7 +101,7 @@ public sealed class MediatRCompatibilityTests
         recorder.Entries.ShouldContain("ported-notification:news");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Compatibility MediatR interfaces resolve to KyrolusMediator instance")]
     public void Compatibility_interfaces_all_resolve_to_the_mediator()
     {
         var services = new ServiceCollection();
@@ -119,6 +111,21 @@ public sealed class MediatRCompatibilityTests
 
         provider.GetService<IMediator>().ShouldNotBeNull();
         provider.GetService<IKyrolusMediator>().ShouldNotBeNull();
+    }
+
+    [Fact(DisplayName = "MediatR style IPipelineBehavior open behavior runs successfully")]
+    public async Task MediatR_style_open_behavior_runs()
+    {
+        var recorder = new Recorder();
+        var services = TestHost.Standard(recorder, configuration =>
+            configuration.AddOpenBehavior(typeof(MediatRStyleBehavior<,>)));
+
+        await using var provider = services.BuildServiceProvider();
+        var mediator = provider.GetRequiredService<IKyrolusMediator>();
+
+        await mediator.SendAsync(new Ping("hi"));
+
+        recorder.Entries.ShouldContain("mediatr-style");
     }
 }
 
@@ -140,5 +147,16 @@ public sealed class PortedNotificationHandler(Recorder recorder) : INotification
     {
         recorder.Add($"ported-notification:{notification.What}");
         return Task.CompletedTask;
+    }
+}
+
+public sealed class MediatRStyleBehavior<TRequest, TResponse>(Recorder recorder)
+    : IPipelineBehavior<TRequest, TResponse>
+    where TRequest : notnull
+{
+    public Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+    {
+        recorder.Add("mediatr-style");
+        return next(cancellationToken);
     }
 }
