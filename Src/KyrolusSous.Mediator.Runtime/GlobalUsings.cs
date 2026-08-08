@@ -7,5 +7,4 @@ global using KyrolusSous.Mediator.Runtime.Implementations;
 global using System.Collections.Concurrent;
 global using Microsoft.Extensions.DependencyInjection.Extensions;
 global using System.Runtime.CompilerServices;
-global using System.Runtime.ExceptionServices;
 global using System.Diagnostics.CodeAnalysis;

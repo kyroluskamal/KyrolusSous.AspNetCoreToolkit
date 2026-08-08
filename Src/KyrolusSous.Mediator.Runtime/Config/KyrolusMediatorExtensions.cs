@@ -1,5 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-
 namespace KyrolusSous.Mediator.Runtime.Config;
 
 /// <summary>
@@ -29,7 +27,7 @@ public static class MediatorExtensions
     }
 
     public static void AddKyrolusMediatorPublisher(this IServiceCollection services)
-    {
+    {       
         services.TryAddScoped<IKyrolusMediatorPublisher, KyrolusMediatorPublisher>();
         services.TryAddSingleton<IKyrolusNotificationPublishStrategy, KyrolusParallelNotificationPublishStrategy>();
     }

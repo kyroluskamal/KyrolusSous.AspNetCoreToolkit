@@ -2,20 +2,6 @@ namespace KyrolusSous.Mediator.Runtime.UnitTests;
 
 public sealed class KyrolusMediatorConfigurationTests
 {
-    private static ServiceCollection Scanned(Action<KyrolusMediatorConfiguration>? configure = null)
-    {
-        var services = new ServiceCollection();
-        services.AddSingleton(new Recorder());
-        services.AddKyrolusMediator(configuration =>
-        {
-            configuration.RegisterServicesFromAssemblyContaining<Ping>();
-            configuration.ThrowOnDuplicateRequestHandlers = false;
-            configure?.Invoke(configuration);
-        });
-        services.AddKyrolusMediatorReflection();
-        return services;
-    }
-
     #region Register Services From Assembly 
     [Fact(DisplayName = "RegisterServicesFromAssembly should throw ArgumentNullException when given null assembly")]
     public void RegisterServicesFromAssembly_should_throw_when_given_null_assembly()
@@ -80,7 +66,7 @@ public sealed class KyrolusMediatorConfigurationTests
     [Fact(DisplayName = "Handler lifetime can be configured via KyrolusMediatorConfiguration")]
     public void Handler_lifetime_is_configurable()
     {
-        var services = Scanned(configuration => configuration.Lifetime = ServiceLifetime.Scoped);
+        var services = MediatorRuntimeTestsHelper.Scanned(configuration => configuration.Lifetime = ServiceLifetime.Scoped);
         var descriptor = services.First(d => d.ServiceType == typeof(IKyrolusQueryHandler<Ping, string>));
         descriptor.Lifetime.ShouldBe(ServiceLifetime.Scoped);
     }
@@ -88,7 +74,7 @@ public sealed class KyrolusMediatorConfigurationTests
     [Fact(DisplayName = "Handler lifetime defaults to Transient when not specified")]
     public void Handler_lifetime_defaults_to_transient()
     {
-        var services = Scanned();
+        var services = MediatorRuntimeTestsHelper.Scanned();
         var descriptor = services.First(d => d.ServiceType == typeof(IKyrolusQueryHandler<Ping, string>));
         descriptor.Lifetime.ShouldBe(ServiceLifetime.Transient);
     }
@@ -96,7 +82,7 @@ public sealed class KyrolusMediatorConfigurationTests
     [Fact(DisplayName = "Mediator lifetime can be configured via KyrolusMediatorConfiguration")]
     public void Mediator_lifetime_is_configurable()
     {
-        var services = Scanned(configuration => configuration.MediatorLifetime = ServiceLifetime.Singleton);
+        var services = MediatorRuntimeTestsHelper.Scanned(configuration => configuration.MediatorLifetime = ServiceLifetime.Singleton);
         var descriptor = services.First(d => d.ServiceType == typeof(IKyrolusMediator));
         descriptor.Lifetime.ShouldBe(ServiceLifetime.Singleton);
     }
@@ -104,7 +90,7 @@ public sealed class KyrolusMediatorConfigurationTests
     [Fact(DisplayName = "Mediator lifetime defaults to Scoped when not specified")]
     public void Mediator_lifetime_defaults_to_scoped()
     {
-        var services = Scanned();
+        var services = MediatorRuntimeTestsHelper. Scanned();
         var descriptor = services.First(d => d.ServiceType == typeof(IKyrolusMediator));
         descriptor.Lifetime.ShouldBe(ServiceLifetime.Scoped);
     }

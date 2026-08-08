@@ -5,4 +5,5 @@ global using Shouldly;
 global using Xunit;
 global using Microsoft.Extensions.DependencyInjection.Extensions;
 global using System.Collections.Concurrent;
+global using KyrolusSous.Mediator.Runtime.Implementations;
 [assembly: System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]

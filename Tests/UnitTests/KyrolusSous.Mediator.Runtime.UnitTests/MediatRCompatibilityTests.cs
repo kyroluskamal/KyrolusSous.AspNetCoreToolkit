@@ -127,6 +127,20 @@ public sealed class MediatRCompatibilityTests
 
         recorder.Entries.ShouldContain("mediatr-style");
     }
+
+    [Fact(DisplayName = "MediatR style IPipelineBehavior is resolved from container as IKyrolusPipelineBehavior")]
+    public void MediatR_style_behavior_is_resolved_as_IKyrolusPipelineBehavior()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(new Recorder());
+        services.AddKyrolusMediator(configuration => configuration.AddOpenBehavior(typeof(MediatRStyleBehavior<,>)));
+
+        using var provider = services.BuildServiceProvider();
+
+        // Resolving IKyrolusPipelineBehavior returns MediatRStyleBehavior because IPipelineBehavior inherits IKyrolusPipelineBehavior!
+        var behaviors = provider.GetServices<IKyrolusPipelineBehavior<Ping, string>>().ToList();
+        behaviors.ShouldContain(b => b.GetType() == typeof(MediatRStyleBehavior<Ping, string>));
+    }
 }
 
 // --- Types written the MediatR way ---
