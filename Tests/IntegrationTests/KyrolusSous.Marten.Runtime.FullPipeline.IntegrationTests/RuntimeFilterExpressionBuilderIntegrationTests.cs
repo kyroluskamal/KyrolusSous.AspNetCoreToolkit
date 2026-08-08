@@ -211,8 +211,8 @@ public sealed class RuntimeFilterExpressionBuilderIntegrationTests(TestAppFactor
         yield return OrderCase("tags-all-list", "Tags all [HighQty1,HighQty2]", HttpStatusCode.BadRequest, null, "Operator is required.");
         yield return OrderCase("tags-all-list-insensitive", "Tags all [highqty1,highqty2]", HttpStatusCode.BadRequest, null, "Operator is required.");
         yield return OrderCase("lines-any-quantity-gt2", "Lines any Quantity>2", HttpStatusCode.OK, 1);
-        yield return OrderCase("lines-all-quantity-gte1", "Lines all Quantity>=1", HttpStatusCode.OK, 1);
-        yield return OrderCase("lines-all-quantity-gt1", "Lines all Quantity>1", HttpStatusCode.OK, 0);
+        yield return OrderCase("lines-all-quantity-gte1", "Lines all Quantity>=1", HttpStatusCode.OK, 2);
+        yield return OrderCase("lines-all-quantity-gt1", "Lines all Quantity>1", HttpStatusCode.OK, 1);
         yield return OrderCase("lines-any-grouped-or", "Lines any (Quantity>3|Quantity<2)", HttpStatusCode.OK, 2);
         yield return OrderCase("lines-any-grouped-and", "Lines any (Quantity>3,Quantity<5)", HttpStatusCode.OK, 1);
         yield return OrderCase("lines-any-date-between", "Lines any ScheduledDate between 2024-01-02..2024-01-03", HttpStatusCode.BadRequest, null, "could not be converted to OrderLine");

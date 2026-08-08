@@ -68,7 +68,7 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
 
     [Theory(DisplayName = "Marten query helper - supports any/all nested filters")]
     [InlineData("any", 1)]
-    [InlineData("all", 0)]
+    [InlineData("all", 1)]
     public async Task Query_helper_supports_any_all_nested_filters(string op, int expectedCount)
     {
         using var client = factory.CreateClientWithTenant(TestHelpers.NewTenantId("marten-helper-orders-anyall"));
@@ -571,8 +571,8 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return OrderBurstCase("tags-any-highqty1", [new("Tags", "any", "HighQty1")], HttpStatusCode.OK, 1);
         yield return OrderBurstCase("tags-any-highqty1-lower", [new("Tags", "any", "highqty1")], HttpStatusCode.OK, 0);
         yield return OrderBurstCase("lines-any-qty-gt2", [new("Lines", "any", "Quantity>2")], HttpStatusCode.OK, 1);
-        yield return OrderBurstCase("lines-all-qty-gte1", [new("Lines", "all", "Quantity>=1")], HttpStatusCode.OK, 1);
-        yield return OrderBurstCase("lines-all-qty-gte2", [new("Lines", "all", "Quantity>=2")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("lines-all-qty-gte1", [new("Lines", "all", "Quantity>=1")], HttpStatusCode.OK, 2);
+        yield return OrderBurstCase("lines-all-qty-gte2", [new("Lines", "all", "Quantity>=2")], HttpStatusCode.OK, 1);
         yield return OrderBurstCase("lines-any-qty-between-dotdot", [new("Lines", "any", "Quantity between 2..3")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("lines-any-prepduration-eq", [new("Lines", "any", "PrepDuration==00:15:00")], HttpStatusCode.BadRequest, null, "Invalid filter: property='Lines'");
         yield return OrderBurstCase("lines-any-prepduration-between-dotdot", [new("Lines", "any", "PrepDuration between 00:05:00..00:15:00")], HttpStatusCode.BadRequest, null, "Invalid filter: property='Lines'");

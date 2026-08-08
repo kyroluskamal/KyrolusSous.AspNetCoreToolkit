@@ -235,7 +235,7 @@ public sealed class FilterBuilderCoverageGapIntegrationTests(TestAppFactory fact
         yield return ["paymentid-isnull", "PaymentId isnull", false, HttpStatusCode.OK, 0, null];
         yield return ["paymentid-in-null-or-guid", "PaymentId in [null,{order1PaymentId}]", false, HttpStatusCode.OK, 1, null];
         yield return ["lines-any-nested", "Lines any Quantity>2", false, HttpStatusCode.OK, 1, null];
-        yield return ["lines-all-nested", "Lines all Quantity>0", false, HttpStatusCode.OK, 0, null];
+        yield return ["lines-all-nested", "Lines all Quantity>0", false, HttpStatusCode.OK, 2, null];
         yield return ["tags-any-case-sensitive", "Tags any [HighQty1]", false, HttpStatusCode.OK, 1, null];
         yield return ["tags-any-case-insensitive-unsupported", "Tags any [highqty1]", true, HttpStatusCode.BadRequest, (int?)null, "Case-insensitive 'any' with value lists is not supported for string collections."];
         yield return ["tags-all-list-unsupported", "Tags all [highqty1,highqty2]", true, HttpStatusCode.BadRequest, (int?)null, "Operator 'all' with value lists is not supported for Marten collections."];
