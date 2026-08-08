@@ -3,7 +3,7 @@
 
   "coverage": {
     "report": "TestResults/coverage-run/Coverage/coverage.cobertura.xml",
-    "target": "Tests/KyrolusSous.Repositories.EF.Runtime/IntegrationTests/IntegrationTests.postgressql/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.csproj",
+    "target": "Tests/IntegrationTests/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgresql/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.csproj",
     "overall": {
       "line": 68,
       "branch": 64
@@ -19,7 +19,7 @@
   "testSuites": [
     {
       "name": "EF.Runtime - PostgreSQL",
-      "project": "Tests/KyrolusSous.Repositories.EF.Runtime/IntegrationTests/IntegrationTests.postgressql/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.csproj",
+      "project": "Tests/IntegrationTests/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgresql/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.csproj",
       "kind": "integration",
       "services": ["postgres"],
       "ci": true,
@@ -27,30 +27,14 @@
     },
     {
       "name": "EF.Runtime - Unit",
-      "project": "Tests/KyrolusSous.Repositories.EF.Runtime/UnitTests/KyrolusSous.Repositories.EF.Runtime.UnitTests.csproj",
+      "project": "Tests/UnitTests/KyrolusSous.Repositories.EF.Runtime.UnitTests/KyrolusSous.Repositories.EF.Runtime.UnitTests.csproj",
       "kind": "unit",
       "services": [],
       "ci": true
     },
     {
-      "name": "EF.Runtime - SQLite",
-      "project": "Tests/KyrolusSous.Repositories.EF.Runtime/IntegrationTests/IntegrationTests.SQLlite/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.SQLlite.csproj",
-      "kind": "integration",
-      "services": [],
-      "ci": true,
-      "notes": "Placeholder suite - no real assertions yet."
-    },
-    {
-      "name": "EF.Runtime - SQL Server",
-      "project": "Tests/KyrolusSous.Repositories.EF.Runtime/IntegrationTests/IntegrationTests.SQLSever/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.SQLSever.csproj",
-      "kind": "integration",
-      "services": [],
-      "ci": true,
-      "notes": "Placeholder suite - add a mssql service to `services` once real tests land."
-    },
-    {
       "name": "EF.Generator - Integration",
-      "project": "Tests/KyrolusSous.Repositories.EF.Generator/IntegrationTests/KyrolusSous.Repositories.EF.Generator.IntegrationTests.csproj",
+      "project": "Tests/IntegrationTests/KyrolusSous.Repositories.EF.Generator.IntegrationTests/KyrolusSous.Repositories.EF.Generator.IntegrationTests.csproj",
       "kind": "integration",
       "services": [],
       "ci": true,
@@ -58,56 +42,49 @@
     },
     {
       "name": "EF.Generator - Unit",
-      "project": "Tests/KyrolusSous.Repositories.EF.Generator/UnitTests/KyrolusSous.Repositories.EF.Generator.UnitTests.csproj",
+      "project": "Tests/UnitTests/KyrolusSous.Repositories.EF.Generator.UnitTests/KyrolusSous.Repositories.EF.Generator.UnitTests.csproj",
       "kind": "unit",
       "services": [],
       "ci": true
     },
     {
       "name": "Marten.Runtime - FullPipeline",
-      "project": "Tests/KyrolusSous.Marten.Runtime.FullPipeline.Integration/KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests/KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests.csproj",
+      "project": "Tests/IntegrationTests/KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests/KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests.csproj",
       "kind": "integration",
       "services": ["postgres", "redis"],
       "ci": true
     },
     {
       "name": "Logging",
-      "project": "Tests/KyrolusSous.Logging.Tests/KyrolusSous.Logging.Tests/KyrolusSous.Logging.Tests.csproj",
+      "project": "Tests/UnitTests/KyrolusSous.Logging.UnitTests/KyrolusSous.Logging.Tests.csproj",
       "kind": "unit",
       "services": [],
       "ci": true
     },
     {
       "name": "Mediator.Runtime - Unit",
-      "project": "Tests/KyrolusSous.Mediator.Runtime/UnitTests/KyrolusSous.Mediator.Runtime.UnitTests.csproj",
+      "project": "Tests/UnitTests/KyrolusSous.Mediator.Runtime.UnitTests/KyrolusSous.Mediator.Runtime.UnitTests.csproj",
       "kind": "unit",
       "services": [],
       "ci": true
     },
     {
-      "name": "Mediator.Runtime - Integration",
-      "project": "Tests/KyrolusSous.Mediator.Runtime/IntegrationTests/KyrolusSous.Mediator.Runtime.IntegrationTests.csproj",
-      "kind": "integration",
-      "services": [],
-      "ci": true
-    },
-    {
       "name": "Mediator.Generator - Unit",
-      "project": "Tests/KyrolusSous.Mediator.Generator/UnitTests/KyrolusSous.Mediator.Generator.UnitTests.csproj",
+      "project": "Tests/UnitTests/KyrolusSous.Mediator.Generator.UnitTests/KyrolusSous.Mediator.Generator.UnitTests.csproj",
       "kind": "unit",
       "services": [],
       "ci": true
     },
     {
       "name": "Mediator.Reflection - Unit",
-      "project": "Tests/KyrolusSous.Mediator.Reflection/UnitTests/KyrolusSous.Mediator.Reflection.UnitTests.csproj",
+      "project": "Tests/UnitTests/KyrolusSous.Mediator.Reflection.UnitTests/KyrolusSous.Mediator.Reflection.UnitTests.csproj",
       "kind": "unit",
       "services": [],
       "ci": true
     },
     {
       "name": "Swagger - Integration",
-      "project": "Tests/KyrolusSous.Swagger.Tests/KyrolusSous.Swagger.IntegrationTests/KyrolusSous.Swagger.IntegrationTests.csproj",
+      "project": "Tests/IntegrationTests/KyrolusSous.Swagger.IntegrationTests/KyrolusSous.Swagger.IntegrationTests.csproj",
       "kind": "integration",
       "services": [],
       "ci": true

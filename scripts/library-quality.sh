@@ -30,8 +30,8 @@ EOF
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-SQLITE_PROJECT="Tests/KyrolusSous.Repositories.EF.Runtime/IntegrationTests/IntegrationTests.SQLlite/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.SQLlite.csproj"
-SQLSERVER_PROJECT="Tests/KyrolusSous.Repositories.EF.Runtime/IntegrationTests/IntegrationTests.SQLSever/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.SQLSever.csproj"
+SQLITE_PROJECT="Tests/IntegrationTests/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.SQLlite/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.SQLlite.csproj"
+SQLSERVER_PROJECT="Tests/IntegrationTests/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.SQLSever/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.SQLSever.csproj"
 
 CONFIG_PATH="$REPO_ROOT/quality-gates.json"
 TARGET=""

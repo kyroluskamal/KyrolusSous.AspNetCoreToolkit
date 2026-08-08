@@ -143,7 +143,7 @@ The codebase is largely AI-generated. These patterns keep recurring:
 
 ```bash
 # One suite
-dotnet test Tests/<suite>/<suite>.csproj
+dotnet test Tests/UnitTests/<suite>.UnitTests/<suite>.UnitTests.csproj
 
 # One class or one test
 dotnet test <project> --filter "FullyQualifiedName~ClassName"

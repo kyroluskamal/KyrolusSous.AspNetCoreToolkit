@@ -25,15 +25,15 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Swagger", "Src\
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "KyrolusSous.Swagger.Tests", "KyrolusSous.Swagger.Tests", "{C12847B0-E22A-5036-E177-801BB6ACC509}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Swagger.TestApp", "Tests\KyrolusSous.Swagger.Tests\KyrolusSous.Swagger.TestApp\KyrolusSous.Swagger.TestApp.csproj", "{278A0495-49C0-46E9-950D-9DA2EE521F53}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Swagger.TestApp", "Tests\IntegrationTests\KyrolusSous.Swagger.TestApp\KyrolusSous.Swagger.TestApp.csproj", "{278A0495-49C0-46E9-950D-9DA2EE521F53}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Swagger.IntegrationTests", "Tests\KyrolusSous.Swagger.Tests\KyrolusSous.Swagger.IntegrationTests\KyrolusSous.Swagger.IntegrationTests.csproj", "{7893DA7E-8ADC-4A5D-94EC-BE29D985EFF9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Swagger.IntegrationTests", "Tests\IntegrationTests\KyrolusSous.Swagger.IntegrationTests\KyrolusSous.Swagger.IntegrationTests.csproj", "{7893DA7E-8ADC-4A5D-94EC-BE29D985EFF9}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "KyrolusSous.Logging.Tests", "KyrolusSous.Logging.Tests", "{ECA7CFA7-416B-F053-3AA6-A85E7B6C5192}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Logging.Tests", "Tests\KyrolusSous.Logging.Tests\KyrolusSous.Logging.Tests\KyrolusSous.Logging.Tests.csproj", "{46BE61F3-BBC6-4753-AA55-76BC05C723B9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Logging.Tests", "Tests\UnitTests\KyrolusSous.Logging.UnitTests\KyrolusSous.Logging.Tests.csproj", "{46BE61F3-BBC6-4753-AA55-76BC05C723B9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Logging.TestApp", "Tests\KyrolusSous.Logging.Tests\KyrolusSous.Logging.TestApp\KyrolusSous.Logging.TestApp.csproj", "{666C1E91-F1F6-4977-AD54-33FA238CF644}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Logging.TestApp", "Tests\IntegrationTests\KyrolusSous.Logging.TestApp\KyrolusSous.Logging.TestApp.csproj", "{666C1E91-F1F6-4977-AD54-33FA238CF644}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Abstractions", "Src\KyrolusSous.Repositories.EF.Abstractions\KyrolusSous.Repositories.EF.Abstractions.csproj", "{9E021341-6D25-4772-A20E-8CC424D75C61}"
 EndProject
@@ -43,11 +43,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "KyrolusSous.Repositories.EF.Generator", "KyrolusSous.Repositories.EF.Generator", "{AB1C8B42-AD1F-0441-3767-EE6586587EA3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Generator.UnitTests", "Tests\KyrolusSous.Repositories.EF.Generator\UnitTests\KyrolusSous.Repositories.EF.Generator.UnitTests.csproj", "{22B9A1B2-CF6F-4AF1-A7D2-BD6E772D735A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Generator.UnitTests", "Tests\UnitTests\KyrolusSous.Repositories.EF.Generator.UnitTests\KyrolusSous.Repositories.EF.Generator.UnitTests.csproj", "{22B9A1B2-CF6F-4AF1-A7D2-BD6E772D735A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Generator.TestApp", "Tests\KyrolusSous.Repositories.EF.Generator\TestApp\KyrolusSous.Repositories.EF.Generator.TestApp.csproj", "{64284399-B47F-4753-9F9D-01C1997D109C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Generator.TestApp", "Tests\IntegrationTests\KyrolusSous.Repositories.EF.Generator.TestApp\KyrolusSous.Repositories.EF.Generator.TestApp.csproj", "{64284399-B47F-4753-9F9D-01C1997D109C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Generator.IntegrationTests", "Tests\KyrolusSous.Repositories.EF.Generator\IntegrationTests\KyrolusSous.Repositories.EF.Generator.IntegrationTests.csproj", "{58F50052-5DB4-4096-98DE-C6099D9A2B88}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Generator.IntegrationTests", "Tests\IntegrationTests\KyrolusSous.Repositories.EF.Generator.IntegrationTests\KyrolusSous.Repositories.EF.Generator.IntegrationTests.csproj", "{58F50052-5DB4-4096-98DE-C6099D9A2B88}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.Marten.Runtime", "Src\KyrolusSous.Repositories.Marten.Runtime\KyrolusSous.Repositories.Marten.Runtime.csproj", "{1EEC4764-75B9-45EE-993D-520A8949254D}"
 EndProject
@@ -109,7 +109,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.Flue
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.Generator", "Src\KyrolusSous.Validation.Generator\KyrolusSous.Validation.Generator.csproj", "{BD74543A-F979-4318-9A59-DC51E6D9A753}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Caching.Benchmarks", "Tests\KyrolusSous.Caching.Benchmarks\KyrolusSous.Caching.Benchmarks.csproj", "{58CC2A80-2BC8-4ADE-8D2D-DCADBFA39E60}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Caching.Benchmarks", "Tests\Benchmarks\KyrolusSous.Caching.Benchmarks\KyrolusSous.Caching.Benchmarks.csproj", "{58CC2A80-2BC8-4ADE-8D2D-DCADBFA39E60}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.Abstractions", "Src\KyrolusSous.DataProtection.Abstractions\KyrolusSous.DataProtection.Abstractions.csproj", "{82228C4D-1D35-431F-805B-92DF0ECFE48E}"
 EndProject
@@ -147,67 +147,43 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "KyrolusSous.Repositories.EF
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "IntegrationTests", "IntegrationTests", "{8DEB10AC-654C-1DFC-0322-F69C854DBE81}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "TestApp.SQLServer", "TestApp.SQLServer", "{F78429CE-BF92-16A3-1FE8-7005C6C4D379}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "TestApp.SQLlite", "TestApp.SQLlite", "{44064FA0-0F13-5789-0B53-521B5CF5E28B}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestApp.SQLlite", "Tests\KyrolusSous.Repositories.EF.Runtime\IntegrationTests\TestApp.SQLlite\TestApp.SQLlite.csproj", "{C964FFC5-AC97-4B84-AA41-D6342CD2CDF5}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "TestApp.postgressql", "TestApp.postgressql", "{3F031F97-6E3F-3AB0-4583-D3D1AD80DFDE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestApp.postgresql", "Tests\KyrolusSous.Repositories.EF.Runtime\IntegrationTests\TestApp.postgresql\TestApp.postgresql.csproj", "{FD1D7B7B-6293-2DEE-B54B-5D6FF676AF75}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestApp.SQLServer", "Tests\KyrolusSous.Repositories.EF.Runtime\IntegrationTests\TestApp.SQLServer\TestApp.SQLServer.csproj", "{21FC2479-3BA7-4251-89FA-F4A9830F937A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestApp.postgresql", "Tests\IntegrationTests\KyrolusSous.Repositories.EF.Runtime.TestApp.postgresql\TestApp.postgresql.csproj", "{FD1D7B7B-6293-2DEE-B54B-5D6FF676AF75}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "IntegrationTests.postgressql", "IntegrationTests.postgressql", "{5B659782-274B-D480-B148-DB1EE6C69F3B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql", "Tests\KyrolusSous.Repositories.EF.Runtime\IntegrationTests\IntegrationTests.postgressql\KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.csproj", "{5AD3D016-2E6B-4B43-85B3-554C56B4C486}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "IntegrationTests.SQLSever", "IntegrationTests.SQLSever", "{4E162AA3-A6A7-4406-FF80-6BCD9CDDF5BD}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "IntegrationTests.SQLlite", "IntegrationTests.SQLlite", "{A417F501-7BD2-EFBD-28BF-85BD00CC23BD}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Runtime.IntegrationTests.SQLlite", "Tests\KyrolusSous.Repositories.EF.Runtime\IntegrationTests\IntegrationTests.SQLlite\KyrolusSous.Repositories.EF.Runtime.IntegrationTests.SQLlite.csproj", "{C1C4A9DB-F02B-4330-98D1-0F3E2AFF0BDA}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Runtime.IntegrationTests.SQLSever", "Tests\KyrolusSous.Repositories.EF.Runtime\IntegrationTests\IntegrationTests.SQLSever\KyrolusSous.Repositories.EF.Runtime.IntegrationTests.SQLSever.csproj", "{255958F7-F5FC-4F33-B1C1-71A31CB2AE3C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql", "Tests\IntegrationTests\KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgresql\KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.csproj", "{5AD3D016-2E6B-4B43-85B3-554C56B4C486}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "UnitTests", "UnitTests", "{D231E709-B61E-F909-333A-D48DD31FD69F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Runtime.UnitTests", "Tests\KyrolusSous.Repositories.EF.Runtime\UnitTests\KyrolusSous.Repositories.EF.Runtime.UnitTests.csproj", "{60E06BF3-59DF-4200-9FE3-006AB67040EE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Runtime.UnitTests", "Tests\UnitTests\KyrolusSous.Repositories.EF.Runtime.UnitTests\KyrolusSous.Repositories.EF.Runtime.UnitTests.csproj", "{60E06BF3-59DF-4200-9FE3-006AB67040EE}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "KyrolusSous.Marten.Runtime.FullPipeline.Integration", "KyrolusSous.Marten.Runtime.FullPipeline.Integration", "{038CE319-0699-D691-E4FF-4008DFF940AA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Marten.Runtime.FullPipeline.TestApp", "Tests\KyrolusSous.Marten.Runtime.FullPipeline.Integration\KyrolusSous.Marten.Runtime.FullPipeline.TestApp\KyrolusSous.Marten.Runtime.FullPipeline.TestApp.csproj", "{3B7F5CB0-7A57-4C7C-8F13-3B683F46B1B1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Marten.Runtime.FullPipeline.TestApp", "Tests\IntegrationTests\KyrolusSous.Marten.Runtime.FullPipeline.TestApp\KyrolusSous.Marten.Runtime.FullPipeline.TestApp.csproj", "{3B7F5CB0-7A57-4C7C-8F13-3B683F46B1B1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests", "Tests\KyrolusSous.Marten.Runtime.FullPipeline.Integration\KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests\KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests.csproj", "{C2E34397-963B-4F52-B292-653413B9B643}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests", "Tests\IntegrationTests\KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests\KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests.csproj", "{C2E34397-963B-4F52-B292-653413B9B643}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "KyrolusSous.Mediator.Generator", "KyrolusSous.Mediator.Generator", "{39370245-888D-C478-EE38-5BCFCDEF3D00}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "TestApp", "TestApp", "{EF27DE56-7C2E-F54B-AAF4-ED8406FF9293}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Generator.TestApp", "Tests\KyrolusSous.Mediator.Generator\TestApp\KyrolusSous.Mediator.Generator.TestApp.csproj", "{B6D9A63A-4321-41A4-B1EE-1F6454C8D3AD}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "UnitTests", "UnitTests", "{0CE49EF2-5606-F02C-CAFF-CB091FBDAE60}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Generator.UnitTests", "Tests\KyrolusSous.Mediator.Generator\UnitTests\KyrolusSous.Mediator.Generator.UnitTests.csproj", "{1E15C73C-1977-49DD-8FE5-38CC80371FBD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Generator.UnitTests", "Tests\UnitTests\KyrolusSous.Mediator.Generator.UnitTests\KyrolusSous.Mediator.Generator.UnitTests.csproj", "{1E15C73C-1977-49DD-8FE5-38CC80371FBD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Reflection", "Src\KyrolusSous.Mediator.Reflection\KyrolusSous.Mediator.Reflection.csproj", "{43EA220B-73D0-46C4-9F85-0C0671238486}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Aot", "Tests\KyrolusSous.Mediator.Aot\KyrolusSous.Mediator.Aot.csproj", "{0B47D7B2-EC65-4F58-9F87-FE662E8B3B66}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Aot", "Tests\Aot\KyrolusSous.Mediator.Aot\KyrolusSous.Mediator.Aot.csproj", "{0B47D7B2-EC65-4F58-9F87-FE662E8B3B66}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "KyrolusSous.Mediator.Runtime", "KyrolusSous.Mediator.Runtime", "{A9D43DBB-4502-1156-36D6-8FF5833A0666}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Runtime.UnitTests", "Tests\KyrolusSous.Mediator.Runtime\UnitTests\KyrolusSous.Mediator.Runtime.UnitTests.csproj", "{E2B22D25-80C0-476B-BED1-BBED83DC02F5}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "KyrolusSous.Mediator.Runtime", "KyrolusSous.Mediator.Runtime", "{CFF80E68-813C-7F29-62E1-6FE60FBCE537}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Runtime.IntegrationTests", "Tests\KyrolusSous.Mediator.Runtime\IntegrationTests\KyrolusSous.Mediator.Runtime.IntegrationTests.csproj", "{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Runtime.UnitTests", "Tests\UnitTests\KyrolusSous.Mediator.Runtime.UnitTests\KyrolusSous.Mediator.Runtime.UnitTests.csproj", "{E2B22D25-80C0-476B-BED1-BBED83DC02F5}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "KyrolusSous.Mediator.Reflection", "KyrolusSous.Mediator.Reflection", "{541DDD17-C492-4689-A5A8-66A4B24E5C38}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "UnitTests", "UnitTests", "{7BE4BE93-A4AB-4FA1-24C1-A354F837FA9E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Reflection.UnitTests", "Tests\KyrolusSous.Mediator.Reflection\UnitTests\KyrolusSous.Mediator.Reflection.UnitTests.csproj", "{7C386C1A-4D1E-420E-8C62-36CFA493A208}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Reflection.UnitTests", "Tests\UnitTests\KyrolusSous.Mediator.Reflection.UnitTests\KyrolusSous.Mediator.Reflection.UnitTests.csproj", "{7C386C1A-4D1E-420E-8C62-36CFA493A208}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -999,18 +975,6 @@ Global
 		{E4E0C639-2263-450D-8917-C77767A163D3}.Release|x64.Build.0 = Release|Any CPU
 		{E4E0C639-2263-450D-8917-C77767A163D3}.Release|x86.ActiveCfg = Release|Any CPU
 		{E4E0C639-2263-450D-8917-C77767A163D3}.Release|x86.Build.0 = Release|Any CPU
-		{C964FFC5-AC97-4B84-AA41-D6342CD2CDF5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{C964FFC5-AC97-4B84-AA41-D6342CD2CDF5}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{C964FFC5-AC97-4B84-AA41-D6342CD2CDF5}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{C964FFC5-AC97-4B84-AA41-D6342CD2CDF5}.Debug|x64.Build.0 = Debug|Any CPU
-		{C964FFC5-AC97-4B84-AA41-D6342CD2CDF5}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{C964FFC5-AC97-4B84-AA41-D6342CD2CDF5}.Debug|x86.Build.0 = Debug|Any CPU
-		{C964FFC5-AC97-4B84-AA41-D6342CD2CDF5}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{C964FFC5-AC97-4B84-AA41-D6342CD2CDF5}.Release|Any CPU.Build.0 = Release|Any CPU
-		{C964FFC5-AC97-4B84-AA41-D6342CD2CDF5}.Release|x64.ActiveCfg = Release|Any CPU
-		{C964FFC5-AC97-4B84-AA41-D6342CD2CDF5}.Release|x64.Build.0 = Release|Any CPU
-		{C964FFC5-AC97-4B84-AA41-D6342CD2CDF5}.Release|x86.ActiveCfg = Release|Any CPU
-		{C964FFC5-AC97-4B84-AA41-D6342CD2CDF5}.Release|x86.Build.0 = Release|Any CPU
 		{FD1D7B7B-6293-2DEE-B54B-5D6FF676AF75}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{FD1D7B7B-6293-2DEE-B54B-5D6FF676AF75}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FD1D7B7B-6293-2DEE-B54B-5D6FF676AF75}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -1023,18 +987,6 @@ Global
 		{FD1D7B7B-6293-2DEE-B54B-5D6FF676AF75}.Release|x64.Build.0 = Release|Any CPU
 		{FD1D7B7B-6293-2DEE-B54B-5D6FF676AF75}.Release|x86.ActiveCfg = Release|Any CPU
 		{FD1D7B7B-6293-2DEE-B54B-5D6FF676AF75}.Release|x86.Build.0 = Release|Any CPU
-		{21FC2479-3BA7-4251-89FA-F4A9830F937A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{21FC2479-3BA7-4251-89FA-F4A9830F937A}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{21FC2479-3BA7-4251-89FA-F4A9830F937A}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{21FC2479-3BA7-4251-89FA-F4A9830F937A}.Debug|x64.Build.0 = Debug|Any CPU
-		{21FC2479-3BA7-4251-89FA-F4A9830F937A}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{21FC2479-3BA7-4251-89FA-F4A9830F937A}.Debug|x86.Build.0 = Debug|Any CPU
-		{21FC2479-3BA7-4251-89FA-F4A9830F937A}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{21FC2479-3BA7-4251-89FA-F4A9830F937A}.Release|Any CPU.Build.0 = Release|Any CPU
-		{21FC2479-3BA7-4251-89FA-F4A9830F937A}.Release|x64.ActiveCfg = Release|Any CPU
-		{21FC2479-3BA7-4251-89FA-F4A9830F937A}.Release|x64.Build.0 = Release|Any CPU
-		{21FC2479-3BA7-4251-89FA-F4A9830F937A}.Release|x86.ActiveCfg = Release|Any CPU
-		{21FC2479-3BA7-4251-89FA-F4A9830F937A}.Release|x86.Build.0 = Release|Any CPU
 		{5AD3D016-2E6B-4B43-85B3-554C56B4C486}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{5AD3D016-2E6B-4B43-85B3-554C56B4C486}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5AD3D016-2E6B-4B43-85B3-554C56B4C486}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -1047,30 +999,6 @@ Global
 		{5AD3D016-2E6B-4B43-85B3-554C56B4C486}.Release|x64.Build.0 = Release|Any CPU
 		{5AD3D016-2E6B-4B43-85B3-554C56B4C486}.Release|x86.ActiveCfg = Release|Any CPU
 		{5AD3D016-2E6B-4B43-85B3-554C56B4C486}.Release|x86.Build.0 = Release|Any CPU
-		{C1C4A9DB-F02B-4330-98D1-0F3E2AFF0BDA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{C1C4A9DB-F02B-4330-98D1-0F3E2AFF0BDA}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{C1C4A9DB-F02B-4330-98D1-0F3E2AFF0BDA}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{C1C4A9DB-F02B-4330-98D1-0F3E2AFF0BDA}.Debug|x64.Build.0 = Debug|Any CPU
-		{C1C4A9DB-F02B-4330-98D1-0F3E2AFF0BDA}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{C1C4A9DB-F02B-4330-98D1-0F3E2AFF0BDA}.Debug|x86.Build.0 = Debug|Any CPU
-		{C1C4A9DB-F02B-4330-98D1-0F3E2AFF0BDA}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{C1C4A9DB-F02B-4330-98D1-0F3E2AFF0BDA}.Release|Any CPU.Build.0 = Release|Any CPU
-		{C1C4A9DB-F02B-4330-98D1-0F3E2AFF0BDA}.Release|x64.ActiveCfg = Release|Any CPU
-		{C1C4A9DB-F02B-4330-98D1-0F3E2AFF0BDA}.Release|x64.Build.0 = Release|Any CPU
-		{C1C4A9DB-F02B-4330-98D1-0F3E2AFF0BDA}.Release|x86.ActiveCfg = Release|Any CPU
-		{C1C4A9DB-F02B-4330-98D1-0F3E2AFF0BDA}.Release|x86.Build.0 = Release|Any CPU
-		{255958F7-F5FC-4F33-B1C1-71A31CB2AE3C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{255958F7-F5FC-4F33-B1C1-71A31CB2AE3C}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{255958F7-F5FC-4F33-B1C1-71A31CB2AE3C}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{255958F7-F5FC-4F33-B1C1-71A31CB2AE3C}.Debug|x64.Build.0 = Debug|Any CPU
-		{255958F7-F5FC-4F33-B1C1-71A31CB2AE3C}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{255958F7-F5FC-4F33-B1C1-71A31CB2AE3C}.Debug|x86.Build.0 = Debug|Any CPU
-		{255958F7-F5FC-4F33-B1C1-71A31CB2AE3C}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{255958F7-F5FC-4F33-B1C1-71A31CB2AE3C}.Release|Any CPU.Build.0 = Release|Any CPU
-		{255958F7-F5FC-4F33-B1C1-71A31CB2AE3C}.Release|x64.ActiveCfg = Release|Any CPU
-		{255958F7-F5FC-4F33-B1C1-71A31CB2AE3C}.Release|x64.Build.0 = Release|Any CPU
-		{255958F7-F5FC-4F33-B1C1-71A31CB2AE3C}.Release|x86.ActiveCfg = Release|Any CPU
-		{255958F7-F5FC-4F33-B1C1-71A31CB2AE3C}.Release|x86.Build.0 = Release|Any CPU
 		{60E06BF3-59DF-4200-9FE3-006AB67040EE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{60E06BF3-59DF-4200-9FE3-006AB67040EE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{60E06BF3-59DF-4200-9FE3-006AB67040EE}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -1107,18 +1035,6 @@ Global
 		{C2E34397-963B-4F52-B292-653413B9B643}.Release|x64.Build.0 = Release|Any CPU
 		{C2E34397-963B-4F52-B292-653413B9B643}.Release|x86.ActiveCfg = Release|Any CPU
 		{C2E34397-963B-4F52-B292-653413B9B643}.Release|x86.Build.0 = Release|Any CPU
-		{B6D9A63A-4321-41A4-B1EE-1F6454C8D3AD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B6D9A63A-4321-41A4-B1EE-1F6454C8D3AD}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B6D9A63A-4321-41A4-B1EE-1F6454C8D3AD}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{B6D9A63A-4321-41A4-B1EE-1F6454C8D3AD}.Debug|x64.Build.0 = Debug|Any CPU
-		{B6D9A63A-4321-41A4-B1EE-1F6454C8D3AD}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{B6D9A63A-4321-41A4-B1EE-1F6454C8D3AD}.Debug|x86.Build.0 = Debug|Any CPU
-		{B6D9A63A-4321-41A4-B1EE-1F6454C8D3AD}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B6D9A63A-4321-41A4-B1EE-1F6454C8D3AD}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B6D9A63A-4321-41A4-B1EE-1F6454C8D3AD}.Release|x64.ActiveCfg = Release|Any CPU
-		{B6D9A63A-4321-41A4-B1EE-1F6454C8D3AD}.Release|x64.Build.0 = Release|Any CPU
-		{B6D9A63A-4321-41A4-B1EE-1F6454C8D3AD}.Release|x86.ActiveCfg = Release|Any CPU
-		{B6D9A63A-4321-41A4-B1EE-1F6454C8D3AD}.Release|x86.Build.0 = Release|Any CPU
 		{1E15C73C-1977-49DD-8FE5-38CC80371FBD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{1E15C73C-1977-49DD-8FE5-38CC80371FBD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1E15C73C-1977-49DD-8FE5-38CC80371FBD}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -1167,18 +1083,6 @@ Global
 		{E2B22D25-80C0-476B-BED1-BBED83DC02F5}.Release|x64.Build.0 = Release|Any CPU
 		{E2B22D25-80C0-476B-BED1-BBED83DC02F5}.Release|x86.ActiveCfg = Release|Any CPU
 		{E2B22D25-80C0-476B-BED1-BBED83DC02F5}.Release|x86.Build.0 = Release|Any CPU
-		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Debug|x64.Build.0 = Debug|Any CPU
-		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Debug|x86.Build.0 = Debug|Any CPU
-		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Release|Any CPU.Build.0 = Release|Any CPU
-		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Release|x64.ActiveCfg = Release|Any CPU
-		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Release|x64.Build.0 = Release|Any CPU
-		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Release|x86.ActiveCfg = Release|Any CPU
-		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022}.Release|x86.Build.0 = Release|Any CPU
 		{7C386C1A-4D1E-420E-8C62-36CFA493A208}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{7C386C1A-4D1E-420E-8C62-36CFA493A208}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7C386C1A-4D1E-420E-8C62-36CFA493A208}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -1266,33 +1170,22 @@ Global
 		{E4E0C639-2263-450D-8917-C77767A163D3} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{1CF310AF-30C4-E599-ACC4-BCEABD847FE2} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{8DEB10AC-654C-1DFC-0322-F69C854DBE81} = {1CF310AF-30C4-E599-ACC4-BCEABD847FE2}
-		{F78429CE-BF92-16A3-1FE8-7005C6C4D379} = {8DEB10AC-654C-1DFC-0322-F69C854DBE81}
-		{44064FA0-0F13-5789-0B53-521B5CF5E28B} = {8DEB10AC-654C-1DFC-0322-F69C854DBE81}
-		{C964FFC5-AC97-4B84-AA41-D6342CD2CDF5} = {44064FA0-0F13-5789-0B53-521B5CF5E28B}
 		{3F031F97-6E3F-3AB0-4583-D3D1AD80DFDE} = {8DEB10AC-654C-1DFC-0322-F69C854DBE81}
 		{FD1D7B7B-6293-2DEE-B54B-5D6FF676AF75} = {3F031F97-6E3F-3AB0-4583-D3D1AD80DFDE}
-		{21FC2479-3BA7-4251-89FA-F4A9830F937A} = {F78429CE-BF92-16A3-1FE8-7005C6C4D379}
 		{5B659782-274B-D480-B148-DB1EE6C69F3B} = {8DEB10AC-654C-1DFC-0322-F69C854DBE81}
 		{5AD3D016-2E6B-4B43-85B3-554C56B4C486} = {5B659782-274B-D480-B148-DB1EE6C69F3B}
-		{4E162AA3-A6A7-4406-FF80-6BCD9CDDF5BD} = {8DEB10AC-654C-1DFC-0322-F69C854DBE81}
-		{A417F501-7BD2-EFBD-28BF-85BD00CC23BD} = {8DEB10AC-654C-1DFC-0322-F69C854DBE81}
-		{C1C4A9DB-F02B-4330-98D1-0F3E2AFF0BDA} = {A417F501-7BD2-EFBD-28BF-85BD00CC23BD}
-		{255958F7-F5FC-4F33-B1C1-71A31CB2AE3C} = {4E162AA3-A6A7-4406-FF80-6BCD9CDDF5BD}
 		{D231E709-B61E-F909-333A-D48DD31FD69F} = {1CF310AF-30C4-E599-ACC4-BCEABD847FE2}
 		{60E06BF3-59DF-4200-9FE3-006AB67040EE} = {D231E709-B61E-F909-333A-D48DD31FD69F}
 		{038CE319-0699-D691-E4FF-4008DFF940AA} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{3B7F5CB0-7A57-4C7C-8F13-3B683F46B1B1} = {038CE319-0699-D691-E4FF-4008DFF940AA}
 		{C2E34397-963B-4F52-B292-653413B9B643} = {038CE319-0699-D691-E4FF-4008DFF940AA}
 		{39370245-888D-C478-EE38-5BCFCDEF3D00} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
-		{EF27DE56-7C2E-F54B-AAF4-ED8406FF9293} = {39370245-888D-C478-EE38-5BCFCDEF3D00}
-		{B6D9A63A-4321-41A4-B1EE-1F6454C8D3AD} = {EF27DE56-7C2E-F54B-AAF4-ED8406FF9293}
 		{0CE49EF2-5606-F02C-CAFF-CB091FBDAE60} = {39370245-888D-C478-EE38-5BCFCDEF3D00}
 		{1E15C73C-1977-49DD-8FE5-38CC80371FBD} = {0CE49EF2-5606-F02C-CAFF-CB091FBDAE60}
 		{43EA220B-73D0-46C4-9F85-0C0671238486} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{0B47D7B2-EC65-4F58-9F87-FE662E8B3B66} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{A9D43DBB-4502-1156-36D6-8FF5833A0666} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{E2B22D25-80C0-476B-BED1-BBED83DC02F5} = {A9D43DBB-4502-1156-36D6-8FF5833A0666}
-		{E2C4DC27-2DE0-4EEF-BE9F-AA93EEEE5022} = {CFF80E68-813C-7F29-62E1-6FE60FBCE537}
 		{541DDD17-C492-4689-A5A8-66A4B24E5C38} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{7BE4BE93-A4AB-4FA1-24C1-A354F837FA9E} = {541DDD17-C492-4689-A5A8-66A4B24E5C38}
 		{7C386C1A-4D1E-420E-8C62-36CFA493A208} = {7BE4BE93-A4AB-4FA1-24C1-A354F837FA9E}

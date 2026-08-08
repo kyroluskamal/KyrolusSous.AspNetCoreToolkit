@@ -61,16 +61,15 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | --- | --- | ---: | --- | :---: |
 | EF.Runtime - PostgreSQL<br><sub>Primary confidence suite; also the coverage target.</sub> | integration | 475 | postgres | yes |
 | EF.Runtime - Unit | unit | 62 | none | yes |
-| EF.Runtime - SQLite<br><sub>Placeholder suite - no real assertions yet.</sub> | integration | 1 | none | yes |
-| EF.Runtime - SQL Server<br><sub>Placeholder suite - add a mssql service to `services` once real tests land.</sub> | integration | 1 | none | yes |
 | EF.Generator - Integration<br><sub>Runs against an in-process SQLite TestApp.</sub> | integration | 133 | none | yes |
 | EF.Generator - Unit | unit | 67 | none | yes |
 | Marten.Runtime - FullPipeline | integration | 235 | postgres, redis | yes |
 | Logging | unit | 28 | none | yes |
-| Mediator - Unit | unit | 62 | none | yes |
-| Mediator.Generator - Unit | unit | 12 | none | yes |
+| Mediator.Runtime - Unit | unit | 63 | none | yes |
+| Mediator.Generator - Unit | unit | 14 | none | yes |
+| Mediator.Reflection - Unit | unit | 52 | none | yes |
 | Swagger - Integration | integration | 10 | none | yes |
-| **Total** | | **1086** | | |
+| **Total** | | **1139** | | |
 
 <!-- END:GENERATED:test-suites -->
 
