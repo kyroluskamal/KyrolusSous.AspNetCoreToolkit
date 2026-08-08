@@ -1,6 +1,5 @@
-using Microsoft.Extensions.DependencyInjection.Extensions;
 
-namespace KyrolusSous.Mediator.Tests;
+namespace KyrolusSous.Mediator.Runtime.UnitTests;
 
 /// <summary>
 /// Assembly scanning and <see cref="KyrolusMediatorConfiguration"/>. These deliberately scan the

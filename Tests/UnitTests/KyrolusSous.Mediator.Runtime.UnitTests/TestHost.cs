@@ -1,4 +1,4 @@
-namespace KyrolusSous.Mediator.Tests;
+namespace KyrolusSous.Mediator.Runtime.UnitTests;
 
 /// <summary>
 /// Builds a provider with exactly the handlers a test asks for.

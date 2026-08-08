@@ -1,4 +1,4 @@
-namespace KyrolusSous.Mediator.Tests;
+namespace KyrolusSous.Mediator.Runtime.UnitTests;
 
 /// <summary>
 /// One test per defect found in the review. Each fails against the pre-fix code.

@@ -1,6 +1,7 @@
+
 using KyrolusSous.Mediator.Abstractions.Compatibility;
 
-namespace KyrolusSous.Mediator.Tests;
+namespace KyrolusSous.Mediator.Runtime.UnitTests;
 
 /// <summary>
 /// Proves that code written the MediatR way compiles and runs here. Everything in this file is

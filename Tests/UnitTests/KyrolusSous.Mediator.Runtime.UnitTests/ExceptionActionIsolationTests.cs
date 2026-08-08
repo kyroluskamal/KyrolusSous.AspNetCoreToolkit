@@ -1,6 +1,4 @@
-using Microsoft.Extensions.Logging;
-
-namespace KyrolusSous.Mediator.Tests;
+namespace KyrolusSous.Mediator.Runtime.UnitTests;
 
 /// <summary>
 /// An exception action is an independent side effect. One of them failing must not skip the

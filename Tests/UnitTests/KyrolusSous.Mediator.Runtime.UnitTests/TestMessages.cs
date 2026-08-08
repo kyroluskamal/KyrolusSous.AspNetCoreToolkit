@@ -1,6 +1,5 @@
-using System.Collections.Concurrent;
 
-namespace KyrolusSous.Mediator.Tests;
+namespace KyrolusSous.Mediator.Runtime.UnitTests;
 
 /// <summary>
 /// Ordered log shared by the probes in a single test. Instance-scoped rather than static so

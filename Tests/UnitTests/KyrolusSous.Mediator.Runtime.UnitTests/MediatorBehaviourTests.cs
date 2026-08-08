@@ -1,4 +1,4 @@
-namespace KyrolusSous.Mediator.Tests;
+namespace KyrolusSous.Mediator.Runtime.UnitTests;
 
 /// <summary>Core dispatch, pipeline, notification and streaming behaviour.</summary>
 public sealed class MediatorBehaviourTests
