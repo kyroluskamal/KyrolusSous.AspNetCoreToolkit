@@ -1,5 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-
 namespace KyrolusSous.Mediator.Runtime.Config;
 
 /// <summary>
@@ -83,6 +81,8 @@ public sealed class KyrolusMediatorConfiguration
     public KyrolusMediatorConfiguration RegisterServicesFromAssemblies(params Assembly[] assemblies)
     {
         ArgumentNullException.ThrowIfNull(assemblies);
+        if (assemblies.Length == 0)
+            throw new ArgumentException("[KyrolusMediator] No assemblies were supplied.", nameof(assemblies));
         foreach (var assembly in assemblies)
             RegisterServicesFromAssembly(assembly);
 
@@ -107,7 +107,7 @@ public sealed class KyrolusMediatorConfiguration
         var added = false;
         foreach (var iface in implementationType.GetInterfaces())
         {
-            if (!iface.IsGenericType)        continue;
+            if (!iface.IsGenericType) continue;
 
             var definition = iface.GetGenericTypeDefinition();
             if (definition == typeof(IKyrolusPipelineBehavior<,>))
