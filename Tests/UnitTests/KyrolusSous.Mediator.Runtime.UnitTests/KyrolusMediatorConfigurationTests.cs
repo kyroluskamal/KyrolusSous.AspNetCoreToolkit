@@ -12,7 +12,6 @@ public sealed class KyrolusMediatorConfigurationTests
             configuration.ThrowOnDuplicateRequestHandlers = false;
             configure?.Invoke(configuration);
         });
-
         services.AddKyrolusMediatorReflection();
         return services;
     }
@@ -100,6 +99,14 @@ public sealed class KyrolusMediatorConfigurationTests
         var services = Scanned(configuration => configuration.MediatorLifetime = ServiceLifetime.Singleton);
         var descriptor = services.First(d => d.ServiceType == typeof(IKyrolusMediator));
         descriptor.Lifetime.ShouldBe(ServiceLifetime.Singleton);
+    }
+
+    [Fact(DisplayName = "Mediator lifetime defaults to Scoped when not specified")]
+    public void Mediator_lifetime_defaults_to_scoped()
+    {
+        var services = Scanned();
+        var descriptor = services.First(d => d.ServiceType == typeof(IKyrolusMediator));
+        descriptor.Lifetime.ShouldBe(ServiceLifetime.Scoped);
     }
 
     #region AddOpenBehavior
