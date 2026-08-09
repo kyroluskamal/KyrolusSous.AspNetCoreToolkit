@@ -3,7 +3,7 @@
 
   "coverage": {
     "report": "TestResults/coverage-run/Coverage/coverage.cobertura.xml",
-    "target": "Tests/IntegrationTests/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgresql/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgresql.csproj",
+    "target": "Tests/IntegrationTests/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgresql/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.csproj",
     "overall": {
       "line": 68,
       "branch": 58
