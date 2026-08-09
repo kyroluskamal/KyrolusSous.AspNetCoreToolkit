@@ -24,7 +24,7 @@
     },
     {
       "name": "EF.Runtime - Unit",
-      "project": "Tests/UnitTests/KyrolusSous.Repositories.EF.Runtime.UnitTests/KyrolusSous.Repositories.EF.Runtime.UnitTests.csproj",
+      "project": "Tests/UnitTests/Repositories/KyrolusSous.Repositories.EF.Runtime.UnitTests/KyrolusSous.Repositories.EF.Runtime.UnitTests.csproj",
       "kind": "unit",
       "services": [],
       "ci": true
@@ -39,7 +39,7 @@
     },
     {
       "name": "EF.Generator - Unit",
-      "project": "Tests/UnitTests/KyrolusSous.Repositories.EF.Generator.UnitTests/KyrolusSous.Repositories.EF.Generator.UnitTests.csproj",
+      "project": "Tests/UnitTests/Repositories/KyrolusSous.Repositories.EF.Generator.UnitTests/KyrolusSous.Repositories.EF.Generator.UnitTests.csproj",
       "kind": "unit",
       "services": [],
       "ci": true
@@ -53,28 +53,35 @@
     },
     {
       "name": "Logging",
-      "project": "Tests/UnitTests/KyrolusSous.Logging.UnitTests/KyrolusSous.Logging.Tests.csproj",
+      "project": "Tests/UnitTests/Logging/KyrolusSous.Logging.UnitTests/KyrolusSous.Logging.Tests.csproj",
       "kind": "unit",
       "services": [],
       "ci": true
     },
     {
       "name": "Mediator.Runtime - Unit",
-      "project": "Tests/UnitTests/KyrolusSous.Mediator.Runtime.UnitTests/KyrolusSous.Mediator.Runtime.UnitTests.csproj",
+      "project": "Tests/UnitTests/Mediator/KyrolusSous.Mediator.Runtime.UnitTests/KyrolusSous.Mediator.Runtime.UnitTests.csproj",
       "kind": "unit",
       "services": [],
       "ci": true
     },
     {
       "name": "Mediator.Generator - Unit",
-      "project": "Tests/UnitTests/KyrolusSous.Mediator.Generator.UnitTests/KyrolusSous.Mediator.Generator.UnitTests.csproj",
+      "project": "Tests/UnitTests/Mediator/KyrolusSous.Mediator.Generator.UnitTests/KyrolusSous.Mediator.Generator.UnitTests.csproj",
       "kind": "unit",
       "services": [],
       "ci": true
     },
     {
       "name": "Mediator.Reflection - Unit",
-      "project": "Tests/UnitTests/KyrolusSous.Mediator.Reflection.UnitTests/KyrolusSous.Mediator.Reflection.UnitTests.csproj",
+      "project": "Tests/UnitTests/Mediator/KyrolusSous.Mediator.Reflection.UnitTests/KyrolusSous.Mediator.Reflection.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "Validation.Fluent - Unit",
+      "project": "Tests/UnitTests/Validation/KyrolusSous.Validation.Fluent.UnitTests/KyrolusSous.Validation.Fluent.UnitTests.csproj",
       "kind": "unit",
       "services": [],
       "ci": true

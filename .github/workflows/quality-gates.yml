@@ -49,7 +49,7 @@ jobs:
         run: dotnet build -c Release --no-restore
 
       - name: Show derived package version
-        run: dotnet pack Src/KyrolusSous.Mediator.Abstractions/KyrolusSous.Mediator.Abstractions.csproj -c Release --no-build -o /tmp/pack && ls /tmp/pack
+        run: dotnet pack Src/Mediator/KyrolusSous.Mediator.Abstractions/KyrolusSous.Mediator.Abstractions.csproj -c Release --no-build -o /tmp/pack && ls /tmp/pack
 
   # ---------------------------------------------------------------------------
   # The suite list comes from quality-gates.json, so a suite cannot silently
