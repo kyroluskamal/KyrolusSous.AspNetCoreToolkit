@@ -86,6 +86,134 @@ public sealed class KyrolusMediatorSenderTests
 
         await Should.ThrowAsync<ArgumentException>(() => mediator.SendAsync(new object()));
     }
+
+    [Fact(DisplayName = "Sender caches request pipeline wrapper instance across multiple calls")]
+    public async Task Sender_caches_request_pipeline_wrapper_instance_across_multiple_calls()
+    {
+        await using var provider = Build(new Recorder());
+        var mediator = provider.GetRequiredService<IKyrolusMediator>();
+
+        await mediator.SendAsync(new Ping("first"));
+        await mediator.SendAsync(new Ping("second"));
+
+        var field = typeof(KyrolusMediatorSender).GetField("s_requestWrappers", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        field.ShouldNotBeNull();
+
+        var dict = (System.Collections.IDictionary)field!.GetValue(null)!;
+        dict.ShouldNotBeNull();
+
+        var wrapperKey = (typeof(Ping), typeof(string));
+        dict.Contains(wrapperKey).ShouldBeTrue();
+
+        var cachedWrapper = dict[wrapperKey];
+        cachedWrapper.ShouldNotBeNull();
+
+        // Send again to ensure same cached instance is used
+        await mediator.SendAsync(new Ping("third"));
+        dict[wrapperKey].ShouldBeSameAs(cachedWrapper);
+    }
+
+    [Fact(DisplayName = "Sender caches stream pipeline wrapper instance across multiple calls")]
+    public async Task Sender_caches_stream_pipeline_wrapper_instance_across_multiple_calls()
+    {
+        await using var provider = Build(new Recorder());
+        var mediator = provider.GetRequiredService<IKyrolusMediator>();
+
+        var items1 = await mediator.StreamAsync(new CountTo(2)).ToListAsync();
+        items1.ShouldNotBeEmpty();
+
+        var field = typeof(KyrolusMediatorSender).GetField("s_streamWrappers", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        field.ShouldNotBeNull();
+
+        var dict = (System.Collections.IDictionary)field!.GetValue(null)!;
+        dict.ShouldNotBeNull();
+
+        var wrapperKey = (typeof(CountTo), typeof(int));
+        dict.Contains(wrapperKey).ShouldBeTrue();
+
+        var cachedWrapper = dict[wrapperKey];
+        cachedWrapper.ShouldNotBeNull();
+
+        var items2 = await mediator.StreamAsync(new CountTo(2)).ToListAsync();
+        items2.ShouldNotBeEmpty();
+        dict[wrapperKey].ShouldBeSameAs(cachedWrapper);
+    }
+
+    [Fact(DisplayName = "KyrolusMediatorSender constructor throws ArgumentNullException when serviceProvider or dispatcher is null")]
+    public async Task Constructor_throws_ArgumentNullException_when_serviceProvider_or_dispatcher_is_null()
+    {
+        await using var provider = Build(new Recorder());
+        var dispatcher = provider.GetRequiredService<IMediatorDispatcher>();
+
+        Should.Throw<ArgumentNullException>(() => new KyrolusMediatorSender(null!, dispatcher)).ParamName.ShouldBe("serviceProvider");
+        Should.Throw<ArgumentNullException>(() => new KyrolusMediatorSender(provider, null!)).ParamName.ShouldBe("dispatcher");
+    }
+
+    [Fact(DisplayName = "Sender throws InvalidOperationException when no pipeline wrapper source is registered")]
+    public async Task Sender_throws_InvalidOperationException_when_no_pipeline_wrapper_source_is_registered()
+    {
+        var services = new ServiceCollection();
+        var dispatcher = new DummyDispatcher();
+        services.AddSingleton<IMediatorDispatcher>(dispatcher);
+        await using var provider = services.BuildServiceProvider();
+
+        var sender = new KyrolusMediatorSender(provider, dispatcher);
+
+        var ex1 = await Should.ThrowAsync<InvalidOperationException>(() => sender.SendAsync(new UnregisteredQuery()));
+        ex1.Message.ShouldContain("No pipeline wrapper source is registered");
+    }
+
+    [Fact(DisplayName = "Sender throws InvalidOperationException when wrapper source returns null for request wrapper")]
+    public async Task Sender_throws_InvalidOperationException_when_wrapper_source_returns_null_request_wrapper()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<GeneratorIntegration.IKyrolusPipelineWrapperSource>(new NullWrapperSource());
+        var dispatcher = new DummyDispatcher();
+        services.AddSingleton<IMediatorDispatcher>(dispatcher);
+        await using var provider = services.BuildServiceProvider();
+
+        var sender = new KyrolusMediatorSender(provider, dispatcher);
+
+        var ex = await Should.ThrowAsync<InvalidOperationException>(() => sender.SendAsync(new NullWrapperQuery()));
+        ex.Message.ShouldContain("No pipeline wrapper for");
+    }
+
+    [Fact(DisplayName = "Sender throws InvalidOperationException when wrapper source returns null for stream wrapper")]
+    public async Task Sender_throws_InvalidOperationException_when_wrapper_source_returns_null_stream_wrapper()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<GeneratorIntegration.IKyrolusPipelineWrapperSource>(new NullWrapperSource());
+        var dispatcher = new DummyDispatcher();
+        services.AddSingleton<IMediatorDispatcher>(dispatcher);
+        await using var provider = services.BuildServiceProvider();
+
+        var sender = new KyrolusMediatorSender(provider, dispatcher);
+
+        var ex = await Should.ThrowAsync<InvalidOperationException>(async () =>
+        {
+            await foreach (var _ in sender.StreamAsync(new NullStreamQuery()))
+            {
+            }
+        });
+        ex.Message.ShouldContain("No pipeline wrapper for");
+    }
+
+    private sealed class DummyDispatcher : IMediatorDispatcher
+    {
+        public Task<TResponse> DispatchRequestAsync<TResponse>(object request, IServiceProvider sp, CancellationToken ct) => throw new NotImplementedException();
+        public Task DispatchCommandAsync(object command, IServiceProvider sp, CancellationToken ct) => throw new NotImplementedException();
+        public IAsyncEnumerable<TResponse> DispatchStreamAsync<TResponse>(object request, IServiceProvider sp, CancellationToken ct) => throw new NotImplementedException();
+    }
+
+    private sealed class NullWrapperSource : GeneratorIntegration.IKyrolusPipelineWrapperSource
+    {
+        public object? CreateRequestWrapper(Type requestType, Type responseType) => null;
+        public object? CreateStreamWrapper(Type requestType, Type responseType) => null;
+        public Type? GetResponseType(Type requestType, bool stream) => null;
+    }
 }
 
 public sealed record Unhandled : IKyrolusQuery<string>;
+public sealed record UnregisteredQuery : IKyrolusQuery<string>;
+public sealed record NullWrapperQuery : IKyrolusQuery<string>;
+public sealed record NullStreamQuery : IKyrolusStreamRequest<int>;

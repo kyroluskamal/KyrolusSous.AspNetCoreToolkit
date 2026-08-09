@@ -7,8 +7,8 @@ public sealed class KyrolusMediator(
     IKyrolusMediatorSender sender,
     IKyrolusMediatorPublisher publisher) : IKyrolusMediator, IMediator
 {
-    private readonly IKyrolusMediatorSender _sender = sender ?? throw new ArgumentNullException(nameof(sender));
-    private readonly IKyrolusMediatorPublisher _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
+    private readonly IKyrolusMediatorSender _sender = sender ?? throw new ArgumentNullException(nameof(sender), "[KyrolusMediator] It looks like you are trying to use the KyrolusMediator without registering the sender service. Please ensure that you have registered the IKyrolusMediatorSender implementation in your dependency injection container.");
+    private readonly IKyrolusMediatorPublisher _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher), "[KyrolusMediator] It looks like you are trying to use the KyrolusMediator without registering the publisher service. Please ensure that you have registered the IKyrolusMediatorPublisher implementation in your dependency injection container.");
 
     public Task<TResponse> SendAsync<TResponse>(IKyrolusQuery<TResponse> query, CancellationToken cancellationToken = default)
         => _sender.SendAsync(query, cancellationToken);

@@ -69,4 +69,27 @@ public sealed class KyrolusMediatorPublisherTests
 
         await Should.ThrowAsync<ArgumentException>(() => mediator.PublishAsync(new object()));
     }
+
+    [Fact(DisplayName = "PublishAsync with explicit strategy delegates and dispatches notification successfully")]
+    public async Task PublishAsync_with_explicit_strategy_dispatches_notification_successfully()
+    {
+        var recorder = new Recorder();
+        await using var provider = Build(recorder);
+        var mediator = provider.GetRequiredService<IKyrolusMediator>();
+
+        await mediator.PublishAsync(new SomethingHappened("strategy"), new KyrolusSequentialNotificationPublishStrategy());
+
+        recorder.Entries.ShouldContain("first:strategy");
+    }
+
+    [Fact(DisplayName = "KyrolusMediator constructor throws ArgumentNullException when sender or publisher is null")]
+    public async Task KyrolusMediator_constructor_throws_ArgumentNullException_when_sender_or_publisher_is_null()
+    {
+        await using var provider = Build(new Recorder());
+        var sender = provider.GetRequiredService<IKyrolusMediatorSender>();
+        var publisher = provider.GetRequiredService<IKyrolusMediatorPublisher>();
+
+        Should.Throw<ArgumentNullException>(() => new KyrolusMediator(null!, publisher)).ParamName.ShouldBe("sender");
+        Should.Throw<ArgumentNullException>(() => new KyrolusMediator(sender, null!)).ParamName.ShouldBe("publisher");
+    }
 }

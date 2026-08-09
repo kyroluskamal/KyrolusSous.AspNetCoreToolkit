@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using KyrolusSous.Mediator.Runtime.GeneratorIntegration;
 using Microsoft.Extensions.Logging;
 
@@ -14,20 +15,14 @@ namespace KyrolusSous.Mediator.Runtime.Implementations;
 /// cannot close.
 /// </remarks>
 [PipelineOrder(-2000)]
-public sealed class KyrolusRequestExceptionProcessorBehavior<TRequest, TResponse>
+public sealed class KyrolusRequestExceptionProcessorBehavior<TRequest, TResponse>(IServiceProvider serviceProvider)
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
     /// <summary>Stable logger category, rather than the mangled closed generic type name.</summary>
     private const string LoggerCategory = "KyrolusSous.Mediator.RequestExceptionProcessor";
 
-    private readonly IServiceProvider _serviceProvider;
-    private readonly IKyrolusRequestExceptionDispatchSource? _dispatchSource;
-
-    public KyrolusRequestExceptionProcessorBehavior(IServiceProvider serviceProvider)
-    {
-        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
-        _dispatchSource = serviceProvider.GetService<IKyrolusRequestExceptionDispatchSource>();
-    }
+    private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+    private readonly IKyrolusRequestExceptionDispatchSource? _dispatchSource = serviceProvider.GetService<IKyrolusRequestExceptionDispatchSource>();
 
     public async Task<TResponse> Handle(TRequest request,
         RequestHandlerDelegate<TResponse> next,
@@ -118,6 +113,7 @@ public sealed class KyrolusRequestExceptionProcessorBehavior<TRequest, TResponse
     /// Logs an action that threw, if logging is available. Deliberately best-effort: this runs
     /// while an exception is already in flight, so it must not throw a second one.
     /// </summary>
+    [ExcludeFromCodeCoverage]
     private void ReportActionFailure(Type actionType, Exception originalException, Exception actionFailure)
     {
         try
@@ -142,6 +138,7 @@ public sealed class KyrolusRequestExceptionProcessorBehavior<TRequest, TResponse
     /// Yields the exception's type and every base type up to <see cref="Exception"/>, most specific
     /// first - so a handler registered for a precise type runs before a general one.
     /// </summary>
+    [ExcludeFromCodeCoverage]
     private static IEnumerable<Type> GetExceptionTypes(Exception exception)
     {
         for (Type? current = exception.GetType();

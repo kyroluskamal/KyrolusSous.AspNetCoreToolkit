@@ -18,30 +18,20 @@ namespace KyrolusSous.Mediator.Runtime.Implementations;
 /// that closes the types on demand. Neither is referenced from here.
 /// </para>
 /// </remarks>
-public sealed class KyrolusMediatorSender : IKyrolusMediatorSender
+/// <param name="serviceProvider">The service provider instance.</param>
+/// <param name="dispatcher">The dispatcher implementation (generated or reflection-based).</param>
+/// <exception cref="ArgumentNullException">Thrown if serviceProvider or dispatcher is null.</exception>
+public sealed class KyrolusMediatorSender(IServiceProvider serviceProvider, IMediatorDispatcher dispatcher) : IKyrolusMediatorSender
 {
     private static readonly ConcurrentDictionary<(Type RequestType, Type ResponseType), RequestPipelineWrapper> s_requestWrappers = new();
     private static readonly ConcurrentDictionary<(Type RequestType, Type ResponseType), StreamPipelineWrapper> s_streamWrappers = new();
 
-    private readonly IServiceProvider _serviceProvider;
-    private readonly IMediatorDispatcher _dispatcher;
-    private readonly IKyrolusPipelineWrapperSource? _wrapperSource;
-
-    /// <param name="serviceProvider">The service provider instance.</param>
-    /// <param name="dispatcher">The dispatcher implementation (generated or reflection-based).</param>
-    /// <exception cref="ArgumentNullException">Thrown if serviceProvider or dispatcher is null.</exception>
-    public KyrolusMediatorSender(IServiceProvider serviceProvider, IMediatorDispatcher dispatcher)
-    {
-        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
-        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
-
-        // Resolved rather than declared as a constructor parameter: the built-in container has no
-        // notion of an optional dependency, and a missing source should be reported as the setup
-        // mistake it is rather than as a failure to construct the sender.
-        _wrapperSource = serviceProvider.GetService<IKyrolusPipelineWrapperSource>();
-    }
+    private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+    private readonly IMediatorDispatcher _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+    private readonly IKyrolusPipelineWrapperSource? _wrapperSource = serviceProvider.GetService<IKyrolusPipelineWrapperSource>();
 
     // --- Typed overloads ---
+
 
     /// <inheritdoc />
     public Task<TResponse> SendAsync<TResponse>(IKyrolusQuery<TResponse> query, CancellationToken cancellationToken = default)

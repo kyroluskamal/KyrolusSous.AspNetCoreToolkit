@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+
 namespace KyrolusSous.Mediator.Runtime.UnitTests;
 
 public sealed class KyrolusRequestExceptionProcessorBehaviorTests
@@ -51,6 +53,43 @@ public sealed class KyrolusRequestExceptionProcessorBehaviorTests
         exception.Message.ShouldBe("boom:original");
     }
 
+    [Fact(DisplayName = "Constructor throws ArgumentNullException when serviceProvider is null")]
+    public void Constructor_throws_ArgumentNullException_when_serviceProvider_is_null()
+    {
+        var exception = Should.Throw<ArgumentNullException>(
+            () => new KyrolusRequestExceptionProcessorBehavior<Ping, string>(null!));
+
+        exception.ParamName.ShouldBe("serviceProvider");
+    }
+
+    [Fact(DisplayName = "Processor behavior handles missing dispatch source gracefully when pipeline throws")]
+    public async Task Processor_behavior_handles_missing_dispatch_source_gracefully()
+    {
+        var services = new ServiceCollection();
+        await using var sp = services.BuildServiceProvider();
+
+        var behavior = new KyrolusRequestExceptionProcessorBehavior<Ping, string>(sp);
+
+        await Should.ThrowAsync<InvalidOperationException>(
+            () => behavior.Handle(new Ping("test"), _ => throw new InvalidOperationException("boom"), CancellationToken.None));
+    }
+
+    [Fact(DisplayName = "Processor behavior logs action failure and swallows logger failure if logger throws")]
+    public async Task Processor_behavior_swallows_logger_failure_when_logger_factory_throws()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<GeneratorIntegration.IKyrolusRequestExceptionDispatchSource>(new FailingDispatchSource());
+        services.AddSingleton<ILoggerFactory>(new ExplodingLoggerFactory());
+        await using var sp = services.BuildServiceProvider();
+
+        var behavior = new KyrolusRequestExceptionProcessorBehavior<Ping, string>(sp);
+
+        var ex = await Should.ThrowAsync<InvalidOperationException>(
+            () => behavior.Handle(new Ping("test"), _ => throw new InvalidOperationException("original-error"), CancellationToken.None));
+
+        ex.Message.ShouldBe("original-error");
+    }
+
     private static IServiceCollection WithFailingAction(Recorder recorder)
     {
         var services = new ServiceCollection();
@@ -62,6 +101,28 @@ public sealed class KyrolusRequestExceptionProcessorBehaviorTests
         services.AddTransient<IKyrolusRequestExceptionAction<Explode, InvalidOperationException>, SecondAction>();
         return services;
     }
+}
+
+public sealed class FailingDispatchSource : GeneratorIntegration.IKyrolusRequestExceptionDispatchSource
+{
+    public IReadOnlyList<(Type ActionType, Func<CancellationToken, Task> Invoke)>? CreateActionInvocations(Type requestType, Type exceptionType, object request, Exception exception, IServiceProvider serviceProvider)
+    {
+        if (exceptionType == typeof(InvalidOperationException))
+        {
+            return [(typeof(FailingAction), _ => throw new InvalidOperationException("action-failed"))];
+        }
+        return null;
+    }
+
+    public IReadOnlyList<Func<CancellationToken, Task>>? CreateHandlerInvocations(Type requestType, Type exceptionType, Type responseType, object request, Exception exception, object state, IServiceProvider serviceProvider)
+        => null;
+}
+
+public sealed class ExplodingLoggerFactory : ILoggerFactory
+{
+    public void AddProvider(ILoggerProvider provider) { }
+    public ILogger CreateLogger(string categoryName) => throw new InvalidOperationException("Logging is broken!");
+    public void Dispose() { }
 }
 
 public sealed class FailingAction : IKyrolusRequestExceptionAction<Explode, InvalidOperationException>
