@@ -87,6 +87,13 @@
       "ci": true
     },
     {
+      "name": "Validation.DataAnnotations.Generator - Unit",
+      "project": "Tests/UnitTests/Validation/KyrolusSous.Validation.DataAnnotations.Generator.UnitTests/KyrolusSous.Validation.DataAnnotations.Generator.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
       "name": "Swagger - Integration",
       "project": "Tests/IntegrationTests/KyrolusSous.Swagger.IntegrationTests/KyrolusSous.Swagger.IntegrationTests.csproj",
       "kind": "integration",
