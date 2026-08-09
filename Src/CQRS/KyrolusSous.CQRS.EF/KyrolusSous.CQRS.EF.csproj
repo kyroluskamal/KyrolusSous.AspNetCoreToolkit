@@ -10,8 +10,8 @@
     <None Remove="Interfaces\**" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\CQRS\KyrolusSous.CQRS.Abstractions\KyrolusSous.CQRS.Abstractions.csproj" />
-    <ProjectReference Include="..\Mediator\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj" />
+    <ProjectReference Include="..\KyrolusSous.CQRS.Abstractions\KyrolusSous.CQRS.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Mediator\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj" />
   </ItemGroup>
   <ItemGroup>
   </ItemGroup>

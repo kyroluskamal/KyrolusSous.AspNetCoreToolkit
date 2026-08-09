@@ -1,125 +1,121 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Src", "Src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Caching.Abstractions", "Src\KyrolusSous.Caching.Abstractions\KyrolusSous.Caching.Abstractions.csproj", "{CDD69D72-5852-4B14-ABDC-ADC8F9BF40FA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Caching.Abstractions", "Src\Caching\KyrolusSous.Caching.Abstractions\KyrolusSous.Caching.Abstractions.csproj", "{CDD69D72-5852-4B14-ABDC-ADC8F9BF40FA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Caching.Redis", "Src\KyrolusSous.Caching.Redis\KyrolusSous.Caching.Redis.csproj", "{B9446DD9-2CDF-4330-B053-31F2915418E1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Caching.Redis", "Src\Caching\KyrolusSous.Caching.Redis\KyrolusSous.Caching.Redis.csproj", "{B9446DD9-2CDF-4330-B053-31F2915418E1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.CQRS.Abstractions", "Src\KyrolusSous.CQRS.Abstractions\KyrolusSous.CQRS.Abstractions.csproj", "{C0DE5FAC-8F4D-4930-B3A3-8BB4433F2C11}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.CQRS.Abstractions", "Src\CQRS\KyrolusSous.CQRS.Abstractions\KyrolusSous.CQRS.Abstractions.csproj", "{C0DE5FAC-8F4D-4930-B3A3-8BB4433F2C11}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.CQRS.Caching", "Src\KyrolusSous.CQRS.Caching\KyrolusSous.CQRS.Caching.csproj", "{BBF99E98-1A24-4F68-ACA2-45DDA30BB135}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.CQRS.Caching", "Src\CQRS\KyrolusSous.CQRS.Caching\KyrolusSous.CQRS.Caching.csproj", "{BBF99E98-1A24-4F68-ACA2-45DDA30BB135}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Abstractions", "Src\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj", "{F84A0D57-29A7-41C4-B764-D6418AE2F40F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Abstractions", "Src\Mediator\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj", "{F84A0D57-29A7-41C4-B764-D6418AE2F40F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.CQRS.EF", "Src\KyrolusSous.CQRS.EF\KyrolusSous.CQRS.EF.csproj", "{6087F83C-B9E7-498B-A49C-492643B7FC96}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.CQRS.EF", "Src\CQRS\KyrolusSous.CQRS.EF\KyrolusSous.CQRS.EF.csproj", "{6087F83C-B9E7-498B-A49C-492643B7FC96}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Abstractions", "Src\KyrolusSous.Repositories.EF.Abstractions\KyrolusSous.Repositories.EF.Abstractions.csproj", "{99F6DD90-1FDE-4B4A-A8A6-F1CA49670CC8}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.CQRS.ExceptionHandling", "Src\CQRS\KyrolusSous.CQRS.ExceptionHandling\KyrolusSous.CQRS.ExceptionHandling.csproj", "{44C8AAA8-E935-490D-B282-97314F1FC415}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.CQRS.ExceptionHandling", "Src\KyrolusSous.CQRS.ExceptionHandling\KyrolusSous.CQRS.ExceptionHandling.csproj", "{44C8AAA8-E935-490D-B282-97314F1FC415}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.CQRS.Mapping", "Src\CQRS\KyrolusSous.CQRS.Mapping\KyrolusSous.CQRS.Mapping.csproj", "{A7F7598A-89AA-4C10-B057-E4D86153F6C5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.CQRS.Mapping", "Src\KyrolusSous.CQRS.Mapping\KyrolusSous.CQRS.Mapping.csproj", "{A7F7598A-89AA-4C10-B057-E4D86153F6C5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mapping.Abstractions", "Src\Mapping\KyrolusSous.Mapping.Abstractions\KyrolusSous.Mapping.Abstractions.csproj", "{5C8867EC-E018-4410-AFA3-3744D649E8A6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mapping.Abstractions", "Src\KyrolusSous.Mapping.Abstractions\KyrolusSous.Mapping.Abstractions.csproj", "{5C8867EC-E018-4410-AFA3-3744D649E8A6}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.CQRS.Marten", "Src\CQRS\KyrolusSous.CQRS.Marten\KyrolusSous.CQRS.Marten.csproj", "{89B183E0-1D42-4401-A921-4D10FD706144}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.CQRS.Marten", "Src\KyrolusSous.CQRS.Marten\KyrolusSous.CQRS.Marten.csproj", "{89B183E0-1D42-4401-A921-4D10FD706144}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.Marten.Abstractions", "Src\Repositories\KyrolusSous.Repositories.Marten.Abstractions\KyrolusSous.Repositories.Marten.Abstractions.csproj", "{A09DB454-585E-473F-B448-68D0C8AC525B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.Marten.Abstractions", "Src\KyrolusSous.Repositories.Marten.Abstractions\KyrolusSous.Repositories.Marten.Abstractions.csproj", "{A09DB454-585E-473F-B448-68D0C8AC525B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.CQRS.Validation", "Src\CQRS\KyrolusSous.CQRS.Validation\KyrolusSous.CQRS.Validation.csproj", "{CFA2F241-7464-4B34-B9F4-A8F32CA2B22D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.CQRS.Validation", "Src\KyrolusSous.CQRS.Validation\KyrolusSous.CQRS.Validation.csproj", "{CFA2F241-7464-4B34-B9F4-A8F32CA2B22D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.Abstractions", "Src\Validation\KyrolusSous.Validation.Abstractions\KyrolusSous.Validation.Abstractions.csproj", "{37D936A5-656C-47E0-87D7-4DFCBC655208}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.Abstractions", "Src\KyrolusSous.Validation.Abstractions\KyrolusSous.Validation.Abstractions.csproj", "{37D936A5-656C-47E0-87D7-4DFCBC655208}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.Abstractions", "Src\DataProtection\KyrolusSous.DataProtection.Abstractions\KyrolusSous.DataProtection.Abstractions.csproj", "{61B127D7-99D1-448B-8D63-20D85390D701}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.Abstractions", "Src\KyrolusSous.DataProtection.Abstractions\KyrolusSous.DataProtection.Abstractions.csproj", "{61B127D7-99D1-448B-8D63-20D85390D701}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.AwsKms", "Src\DataProtection\KyrolusSous.DataProtection.AwsKms\KyrolusSous.DataProtection.AwsKms.csproj", "{AA3AFBF5-2A1E-47C5-94C4-46E5829FB90C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.AwsKms", "Src\KyrolusSous.DataProtection.AwsKms\KyrolusSous.DataProtection.AwsKms.csproj", "{AA3AFBF5-2A1E-47C5-94C4-46E5829FB90C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.AzureKeyVault", "Src\DataProtection\KyrolusSous.DataProtection.AzureKeyVault\KyrolusSous.DataProtection.AzureKeyVault.csproj", "{B8BD96DF-93D2-436F-AFFC-A2EDBC5083F7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.AzureKeyVault", "Src\KyrolusSous.DataProtection.AzureKeyVault\KyrolusSous.DataProtection.AzureKeyVault.csproj", "{B8BD96DF-93D2-436F-AFFC-A2EDBC5083F7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.AzureStorage", "Src\DataProtection\KyrolusSous.DataProtection.AzureStorage\KyrolusSous.DataProtection.AzureStorage.csproj", "{3CA78555-96D2-4013-9342-C77FEBB0DF8B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.AzureStorage", "Src\KyrolusSous.DataProtection.AzureStorage\KyrolusSous.DataProtection.AzureStorage.csproj", "{3CA78555-96D2-4013-9342-C77FEBB0DF8B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.Cli", "Src\DataProtection\KyrolusSous.DataProtection.Cli\KyrolusSous.DataProtection.Cli.csproj", "{361A85FB-65DE-49FC-8461-BF5964B84A61}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.Cli", "Src\KyrolusSous.DataProtection.Cli\KyrolusSous.DataProtection.Cli.csproj", "{361A85FB-65DE-49FC-8461-BF5964B84A61}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.Runtime", "Src\DataProtection\KyrolusSous.DataProtection.Runtime\KyrolusSous.DataProtection.Runtime.csproj", "{3B230F1E-832E-4E99-A62C-63F50F7ACE42}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.Runtime", "Src\KyrolusSous.DataProtection.Runtime\KyrolusSous.DataProtection.Runtime.csproj", "{3B230F1E-832E-4E99-A62C-63F50F7ACE42}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.FileSystem", "Src\DataProtection\KyrolusSous.DataProtection.FileSystem\KyrolusSous.DataProtection.FileSystem.csproj", "{1A5E308F-AD24-406B-A63C-3303AA5578DE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.FileSystem", "Src\KyrolusSous.DataProtection.FileSystem\KyrolusSous.DataProtection.FileSystem.csproj", "{1A5E308F-AD24-406B-A63C-3303AA5578DE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.Redis", "Src\DataProtection\KyrolusSous.DataProtection.Redis\KyrolusSous.DataProtection.Redis.csproj", "{063FE91C-1851-4A29-B947-CA952B21F2DE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.Redis", "Src\KyrolusSous.DataProtection.Redis\KyrolusSous.DataProtection.Redis.csproj", "{063FE91C-1851-4A29-B947-CA952B21F2DE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.GoogleKms", "Src\DataProtection\KyrolusSous.DataProtection.GoogleKms\KyrolusSous.DataProtection.GoogleKms.csproj", "{CDC244B8-4D27-4CFC-ADAC-85FC6B038B8E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.GoogleKms", "Src\KyrolusSous.DataProtection.GoogleKms\KyrolusSous.DataProtection.GoogleKms.csproj", "{CDC244B8-4D27-4CFC-ADAC-85FC6B038B8E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.EntityFramework", "Src\DataProtection\KyrolusSous.DataProtection.EntityFramework\KyrolusSous.DataProtection.EntityFramework.csproj", "{9995AD1F-D570-47A8-A981-DDED416F62F1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.EntityFramework", "Src\KyrolusSous.DataProtection.EntityFramework\KyrolusSous.DataProtection.EntityFramework.csproj", "{9995AD1F-D570-47A8-A981-DDED416F62F1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.Ephemeral", "Src\DataProtection\KyrolusSous.DataProtection.Ephemeral\KyrolusSous.DataProtection.Ephemeral.csproj", "{D2E7C61D-6B59-4AD4-AFFA-7B348C9B9EE2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.Ephemeral", "Src\KyrolusSous.DataProtection.Ephemeral\KyrolusSous.DataProtection.Ephemeral.csproj", "{D2E7C61D-6B59-4AD4-AFFA-7B348C9B9EE2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.CustomXml", "Src\DataProtection\KyrolusSous.DataProtection.CustomXml\KyrolusSous.DataProtection.CustomXml.csproj", "{3353C03E-3DB5-4714-8DD5-9ADA893103CF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.CustomXml", "Src\KyrolusSous.DataProtection.CustomXml\KyrolusSous.DataProtection.CustomXml.csproj", "{3353C03E-3DB5-4714-8DD5-9ADA893103CF}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.Marten", "Src\DataProtection\KyrolusSous.DataProtection.Marten\KyrolusSous.DataProtection.Marten.csproj", "{1A9B19DA-6C83-45CB-B330-E6B9AD151DF2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.Marten", "Src\KyrolusSous.DataProtection.Marten\KyrolusSous.DataProtection.Marten.csproj", "{1A9B19DA-6C83-45CB-B330-E6B9AD151DF2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.EndpointKit.Core", "Src\EndpointKit\KyrolusSous.EndpointKit.Core\KyrolusSous.EndpointKit.Core.csproj", "{FD1A1735-90A1-4D06-907A-96F303C7D23B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.EndpointKit.Core", "Src\KyrolusSous.EndpointKit.Core\KyrolusSous.EndpointKit.Core.csproj", "{FD1A1735-90A1-4D06-907A-96F303C7D23B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.EndpointKit.EF", "Src\EndpointKit\KyrolusSous.EndpointKit.EF\KyrolusSous.EndpointKit.EF.csproj", "{48DA6E71-81D5-420E-95B3-FA8D17054001}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.EndpointKit.EF", "Src\KyrolusSous.EndpointKit.EF\KyrolusSous.EndpointKit.EF.csproj", "{48DA6E71-81D5-420E-95B3-FA8D17054001}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.ExceptionHandling", "Src\ExceptionHandling\KyrolusSous.ExceptionHandling\KyrolusSous.ExceptionHandling.csproj", "{EBFD5CE7-E9A4-4A17-B089-71730AFA8A39}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.ExceptionHandling", "Src\KyrolusSous.ExceptionHandling\KyrolusSous.ExceptionHandling.csproj", "{EBFD5CE7-E9A4-4A17-B089-71730AFA8A39}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.ExceptionHandling.Abstractions", "Src\ExceptionHandling\KyrolusSous.ExceptionHandling.Abstractions\KyrolusSous.ExceptionHandling.Abstractions.csproj", "{DCD122BA-EB9F-4ED8-92E5-7ACF799DD842}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.ExceptionHandling.Abstractions", "Src\KyrolusSous.ExceptionHandling.Abstractions\KyrolusSous.ExceptionHandling.Abstractions.csproj", "{DCD122BA-EB9F-4ED8-92E5-7ACF799DD842}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.ExceptionHandling.ProblemDetails", "Src\ExceptionHandling\KyrolusSous.ExceptionHandling.ProblemDetails\KyrolusSous.ExceptionHandling.ProblemDetails.csproj", "{480250E0-949E-4E67-A6DC-62C20B9C00F0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.ExceptionHandling.ProblemDetails", "Src\KyrolusSous.ExceptionHandling.ProblemDetails\KyrolusSous.ExceptionHandling.ProblemDetails.csproj", "{480250E0-949E-4E67-A6DC-62C20B9C00F0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.EndpointKit.Generator", "Src\EndpointKit\KyrolusSous.EndpointKit.Generator\KyrolusSous.EndpointKit.Generator.csproj", "{208A5A76-DB9A-4228-BE92-368A6E4ACFF5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.EndpointKit.Generator", "Src\KyrolusSous.EndpointKit.Generator\KyrolusSous.EndpointKit.Generator.csproj", "{208A5A76-DB9A-4228-BE92-368A6E4ACFF5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.EndpointKit.Marten", "Src\EndpointKit\KyrolusSous.EndpointKit.Marten\KyrolusSous.EndpointKit.Marten.csproj", "{9293226E-87B2-4CE3-AE44-CB221002B93A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.EndpointKit.Marten", "Src\KyrolusSous.EndpointKit.Marten\KyrolusSous.EndpointKit.Marten.csproj", "{9293226E-87B2-4CE3-AE44-CB221002B93A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.ExceptionHandling.EntityFramework", "Src\ExceptionHandling\KyrolusSous.ExceptionHandling.EntityFramework\KyrolusSous.ExceptionHandling.EntityFramework.csproj", "{864B9CD0-2A7A-4D0F-90A3-0E50875FD0D4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.ExceptionHandling.EntityFramework", "Src\KyrolusSous.ExceptionHandling.EntityFramework\KyrolusSous.ExceptionHandling.EntityFramework.csproj", "{864B9CD0-2A7A-4D0F-90A3-0E50875FD0D4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.ExceptionHandling.FluentValidation", "Src\ExceptionHandling\KyrolusSous.ExceptionHandling.FluentValidation\KyrolusSous.ExceptionHandling.FluentValidation.csproj", "{C0ECDA37-704B-4924-B80D-A51E623D66D1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.ExceptionHandling.FluentValidation", "Src\KyrolusSous.ExceptionHandling.FluentValidation\KyrolusSous.ExceptionHandling.FluentValidation.csproj", "{C0ECDA37-704B-4924-B80D-A51E623D66D1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.ExceptionHandling.Redis", "Src\ExceptionHandling\KyrolusSous.ExceptionHandling.Redis\KyrolusSous.ExceptionHandling.Redis.csproj", "{5A763381-CCF8-491D-9531-87109C369A18}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.ExceptionHandling.Redis", "Src\KyrolusSous.ExceptionHandling.Redis\KyrolusSous.ExceptionHandling.Redis.csproj", "{5A763381-CCF8-491D-9531-87109C369A18}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.IRabbitMQUtilsInterfaces", "Src\RabbitMQ\KyrolusSous.IRabbitMQUtilsInterfaces\KyrolusSous.IRabbitMQUtilsInterfaces.csproj", "{FFAF280D-E99D-41C1-9D8F-06E7D8AB8153}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.IRabbitMQUtilsInterfaces", "Src\KyrolusSous.IRabbitMQUtilsInterfaces\KyrolusSous.IRabbitMQUtilsInterfaces.csproj", "{FFAF280D-E99D-41C1-9D8F-06E7D8AB8153}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Logging.Abstractions", "Src\Logging\KyrolusSous.Logging.Abstractions\KyrolusSous.Logging.Abstractions.csproj", "{D6EAAC6B-96B4-40F9-9E30-8DB94B73C141}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Logging.Abstractions", "Src\KyrolusSous.Logging.Abstractions\KyrolusSous.Logging.Abstractions.csproj", "{D6EAAC6B-96B4-40F9-9E30-8DB94B73C141}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Logging.Runtime", "Src\Logging\KyrolusSous.Logging.Runtime\KyrolusSous.Logging.Runtime.csproj", "{EE01CFC6-9E19-4A8F-AAB4-B46C53BD5821}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Logging.Runtime", "Src\KyrolusSous.Logging.Runtime\KyrolusSous.Logging.Runtime.csproj", "{EE01CFC6-9E19-4A8F-AAB4-B46C53BD5821}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mapping.Mapster", "Src\Mapping\KyrolusSous.Mapping.Mapster\KyrolusSous.Mapping.Mapster.csproj", "{836EE053-0152-4B1C-8A04-76A2CDB81A32}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Logging.Serilog", "Src\KyrolusSous.Logging.Serilog\KyrolusSous.Logging.Serilog.csproj", "{F4B0D50E-B38C-4D7D-A907-3B2718580ECD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Generator", "Src\Mediator\KyrolusSous.Mediator.Generator\KyrolusSous.Mediator.Generator.csproj", "{21D0AF33-6FF7-4FC1-A878-DA928D5E9FCE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mapping.Mapster", "Src\KyrolusSous.Mapping.Mapster\KyrolusSous.Mapping.Mapster.csproj", "{836EE053-0152-4B1C-8A04-76A2CDB81A32}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Reflection", "Src\Mediator\KyrolusSous.Mediator.Reflection\KyrolusSous.Mediator.Reflection.csproj", "{034FE714-8A38-4381-B32D-A7017BCF3B14}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Generator", "Src\KyrolusSous.Mediator.Generator\KyrolusSous.Mediator.Generator.csproj", "{21D0AF33-6FF7-4FC1-A878-DA928D5E9FCE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Runtime", "Src\Mediator\KyrolusSous.Mediator.Runtime\KyrolusSous.Mediator.Runtime.csproj", "{3851B2EB-E8E8-4761-BE54-5F5ABC7225DF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Reflection", "Src\KyrolusSous.Mediator.Reflection\KyrolusSous.Mediator.Reflection.csproj", "{034FE714-8A38-4381-B32D-A7017BCF3B14}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.OpenIddictAuth", "Src\Auth\KyrolusSous.OpenIddictAuth\KyrolusSous.OpenIddictAuth.csproj", "{8E16B4A3-72EE-4E62-A0B2-DCCA0A0F7C71}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Runtime", "Src\KyrolusSous.Mediator.Runtime\KyrolusSous.Mediator.Runtime.csproj", "{3851B2EB-E8E8-4761-BE54-5F5ABC7225DF}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.RabbitMQUtils", "Src\RabbitMQ\KyrolusSous.RabbitMQUtils\KyrolusSous.RabbitMQUtils.csproj", "{94E155F1-0ABF-441D-A2AD-F2842AB35ED7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.OpenIddictAuth", "Src\KyrolusSous.OpenIddictAuth\KyrolusSous.OpenIddictAuth.csproj", "{8E16B4A3-72EE-4E62-A0B2-DCCA0A0F7C71}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Cache.Distributed", "Src\Repositories\KyrolusSous.Repositories.EF.Cache.Distributed\KyrolusSous.Repositories.EF.Cache.Distributed.csproj", "{AB852D4F-81D6-4D1D-B526-99281ED37E6F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.RabbitMQUtils", "Src\KyrolusSous.RabbitMQUtils\KyrolusSous.RabbitMQUtils.csproj", "{94E155F1-0ABF-441D-A2AD-F2842AB35ED7}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Cache.Distributed", "Src\KyrolusSous.Repositories.EF.Cache.Distributed\KyrolusSous.Repositories.EF.Cache.Distributed.csproj", "{AB852D4F-81D6-4D1D-B526-99281ED37E6F}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Generator", "Src\KyrolusSous.Repositories.EF.Generator\KyrolusSous.Repositories.EF.Generator.csproj", "{1139E992-2331-4535-A23B-0D1B38BBFA9A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Generator", "Src\Repositories\KyrolusSous.Repositories.EF.Generator\KyrolusSous.Repositories.EF.Generator.csproj", "{1139E992-2331-4535-A23B-0D1B38BBFA9A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Runtime", "Src\KyrolusSous.Repositories.EF.Runtime\KyrolusSous.Repositories.EF.Runtime.csproj", "{A1715981-DC36-4267-B880-3CD31FACDAAF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.Marten.Generator", "Src\KyrolusSous.Repositories.Marten.Generator\KyrolusSous.Repositories.Marten.Generator.csproj", "{36EDAFA6-F003-4CFA-ACCA-E2632909B0D8}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.Marten.Generator", "Src\Repositories\KyrolusSous.Repositories.Marten.Generator\KyrolusSous.Repositories.Marten.Generator.csproj", "{36EDAFA6-F003-4CFA-ACCA-E2632909B0D8}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.Marten.Runtime", "Src\KyrolusSous.Repositories.Marten.Runtime\KyrolusSous.Repositories.Marten.Runtime.csproj", "{856EC61D-FCE4-4CF1-A818-BA2EA31764C2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.Marten.Runtime", "Src\Repositories\KyrolusSous.Repositories.Marten.Runtime\KyrolusSous.Repositories.Marten.Runtime.csproj", "{856EC61D-FCE4-4CF1-A818-BA2EA31764C2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Swagger", "Src\KyrolusSous.Swagger\KyrolusSous.Swagger.csproj", "{668D6E2D-3BA2-4FE5-AEE6-D14C8013756D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Swagger", "Src\Swagger\KyrolusSous.Swagger\KyrolusSous.Swagger.csproj", "{668D6E2D-3BA2-4FE5-AEE6-D14C8013756D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.DataAnnotations", "Src\KyrolusSous.Validation.DataAnnotations\KyrolusSous.Validation.DataAnnotations.csproj", "{6814CB1F-CA1A-4F90-BB33-391E53BF79B2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.DataAnnotations", "Src\Validation\KyrolusSous.Validation.DataAnnotations\KyrolusSous.Validation.DataAnnotations.csproj", "{6814CB1F-CA1A-4F90-BB33-391E53BF79B2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.FluentValidation", "Src\KyrolusSous.Validation.FluentValidation\KyrolusSous.Validation.FluentValidation.csproj", "{728DC4CA-805C-429D-85FF-9B6ADE35F89A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.FluentValidation", "Src\Validation\KyrolusSous.Validation.FluentValidation\KyrolusSous.Validation.FluentValidation.csproj", "{728DC4CA-805C-429D-85FF-9B6ADE35F89A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.FluentValidation.Scanning", "Src\KyrolusSous.Validation.FluentValidation.Scanning\KyrolusSous.Validation.FluentValidation.Scanning.csproj", "{ECB1D1AC-9485-4C15-BF75-6BC8F3A4141B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.FluentValidation.Scanning", "Src\Validation\KyrolusSous.Validation.FluentValidation.Scanning\KyrolusSous.Validation.FluentValidation.Scanning.csproj", "{ECB1D1AC-9485-4C15-BF75-6BC8F3A4141B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.Generator", "Src\KyrolusSous.Validation.Generator\KyrolusSous.Validation.Generator.csproj", "{6B432D76-8741-4E2C-BEC4-5AE3655FAE3E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.Generator", "Src\Validation\KyrolusSous.Validation.Generator\KyrolusSous.Validation.Generator.csproj", "{6B432D76-8741-4E2C-BEC4-5AE3655FAE3E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.Runtime", "Src\KyrolusSous.Validation.Runtime\KyrolusSous.Validation.Runtime.csproj", "{E383F074-EF69-4D1C-827A-26DB78CF67B1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.Runtime", "Src\Validation\KyrolusSous.Validation.Runtime\KyrolusSous.Validation.Runtime.csproj", "{E383F074-EF69-4D1C-827A-26DB78CF67B1}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject
@@ -161,15 +157,17 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "KyrolusSous.Logging.UnitTes
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Logging.Tests", "Tests\UnitTests\KyrolusSous.Logging.UnitTests\KyrolusSous.Logging.Tests.csproj", "{BAB985C7-17E9-4B67-BAC3-E928E2B3732A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Generator.UnitTests", "Tests\UnitTests\KyrolusSous.Mediator.Generator.UnitTests\KyrolusSous.Mediator.Generator.UnitTests.csproj", "{8DBB3CCC-FC0D-410F-8CF2-022305AC3263}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Generator.UnitTests", "Tests\UnitTests\Mediator\KyrolusSous.Mediator.Generator.UnitTests\KyrolusSous.Mediator.Generator.UnitTests.csproj", "{8DBB3CCC-FC0D-410F-8CF2-022305AC3263}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Reflection.UnitTests", "Tests\UnitTests\KyrolusSous.Mediator.Reflection.UnitTests\KyrolusSous.Mediator.Reflection.UnitTests.csproj", "{B19380F0-0519-4015-896F-15C9548FFAE4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Runtime.UnitTests", "Tests\UnitTests\Mediator\KyrolusSous.Mediator.Runtime.UnitTests\KyrolusSous.Mediator.Runtime.UnitTests.csproj", "{306A22F8-6D8C-4C83-B37A-3CFAEA0397B6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Mediator.Runtime.UnitTests", "Tests\UnitTests\KyrolusSous.Mediator.Runtime.UnitTests\KyrolusSous.Mediator.Runtime.UnitTests.csproj", "{306A22F8-6D8C-4C83-B37A-3CFAEA0397B6}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Validation", "Validation", "{005EFC0B-32EF-5B7C-1F39-A76BD9A89E34}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Generator.UnitTests", "Tests\UnitTests\KyrolusSous.Repositories.EF.Generator.UnitTests\KyrolusSous.Repositories.EF.Generator.UnitTests.csproj", "{4456EA74-5236-4B28-8B5D-99257E6472C1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.Fluent", "Src\Validation\KyrolusSous.Validation.Fluent\KyrolusSous.Validation.Fluent.csproj", "{46930669-E66E-4A03-BD21-435AE6B31F31}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF.Runtime.UnitTests", "Tests\UnitTests\KyrolusSous.Repositories.EF.Runtime.UnitTests\KyrolusSous.Repositories.EF.Runtime.UnitTests.csproj", "{E2657888-3A06-4C64-9FEA-052064671235}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Validation", "Validation", "{2DF51929-66A1-651D-8EF3-B92A1CDF3ABF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.Fluent.UnitTests", "Tests\UnitTests\Validation\KyrolusSous.Validation.Fluent.UnitTests\KyrolusSous.Validation.Fluent.UnitTests.csproj", "{281E1D5E-F196-4D82-A555-256C1375AD0A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -253,18 +251,6 @@ Global
 		{6087F83C-B9E7-498B-A49C-492643B7FC96}.Release|x64.Build.0 = Release|Any CPU
 		{6087F83C-B9E7-498B-A49C-492643B7FC96}.Release|x86.ActiveCfg = Release|Any CPU
 		{6087F83C-B9E7-498B-A49C-492643B7FC96}.Release|x86.Build.0 = Release|Any CPU
-		{99F6DD90-1FDE-4B4A-A8A6-F1CA49670CC8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{99F6DD90-1FDE-4B4A-A8A6-F1CA49670CC8}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{99F6DD90-1FDE-4B4A-A8A6-F1CA49670CC8}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{99F6DD90-1FDE-4B4A-A8A6-F1CA49670CC8}.Debug|x64.Build.0 = Debug|Any CPU
-		{99F6DD90-1FDE-4B4A-A8A6-F1CA49670CC8}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{99F6DD90-1FDE-4B4A-A8A6-F1CA49670CC8}.Debug|x86.Build.0 = Debug|Any CPU
-		{99F6DD90-1FDE-4B4A-A8A6-F1CA49670CC8}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{99F6DD90-1FDE-4B4A-A8A6-F1CA49670CC8}.Release|Any CPU.Build.0 = Release|Any CPU
-		{99F6DD90-1FDE-4B4A-A8A6-F1CA49670CC8}.Release|x64.ActiveCfg = Release|Any CPU
-		{99F6DD90-1FDE-4B4A-A8A6-F1CA49670CC8}.Release|x64.Build.0 = Release|Any CPU
-		{99F6DD90-1FDE-4B4A-A8A6-F1CA49670CC8}.Release|x86.ActiveCfg = Release|Any CPU
-		{99F6DD90-1FDE-4B4A-A8A6-F1CA49670CC8}.Release|x86.Build.0 = Release|Any CPU
 		{44C8AAA8-E935-490D-B282-97314F1FC415}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{44C8AAA8-E935-490D-B282-97314F1FC415}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{44C8AAA8-E935-490D-B282-97314F1FC415}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -661,18 +647,6 @@ Global
 		{EE01CFC6-9E19-4A8F-AAB4-B46C53BD5821}.Release|x64.Build.0 = Release|Any CPU
 		{EE01CFC6-9E19-4A8F-AAB4-B46C53BD5821}.Release|x86.ActiveCfg = Release|Any CPU
 		{EE01CFC6-9E19-4A8F-AAB4-B46C53BD5821}.Release|x86.Build.0 = Release|Any CPU
-		{F4B0D50E-B38C-4D7D-A907-3B2718580ECD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{F4B0D50E-B38C-4D7D-A907-3B2718580ECD}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{F4B0D50E-B38C-4D7D-A907-3B2718580ECD}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{F4B0D50E-B38C-4D7D-A907-3B2718580ECD}.Debug|x64.Build.0 = Debug|Any CPU
-		{F4B0D50E-B38C-4D7D-A907-3B2718580ECD}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{F4B0D50E-B38C-4D7D-A907-3B2718580ECD}.Debug|x86.Build.0 = Debug|Any CPU
-		{F4B0D50E-B38C-4D7D-A907-3B2718580ECD}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{F4B0D50E-B38C-4D7D-A907-3B2718580ECD}.Release|Any CPU.Build.0 = Release|Any CPU
-		{F4B0D50E-B38C-4D7D-A907-3B2718580ECD}.Release|x64.ActiveCfg = Release|Any CPU
-		{F4B0D50E-B38C-4D7D-A907-3B2718580ECD}.Release|x64.Build.0 = Release|Any CPU
-		{F4B0D50E-B38C-4D7D-A907-3B2718580ECD}.Release|x86.ActiveCfg = Release|Any CPU
-		{F4B0D50E-B38C-4D7D-A907-3B2718580ECD}.Release|x86.Build.0 = Release|Any CPU
 		{836EE053-0152-4B1C-8A04-76A2CDB81A32}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{836EE053-0152-4B1C-8A04-76A2CDB81A32}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{836EE053-0152-4B1C-8A04-76A2CDB81A32}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -1033,18 +1007,6 @@ Global
 		{8DBB3CCC-FC0D-410F-8CF2-022305AC3263}.Release|x64.Build.0 = Release|Any CPU
 		{8DBB3CCC-FC0D-410F-8CF2-022305AC3263}.Release|x86.ActiveCfg = Release|Any CPU
 		{8DBB3CCC-FC0D-410F-8CF2-022305AC3263}.Release|x86.Build.0 = Release|Any CPU
-		{B19380F0-0519-4015-896F-15C9548FFAE4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B19380F0-0519-4015-896F-15C9548FFAE4}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B19380F0-0519-4015-896F-15C9548FFAE4}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{B19380F0-0519-4015-896F-15C9548FFAE4}.Debug|x64.Build.0 = Debug|Any CPU
-		{B19380F0-0519-4015-896F-15C9548FFAE4}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{B19380F0-0519-4015-896F-15C9548FFAE4}.Debug|x86.Build.0 = Debug|Any CPU
-		{B19380F0-0519-4015-896F-15C9548FFAE4}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B19380F0-0519-4015-896F-15C9548FFAE4}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B19380F0-0519-4015-896F-15C9548FFAE4}.Release|x64.ActiveCfg = Release|Any CPU
-		{B19380F0-0519-4015-896F-15C9548FFAE4}.Release|x64.Build.0 = Release|Any CPU
-		{B19380F0-0519-4015-896F-15C9548FFAE4}.Release|x86.ActiveCfg = Release|Any CPU
-		{B19380F0-0519-4015-896F-15C9548FFAE4}.Release|x86.Build.0 = Release|Any CPU
 		{306A22F8-6D8C-4C83-B37A-3CFAEA0397B6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{306A22F8-6D8C-4C83-B37A-3CFAEA0397B6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{306A22F8-6D8C-4C83-B37A-3CFAEA0397B6}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -1057,30 +1019,30 @@ Global
 		{306A22F8-6D8C-4C83-B37A-3CFAEA0397B6}.Release|x64.Build.0 = Release|Any CPU
 		{306A22F8-6D8C-4C83-B37A-3CFAEA0397B6}.Release|x86.ActiveCfg = Release|Any CPU
 		{306A22F8-6D8C-4C83-B37A-3CFAEA0397B6}.Release|x86.Build.0 = Release|Any CPU
-		{4456EA74-5236-4B28-8B5D-99257E6472C1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{4456EA74-5236-4B28-8B5D-99257E6472C1}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{4456EA74-5236-4B28-8B5D-99257E6472C1}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{4456EA74-5236-4B28-8B5D-99257E6472C1}.Debug|x64.Build.0 = Debug|Any CPU
-		{4456EA74-5236-4B28-8B5D-99257E6472C1}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{4456EA74-5236-4B28-8B5D-99257E6472C1}.Debug|x86.Build.0 = Debug|Any CPU
-		{4456EA74-5236-4B28-8B5D-99257E6472C1}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{4456EA74-5236-4B28-8B5D-99257E6472C1}.Release|Any CPU.Build.0 = Release|Any CPU
-		{4456EA74-5236-4B28-8B5D-99257E6472C1}.Release|x64.ActiveCfg = Release|Any CPU
-		{4456EA74-5236-4B28-8B5D-99257E6472C1}.Release|x64.Build.0 = Release|Any CPU
-		{4456EA74-5236-4B28-8B5D-99257E6472C1}.Release|x86.ActiveCfg = Release|Any CPU
-		{4456EA74-5236-4B28-8B5D-99257E6472C1}.Release|x86.Build.0 = Release|Any CPU
-		{E2657888-3A06-4C64-9FEA-052064671235}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{E2657888-3A06-4C64-9FEA-052064671235}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{E2657888-3A06-4C64-9FEA-052064671235}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{E2657888-3A06-4C64-9FEA-052064671235}.Debug|x64.Build.0 = Debug|Any CPU
-		{E2657888-3A06-4C64-9FEA-052064671235}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{E2657888-3A06-4C64-9FEA-052064671235}.Debug|x86.Build.0 = Debug|Any CPU
-		{E2657888-3A06-4C64-9FEA-052064671235}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{E2657888-3A06-4C64-9FEA-052064671235}.Release|Any CPU.Build.0 = Release|Any CPU
-		{E2657888-3A06-4C64-9FEA-052064671235}.Release|x64.ActiveCfg = Release|Any CPU
-		{E2657888-3A06-4C64-9FEA-052064671235}.Release|x64.Build.0 = Release|Any CPU
-		{E2657888-3A06-4C64-9FEA-052064671235}.Release|x86.ActiveCfg = Release|Any CPU
-		{E2657888-3A06-4C64-9FEA-052064671235}.Release|x86.Build.0 = Release|Any CPU
+		{46930669-E66E-4A03-BD21-435AE6B31F31}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{46930669-E66E-4A03-BD21-435AE6B31F31}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{46930669-E66E-4A03-BD21-435AE6B31F31}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{46930669-E66E-4A03-BD21-435AE6B31F31}.Debug|x64.Build.0 = Debug|Any CPU
+		{46930669-E66E-4A03-BD21-435AE6B31F31}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{46930669-E66E-4A03-BD21-435AE6B31F31}.Debug|x86.Build.0 = Debug|Any CPU
+		{46930669-E66E-4A03-BD21-435AE6B31F31}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{46930669-E66E-4A03-BD21-435AE6B31F31}.Release|Any CPU.Build.0 = Release|Any CPU
+		{46930669-E66E-4A03-BD21-435AE6B31F31}.Release|x64.ActiveCfg = Release|Any CPU
+		{46930669-E66E-4A03-BD21-435AE6B31F31}.Release|x64.Build.0 = Release|Any CPU
+		{46930669-E66E-4A03-BD21-435AE6B31F31}.Release|x86.ActiveCfg = Release|Any CPU
+		{46930669-E66E-4A03-BD21-435AE6B31F31}.Release|x86.Build.0 = Release|Any CPU
+		{281E1D5E-F196-4D82-A555-256C1375AD0A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{281E1D5E-F196-4D82-A555-256C1375AD0A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{281E1D5E-F196-4D82-A555-256C1375AD0A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{281E1D5E-F196-4D82-A555-256C1375AD0A}.Debug|x64.Build.0 = Debug|Any CPU
+		{281E1D5E-F196-4D82-A555-256C1375AD0A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{281E1D5E-F196-4D82-A555-256C1375AD0A}.Debug|x86.Build.0 = Debug|Any CPU
+		{281E1D5E-F196-4D82-A555-256C1375AD0A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{281E1D5E-F196-4D82-A555-256C1375AD0A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{281E1D5E-F196-4D82-A555-256C1375AD0A}.Release|x64.ActiveCfg = Release|Any CPU
+		{281E1D5E-F196-4D82-A555-256C1375AD0A}.Release|x64.Build.0 = Release|Any CPU
+		{281E1D5E-F196-4D82-A555-256C1375AD0A}.Release|x86.ActiveCfg = Release|Any CPU
+		{281E1D5E-F196-4D82-A555-256C1375AD0A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1092,7 +1054,6 @@ Global
 		{BBF99E98-1A24-4F68-ACA2-45DDA30BB135} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{F84A0D57-29A7-41C4-B764-D6418AE2F40F} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{6087F83C-B9E7-498B-A49C-492643B7FC96} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
-		{99F6DD90-1FDE-4B4A-A8A6-F1CA49670CC8} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{44C8AAA8-E935-490D-B282-97314F1FC415} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{A7F7598A-89AA-4C10-B057-E4D86153F6C5} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{5C8867EC-E018-4410-AFA3-3744D649E8A6} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
@@ -1126,7 +1087,6 @@ Global
 		{FFAF280D-E99D-41C1-9D8F-06E7D8AB8153} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{D6EAAC6B-96B4-40F9-9E30-8DB94B73C141} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{EE01CFC6-9E19-4A8F-AAB4-B46C53BD5821} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
-		{F4B0D50E-B38C-4D7D-A907-3B2718580ECD} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{836EE053-0152-4B1C-8A04-76A2CDB81A32} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{21D0AF33-6FF7-4FC1-A878-DA928D5E9FCE} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{034FE714-8A38-4381-B32D-A7017BCF3B14} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
@@ -1164,9 +1124,11 @@ Global
 		{66319178-A4B2-5719-EF5A-879B9046B690} = {394A81D9-3C45-9818-BB26-23F2B85056FF}
 		{BAB985C7-17E9-4B67-BAC3-E928E2B3732A} = {66319178-A4B2-5719-EF5A-879B9046B690}
 		{8DBB3CCC-FC0D-410F-8CF2-022305AC3263} = {394A81D9-3C45-9818-BB26-23F2B85056FF}
-		{B19380F0-0519-4015-896F-15C9548FFAE4} = {394A81D9-3C45-9818-BB26-23F2B85056FF}
 		{306A22F8-6D8C-4C83-B37A-3CFAEA0397B6} = {394A81D9-3C45-9818-BB26-23F2B85056FF}
-		{4456EA74-5236-4B28-8B5D-99257E6472C1} = {394A81D9-3C45-9818-BB26-23F2B85056FF}
-		{E2657888-3A06-4C64-9FEA-052064671235} = {394A81D9-3C45-9818-BB26-23F2B85056FF}
+		{005EFC0B-32EF-5B7C-1F39-A76BD9A89E34} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{46930669-E66E-4A03-BD21-435AE6B31F31} = {005EFC0B-32EF-5B7C-1F39-A76BD9A89E34}
+		{2DF51929-66A1-651D-8EF3-B92A1CDF3ABF} = {394A81D9-3C45-9818-BB26-23F2B85056FF}
+		{281E1D5E-F196-4D82-A555-256C1375AD0A} = {2DF51929-66A1-651D-8EF3-B92A1CDF3ABF}
 	EndGlobalSection
 EndGlobal
+

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\KyrolusSous.EndpointKit.Core\KyrolusSous.EndpointKit.Core.csproj" />
+    <ProjectReference Include="..\..\CQRS\KyrolusSous.CQRS.Marten\KyrolusSous.CQRS.Marten.csproj" />
+    <ProjectReference Include="..\..\Caching\KyrolusSous.Caching.Abstractions\KyrolusSous.Caching.Abstractions.csproj" />
+    <ProjectReference Include="..\..\ExceptionHandling\KyrolusSous.ExceptionHandling\KyrolusSous.ExceptionHandling.csproj" />
+    <ProjectReference Include="..\..\ExceptionHandling\KyrolusSous.ExceptionHandling.ProblemDetails\KyrolusSous.ExceptionHandling.ProblemDetails.csproj" />
+    <ProjectReference Include="..\..\Repositories\KyrolusSous.Repositories.Marten.Abstractions\KyrolusSous.Repositories.Marten.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Validation\KyrolusSous.Validation.Abstractions\KyrolusSous.Validation.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Mapster" Version="10.0.11" />
+  </ItemGroup>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>KyrolusSous.EndpointKit.Marten</AssemblyName>
+    <RootNamespace>KyrolusSous.EndpointKit.Marten</RootNamespace>
+  </PropertyGroup>
+</Project>
+

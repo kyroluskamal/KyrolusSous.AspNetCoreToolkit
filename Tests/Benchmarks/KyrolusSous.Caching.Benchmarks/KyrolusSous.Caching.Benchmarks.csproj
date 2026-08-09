@@ -12,8 +12,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Src\KyrolusSous.Caching.Abstractions\KyrolusSous.Caching.Abstractions.csproj" />
-    <ProjectReference Include="..\..\..\Src\KyrolusSous.Caching.Redis\KyrolusSous.Caching.Redis.csproj" />
+    <ProjectReference Include="..\..\..\Src\Caching\KyrolusSous.Caching.Abstractions\KyrolusSous.Caching.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\Src\Caching\KyrolusSous.Caching.Redis\KyrolusSous.Caching.Redis.csproj" />
   </ItemGroup>
 
 </Project>
+

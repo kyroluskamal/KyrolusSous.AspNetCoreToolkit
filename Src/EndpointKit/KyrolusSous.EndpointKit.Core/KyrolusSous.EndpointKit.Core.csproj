@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\Caching\KyrolusSous.Caching.Abstractions\KyrolusSous.Caching.Abstractions.csproj" />
+    <ProjectReference Include="..\..\CQRS\KyrolusSous.CQRS.Abstractions\KyrolusSous.CQRS.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Mediator\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Must stay on 2.x: Microsoft.AspNetCore.OpenApi 10.x is compiled against Microsoft.OpenApi 2.0.0.0 and its
+         XmlCommentGenerator emits code that assigns to IOpenApiMediaType.Example, which is read-only in 3.x.
+         2.11.0 is the latest 2.x and is above the GHSA-v5pm-xwqc-g5wc fix (2.7.5). Move to 3.x with ASP.NET Core 11. -->
+    <PackageReference Include="Microsoft.OpenApi" Version="2.11.0" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
+  </ItemGroup>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>KyrolusSous.EndpointKit.Core</AssemblyName>
+    <RootNamespace>KyrolusSous.EndpointKit.Core</RootNamespace>
+  </PropertyGroup>
+</Project>
+
+

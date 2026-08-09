@@ -20,11 +20,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Src\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj" />
-    <ProjectReference Include="..\..\..\Src\KyrolusSous.Mediator.Runtime\KyrolusSous.Mediator.Runtime.csproj" />
-    <ProjectReference Include="..\..\..\Src\KyrolusSous.Mediator.Generator\KyrolusSous.Mediator.Generator.csproj"
+    <ProjectReference Include="..\..\..\Src\Mediator\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\Src\Mediator\KyrolusSous.Mediator.Runtime\KyrolusSous.Mediator.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\Src\Mediator\KyrolusSous.Mediator.Generator\KyrolusSous.Mediator.Generator.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>
+

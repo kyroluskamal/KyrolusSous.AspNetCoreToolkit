@@ -24,7 +24,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Src\KyrolusSous.Logging.Serilog\KyrolusSous.Logging.Serilog.csproj" />
     <ProjectReference Include="..\..\IntegrationTests\KyrolusSous.Logging.TestApp\KyrolusSous.Logging.TestApp.csproj" />
   </ItemGroup>
 
@@ -35,3 +34,4 @@
     <AssemblyAttribute Include="System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverageAttribute" />
   </ItemGroup>
 </Project>
+

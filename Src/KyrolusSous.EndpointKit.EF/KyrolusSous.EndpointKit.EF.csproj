@@ -1,12 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <ProjectReference Include="..\KyrolusSous.EndpointKit.Core\KyrolusSous.EndpointKit.Core.csproj" />
-    <ProjectReference Include="..\KyrolusSous.CQRS.EF\KyrolusSous.CQRS.EF.csproj" />
-    <ProjectReference Include="..\KyrolusSous.Caching.Abstractions\KyrolusSous.Caching.Abstractions.csproj" />
-    <ProjectReference Include="..\KyrolusSous.ExceptionHandling\KyrolusSous.ExceptionHandling.csproj" />
-    <ProjectReference Include="..\KyrolusSous.ExceptionHandling.ProblemDetails\KyrolusSous.ExceptionHandling.ProblemDetails.csproj" />
-    <ProjectReference Include="..\KyrolusSous.Repositories.EF.Abstractions\KyrolusSous.Repositories.EF.Abstractions.csproj" />
-    <ProjectReference Include="..\KyrolusSous.Validation.Abstractions\KyrolusSous.Validation.Abstractions.csproj" />
+    <ProjectReference Include="..\EndpointKit\KyrolusSous.EndpointKit.Core\KyrolusSous.EndpointKit.Core.csproj" />
+    <ProjectReference Include="..\CQRS\KyrolusSous.CQRS.EF\KyrolusSous.CQRS.EF.csproj" />
+    <ProjectReference Include="..\Caching\KyrolusSous.Caching.Abstractions\KyrolusSous.Caching.Abstractions.csproj" />
+    <ProjectReference Include="..\ExceptionHandling\KyrolusSous.ExceptionHandling\KyrolusSous.ExceptionHandling.csproj" />
+    <ProjectReference Include="..\ExceptionHandling\KyrolusSous.ExceptionHandling.ProblemDetails\KyrolusSous.ExceptionHandling.ProblemDetails.csproj" />
+    <ProjectReference Include="..\Validation\KyrolusSous.Validation.Abstractions\KyrolusSous.Validation.Abstractions.csproj" />
   </ItemGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
@@ -22,3 +21,4 @@
     <RootNamespace>KyrolusSous.EndpointKit.EF</RootNamespace>
   </PropertyGroup>
 </Project>
+
