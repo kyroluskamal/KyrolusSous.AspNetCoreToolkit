@@ -32,7 +32,7 @@ this table is generated from it by `scripts/update-docs.py`.
 | Scope | Min line | Min branch |
 | --- | ---: | ---: |
 | **Overall** | 68% | 58% |
-| `KyrolusSous.Mediator.Generator` | 65% | 45% |
+| `KyrolusSous.Repositories.EF.Runtime` | 68% | 58% |
 
 <!-- END:GENERATED:thresholds -->
 

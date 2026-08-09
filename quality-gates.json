@@ -9,7 +9,7 @@
       "branch": 58
     },
     "packages": {
-      "KyrolusSous.Mediator.Generator": { "line": 65, "branch": 45 }
+      "KyrolusSous.Repositories.EF.Runtime": { "line": 68, "branch": 58 }
     }
   },
 
