@@ -348,9 +348,9 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return [new QueryHelperFilter("Lines", "any", "Quantity>2"), HttpStatusCode.OK, 1];
         yield return [new QueryHelperFilter("Lines", "any", "Quantity>=2"), HttpStatusCode.OK, 2];
         yield return [new QueryHelperFilter("Lines", "all", "Quantity>=2"), HttpStatusCode.OK, 2];
-        yield return [new QueryHelperFilter("Lines", "all", "Quantity>=3"), HttpStatusCode.OK, 2];
+        yield return [new QueryHelperFilter("Lines", "all", "Quantity>=3"), HttpStatusCode.OK, 1];
         yield return [new QueryHelperFilter("Lines", "any", "Quantity between (2,2)"), HttpStatusCode.OK, 1];
-        yield return [new QueryHelperFilter("Lines", "all", "Quantity between (1,4)"), HttpStatusCode.BadRequest, (int?)null];
+        yield return [new QueryHelperFilter("Lines", "all", "Quantity between (1,4)"), HttpStatusCode.OK, 3];
         yield return [new QueryHelperFilter("Lines", "any", "Quantity in (1,4)"), HttpStatusCode.OK, 2];
         yield return [new QueryHelperFilter("Lines", "all", "Quantity in (1,2,3,4)"), HttpStatusCode.BadRequest, (int?)null];
         yield return [new QueryHelperFilter("Lines", "any", "Name contains \"High\""), HttpStatusCode.BadRequest, (int?)null];
@@ -571,8 +571,8 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return OrderBurstCase("tags-any-highqty1", [new("Tags", "any", "HighQty1")], HttpStatusCode.OK, 1);
         yield return OrderBurstCase("tags-any-highqty1-lower", [new("Tags", "any", "highqty1")], HttpStatusCode.OK, 0);
         yield return OrderBurstCase("lines-any-qty-gt2", [new("Lines", "any", "Quantity>2")], HttpStatusCode.OK, 1);
-        yield return OrderBurstCase("lines-all-qty-gte1", [new("Lines", "all", "Quantity>=1")], HttpStatusCode.OK, 2);
-        yield return OrderBurstCase("lines-all-qty-gte2", [new("Lines", "all", "Quantity>=2")], HttpStatusCode.OK, 1);
+        yield return OrderBurstCase("lines-all-qty-gte1", [new("Lines", "all", "Quantity>=1")], HttpStatusCode.OK, 3);
+        yield return OrderBurstCase("lines-all-qty-gte2", [new("Lines", "all", "Quantity>=2")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("lines-any-qty-between-dotdot", [new("Lines", "any", "Quantity between 2..3")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("lines-any-prepduration-eq", [new("Lines", "any", "PrepDuration==00:15:00")], HttpStatusCode.BadRequest, null, "Invalid filter: property='Lines'");
         yield return OrderBurstCase("lines-any-prepduration-between-dotdot", [new("Lines", "any", "PrepDuration between 00:05:00..00:15:00")], HttpStatusCode.BadRequest, null, "Invalid filter: property='Lines'");
@@ -582,7 +582,7 @@ public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory fact
         yield return OrderBurstCase("lines-any-time-gte", [new("Lines", "any", "ScheduledTime>=10:00")], HttpStatusCode.OK, 2);
         yield return OrderBurstCase("lines-any-date-between-dotdot", [new("Lines", "any", "ScheduledDate between 2024-01-02..2024-01-03")], HttpStatusCode.OK, 1);
         yield return OrderBurstCase("lines-any-date-between-comma", [new("Lines", "any", "ScheduledDate between 2024-01-02,2024-01-03")], HttpStatusCode.BadRequest, null, "Invalid filter: property='Lines'");
-        yield return OrderBurstCase("lines-all-date-gte", [new("Lines", "all", "ScheduledDate>=2024-01-01")], HttpStatusCode.OK, 1);
+        yield return OrderBurstCase("lines-all-date-gte", [new("Lines", "all", "ScheduledDate>=2024-01-01")], HttpStatusCode.OK, 3);
 
         yield return OrderBurstCase("invalid-status-gt", [new("Status", "gt", "Paid")], HttpStatusCode.BadRequest, null, "Unsupported operator");
         yield return OrderBurstCase("invalid-status-in", [new("Status", "in", "Paid|Missing")], HttpStatusCode.BadRequest, null, "could not be converted to OrderStatus");

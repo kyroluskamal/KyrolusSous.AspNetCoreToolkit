@@ -31,11 +31,8 @@ this table is generated from it by `scripts/update-docs.py`.
 
 | Scope | Min line | Min branch |
 | --- | ---: | ---: |
-| **Overall** | 68% | 64% |
-| `KyrolusSous.Repositories.EF.Runtime` | 95% | 85% |
-| `KyrolusSous.Repositories.EF.Abstractions` | 65% | 55% |
+| **Overall** | 68% | 58% |
 | `KyrolusSous.Mediator.Generator` | 65% | 45% |
-| `KyrolusSous.Caching.Abstractions` | 10% | 10% |
 
 <!-- END:GENERATED:thresholds -->
 

@@ -190,7 +190,7 @@ public sealed class FilterBuilderDiagnosticsIntegrationTests(TestAppFactory fact
     {
         yield return [new FilterBuilderRequest(Filter: "CustomerEmail==\"two@local.test\""), HttpStatusCode.OK, 1];
         yield return [new FilterBuilderRequest(Filter: "Lines any Quantity>1"), HttpStatusCode.OK, 1];
-        yield return [new FilterBuilderRequest(Filter: "Lines all Quantity>1"), HttpStatusCode.OK, 0];
+        yield return [new FilterBuilderRequest(Filter: "Lines all Quantity>1"), HttpStatusCode.OK, 1];
         yield return [new FilterBuilderRequest(Filter: "CustomerEmail any admin"), HttpStatusCode.BadRequest, (int?)null];
         yield return [new FilterBuilderRequest(Filter: "Lines any first,second"), HttpStatusCode.BadRequest, (int?)null];
     }

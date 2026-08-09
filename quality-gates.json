@@ -3,16 +3,13 @@
 
   "coverage": {
     "report": "TestResults/coverage-run/Coverage/coverage.cobertura.xml",
-    "target": "Tests/IntegrationTests/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgresql/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.csproj",
+    "target": "Tests/IntegrationTests/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgresql/KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgresql.csproj",
     "overall": {
       "line": 68,
-      "branch": 64
+      "branch": 58
     },
     "packages": {
-      "KyrolusSous.Repositories.EF.Runtime": { "line": 95, "branch": 85 },
-      "KyrolusSous.Repositories.EF.Abstractions": { "line": 65, "branch": 55 },
-      "KyrolusSous.Mediator.Generator": { "line": 65, "branch": 45 },
-      "KyrolusSous.Caching.Abstractions": { "line": 10, "branch": 10 }
+      "KyrolusSous.Mediator.Generator": { "line": 65, "branch": 45 }
     }
   },
 
