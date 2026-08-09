@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\Src\KyrolusSous.Repositories.EF.Runtime\KyrolusSous.Repositories.EF.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Repositories\KyrolusSous.Repositories.EF.Runtime\KyrolusSous.Repositories.EF.Runtime.csproj" />
   </ItemGroup>
 
   <ItemGroup>
