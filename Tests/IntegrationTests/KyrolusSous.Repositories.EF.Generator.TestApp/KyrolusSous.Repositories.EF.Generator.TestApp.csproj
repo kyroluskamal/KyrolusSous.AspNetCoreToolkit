@@ -22,6 +22,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\Src\Repositories\KyrolusSous.Repositories.EF.Generator\KyrolusSous.Repositories.EF.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\Src\Repositories\KyrolusSous.Repositories.EF.Abstractions\KyrolusSous.Repositories.EF.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\Src\Repositories\KyrolusSous.Repositories.EF.Runtime\KyrolusSous.Repositories.EF.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\Src\Caching\KyrolusSous.Caching.Abstractions\KyrolusSous.Caching.Abstractions.csproj" />
   </ItemGroup>
   <PropertyGroup>
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>

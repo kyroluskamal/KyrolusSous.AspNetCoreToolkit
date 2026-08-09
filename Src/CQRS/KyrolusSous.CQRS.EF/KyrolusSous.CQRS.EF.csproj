@@ -12,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\KyrolusSous.CQRS.Abstractions\KyrolusSous.CQRS.Abstractions.csproj" />
     <ProjectReference Include="..\..\Mediator\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Repositories\KyrolusSous.Repositories.EF.Abstractions\KyrolusSous.Repositories.EF.Abstractions.csproj" />
   </ItemGroup>
   <ItemGroup>
   </ItemGroup>
