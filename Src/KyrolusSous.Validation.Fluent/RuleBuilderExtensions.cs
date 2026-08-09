@@ -23,8 +23,28 @@ public static partial class RuleBuilderExtensions
     public static bool IsLengthValid(string? value, int min, int max)
         => value is not null && value.Length >= min && value.Length <= max;
 
+    public static bool IsMinLengthValid(string? value, int min)
+        => value is not null && value.Length >= min;
+
+    public static bool IsMaxLengthValid(string? value, int max)
+        => value is not null && value.Length <= max;
+
     public static bool IsExactLengthValid(string? value, int length)
         => value is not null && value.Length == length;
+
+    public static bool IsInEnumValid<TEnum>(TEnum value) where TEnum : struct, Enum
+        => Enum.IsDefined(value);
+
+    public static bool IsScalePrecisionValid(decimal value, int precision, int scale)
+    {
+        var bits = decimal.GetBits(value);
+        byte actualScale = (byte)((bits[3] >> 16) & 0x7F);
+        if (actualScale > scale) return false;
+
+        // Calculate precision (number of total digits)
+        string str = Math.Abs(value).ToString("G", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "");
+        return str.Length <= precision;
+    }
 
     public static bool IsGreaterThan<T>(T value, T limit) where T : IComparable<T>
         => value is not null && value.CompareTo(limit) > 0;
@@ -37,6 +57,24 @@ public static partial class RuleBuilderExtensions
 
     public static bool IsLessThanOrEqualTo<T>(T value, T limit) where T : IComparable<T>
         => value is not null && value.CompareTo(limit) <= 0;
+
+    public static bool IsEqual<T>(T value, T expected)
+        => EqualityComparer<T>.Default.Equals(value, expected);
+
+    public static bool IsNotEqual<T>(T value, T expected)
+        => !EqualityComparer<T>.Default.Equals(value, expected);
+
+    public static bool IsEmpty(string? value)
+        => string.IsNullOrWhiteSpace(value);
+
+    public static bool IsEmpty<T>(IEnumerable<T>? collection)
+        => collection is null || !collection.Any();
+
+    public static bool IsNull<T>(T? value)
+        => value is null;
+
+    public static bool IsExclusiveBetween<T>(T value, T from, T to) where T : IComparable<T>
+        => value is not null && value.CompareTo(from) > 0 && value.CompareTo(to) < 0;
 
     public static bool IsInclusiveBetween<T>(T value, T from, T to) where T : IComparable<T>
         => value is not null && value.CompareTo(from) >= 0 && value.CompareTo(to) <= 0;

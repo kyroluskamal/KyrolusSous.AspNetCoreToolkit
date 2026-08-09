@@ -6,13 +6,13 @@ public sealed class PropertyRule<T, TProperty> : IRuleBuilder<T, TProperty>, IVa
 {
     private sealed class RuleStep
     {
-        public Func<TProperty, T, bool> Predicate { get; }
+        public Func<TProperty, T, CancellationToken, ValueTask<bool>> Predicate { get; }
         public string DefaultMessage { get; }
         public string? CustomMessage { get; set; }
         public string? ErrorCode { get; set; }
         public KyrolusValidationSeverity Severity { get; set; } = KyrolusValidationSeverity.Error;
 
-        public RuleStep(Func<TProperty, T, bool> predicate, string defaultMessage)
+        public RuleStep(Func<TProperty, T, CancellationToken, ValueTask<bool>> predicate, string defaultMessage)
         {
             Predicate = predicate;
             DefaultMessage = defaultMessage;
@@ -35,14 +35,28 @@ public sealed class PropertyRule<T, TProperty> : IRuleBuilder<T, TProperty>, IVa
     public IRuleBuilder<T, TProperty> Must(Func<TProperty, bool> predicate, string defaultMessage = "Validation failed.")
     {
         ArgumentNullException.ThrowIfNull(predicate);
-        _steps.Add(new RuleStep((val, _) => predicate(val), defaultMessage));
+        _steps.Add(new RuleStep((val, _, _) => ValueTask.FromResult(predicate(val)), defaultMessage));
         return this;
     }
 
     public IRuleBuilder<T, TProperty> Must(Func<TProperty, T, bool> predicate, string defaultMessage = "Validation failed.")
     {
         ArgumentNullException.ThrowIfNull(predicate);
-        _steps.Add(new RuleStep(predicate, defaultMessage));
+        _steps.Add(new RuleStep((val, req, _) => ValueTask.FromResult(predicate(val, req)), defaultMessage));
+        return this;
+    }
+
+    public IRuleBuilder<T, TProperty> MustAsync(Func<TProperty, CancellationToken, ValueTask<bool>> predicate, string defaultMessage = "Validation failed.")
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        _steps.Add(new RuleStep((val, _, ct) => predicate(val, ct), defaultMessage));
+        return this;
+    }
+
+    public IRuleBuilder<T, TProperty> MustAsync(Func<TProperty, T, CancellationToken, ValueTask<bool>> predicate, string defaultMessage = "Validation failed.")
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        _steps.Add(new RuleStep((val, req, ct) => predicate(val, req, ct), defaultMessage));
         return this;
     }
 
@@ -97,21 +111,21 @@ public sealed class PropertyRule<T, TProperty> : IRuleBuilder<T, TProperty>, IVa
         return this;
     }
 
-    public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(T request, CancellationToken cancellationToken = default)
+    public async ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(T request, CancellationToken cancellationToken = default)
     {
         if (request is null)
         {
-            return ValueTask.FromResult<IReadOnlyList<KyrolusValidationFailure>>([]);
+            return [];
         }
 
         if (WhenPredicate is not null && !WhenPredicate(request))
         {
-            return ValueTask.FromResult<IReadOnlyList<KyrolusValidationFailure>>([]);
+            return [];
         }
 
         if (UnlessPredicate is not null && UnlessPredicate(request))
         {
-            return ValueTask.FromResult<IReadOnlyList<KyrolusValidationFailure>>([]);
+            return [];
         }
 
         var propValue = _propertySelector(request);
@@ -119,7 +133,8 @@ public sealed class PropertyRule<T, TProperty> : IRuleBuilder<T, TProperty>, IVa
 
         foreach (var step in _steps)
         {
-            var isValid = step.Predicate(propValue, request);
+            cancellationToken.ThrowIfCancellationRequested();
+            var isValid = await step.Predicate(propValue, request, cancellationToken).ConfigureAwait(false);
             if (!isValid)
             {
                 var message = step.CustomMessage ?? step.DefaultMessage;
@@ -134,6 +149,6 @@ public sealed class PropertyRule<T, TProperty> : IRuleBuilder<T, TProperty>, IVa
             }
         }
 
-        return ValueTask.FromResult<IReadOnlyList<KyrolusValidationFailure>>(failures);
+        return failures;
     }
 }

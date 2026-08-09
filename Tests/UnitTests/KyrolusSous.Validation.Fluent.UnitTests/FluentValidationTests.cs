@@ -184,4 +184,58 @@ public sealed class FluentValidationTests
         failures.Count.ShouldBe(1);
         failures[0].PropertyName.ShouldBe("Email");
     }
+
+    private sealed record Address(string City);
+    private sealed record Customer(string Name, Address Address, int Age, string Role);
+
+    private sealed class AddressValidator : KyrolusAbstractValidator<Address>
+    {
+        public AddressValidator()
+        {
+            RuleFor(x => x.City).NotEmpty();
+        }
+    }
+
+    private sealed class CustomerValidator : KyrolusAbstractValidator<Customer>
+    {
+        public CustomerValidator()
+        {
+            RuleFor(x => x.Name).NotNull().NotEqual("BannedUser");
+            RuleFor(x => x.Address).SetValidator(new AddressValidator());
+            RuleFor(x => x.Age).ExclusiveBetween(17, 100);
+            RuleFor(x => x.Role).Equal("Admin");
+            RuleFor(x => x.Name).MustAsync(async (name, ct) =>
+            {
+                await Task.Delay(1, ct);
+                return name != "AsyncBanned";
+            }, "Name is async banned.");
+        }
+    }
+
+    private enum UserStatus { Active, Inactive }
+
+    private sealed record Account(string Username, UserStatus Status, decimal Balance);
+
+    private sealed class AccountValidator : KyrolusAbstractValidator<Account>
+    {
+        public AccountValidator()
+        {
+            RuleFor(x => x.Username).MinLength(3).MaxLength(20);
+            RuleFor(x => x.Status).IsInEnum();
+            RuleFor(x => x.Balance).ScalePrecision(10, 2);
+        }
+    }
+
+    [Fact(DisplayName = "MinLength, MaxLength, IsInEnum, ScalePrecision execute cleanly")]
+    public async Task Enum_and_ScalePrecision_validators_execute_cleanly()
+    {
+        var validator = new AccountValidator();
+        var valid = new Account("Kyrolus", UserStatus.Active, 100.50m);
+        var validFailures = await validator.ValidateAsync(valid);
+        validFailures.ShouldBeEmpty();
+
+        var invalid = new Account("ab", (UserStatus)999, 123456789012.345m);
+        var invalidFailures = await validator.ValidateAsync(invalid);
+        invalidFailures.Count.ShouldBeGreaterThan(0);
+    }
 }
