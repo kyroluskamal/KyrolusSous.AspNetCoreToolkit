@@ -1,4 +1,4 @@
-﻿namespace KyrolusSous.Validation.DataAnnotations.Unitests;
+namespace KyrolusSous.Validation.DataAnnotations.UnitTests;
 
 public sealed record TestUserRequest(
     [property: Required(ErrorMessage = "Name is required.")]
@@ -9,5 +9,7 @@ public sealed record TestUserRequest(
     int Age,
 
     [property: EmailAddress(ErrorMessage = "Invalid email format.")]
-    string Email
+    string Email,
+
+    string? Address = null
 );

@@ -1,6 +1,4 @@
-using Microsoft.VisualStudio.TestPlatform;
-
-namespace KyrolusSous.Validation.DataAnnotations.Unitests;
+namespace KyrolusSous.Validation.DataAnnotations.UnitTests;
 
 public class ValidationDataAnnotationTestsHelper
 {
