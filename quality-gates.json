@@ -88,7 +88,7 @@
     },
     {
       "name": "Validation.DataAnnotations - Unit",
-      "project": "Tests/UnitTests/Validation/KyrolusSous.Validation.DataAnnotations.Unitests/KyrolusSous.Validation.DataAnnotations.UnitTests.csproj",
+      "project": "Tests/UnitTests/Validation/KyrolusSous.Validation.DataAnnotations.UnitTests/KyrolusSous.Validation.DataAnnotations.UnitTests.csproj",
       "kind": "unit",
       "services": [],
       "ci": true
