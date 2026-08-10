@@ -31,5 +31,36 @@ public class DataAnnotationsRequestValidatorTests
         var emailFailure = result.FirstOrDefault(f => f.PropertyName == nameof(TestUserRequest.Email));
         emailFailure.ShouldNotBeNull();
         emailFailure!.ErrorMessage.ShouldBe("Invalid email format.");
+
+        var addressFailure = result.FirstOrDefault(f => f.PropertyName == nameof(TestUserRequest.Address));
+        addressFailure.ShouldBeNull();
+        addressFailure?.ErrorMessage.ShouldBe("Validation error.");
+    }
+
+    [Fact(DisplayName = "ValidateAsync should return empty list when request is valid")]
+    public async Task ValidateAsync_ReturnsEmptyList_WhenRequestIsValid()
+    {
+        var request = new TestUserRequest("John Doe", 25, "john.doe@example.com", "123 Main St");
+
+        IReadOnlyList<KyrolusValidationFailure> result = await ValidationDataAnnotationTestsHelper.ValidateAsync(request, KyrolusValidationContext.Default);
+        result.ShouldNotBeNull();
+        result.Count.ShouldBe(0);
+    }
+
+    [Fact(DisplayName = "ValidateAsync handles object-level validation failures without member names and fallback error messages")]
+    public async Task ValidateAsync_HandlesObjectLevelAndNullErrorMessageFailures()
+    {
+        var validator = new DataAnnotationsRequestValidator<ValidatableRequestWithNoMembers>();
+        var request = new ValidatableRequestWithNoMembers();
+
+        IReadOnlyList<KyrolusValidationFailure> result = await validator.ValidateAsync(request, KyrolusValidationContext.Default);
+        result.ShouldNotBeNull();
+        result.Count.ShouldBe(2);
+
+        result[0].PropertyName.ShouldBe(string.Empty);
+        result[0].ErrorMessage.ShouldBe("Object level validation failed.");
+
+        result[1].PropertyName.ShouldBe(string.Empty);
+        result[1].ErrorMessage.ShouldBe("Validation error.");
     }
 }

@@ -10,6 +10,15 @@ public sealed record TestUserRequest(
 
     [property: EmailAddress(ErrorMessage = "Invalid email format.")]
     string Email,
-
+    [property: StringLength(100)]
     string? Address = null
 );
+
+public sealed class ValidatableRequestWithNoMembers : IValidatableObject
+{
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        yield return new ValidationResult("Object level validation failed.");
+        yield return new ValidationResult(errorMessage: null);
+    }
+}
