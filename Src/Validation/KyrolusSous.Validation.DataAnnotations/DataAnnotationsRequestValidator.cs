@@ -25,7 +25,7 @@ public sealed class DataAnnotationsRequestValidator<TRequest> : IKyrolusRequestV
         var isValid = Validator.TryValidateObject(request, validationContext, results, validateAllProperties: true);
         
         if (isValid)
-            return ValueTask.FromResult<IReadOnlyList<KyrolusValidationFailure>>(Array.Empty<KyrolusValidationFailure>());
+            return ValueTask.FromResult<IReadOnlyList<KyrolusValidationFailure>>([]);
 
         var failures = results
             .SelectMany(result =>

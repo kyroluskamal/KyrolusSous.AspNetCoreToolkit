@@ -53,6 +53,7 @@ public sealed class KyrolusMediatorPublisher : IKyrolusMediatorPublisher
     public async Task PublishAsync(INotification notification, IKyrolusNotificationPublishStrategy? strategy, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(notification);
+        cancellationToken.ThrowIfCancellationRequested();
         var effectiveStrategy = strategy ?? _publishStrategy;
         var notificationType = notification.GetType();
 

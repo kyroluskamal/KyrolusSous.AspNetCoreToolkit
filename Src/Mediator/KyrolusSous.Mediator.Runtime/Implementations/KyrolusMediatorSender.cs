@@ -76,6 +76,7 @@ public sealed class KyrolusMediatorSender(IServiceProvider serviceProvider, IMed
     public Task<object?> SendAsync(object request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var requestType = request.GetType();
         var responseType = GetResponseType(requestType, stream: false);
@@ -88,6 +89,7 @@ public sealed class KyrolusMediatorSender(IServiceProvider serviceProvider, IMed
     public IAsyncEnumerable<object?> StreamAsync(object request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var requestType = request.GetType();
         var responseType = GetResponseType(requestType, stream: true);
@@ -99,6 +101,7 @@ public sealed class KyrolusMediatorSender(IServiceProvider serviceProvider, IMed
     // --- Internals ---
     private Task<TResponse> ExecuteAsync<TResponse>(object request, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var wrapper = (RequestPipelineWrapper<TResponse>)GetRequestWrapper(request.GetType(), typeof(TResponse));
         return wrapper.Handle(request, _serviceProvider, _dispatcher, cancellationToken);
     }
