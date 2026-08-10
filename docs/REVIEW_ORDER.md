@@ -31,7 +31,7 @@ Within a phase the order is loose - what matters is not starting a phase before 
 | 4 | `Mediator.Generator` | ✅ | 14 tests incl. incremental caching. Roslyn component properties verified |
 | 5 | `Validation.Abstractions` | ⚡ | |
 | 6 | `Validation.Runtime` | ⚡ | |
-| 7 | `Validation.DataAnnotations` | ⬜ | |
+| 7 | `Validation.DataAnnotations` | ✅ | 8 unit tests covering null requests, property & object-level validation, DI registration, CancellationToken, and context propagation (100% coverage) |
 | 8 | `Validation.FluentValidation` | ⚡ | |
 | 9 | `Validation.FluentValidation.Scanning` | ⬜ | 19 lines |
 | 10 | `Validation.Generator` | ⬜ | 112 lines |

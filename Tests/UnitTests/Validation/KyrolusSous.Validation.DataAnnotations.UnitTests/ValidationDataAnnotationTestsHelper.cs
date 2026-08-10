@@ -1,6 +1,6 @@
 namespace KyrolusSous.Validation.DataAnnotations.UnitTests;
 
-public class ValidationDataAnnotationTestsHelper
+public static class ValidationDataAnnotationTestsHelper
 {
     public static ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(TestUserRequest request,
         KyrolusValidationContext context,

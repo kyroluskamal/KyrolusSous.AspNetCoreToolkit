@@ -63,4 +63,42 @@ public class DataAnnotationsRequestValidatorTests
         result[1].PropertyName.ShouldBe(string.Empty);
         result[1].ErrorMessage.ShouldBe("Validation error.");
     }
+
+    [Fact(DisplayName = "ValidateAsync passes KyrolusValidationContext into ValidationContext.Items dictionary")]
+    public async Task ValidateAsync_PassesKyrolusValidationContext_ToValidationItems()
+    {
+        var validator = new DataAnnotationsRequestValidator<ContextCapturingRequest>();
+        var request = new ContextCapturingRequest();
+        var customContext = KyrolusValidationContext.Default;
+
+        IReadOnlyList<KyrolusValidationFailure> result = await validator.ValidateAsync(request, customContext);
+        result.ShouldNotBeNull();
+        result.Count.ShouldBe(0);
+    }
+
+    [Fact(DisplayName = "ValidateAsync with cancelled CancellationToken throws OperationCanceledException")]
+    public async Task ValidateAsync_WithCancelledToken_ThrowsOperationCanceledException()
+    {
+        var validator = new DataAnnotationsRequestValidator<TestUserRequest>();
+        var request = new TestUserRequest("John Doe", 25, "john.doe@example.com");
+
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Should.ThrowAsync<OperationCanceledException>(async () =>
+        {
+            await validator.ValidateAsync(request, KyrolusValidationContext.Default, cts.Token);
+        });
+    }
+
+    [Fact(DisplayName = "ValidateAsync with null KyrolusValidationContext uses default context")]
+    public async Task ValidateAsync_WithNullContext_UsesDefaultContext()
+    {
+        var validator = new DataAnnotationsRequestValidator<ContextCapturingRequest>();
+        var request = new ContextCapturingRequest();
+
+        IReadOnlyList<KyrolusValidationFailure> result = await validator.ValidateAsync(request);
+        result.ShouldNotBeNull();
+        result.Count.ShouldBe(0);
+    }
 }

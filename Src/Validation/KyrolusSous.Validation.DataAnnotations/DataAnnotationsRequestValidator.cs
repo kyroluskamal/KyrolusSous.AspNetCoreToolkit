@@ -13,6 +13,8 @@ public sealed class DataAnnotationsRequestValidator<TRequest> : IKyrolusRequestV
         KyrolusValidationContext context,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (request is null)
             return ValueTask.FromResult<IReadOnlyList<KyrolusValidationFailure>>(
                 [new KyrolusValidationFailure(string.Empty, "Request is required.")]);

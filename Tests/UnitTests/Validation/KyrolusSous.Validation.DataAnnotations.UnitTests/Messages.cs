@@ -22,3 +22,20 @@ public sealed class ValidatableRequestWithNoMembers : IValidatableObject
         yield return new ValidationResult(errorMessage: null);
     }
 }
+
+public sealed class ContextCapturingRequest : IValidatableObject
+{
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (validationContext.Items.TryGetValue(nameof(KyrolusValidationContext), out var ctxObj) &&
+            ctxObj is KyrolusValidationContext capturedContext)
+        {
+            // Successfully retrieved our KyrolusValidationContext!
+            yield return ValidationResult.Success!;
+        }
+        else
+        {
+            yield return new ValidationResult("KyrolusValidationContext was not passed in Items dictionary.");
+        }
+    }
+}
