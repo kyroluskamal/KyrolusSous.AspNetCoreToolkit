@@ -1,5 +1,3 @@
-using KyrolusSous.Validation.Abstractions;
-
 namespace KyrolusSous.Validation.Runtime;
 
 public sealed class KyrolusNoopValidationMetrics : IKyrolusValidationMetrics
@@ -9,9 +7,7 @@ public sealed class KyrolusNoopValidationMetrics : IKyrolusValidationMetrics
     public ValueTask RecordAsync(
         KyrolusValidationMetricsContext context,
         CancellationToken cancellationToken = default)
-    {
-        return ValueTask.CompletedTask;
-    }
+    => ValueTask.CompletedTask;
 }
 
 public sealed class KyrolusDelegateValidationMetrics(Func<KyrolusValidationMetricsContext, CancellationToken, ValueTask> execute)
@@ -23,7 +19,5 @@ public sealed class KyrolusDelegateValidationMetrics(Func<KyrolusValidationMetri
     public ValueTask RecordAsync(
         KyrolusValidationMetricsContext context,
         CancellationToken cancellationToken = default)
-    {
-        return execute(context, cancellationToken);
-    }
+        => execute(context, cancellationToken);
 }

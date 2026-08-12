@@ -1,14 +1,8 @@
-using System.Globalization;
-using KyrolusSous.Validation.Abstractions;
-
 namespace KyrolusSous.Validation.Runtime;
 
 public sealed class KyrolusNullValidationErrorLocalizer : IKyrolusValidationErrorLocalizer
 {
-    public string Localize(KyrolusValidationFailure failure, CultureInfo? culture = null)
-    {
-        return failure.ErrorMessage;
-    }
+    public string Localize(KyrolusValidationFailure failure, CultureInfo? culture = null) => failure.ErrorMessage;
 }
 
 public sealed class KyrolusDictionaryValidationErrorLocalizer(
@@ -25,14 +19,10 @@ public sealed class KyrolusDictionaryValidationErrorLocalizer(
         var cultureName = (culture ?? CultureInfo.CurrentUICulture).Name;
 
         if (cultureMaps.TryGetValue(cultureName, out var map) && map.TryGetValue(key, out var localized))
-        {
             return localized;
-        }
 
         if (invariantMap is not null && invariantMap.TryGetValue(key, out var fallback))
-        {
             return fallback;
-        }
 
         return failure.ErrorMessage;
     }

@@ -1,6 +1,3 @@
-using KyrolusSous.Validation.Abstractions;
-using Microsoft.Extensions.DependencyInjection;
-
 namespace KyrolusSous.Validation.Runtime;
 
 public sealed class KyrolusValidationEngine(
@@ -21,9 +18,7 @@ public sealed class KyrolusValidationEngine(
     public async ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync<TRequest>(
         TRequest request,
         CancellationToken cancellationToken = default)
-    {
-        return await ValidateAsync(request, KyrolusValidationContext.Default, cancellationToken).ConfigureAwait(false);
-    }
+    => await ValidateAsync(request, KyrolusValidationContext.Default, cancellationToken).ConfigureAwait(false);
 
     public async ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync<TRequest>(
         TRequest request,
@@ -41,7 +36,7 @@ public sealed class KyrolusValidationEngine(
         {
             var cachedResult = localizer is null
                 ? cached
-                : cached.Select(failure => failure with { ErrorMessage = localizer.Localize(failure) }).ToArray();
+                : [.. cached.Select(failure => failure with { ErrorMessage = localizer.Localize(failure) })];
 
             await RunAfterHooks(request, effectiveContext, cachedResult, cancellationToken).ConfigureAwait(false);
             return cachedResult;
@@ -165,26 +160,16 @@ public sealed class KyrolusValidationEngine(
 
     private KyrolusValidationContext ApplyProfiles(KyrolusValidationContext context)
     {
-        if (context.Profiles is not { Count: > 0 })
-        {
-            return context;
-        }
+        if (context.Profiles is not { Count: > 0 }) return context;
 
         var provider = serviceProvider.GetService<IKyrolusValidationProfileProvider>();
-        if (provider is null)
-        {
-            return context;
-        }
+        if (provider is null) return context;
 
         var accumulator = new ProfileAccumulator(context);
 
         foreach (var profileName in context.Profiles)
-        {
             if (provider.TryGetProfile(profileName, out var profileContext))
-            {
                 accumulator.Apply(profileContext);
-            }
-        }
 
         return accumulator.Build(context);
     }
@@ -215,8 +200,8 @@ public sealed class KyrolusValidationEngine(
         {
             return baseContext with
             {
-                RuleSets = ruleSets.Count > 0 || hasRuleSets ? ruleSets.ToArray() : baseContext.RuleSets,
-                Groups = groups.Count > 0 || hasGroups ? groups.ToArray() : baseContext.Groups,
+                RuleSets = ruleSets.Count > 0 || hasRuleSets ? [.. ruleSets] : baseContext.RuleSets,
+                Groups = groups.Count > 0 || hasGroups ? [.. groups] : baseContext.Groups,
                 MinimumSeverity = minimumSeverity
             };
         }
@@ -237,25 +222,15 @@ public sealed class KyrolusValidationEngine(
 
         private static void AddRange(HashSet<string> target, IReadOnlyCollection<string>? values)
         {
-            if (values is { Count: > 0 })
-            {
-                target.UnionWith(values);
-            }
+            if (values is { Count: > 0 }) target.UnionWith(values);
         }
 
         private static KyrolusValidationSeverity? MaxSeverity(
             KyrolusValidationSeverity? current,
             KyrolusValidationSeverity? incoming)
         {
-            if (incoming is null)
-            {
-                return current;
-            }
-
-            if (current is null)
-            {
-                return incoming;
-            }
+            if (incoming is null) return current;
+            if (current is null) return incoming;
 
             return (KyrolusValidationSeverity)Math.Max((int)current.Value, (int)incoming.Value);
         }
@@ -267,14 +242,10 @@ public sealed class KyrolusValidationEngine(
         CancellationToken cancellationToken)
     {
         foreach (var hook in serviceProvider.GetServices<IKyrolusValidationHook>())
-        {
             await hook.OnBeforeAsync(request, context, cancellationToken).ConfigureAwait(false);
-        }
 
         foreach (var hook in serviceProvider.GetServices<IKyrolusValidationHook<TRequest>>())
-        {
             await hook.OnBeforeAsync(request, context, cancellationToken).ConfigureAwait(false);
-        }
     }
 
     private async ValueTask RunAfterHooks<TRequest>(
@@ -284,14 +255,10 @@ public sealed class KyrolusValidationEngine(
         CancellationToken cancellationToken)
     {
         foreach (var hook in serviceProvider.GetServices<IKyrolusValidationHook>())
-        {
             await hook.OnAfterAsync(request, context, failures, cancellationToken).ConfigureAwait(false);
-        }
 
         foreach (var hook in serviceProvider.GetServices<IKyrolusValidationHook<TRequest>>())
-        {
             await hook.OnAfterAsync(request, context, failures, cancellationToken).ConfigureAwait(false);
-        }
     }
 
     private static KyrolusValidationFailure NormalizeFailure(KyrolusValidationFailure failure)
@@ -305,10 +272,7 @@ public sealed class KyrolusValidationEngine(
         KyrolusValidationFailure[] failures,
         KyrolusValidationContext context)
     {
-        if (errorCodeMapper is null && fieldPathMapper is null)
-        {
-            return failures;
-        }
+        if (errorCodeMapper is null && fieldPathMapper is null) return failures;
 
         var mapped = new KyrolusValidationFailure[failures.Length];
         for (var index = 0; index < failures.Length; index++)
@@ -317,15 +281,9 @@ public sealed class KyrolusValidationEngine(
             var mappedCode = errorCodeMapper?.MapErrorCode(failure, context);
             var mappedPath = fieldPathMapper?.MapFieldPath(failure, context);
 
-            if (string.IsNullOrWhiteSpace(mappedCode))
-            {
-                mappedCode = failure.ErrorCode;
-            }
+            if (string.IsNullOrWhiteSpace(mappedCode)) mappedCode = failure.ErrorCode;
 
-            if (string.IsNullOrWhiteSpace(mappedPath))
-            {
-                mappedPath = failure.FieldPath;
-            }
+            if (string.IsNullOrWhiteSpace(mappedPath)) mappedPath = failure.FieldPath;
 
             mapped[index] = failure with { ErrorCode = mappedCode, FieldPath = mappedPath };
         }
@@ -337,15 +295,7 @@ public sealed class KyrolusValidationEngine(
         TRequest request,
         KyrolusValidationContext context)
     {
-        if (cacheKeyProvider is null)
-        {
-            return null;
-        }
-
-        if (request is null)
-        {
-            return null;
-        }
+        if (cacheKeyProvider is null|| request is null) return null;
 
         return cacheKeyProvider.GetCacheEntry(request!, context);
     }
@@ -355,16 +305,7 @@ public sealed class KyrolusValidationEngine(
         IReadOnlyList<KyrolusValidationFailure> failures,
         TimeSpan? ttlOverride = null)
     {
-        if (cacheEntry is null || cacheStore is null)
-        {
-            return;
-        }
-
-        if (!ShouldCache(cacheEntry.Mode, failures))
-        {
-            return;
-        }
-
+        if (cacheEntry is null || cacheStore is null || !ShouldCache(cacheEntry.Mode, failures)) return;
         var ttl = ttlOverride ?? cacheEntry.Ttl;
         cacheStore.Set(cacheEntry.Key, failures, ttl);
     }
@@ -374,9 +315,7 @@ public sealed class KyrolusValidationEngine(
         if (request is IKyrolusValidationNegativeCacheable negative
             && negative.NegativeCacheTtl is { } ttl
             && ttl > TimeSpan.Zero)
-        {
             return ttl;
-        }
 
         return KyrolusValidationCacheDefaults.NegativeTtl;
     }
@@ -401,19 +340,13 @@ public sealed class KyrolusValidationEngine(
         IEnumerable<KyrolusValidationFailure> query = failures;
 
         if (context.MinimumSeverity is not null)
-        {
             query = query.Where(failure => failure.Severity >= context.MinimumSeverity.Value);
-        }
 
         if (context.RuleSets is { Count: > 0 })
-        {
             query = query.Where(failure => context.RuleSets.Contains(failure.RuleSet ?? KyrolusValidationDefaults.DefaultRuleSet));
-        }
 
         if (context.Groups is { Count: > 0 })
-        {
             query = query.Where(failure => context.Groups.Contains(failure.Group ?? KyrolusValidationDefaults.DefaultGroup));
-        }
 
         return [.. query];
     }

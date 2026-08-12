@@ -148,8 +148,8 @@ public class LoggingOptions
 
         /// <summary>
         /// Provides the configuration options for the sink.
-        /// This can be a strongly-typed options object (e.g., new FileSinkOptions())
-        /// OR a Dictionary<string, object?> for advanced sinks.
+        /// This can be a strongly-typed options object (e.g.&#44; new FileSinkOptions())
+        /// OR a Dictionary&lt;string, object?&gt; for advanced sinks.
         /// </summary>
         public object? SinkOptions { get; set; }
 

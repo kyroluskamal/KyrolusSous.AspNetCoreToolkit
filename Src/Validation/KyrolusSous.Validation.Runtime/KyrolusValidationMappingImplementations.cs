@@ -1,5 +1,3 @@
-using KyrolusSous.Validation.Abstractions;
-
 namespace KyrolusSous.Validation.Runtime;
 
 public sealed class KyrolusDelegateValidationErrorCodeMapper(
@@ -33,34 +31,18 @@ public sealed class KyrolusDictionaryValidationErrorCodeMapper(
 
     public string? MapErrorCode(KyrolusValidationFailure failure, KyrolusValidationContext context)
     {
-        var keys = GetLookupKeys(failure);
-        foreach (var key in keys)
-        {
+        foreach (var key in GetLookupKeys(failure))
             if (map.TryGetValue(key, out var mapped) && !string.IsNullOrWhiteSpace(mapped))
-            {
                 return mapped;
-            }
-        }
 
         return null;
     }
 
     private static IEnumerable<string> GetLookupKeys(KyrolusValidationFailure failure)
     {
-        if (!string.IsNullOrWhiteSpace(failure.ErrorCode))
-        {
-            yield return failure.ErrorCode;
-        }
-
-        if (!string.IsNullOrWhiteSpace(failure.MessageKey))
-        {
-            yield return failure.MessageKey;
-        }
-
-        if (!string.IsNullOrWhiteSpace(failure.PropertyName))
-        {
-            yield return failure.PropertyName;
-        }
+        if (!string.IsNullOrWhiteSpace(failure.ErrorCode)) yield return failure.ErrorCode;
+        if (!string.IsNullOrWhiteSpace(failure.MessageKey)) yield return failure.MessageKey;
+        if (!string.IsNullOrWhiteSpace(failure.PropertyName)) yield return failure.PropertyName;
     }
 }
 
@@ -73,10 +55,7 @@ public sealed class KyrolusDictionaryValidationFieldPathMapper(
 
     public string? MapFieldPath(KyrolusValidationFailure failure, KyrolusValidationContext context)
     {
-        if (string.IsNullOrWhiteSpace(failure.PropertyName))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(failure.PropertyName)) return null;
 
         return map.TryGetValue(failure.PropertyName, out var mapped)
             ? mapped

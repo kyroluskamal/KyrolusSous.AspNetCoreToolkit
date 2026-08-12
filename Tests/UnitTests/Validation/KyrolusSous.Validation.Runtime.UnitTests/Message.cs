@@ -1,0 +1,261 @@
+namespace KyrolusSous.Validation.Runtime.UnitTests;
+
+public class TestValidator : IKyrolusRequestValidator<TestRequest>
+{
+    public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(TestRequest request, CancellationToken cancellationToken = default)
+    {
+        var failures = new List<KyrolusValidationFailure>();
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+            failures.Add(new KyrolusValidationFailure(nameof(request.Name), "Name cannot be null or whitespace."));
+
+        if (request.Age < 0)
+            failures.Add(new KyrolusValidationFailure(nameof(request.Age), "Age cannot be negative."));
+
+        return ValueTask.FromResult((IReadOnlyList<KyrolusValidationFailure>)failures);
+    }
+}
+
+public class TestRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public int Age { get; set; }
+}
+
+public class ProfileTestRequest
+{
+    public string Name { get; set; } = string.Empty;
+}
+
+public class ProfileTestValidator : IKyrolusRequestValidator<ProfileTestRequest>
+{
+    public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(ProfileTestRequest request, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<KyrolusValidationFailure> failures =
+        [
+            new("Prop1", "Warning in A", Severity: KyrolusValidationSeverity.Warning, RuleSet: "RuleSetA"),
+            new("Prop2", "Error in A", Severity: KyrolusValidationSeverity.Error, RuleSet: "RuleSetA"),
+            new("Prop3", "Error in B", Severity: KyrolusValidationSeverity.Error, RuleSet: "RuleSetB"),
+            new("Prop4", "Error in Other", Severity: KyrolusValidationSeverity.Error, RuleSet: "OtherRuleSet"),
+            new("Prop5", "Error in Other", Severity: KyrolusValidationSeverity.Error, RuleSet: "Context1")
+        ];
+
+        return ValueTask.FromResult(failures);
+    }
+}
+
+public class HookTestRequest
+{
+    public int Id { get; set; }
+}
+
+public class TestGlobalValidationHook : IKyrolusValidationHook
+{
+    public bool OnBeforeCalled { get; private set; }
+    public bool OnAfterCalled { get; private set; }
+    public object? PassedRequest { get; private set; }
+    public KyrolusValidationContext? PassedContext { get; private set; }
+
+    public ValueTask OnBeforeAsync(object? request, KyrolusValidationContext context, CancellationToken cancellationToken = default)
+    {
+        OnBeforeCalled = true;
+        PassedRequest = request;
+        PassedContext = context;
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask OnAfterAsync(object? request, KyrolusValidationContext context, IReadOnlyList<KyrolusValidationFailure> failures, CancellationToken cancellationToken = default)
+    {
+        OnAfterCalled = true;
+        return ValueTask.CompletedTask;
+    }
+}
+
+public class TestRequestSpecificValidationHook : IKyrolusValidationHook<HookTestRequest>
+{
+    public bool OnBeforeCalled { get; private set; }
+    public bool OnAfterCalled { get; private set; }
+    public HookTestRequest? PassedRequest { get; private set; }
+    public KyrolusValidationContext? PassedContext { get; private set; }
+
+    public ValueTask OnBeforeAsync(HookTestRequest request, KyrolusValidationContext context, CancellationToken cancellationToken = default)
+    {
+        OnBeforeCalled = true;
+        PassedRequest = request;
+        PassedContext = context;
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask OnAfterAsync(HookTestRequest request, KyrolusValidationContext context, IReadOnlyList<KyrolusValidationFailure> failures, CancellationToken cancellationToken = default)
+    {
+        OnAfterCalled = true;
+        return ValueTask.CompletedTask;
+    }
+}
+
+public class CacheableTestRequest : IKyrolusValidationCacheable
+{
+    public string CacheKey { get; set; } = "test-cache-key-1";
+    public KyrolusValidationCacheMode CacheMode => KyrolusValidationCacheMode.All;
+    public TimeSpan? CacheTtl => TimeSpan.FromMinutes(5);
+}
+
+public class CacheableTestValidator : IKyrolusRequestValidator<CacheableTestRequest>
+{
+    public int ExecutionCount { get; private set; }
+
+    public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(CacheableTestRequest request, CancellationToken cancellationToken = default)
+    {
+        ExecutionCount++;
+        IReadOnlyList<KyrolusValidationFailure> failures = [new("Prop", "Cached failure message")];
+        return ValueTask.FromResult(failures);
+    }
+}
+
+public class TestLocalizer : IKyrolusValidationErrorLocalizer
+{
+    public string Localize(KyrolusValidationFailure failure, CultureInfo? culture = null)
+    {
+        return $"Localized: {failure.ErrorMessage}";
+    }
+}
+
+public class ContextValidatorTestRequest
+{
+    public string Title { get; set; } = string.Empty;
+}
+
+public class ContextValidatorTestValidator : IKyrolusRequestValidatorWithContext<ContextValidatorTestRequest>
+{
+    public KyrolusValidationContext? ReceivedContext { get; private set; }
+
+    public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(ContextValidatorTestRequest request, CancellationToken cancellationToken = default)
+    {
+        return ValueTask.FromResult<IReadOnlyList<KyrolusValidationFailure>>([]);
+    }
+
+    public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(ContextValidatorTestRequest request, KyrolusValidationContext context, CancellationToken cancellationToken = default)
+    {
+        ReceivedContext = context;
+        IReadOnlyList<KyrolusValidationFailure> failures = [new("Title", "Context Validator Failure", RuleSet: "RuleSetA")];
+        return ValueTask.FromResult(failures);
+    }
+}
+
+public class CompositeTestValidator : IKyrolusRequestValidator<KyrolusValidationComposite<TestRequest, ProfileTestRequest>>
+{
+    public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(KyrolusValidationComposite<TestRequest, ProfileTestRequest> composite, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<KyrolusValidationFailure> failures = [new("CompositeProp", "Composite validation failed")];
+        return ValueTask.FromResult(failures);
+    }
+}
+
+public class GroupTestRequest
+{
+    public string Name { get; set; } = string.Empty;
+}
+
+public class GroupTestValidator : IKyrolusRequestValidator<GroupTestRequest>
+{
+    public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(GroupTestRequest request, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<KyrolusValidationFailure> failures =
+        [
+            new("Prop1", "Error in GroupA", Group: "GroupA"),
+            new("Prop2", "Error in GroupB", Group: "GroupB"),
+            new("Prop3", "Error in ContextGroup", Group: "ContextGroup"),
+            new("Prop4", "Error in OtherGroup", Group: "OtherGroup")
+        ];
+
+        return ValueTask.FromResult(failures);
+    }
+}
+
+public class MappingTestRequest
+{
+    public int Age { get; set; }
+}
+
+public class MappingTestValidator : IKyrolusRequestValidator<MappingTestRequest>
+{
+    public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(MappingTestRequest request, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<KyrolusValidationFailure> failures = [new("Age", "Invalid age", ErrorCode: "ERR_AGE")];
+        return ValueTask.FromResult(failures);
+    }
+}
+
+public class NegativeCacheableTestRequest : IKyrolusValidationCacheable, IKyrolusValidationNegativeCacheable
+{
+    public string CacheKey { get; set; } = "negative-cache-key";
+    public KyrolusValidationCacheMode CacheMode => KyrolusValidationCacheMode.All;
+    public TimeSpan? CacheTtl => TimeSpan.FromMinutes(10);
+    public TimeSpan? NegativeCacheTtl => TimeSpan.FromMinutes(2);
+}
+
+public class CancellationTokenTestRequest
+{
+    public string Data { get; set; } = string.Empty;
+}
+
+public class CancellationTokenTestValidator : IKyrolusRequestValidator<CancellationTokenTestRequest>
+{
+    public CancellationToken ReceivedToken { get; private set; }
+
+    public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(CancellationTokenTestRequest request, CancellationToken cancellationToken = default)
+    {
+        ReceivedToken = cancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<IReadOnlyList<KyrolusValidationFailure>>([]);
+    }
+}
+
+public class SuccessOnlyCacheableTestRequest : IKyrolusValidationCacheable
+{
+    public string CacheKey { get; set; } = "success-only-key";
+    public KyrolusValidationCacheMode CacheMode => KyrolusValidationCacheMode.SuccessOnly;
+    public TimeSpan? CacheTtl => TimeSpan.FromMinutes(5);
+}
+
+public class FailuresOnlyCacheableTestRequest : IKyrolusValidationCacheable
+{
+    public string CacheKey { get; set; } = "failures-only-key";
+    public KyrolusValidationCacheMode CacheMode => KyrolusValidationCacheMode.FailuresOnly;
+    public TimeSpan? CacheTtl => TimeSpan.FromMinutes(5);
+}
+
+public class FailuresOnlyCacheableTestValidator : IKyrolusRequestValidator<FailuresOnlyCacheableTestRequest>
+{
+    public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(FailuresOnlyCacheableTestRequest request, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<KyrolusValidationFailure> failures = [new("Prop", "Failure message")];
+        return ValueTask.FromResult(failures);
+    }
+}
+
+public class NullRuleSetAndGroupRequest
+{
+    public string Name { get; set; } = string.Empty;
+}
+
+public class NullRuleSetAndGroupValidator : IKyrolusRequestValidator<NullRuleSetAndGroupRequest>
+{
+    public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(NullRuleSetAndGroupRequest request, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<KyrolusValidationFailure> failures =
+        [
+            new("Prop", "Failure with null RuleSet and null Group", RuleSet: null, Group: null)
+        ];
+        return ValueTask.FromResult(failures);
+    }
+}
+
+
+
+
+
+
+
+
+

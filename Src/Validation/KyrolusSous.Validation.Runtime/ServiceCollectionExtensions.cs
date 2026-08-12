@@ -1,8 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-using KyrolusSous.Validation.Abstractions;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-
 namespace KyrolusSous.Validation.Runtime;
 
 public static class ServiceCollectionExtensions
@@ -30,6 +25,31 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    public static IServiceCollection AddKyrolusValidationProfiles(
+        this IServiceCollection services,
+        params KyrolusValidationProfile[] profiles)
+    {
+        ArgumentNullException.ThrowIfNull(profiles);
+        if (profiles.Length == 0) throw new ArgumentException("At least one profile must be provided.", nameof(profiles))   ;
+        
+        return AddKyrolusValidationProfiles(services, (IEnumerable<KyrolusValidationProfile>)profiles);
+    }
+
+    public static IServiceCollection AddKyrolusValidationProfiles(
+        this IServiceCollection services,
+        IEnumerable<KyrolusValidationProfile> profiles)
+    {
+        ArgumentNullException.ThrowIfNull(profiles);
+        if (!profiles.Any()) throw new ArgumentException("At least one profile must be provided.", nameof(profiles));
+
+        AddKyrolusValidationRuntime(services);
+
+        foreach (var profile in profiles)
+            if (profile is not null) services.AddSingleton(profile);
+
+        return services;
+    }
+
     [RequiresUnreferencedCode("Uses reflection to scan for validators. This is not AOT-friendly.")]
     public static IServiceCollection AddKyrolusValidationRuntimeScanning(
         this IServiceCollection services,
@@ -43,18 +63,11 @@ public static class ServiceCollectionExtensions
     [RequiresUnreferencedCode("Uses reflection to scan for validators. This is not AOT-friendly.")]
     private static void RegisterValidators(IServiceCollection services, System.Reflection.Assembly[] assemblies)
     {
-        if (assemblies.Length == 0)
-        {
-            return;
-        }
+        if (assemblies.Length == 0) return;
 
         foreach (var type in assemblies.SelectMany(static assembly => assembly.GetTypes()).Where(IsConcreteType))
-        {
             foreach (var iface in GetValidatorInterfaces(type))
-            {
                 services.TryAddEnumerable(ServiceDescriptor.Transient(iface, type));
-            }
-        }
     }
 
     private static bool IsConcreteType(Type type)
@@ -63,11 +76,7 @@ public static class ServiceCollectionExtensions
     private static IEnumerable<Type> GetValidatorInterfaces(Type type)
     {
         foreach (var iface in type.GetInterfaces())
-        {
             if (iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IKyrolusRequestValidator<>))
-            {
                 yield return iface;
-            }
-        }
     }
 }

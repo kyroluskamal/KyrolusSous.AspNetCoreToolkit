@@ -5,27 +5,27 @@ public static class KyrolusValidationProfiles
     public static KyrolusValidationProfile Create { get; } = new(
         "Create",
         new KyrolusValidationContext(
-            RuleSets: new[] { "Create" },
+            RuleSets: ["Create"],
             MinimumSeverity: KyrolusValidationSeverity.Error));
 
     public static KyrolusValidationProfile Update { get; } = new(
         "Update",
         new KyrolusValidationContext(
-            RuleSets: new[] { "Update" },
+            RuleSets: ["Update"],
             MinimumSeverity: KyrolusValidationSeverity.Error));
 
     public static KyrolusValidationProfile UiHints { get; } = new(
         "UiHints",
         new KyrolusValidationContext(
-            Groups: new[] { "UiHints" },
+            Groups: ["UiHints"],
             MinimumSeverity: KyrolusValidationSeverity.Info));
 
     public static KyrolusValidationProfile BackgroundJobs { get; } = new(
         "BackgroundJobs",
         new KyrolusValidationContext(
-            RuleSets: new[] { "BackgroundJobs" },
+            RuleSets: ["BackgroundJobs"],
             MinimumSeverity: KyrolusValidationSeverity.Error));
 
     public static IReadOnlyList<KyrolusValidationProfile> All { get; } =
-        new[] { Create, Update, UiHints, BackgroundJobs };
+        [Create, Update, UiHints, BackgroundJobs];
 }

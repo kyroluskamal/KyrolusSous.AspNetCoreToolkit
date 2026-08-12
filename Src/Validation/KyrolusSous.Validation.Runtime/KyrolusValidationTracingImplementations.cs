@@ -1,6 +1,3 @@
-using System.Diagnostics;
-using KyrolusSous.Validation.Abstractions;
-
 namespace KyrolusSous.Validation.Runtime;
 
 public sealed class KyrolusNoopValidationTracer : IKyrolusValidationTracer
@@ -15,9 +12,7 @@ public sealed class KyrolusNoopValidationTracer : IKyrolusValidationTracer
         IReadOnlyList<KyrolusValidationFailure> failures,
         Exception? exception = null,
         CancellationToken cancellationToken = default)
-    {
-        return ValueTask.CompletedTask;
-    }
+        => ValueTask.CompletedTask;
 }
 
 public sealed class KyrolusValidationActivityTracer(string sourceName = "Kyrolus.Validation")
@@ -28,10 +23,7 @@ public sealed class KyrolusValidationActivityTracer(string sourceName = "Kyrolus
     public object? Start(KyrolusValidationTraceContext context)
     {
         var activity = source.StartActivity("Validation", ActivityKind.Internal);
-        if (activity is null)
-        {
-            return null;
-        }
+        if (activity is null) return null;
 
         activity.SetTag("validation.request_type", context.RequestType?.FullName);
         activity.SetTag("validation.rule_sets", context.Context.RuleSets is { Count: > 0 }

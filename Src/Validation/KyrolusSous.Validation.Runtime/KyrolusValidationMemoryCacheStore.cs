@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using KyrolusSous.Validation.Abstractions;
 
 namespace KyrolusSous.Validation.Runtime;
 
@@ -36,10 +34,7 @@ public sealed class KyrolusValidationMemoryCacheStore : IKyrolusValidationCacheS
 
     public void Set(string key, IReadOnlyList<KyrolusValidationFailure> failures, TimeSpan ttl)
     {
-        if (string.IsNullOrWhiteSpace(key) || ttl <= TimeSpan.Zero)
-        {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(key) || ttl <= TimeSpan.Zero) return;
 
         var expiresAt = DateTimeOffset.UtcNow.Add(ttl);
         entries[key] = new CacheEntry(failures, expiresAt);

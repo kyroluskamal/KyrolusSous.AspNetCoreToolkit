@@ -1,12 +1,6 @@
 namespace KyrolusSous.Validation.Abstractions;
 
-public sealed class KyrolusValidationException : Exception
+public sealed class KyrolusValidationException(IReadOnlyList<KyrolusValidationFailure> errors) : Exception("Validation failed.")
 {
-    public KyrolusValidationException(IReadOnlyList<KyrolusValidationFailure> errors)
-        : base("Validation failed.")
-    {
-        Errors = errors;
-    }
-
-    public IReadOnlyList<KyrolusValidationFailure> Errors { get; }
+    public IReadOnlyList<KyrolusValidationFailure> Errors { get; } = errors;
 }

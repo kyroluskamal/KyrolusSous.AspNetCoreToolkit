@@ -1,5 +1,3 @@
-using KyrolusSous.Validation.Abstractions;
-
 namespace KyrolusSous.Validation.Runtime;
 
 public sealed class KyrolusValidationProfileProvider : IKyrolusValidationProfileProvider
@@ -10,10 +8,7 @@ public sealed class KyrolusValidationProfileProvider : IKyrolusValidationProfile
     {
         foreach (var profile in profiles)
         {
-            if (profile is null || string.IsNullOrWhiteSpace(profile.Name))
-            {
-                continue;
-            }
+            if (profile is null || string.IsNullOrWhiteSpace(profile.Name)) continue;
 
             this.profiles[profile.Name] = profile.Context;
         }
