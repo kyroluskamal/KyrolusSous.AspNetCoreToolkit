@@ -80,6 +80,13 @@
       "ci": true
     },
     {
+      "name": "Validation.Runtime - Unit",
+      "project": "Tests/UnitTests/Validation/KyrolusSous.Validation.Runtime.UnitTests/KyrolusSous.Validation.Runtime.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
       "name": "Validation.Fluent - Unit",
       "project": "Tests/UnitTests/Validation/KyrolusSous.Validation.Fluent.UnitTests/KyrolusSous.Validation.Fluent.UnitTests.csproj",
       "kind": "unit",
