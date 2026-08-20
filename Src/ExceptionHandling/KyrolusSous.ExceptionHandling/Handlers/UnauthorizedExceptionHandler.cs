@@ -1,25 +1,25 @@
+using System.Net;
+using Microsoft.AspNetCore.Http;
+
 namespace KyrolusSous.ExceptionHandling.Handlers;
+
 public class UnauthorizedException : Exception
 {
-    public UnauthorizedException(string message) : base(message)
-    {
-    }
-
-    public UnauthorizedException(string entityName, string key) : base($"{entityName} with key {key} not found")
-    {
-    }
+    public UnauthorizedException(string message) : base(message) { }
+    public UnauthorizedException(string entityName, string key) : base($"{entityName} with key {key} not found") { }
 }
 
-public class UnauthorizedExceptionHandler(ILogger<SocketExceptionHandler> logger) : IExceptionHandler
+public class UnauthorizedExceptionHandler(ILogger<UnauthorizedExceptionHandler> logger) : IExceptionHandler
 {
-    public ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
+    public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        var contextInfo = new ErrorContextInfo(httpContext);
-        if (exception is UnauthorizedException UnauthorizedException)
+        if (exception is UnauthorizedException unauthorizedException)
         {
-            ExceptionHelper.ReturnErrorResponse(logger, httpContext, contextInfo, UnauthorizedException, HttpStatusCode.Unauthorized, UnauthorizedException.Message).GetAwaiter().GetResult();
-            return new ValueTask<bool>(true);
+            await KyrolusExceptionHandlerHelper.WriteEnvelopeAsync(
+                logger, httpContext, HttpStatusCode.Unauthorized, KyrolusErrorCodes.Unauthorized,
+                "Unauthorized", unauthorizedException.Message, cancellationToken: cancellationToken).ConfigureAwait(false);
+            return true;
         }
-        return new ValueTask<bool>(false);
+        return false;
     }
 }

@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq.Expressions;
@@ -271,50 +271,6 @@ public static partial class RepositoryRuntimeDiagnostics
         }
 
         using var loggerFactory = LoggerFactory.Create(_ => { });
-        var helperLogger = loggerFactory.CreateLogger("runtime-exception-helper");
-        var helperContext = new DefaultHttpContext
-        {
-            Response =
-            {
-                Body = new MemoryStream()
-            }
-        };
-        var helperInfo = new ErrorContextInfo(helperContext);
-        await ExceptionHelper.ReturnErrorResponse(
-            helperLogger,
-            helperContext,
-            helperInfo,
-            new Exception("helper runtime failure"),
-            HttpStatusCode.BadRequest,
-            "helper failure").ConfigureAwait(false);
-        if (helperContext.Response.StatusCode == StatusCodes.Status400BadRequest)
-        {
-            checks++;
-        }
-
-        var validationException = new ValidationException(
-        [
-            new ValidationFailure("Name", "Name is required")
-        ]);
-        var exceptionResponse = new ExceptionResponse(helperContext, helperInfo, validationException);
-        if (exceptionResponse.ErrorDetails is not null &&
-            !string.IsNullOrWhiteSpace(exceptionResponse.ExceptionType))
-        {
-            checks++;
-        }
-
-        var response = new Response(
-            code: 200,
-            message: "ok",
-            isSuccess: true,
-            data: new { Value = 1 },
-            exception: exceptionResponse);
-        if (response.StatusCode == 200 &&
-            response.IsSuccess &&
-            response.Exception is not null)
-        {
-            checks++;
-        }
 
         var registeredServices = new ServiceCollection()
             .AddLogging()
@@ -527,7 +483,7 @@ public static partial class RepositoryRuntimeDiagnostics
                 }
             };
 
-        var authenticationHandler = new AuthenticationExceptionHandler(loggerFactory.CreateLogger<SocketExceptionHandler>());
+        var authenticationHandler = new AuthenticationExceptionHandler(loggerFactory.CreateLogger<AuthenticationExceptionHandler>());
         var authenticationContext = CreateExceptionHandlerContext();
         if (await authenticationHandler.TryHandleAsync(authenticationContext, new SslAuthenticationException("ssl"), cancellationToken).ConfigureAwait(false) &&
             authenticationContext.Response.StatusCode == StatusCodes.Status502BadGateway &&
@@ -536,7 +492,7 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
-        var unauthorizedHandler = new UnauthorizedExceptionHandler(loggerFactory.CreateLogger<SocketExceptionHandler>());
+        var unauthorizedHandler = new UnauthorizedExceptionHandler(loggerFactory.CreateLogger<UnauthorizedExceptionHandler>());
         var unauthorizedContext = CreateExceptionHandlerContext();
         if (await unauthorizedHandler.TryHandleAsync(unauthorizedContext, new UnauthorizedException("unauthorized"), cancellationToken).ConfigureAwait(false) &&
             unauthorizedContext.Response.StatusCode == StatusCodes.Status401Unauthorized &&
@@ -554,10 +510,11 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
+        var valEx = new ValidationException([new ValidationFailure("Name", "Name is required")]);
         var validationHandler = new ValidationExceptionHandler(loggerFactory.CreateLogger<ValidationExceptionHandler>());
         var validationContext = CreateExceptionHandlerContext();
-        if (await validationHandler.TryHandleAsync(validationContext, validationException, cancellationToken).ConfigureAwait(false) &&
-            validationContext.Response.StatusCode == 450 &&
+        if (await validationHandler.TryHandleAsync(validationContext, valEx, cancellationToken).ConfigureAwait(false) &&
+            validationContext.Response.StatusCode == StatusCodes.Status400BadRequest &&
             !await validationHandler.TryHandleAsync(CreateExceptionHandlerContext(), new InvalidOperationException("ignored"), cancellationToken).ConfigureAwait(false))
         {
             checks++;

@@ -48,7 +48,7 @@ public static partial class KyrolusErrorCodeRegistry
 
     public static IReadOnlyCollection<KyrolusErrorCodeDefinition> Snapshot()
     {
-        return Registry.Values.ToArray();
+        return [.. Registry.Values];
     }
 
     public static bool IsValidCode(string code)

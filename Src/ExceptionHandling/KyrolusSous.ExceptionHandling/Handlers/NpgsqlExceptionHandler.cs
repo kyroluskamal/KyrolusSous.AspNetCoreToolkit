@@ -1,15 +1,20 @@
+using System.Net;
+using Microsoft.AspNetCore.Http;
+using Npgsql;
+
 namespace KyrolusSous.ExceptionHandling.Handlers;
 
 public class NpgsqlExceptionHandler(ILogger<NpgsqlExceptionHandler> logger) : IExceptionHandler
 {
-    public ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
+    public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        var contextInfo = new ErrorContextInfo(httpContext);
-        if (exception is NpgsqlException NpgsqlException)
+        if (exception is NpgsqlException npgsqlException)
         {
-            ExceptionHelper.ReturnErrorResponse(logger, httpContext, contextInfo, NpgsqlException, HttpStatusCode.InternalServerError, "Npgsql is not found").GetAwaiter().GetResult();
-            return new ValueTask<bool>(true);
+            await KyrolusExceptionHandlerHelper.WriteEnvelopeAsync(
+                logger, httpContext, HttpStatusCode.InternalServerError, KyrolusErrorCodes.InternalError,
+                "Database error", npgsqlException.Message, cancellationToken: cancellationToken).ConfigureAwait(false);
+            return true;
         }
-        return new ValueTask<bool>(false);
+        return false;
     }
 }

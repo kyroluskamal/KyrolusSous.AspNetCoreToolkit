@@ -1,15 +1,20 @@
+using System.Net;
+using System.Net.Sockets;
+using Microsoft.AspNetCore.Http;
+
 namespace KyrolusSous.ExceptionHandling.Handlers;
 
 public class SocketExceptionHandler(ILogger<SocketExceptionHandler> logger) : IExceptionHandler
 {
-    public ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
+    public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        var contextInfo = new ErrorContextInfo(httpContext);
-        if (exception is SocketException validationException)
+        if (exception is SocketException socketException)
         {
-            ExceptionHelper.ReturnErrorResponse(logger, httpContext, contextInfo, validationException, HttpStatusCode.InternalServerError, "Socket is not found").GetAwaiter().GetResult();
-            return new ValueTask<bool>(true);
+            await KyrolusExceptionHandlerHelper.WriteEnvelopeAsync(
+                logger, httpContext, HttpStatusCode.InternalServerError, KyrolusErrorCodes.ExternalService,
+                "Socket error", socketException.Message, cancellationToken: cancellationToken).ConfigureAwait(false);
+            return true;
         }
-        return new ValueTask<bool>(false);
+        return false;
     }
 }

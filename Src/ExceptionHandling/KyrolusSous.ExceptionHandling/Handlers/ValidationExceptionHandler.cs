@@ -1,16 +1,22 @@
+using System.Net;
+using FluentValidation;
+using KyrolusSous.ExceptionHandling.Abstractions.Models;
+using Microsoft.AspNetCore.Http;
+
 namespace KyrolusSous.ExceptionHandling.Handlers;
 
 public class ValidationExceptionHandler(ILogger<ValidationExceptionHandler> logger) : IExceptionHandler
 {
-    public ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
+    public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        var contextInfo = new ErrorContextInfo(httpContext);
-        if (exception is ValidationException validationException)
+        if (exception is ValidationException valEx)
         {
-            ExceptionHelper.ReturnErrorResponse(logger, httpContext, contextInfo, validationException, (HttpStatusCode)450, validationException.Message).GetAwaiter().GetResult();
-            return new ValueTask<bool>(true);
+            var errors = valEx.Errors.Select(e => new KyrolusErrorItem(e.PropertyName, e.ErrorCode, e.ErrorMessage)).ToArray();
+            await KyrolusExceptionHandlerHelper.WriteEnvelopeAsync(
+                logger, httpContext, HttpStatusCode.BadRequest, KyrolusErrorCodes.Validation,
+                "Validation failed", valEx.Message, errors, cancellationToken: cancellationToken).ConfigureAwait(false);
+            return true;
         }
-
-        return new ValueTask<bool>(false);
+        return false;
     }
 }

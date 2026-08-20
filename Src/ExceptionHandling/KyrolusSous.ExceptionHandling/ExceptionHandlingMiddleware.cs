@@ -1,9 +1,3 @@
-
-using KyrolusSous.ExceptionHandling.Interfaces;
-using KyrolusSous.ExceptionHandling.Mapping;
-using KyrolusSous.ExceptionHandling.Writers;
-using Microsoft.Extensions.Hosting;
-
 namespace KyrolusSous.ExceptionHandling;
 
 public sealed class ExceptionHandlingMiddleware(

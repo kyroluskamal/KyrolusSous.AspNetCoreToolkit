@@ -1,14 +1,19 @@
 namespace KyrolusSous.ExceptionHandling.ClasesAndHelpers;
 
-// [JsonSerializable(typeof(Response))]
-// public partial class ResponseContext : JsonSerializerContext { }
-
-public class Response(int code, string message, bool isSuccess = true, object? data = null, ExceptionResponse? exception = null)
+public class Response
 {
-    public int StatusCode { get; set; } = code;
+    public int StatusCode { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public bool IsSuccess { get; set; }
+    public object? Data { get; set; }
 
-    public string Message { get; set; } = message;
-    public bool IsSuccess { get; set; } = isSuccess;
-    public object? Data { get; set; } = data;
-    public ExceptionResponse? Exception { get; set; } = exception;
+    public Response() { }
+
+    public Response(int statusCode, string message, bool isSuccess, object? data = null)
+    {
+        StatusCode = statusCode;
+        Message = message;
+        IsSuccess = isSuccess;
+        Data = data;
+    }
 }

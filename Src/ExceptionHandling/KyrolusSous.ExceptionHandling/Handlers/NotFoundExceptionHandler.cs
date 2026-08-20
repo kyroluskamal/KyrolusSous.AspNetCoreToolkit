@@ -1,29 +1,25 @@
+using System.Net;
+using Microsoft.AspNetCore.Http;
+
 namespace KyrolusSous.ExceptionHandling.Handlers;
 
 public class NotFoundException : Exception
 {
-    public NotFoundException(string message) : base(message)
-    {
-    }
-
-    public NotFoundException(string entityName, string key) : base($"{entityName} with key {key} not found")
-    {
-    }
+    public NotFoundException(string message) : base(message) { }
+    public NotFoundException(string entityName, string key) : base($"{entityName} with key {key} not found") { }
 }
 
 public class NotFoundExceptionHandler(ILogger<NotFoundExceptionHandler> logger) : IExceptionHandler
 {
-
-
-    public ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
+    public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        var contextInfo = new ErrorContextInfo(httpContext);
         if (exception is NotFoundException notfound)
         {
-            ExceptionHelper.ReturnErrorResponse(logger, httpContext, contextInfo, notfound, HttpStatusCode.NotFound, notfound.Message).GetAwaiter().GetResult();
-            return new ValueTask<bool>(true);
+            await KyrolusExceptionHandlerHelper.WriteEnvelopeAsync(
+                logger, httpContext, HttpStatusCode.NotFound, KyrolusErrorCodes.NotFound,
+                "Not found", notfound.Message, cancellationToken: cancellationToken).ConfigureAwait(false);
+            return true;
         }
-        return new ValueTask<bool>(false);
+        return false;
     }
 }
-
