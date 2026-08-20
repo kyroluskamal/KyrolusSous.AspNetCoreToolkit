@@ -61,6 +61,22 @@ public class KyrolusValidationFluentValidationTests
         failures.ShouldBeEmpty();
     }
 
+    [Fact(DisplayName = "ValidateAsync without context overload uses default context")]
+    public async Task ValidateAsync_WithoutContext_UsesDefaultContext()
+    {
+        var fvValidator = new InlineValidator<GroupTestModel>();
+        fvValidator.RuleFor(x => x.Title).NotEmpty();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IValidator<GroupTestModel>>(fvValidator);
+        var provider = services.BuildServiceProvider();
+
+        var validator = new FluentValidationRequestValidator<GroupTestModel>(provider);
+        var failures = await validator.ValidateAsync(new GroupTestModel());
+
+        failures.ShouldNotBeEmpty();
+    }
+
     [Fact(DisplayName = "ValidateAsync returns empty when request is valid")]
     public async Task ValidateAsync_ReturnsEmpty_WhenRequestIsValid()
     {
@@ -112,6 +128,37 @@ public class KyrolusValidationFluentValidationTests
         catFailure.Group.ShouldBe("MapGroup");
     }
 
+    [Fact(DisplayName = "ValidateAsync with wildcard RuleSets includes all rule sets")]
+    public async Task ValidateAsync_WithWildcardRuleSet_IncludesAllRuleSets()
+    {
+        var services = new ServiceCollection();
+        services.AddTransient<IValidator<GroupTestModel>, GroupTestModelValidator>();
+        var provider = services.BuildServiceProvider();
+
+        var validator = new FluentValidationRequestValidator<GroupTestModel>(provider);
+        var context = new KyrolusValidationContext(RuleSets: ["*"]);
+        var failures = await validator.ValidateAsync(new GroupTestModel(), context);
+
+        failures.Count.ShouldBe(3);
+    }
+
+    [Fact(DisplayName = "ValidateAsync maps default Severity.Error to KyrolusValidationSeverity.Error")]
+    public async Task ValidateAsync_MapsDefaultSeverityError()
+    {
+        var fvValidator = new InlineValidator<GroupTestModel>();
+        fvValidator.RuleFor(x => x.Title).NotEmpty().WithSeverity(Severity.Error);
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IValidator<GroupTestModel>>(fvValidator);
+        var provider = services.BuildServiceProvider();
+
+        var validator = new FluentValidationRequestValidator<GroupTestModel>(provider);
+        var failures = await validator.ValidateAsync(new GroupTestModel());
+
+        failures.Count.ShouldBe(1);
+        failures[0].Severity.ShouldBe(KyrolusValidationSeverity.Error);
+    }
+
     [Fact(DisplayName = "ValidateAsync resolves group when CustomState is a raw string")]
     public async Task ValidateAsync_ResolvesGroup_WhenCustomStateIsString()
     {
@@ -129,6 +176,23 @@ public class KyrolusValidationFluentValidationTests
         failures[0].Group.ShouldBe("StringGroup");
         failures[0].Metadata.ShouldNotBeNull();
         failures[0].Metadata!["customState"].ShouldBe("StringGroup");
+    }
+
+    [Fact(DisplayName = "ResolveGroup handles unhandled CustomState gracefully")]
+    public async Task ResolveGroup_HandlesUnhandledCustomStateGracefully()
+    {
+        var fvValidator = new InlineValidator<GroupTestModel>();
+        fvValidator.RuleFor(x => x.Title).NotEmpty().WithState(_ => 12345);
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IValidator<GroupTestModel>>(fvValidator);
+        var provider = services.BuildServiceProvider();
+
+        var validator = new FluentValidationRequestValidator<GroupTestModel>(provider);
+        var failures = await validator.ValidateAsync(new GroupTestModel());
+
+        failures.Count.ShouldBe(1);
+        failures[0].Group.ShouldBeNull();
     }
     #endregion
 
@@ -164,6 +228,52 @@ public class KyrolusValidationFluentValidationTests
         validator.Validate(new TestSampleModel { NationalId = "19505051234567" }).IsValid.ShouldBeFalse();
         validator.Validate(new TestSampleModel { NationalId = "2950505" }).IsValid.ShouldBeFalse();
         validator.Validate(new TestSampleModel { NationalId = "2950505123456A" }).IsValid.ShouldBeFalse();
+    }
+
+    [Fact(DisplayName = "IsUrl and IsEgyptianNationalId use explicit propertyName when provided")]
+    public void Extensions_UseExplicitPropertyName()
+    {
+        var validator = new InlineValidator<TestSampleModel>();
+        validator.RuleFor(x => x.Website).IsUrl(x => x.Website, propertyName: "CustomUrlProp");
+        validator.RuleFor(x => x.NationalId).IsEgyptianNationalId(x => x.NationalId, propertyName: "CustomNatIdProp");
+
+        var model = new TestSampleModel { Website = "invalid", NationalId = "invalid" };
+        var result = validator.Validate(model);
+
+        result.Errors.Any(e => e.PropertyName == "CustomUrlProp").ShouldBeTrue();
+        result.Errors.Any(e => e.PropertyName == "CustomNatIdProp").ShouldBeTrue();
+    }
+
+    [Fact(DisplayName = "IsEgyptianNationalId fails for invalid prefix starting digit")]
+    public void IsEgyptianNationalId_FailsForInvalidPrefixDigit()
+    {
+        var validator = new InlineValidator<TestSampleModel>();
+        validator.RuleFor(x => x.NationalId).IsEgyptianNationalId(x => x.NationalId);
+
+        var model = new TestSampleModel { NationalId = "49505051234567" };
+        var result = validator.Validate(model);
+
+        result.IsValid.ShouldBeFalse();
+    }
+
+    [Fact(DisplayName = "WithSeverity maps KyrolusValidationSeverity.Error to Severity.Error")]
+    public void WithSeverity_MapsErrorSeverity()
+    {
+        var validator = new InlineValidator<TestSampleModel>();
+        validator.RuleFor(x => x.Name).NotEmpty().WithSeverity(KyrolusValidationSeverity.Error);
+
+        var result = validator.Validate(new TestSampleModel());
+        result.Errors[0].Severity.ShouldBe(Severity.Error);
+    }
+
+    [Fact(DisplayName = "ReturnMemberExpression returns empty string when expression is non-member")]
+    public void Extensions_HandleNonMemberExpressions()
+    {
+        var validator = new InlineValidator<TestSampleModel>();
+        validator.RuleFor(x => x.Name).Required(x => "ConstantString", propertyName: "FallbackName");
+
+        var result = validator.Validate(new TestSampleModel());
+        result.Errors.ShouldNotBeEmpty();
     }
     #endregion
 
