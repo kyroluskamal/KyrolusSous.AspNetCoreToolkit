@@ -84,9 +84,9 @@ public sealed class KyrolusValidationGenerator : IIncrementalGenerator
             sb.AppendLine("    public static IServiceCollection AddKyrolusGeneratedValidators(this IServiceCollection services)");
             sb.AppendLine("    {");
 
-            foreach (var registration in registrations.OrderBy(r => r.ImplementationType))
+            foreach (var (ServiceType, ImplementationType) in registrations.OrderBy(r => r.ImplementationType))
             {
-                sb.AppendLine($"        services.TryAddEnumerable(ServiceDescriptor.Scoped(typeof({registration.ServiceType}), typeof({registration.ImplementationType})));");
+                sb.AppendLine($"        services.TryAddEnumerable(ServiceDescriptor.Scoped(typeof({ServiceType}), typeof({ImplementationType})));");
             }
 
             sb.AppendLine("        return services;");

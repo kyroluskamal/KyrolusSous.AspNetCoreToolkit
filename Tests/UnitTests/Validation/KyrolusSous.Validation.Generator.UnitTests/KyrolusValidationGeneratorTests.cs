@@ -118,6 +118,62 @@ public class GenericValidator<T> : IKyrolusRequestValidator<T>
         generatedCode.ShouldContain("AddKyrolusGeneratedValidationProfiles");
     }
 
+    [Fact(DisplayName = "Generator returns early when no registrations and profiles type is not present")]
+    public void Generator_ReturnsEarly_WhenNoRegistrationsAndNoProfiles()
+    {
+        var source = @"
+namespace KyrolusSous.Validation.Abstractions
+{
+    public interface IKyrolusRequestValidator<TRequest> { }
+}
+
+namespace MyTestApp
+{
+    public class MyRequest { }
+}
+";
+
+        var (diagnostics, outputCompilation) = RunGenerator(source, includeAbstractions: false);
+        diagnostics.ShouldBeEmpty();
+
+        var generatedTrees = outputCompilation.SyntaxTrees.Skip(1).ToList();
+        generatedTrees.Count.ShouldBe(0);
+    }
+
+    [Fact(DisplayName = "Generator generates validators without profiles when KyrolusValidationProfiles symbol is missing")]
+    public void Generator_GeneratesOnlyValidators_WhenProfilesMissing()
+    {
+        var source = @"
+namespace KyrolusSous.Validation.Abstractions
+{
+    public interface IKyrolusRequestValidator<TRequest> { }
+}
+
+namespace MyTestApp
+{
+    using KyrolusSous.Validation.Abstractions;
+
+    public class MyRequest { }
+    public class MyValidator : IKyrolusRequestValidator<MyRequest> { }
+    public class UnrelatedClass : System.IDisposable
+    {
+        public void Dispose() { }
+    }
+}
+";
+
+        var (diagnostics, outputCompilation) = RunGenerator(source, includeAbstractions: false);
+        diagnostics.ShouldBeEmpty();
+
+        var generatedTrees = outputCompilation.SyntaxTrees.Skip(1).ToList();
+        generatedTrees.Count.ShouldBe(1);
+
+        var generatedCode = generatedTrees[0].ToString();
+        generatedCode.ShouldContain("AddKyrolusGeneratedValidators");
+        generatedCode.ShouldNotContain("using KyrolusSous.Validation.Abstractions;");
+        generatedCode.ShouldNotContain("AddKyrolusGeneratedValidationProfiles");
+    }
+
     private static (ImmutableArray<Diagnostic> Diagnostics, Compilation OutputCompilation) RunGenerator(string source, bool includeAbstractions)
     {
         var syntaxTree = CSharpSyntaxTree.ParseText(source);
