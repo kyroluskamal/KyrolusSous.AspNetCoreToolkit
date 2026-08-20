@@ -94,6 +94,13 @@
       "ci": true
     },
     {
+      "name": "Validation.FluentValidation - Unit",
+      "project": "Tests/UnitTests/Validation/KyrolusSous.Validation.FluentValidation.UnitTests/KyrolusSous.Validation.FluentValidation.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
       "name": "Validation.DataAnnotations - Unit",
       "project": "Tests/UnitTests/Validation/KyrolusSous.Validation.DataAnnotations.UnitTests/KyrolusSous.Validation.DataAnnotations.UnitTests.csproj",
       "kind": "unit",

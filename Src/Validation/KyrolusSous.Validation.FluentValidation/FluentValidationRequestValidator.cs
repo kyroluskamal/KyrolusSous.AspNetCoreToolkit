@@ -24,17 +24,27 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
     {
         if (validator is null)
         {
-            return Array.Empty<KyrolusValidationFailure>();
+            return [];
         }
 
         var validationContext = context.RuleSets is { Count: > 0 }
-            ? ValidationContext<TRequest>.CreateWithOptions(request, options => options.IncludeRuleSets(context.RuleSets.ToArray()))
+            ? ValidationContext<TRequest>.CreateWithOptions(request, options =>
+            {
+                if (context.RuleSets.Contains("*"))
+                {
+                    options.IncludeAllRuleSets();
+                }
+                else
+                {
+                    options.IncludeRuleSets(context.RuleSets.ToArray());
+                }
+            })
             : new ValidationContext<TRequest>(request);
 
         var result = await validator.ValidateAsync(validationContext, cancellationToken);
         if (result.IsValid)
         {
-            return Array.Empty<KyrolusValidationFailure>();
+            return [];
         }
 
         var failures = result.Errors

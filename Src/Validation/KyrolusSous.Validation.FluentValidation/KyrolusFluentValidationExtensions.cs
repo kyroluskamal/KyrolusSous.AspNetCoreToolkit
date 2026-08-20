@@ -1,5 +1,6 @@
 using FluentValidation;
 using System.Linq.Expressions;
+using KyrolusSous.Validation.Abstractions;
 using static KyrolusSous.Validation.FluentValidation.KyrolusValidationMessages;
 
 namespace KyrolusSous.Validation.FluentValidation;
@@ -56,7 +57,7 @@ public static class KyrolusFluentValidationExtensions
     {
         return ruleBuilder.Must(url =>
             {
-                if (url is null && isNullOrEmpty)
+                if (string.IsNullOrEmpty(url) && isNullOrEmpty)
                 {
                     return true;
                 }
@@ -67,6 +68,59 @@ public static class KyrolusFluentValidationExtensions
             })
             .OverridePropertyName(string.IsNullOrEmpty(propertyName) ? ReturnMemberExpression(expr) : propertyName)
             .WithMessage(InvalidUrl);
+    }
+
+    public static IRuleBuilderOptions<T, string> IsEgyptianNationalId<T>(
+        this IRuleBuilder<T, string> ruleBuilder,
+        Expression<Func<T, object>> expr,
+        string propertyName = "",
+        bool isNullOrEmpty = false)
+    {
+        return ruleBuilder.Must(id =>
+            {
+                if (string.IsNullOrEmpty(id) && isNullOrEmpty)
+                {
+                    return true;
+                }
+
+                if (string.IsNullOrWhiteSpace(id) || id.Length != 14)
+                {
+                    return false;
+                }
+
+                return id[0] switch
+                {
+                    '2' or '3' => id.All(char.IsDigit),
+                    _ => false
+                };
+            })
+            .OverridePropertyName(string.IsNullOrEmpty(propertyName) ? ReturnMemberExpression(expr) : propertyName)
+            .WithMessage(InvalidEgyptianNationalId);
+    }
+
+    public static IRuleBuilderOptions<T, TProperty> WithGroup<T, TProperty>(
+        this IRuleBuilderOptions<T, TProperty> ruleBuilder, string groupName)
+    {
+        return ruleBuilder.WithState(_ => new KyrolusValidationGroup(groupName));
+    }
+
+    public static IRuleBuilderOptions<T, TProperty> WithGroup<T, TProperty>(
+        this IRuleBuilderOptions<T, TProperty> ruleBuilder, KyrolusValidationGroup group)
+    {
+        return ruleBuilder.WithState(_ => group);
+    }
+
+    public static IRuleBuilderOptions<T, TProperty> WithSeverity<T, TProperty>(
+        this IRuleBuilderOptions<T, TProperty> ruleBuilder, KyrolusValidationSeverity severity)
+    {
+        var fvSeverity = severity switch
+        {
+            KyrolusValidationSeverity.Info => Severity.Info,
+            KyrolusValidationSeverity.Warning => Severity.Warning,
+            _ => Severity.Error
+        };
+
+        return ruleBuilder.WithSeverity(fvSeverity);
     }
 
     private static string ReturnMemberExpression<T>(Expression<Func<T, object>> expr)
