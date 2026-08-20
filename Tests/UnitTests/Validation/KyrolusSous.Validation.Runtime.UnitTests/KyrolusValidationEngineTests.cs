@@ -482,7 +482,55 @@ public class KyrolusValidationEngineTests
         failures.Count.ShouldBe(1);
         failures[0].ErrorCode.ShouldBe("SINGLE_MAPPED_CODE");
     }
+
+    [Fact(DisplayName = "ValidateAsync passes effective context to error code and field path mappers")]
+    public async Task ValidateAsync_PassesEffectiveContext_ToErrorCodeAndFieldPathMappers()
+    {
+        // Arrange
+        KyrolusValidationContext? receivedCodeContext = null;
+        KyrolusValidationContext? receivedPathContext = null;
+
+        var codeMapper = new KyrolusDelegateValidationErrorCodeMapper((failure, ctx) =>
+        {
+            receivedCodeContext = ctx;
+            return "CONTEXT_VERIFIED_CODE";
+        });
+
+        var pathMapper = new KyrolusDelegateValidationFieldPathMapper((failure, ctx) =>
+        {
+            receivedPathContext = ctx;
+            return "context_verified_path";
+        });
+
+        var serviceProvider = TestHelper.BuildServiceProviderWithValidationRuntime(services =>
+        {
+            services.AddSingleton<IKyrolusRequestValidator<MappingTestRequest>, MappingTestValidator>();
+            services.AddSingleton<IKyrolusValidationErrorCodeMapper>(codeMapper);
+            services.AddSingleton<IKyrolusValidationFieldPathMapper>(pathMapper);
+        });
+
+        var validationEngine = serviceProvider.GetRequiredService<IKyrolusValidationEngine>();
+        var request = new MappingTestRequest();
+        var context = new KyrolusValidationContext(MinimumSeverity: KyrolusValidationSeverity.Info);
+
+        // Act
+        var failures = await validationEngine.ValidateAsync(request, context);
+
+        // Assert
+        failures.ShouldNotBeNull();
+        failures.Count.ShouldBe(1);
+        failures[0].ErrorCode.ShouldBe("CONTEXT_VERIFIED_CODE");
+        failures[0].FieldPath.ShouldBe("context_verified_path");
+
+        receivedCodeContext.ShouldNotBeNull();
+        receivedCodeContext!.MinimumSeverity.ShouldBe(KyrolusValidationSeverity.Info);
+
+        receivedPathContext.ShouldNotBeNull();
+        receivedPathContext!.MinimumSeverity.ShouldBe(KyrolusValidationSeverity.Info);
+    }
     #endregion
+
+
 
 
     #region Negative Caching
@@ -607,7 +655,47 @@ public class KyrolusValidationEngineTests
         cachedFailures.ShouldNotBeNull();
         cachedFailures.Count.ShouldBe(1);
     }
+
+    [Fact(DisplayName = "ValidateAsync does not store in cache when mode is None")]
+    public async Task ValidateAsync_CacheMode_None_DoesNotStoreInCache()
+    {
+        // Arrange
+        var serviceProvider = TestHelper.BuildServiceProviderWithValidationRuntime();
+        var validationEngine = serviceProvider.GetRequiredService<IKyrolusValidationEngine>();
+        var cacheStore = serviceProvider.GetRequiredService<IKyrolusValidationCacheStore>();
+
+        var request = new CacheableCacheModeIsNoneRequest();
+        var context = new KyrolusValidationContext();
+
+        // Act
+        var failures = await validationEngine.ValidateAsync(request, context);
+
+        // Assert - النتيجة لم تتخزن في الكاش لأن CacheMode == None
+        failures.ShouldBeEmpty();
+        cacheStore.TryGet("NONEMODECACHEKEY", out _).ShouldBeFalse();
+    }
+
+    [Fact(DisplayName = "ValidateAsync does not store in cache when CacheTtl is Zero")]
+    public async Task ValidateAsync_CacheTtl_IsZero_DoesNotStoreInCache()
+    {
+        // Arrange
+        var serviceProvider = TestHelper.BuildServiceProviderWithValidationRuntime();
+        var validationEngine = serviceProvider.GetRequiredService<IKyrolusValidationEngine>();
+        var cacheStore = serviceProvider.GetRequiredService<IKyrolusValidationCacheStore>();
+
+        var request = new ZeroTtlCacheableTestRequest();
+        var context = new KyrolusValidationContext();
+
+        // Act
+        var failures = await validationEngine.ValidateAsync(request, context);
+
+        // Assert - النتيجة لم تتخزن في الكاش لأن CacheTtl == TimeSpan.Zero
+        failures.ShouldBeEmpty();
+        cacheStore.TryGet("ZEROTTLKEY", out _).ShouldBeFalse();
+    }
     #endregion
+
+
 
     #region Null RuleSet and Group Filtering Defaults
     [Fact(DisplayName = "ValidateAsync filters failures with null RuleSet and null Group using defaults")]

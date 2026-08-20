@@ -251,11 +251,57 @@ public class NullRuleSetAndGroupValidator : IKyrolusRequestValidator<NullRuleSet
     }
 }
 
+public class CacheableNullKeyRequest : IKyrolusValidationCacheable
+{
+    public string? CacheKey => null;
+    public TimeSpan? CacheTtl => throw new NotImplementedException();
+    public KyrolusValidationCacheMode CacheMode => throw new NotImplementedException();
+
+}
+public class CacheableEmptyStringKeyRequest : IKyrolusValidationCacheable
+{
+    public string? CacheKey => "";
+    public TimeSpan? CacheTtl => throw new NotImplementedException();
+    public KyrolusValidationCacheMode CacheMode => throw new NotImplementedException();
+
+}
+
+public class CacheableCacheModeIsNoneRequest : IKyrolusValidationCacheable
+{
+    public string? CacheKey => "NONEMODECACHEKEY";
+    public TimeSpan? CacheTtl => TimeSpan.FromMinutes(5);
+    public KyrolusValidationCacheMode CacheMode => KyrolusValidationCacheMode.None;
+}
+
+public class ZeroTtlCacheableTestRequest : IKyrolusValidationCacheable
+{
+    public string? CacheKey => "ZEROTTLKEY";
+    public TimeSpan? CacheTtl => TimeSpan.Zero;
+    public KyrolusValidationCacheMode CacheMode => KyrolusValidationCacheMode.All;
+}
+
+public class ValidCacheableTestRequest : IKyrolusValidationCacheable
+{
+    public string? CacheKey => "ValidCache";
+    public TimeSpan? CacheTtl => TimeSpan.FromMinutes(1);
+    public KyrolusValidationCacheMode CacheMode => KyrolusValidationCacheMode.FailuresOnly;
+}
+
+public class ValidCacheableWithNullTtlRequest : IKyrolusValidationCacheable
+{
+    public string? CacheKey => "ValidCacheNullTtl";
+    public TimeSpan? CacheTtl => null;
+    public KyrolusValidationCacheMode CacheMode => KyrolusValidationCacheMode.All;
+}
 
 
-
-
-
-
-
+public enum InvalidRequestKind
+{
+    NullRequest,
+    NotCacheableObject,
+    NullCacheKey,
+    EmptyCacheKey,
+    CacheModeIsNone,
+    ZeroTtl
+}
 
