@@ -65,12 +65,12 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Mediator.Runtime - Unit | unit | 101 | none | yes |
 | Mediator.Generator - Unit | unit | 14 | none | yes |
 | Mediator.Reflection - Unit | unit | 52 | none | yes |
-| Validation.Runtime - Unit | unit | 46 | none | yes |
+| Validation.Runtime - Unit | unit | 60 | none | yes |
 | Validation.Fluent - Unit | unit | 14 | none | yes |
 | Validation.DataAnnotations - Unit | unit | 8 | none | yes |
 | Validation.DataAnnotations.Generator - Unit | unit | 1 | none | yes |
 | Swagger - Integration | integration | 10 | none | yes |
-| **Total** | | **1246** | | |
+| **Total** | | **1260** | | |
 
 <!-- END:GENERATED:test-suites -->
 
