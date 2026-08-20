@@ -108,6 +108,13 @@
       "ci": true
     },
     {
+      "name": "Validation.Generator - Unit",
+      "project": "Tests/UnitTests/Validation/KyrolusSous.Validation.Generator.UnitTests/KyrolusSous.Validation.Generator.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
       "name": "Validation.DataAnnotations - Unit",
       "project": "Tests/UnitTests/Validation/KyrolusSous.Validation.DataAnnotations.UnitTests/KyrolusSous.Validation.DataAnnotations.UnitTests.csproj",
       "kind": "unit",

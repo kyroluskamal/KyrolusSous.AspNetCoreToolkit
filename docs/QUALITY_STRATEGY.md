@@ -69,10 +69,11 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Validation.Fluent - Unit | unit | 14 | none | yes |
 | Validation.FluentValidation - Unit | unit | 16 | none | yes |
 | Validation.FluentValidation.Scanning - Unit | unit | 2 | none | yes |
+| Validation.Generator - Unit | unit | 4 | none | yes |
 | Validation.DataAnnotations - Unit | unit | 8 | none | yes |
 | Validation.DataAnnotations.Generator - Unit | unit | 1 | none | yes |
 | Swagger - Integration | integration | 10 | none | yes |
-| **Total** | | **1305** | | |
+| **Total** | | **1309** | | |
 
 <!-- END:GENERATED:test-suites -->
 
