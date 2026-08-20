@@ -33,7 +33,7 @@ Within a phase the order is loose - what matters is not starting a phase before 
 | 6 | `Validation.Runtime` | ✅ | 100 unit tests covering caching, negative TTL, composite validation, mappers, localizers, metrics, tracing, cancellation, and profiles (100% coverage) |
 | 7 | `Validation.DataAnnotations` | ✅ | 8 unit tests covering null requests, property & object-level validation, DI registration, CancellationToken, and context propagation (100% coverage) |
 | 8 | `Validation.FluentValidation` | ✅ | 9 unit tests covering FluentValidation adapter, custom groups, severity mapping, Egyptian National ID, URL validation, and DI assembly scanning (100% coverage) |
-| 9 | `Validation.FluentValidation.Scanning` | ⬜ | 19 lines |
+| 9 | `Validation.FluentValidation.Scanning` | ✅ | 2 unit tests covering reflection-based assembly scanning for DI (100% coverage) |
 | 10 | `Validation.Generator` | ⬜ | 112 lines |
 | 11 | `ExceptionHandling.Abstractions` | ⚡ | |
 | 12 | `ExceptionHandling` | ⚡ | 1138 lines |

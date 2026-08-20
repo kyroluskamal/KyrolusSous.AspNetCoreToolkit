@@ -8,19 +8,4 @@ public static class ServiceCollectionExtensions
         services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IKyrolusRequestValidatorWithContext<>), typeof(FluentValidationRequestValidator<>)));
         return services;
     }
-
-    public static IServiceCollection AddKyrolusFluentValidationFromAssemblyContaining<T>(this IServiceCollection services)
-    {
-        return services.AddKyrolusFluentValidationFromAssemblies(typeof(T).Assembly);
-    }
-
-    public static IServiceCollection AddKyrolusFluentValidationFromAssemblies(this IServiceCollection services, params Assembly[] assemblies)
-    {
-        services.AddKyrolusFluentValidation();
-        foreach (var result in AssemblyScanner.FindValidatorsInAssemblies(assemblies))
-        {
-            services.TryAddTransient(result.InterfaceType, result.ValidatorType);
-        }
-        return services;
-    }
 }

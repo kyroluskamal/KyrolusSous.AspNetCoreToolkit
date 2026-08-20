@@ -292,18 +292,6 @@ public class KyrolusValidationFluentValidationTests
         var contextValidator = provider.GetService<IKyrolusRequestValidatorWithContext<TestSampleModel>>();
         contextValidator.ShouldNotBeNull();
     }
-
-    [Fact(DisplayName = "AddKyrolusFluentValidationFromAssemblyContaining scans and registers validators")]
-    public void AddKyrolusFluentValidationFromAssemblyContaining_ScansValidators()
-    {
-        var services = new ServiceCollection();
-        services.AddKyrolusFluentValidationFromAssemblyContaining<TestSampleModelValidator>();
-        var provider = services.BuildServiceProvider();
-
-        var fvValidator = provider.GetService<IValidator<TestSampleModel>>();
-        fvValidator.ShouldNotBeNull();
-        fvValidator.ShouldBeOfType<TestSampleModelValidator>();
-    }
     #endregion
 
     #region KyrolusValidationMessages

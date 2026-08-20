@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="10.0.1">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="Shouldly" Version="4.3.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Src\Validation\KyrolusSous.Validation.Abstractions\KyrolusSous.Validation.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Validation\KyrolusSous.Validation.FluentValidation\KyrolusSous.Validation.FluentValidation.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Validation\KyrolusSous.Validation.FluentValidation.Scanning\KyrolusSous.Validation.FluentValidation.Scanning.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Shouldly" />
+    <Using Include="KyrolusSous.Validation.Abstractions" />
+    <Using Include="KyrolusSous.Validation.FluentValidation" />
+    <Using Include="KyrolusSous.Validation.FluentValidation.Scanning" />
+  </ItemGroup>
+
+</Project>
