@@ -1,3 +1,5 @@
+using KyrolusSous.EndpointKit.Core.Envelope;
+
 namespace KyrolusSous.EndpointKit.Marten.BaseKyrolusModule;
 
 public class KyrolusMapper : IKyrolusMapper

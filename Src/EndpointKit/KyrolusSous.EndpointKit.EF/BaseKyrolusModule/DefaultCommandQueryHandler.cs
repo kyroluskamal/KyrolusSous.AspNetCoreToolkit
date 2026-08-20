@@ -1,6 +1,7 @@
 using KyrolusSous.CQRS.Abstractions.Interfaces;
 using KyrolusSous.CQRS.EF.Query;
 using KyrolusSous.EndpointKit.Core.Batch;
+using KyrolusSous.EndpointKit.Core.Envelope;
 using KyrolusSous.EndpointKit.EF.BaseKyrolusModule.Authorization;
 using KyrolusSous.EndpointKit.EF.BaseKyrolusModule.Interfaces;
 using KyrolusSous.ExceptionHandling;
