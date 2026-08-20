@@ -11,20 +11,20 @@ public sealed class KyrolusValidationMemoryCacheStore : IKyrolusValidationCacheS
     {
         if (string.IsNullOrWhiteSpace(key))
         {
-            failures = Array.Empty<KyrolusValidationFailure>();
+            failures = [];
             return false;
         }
 
         if (!entries.TryGetValue(key, out var entry))
         {
-            failures = Array.Empty<KyrolusValidationFailure>();
+            failures = [];
             return false;
         }
 
         if (entry.ExpiresAt <= DateTimeOffset.UtcNow)
         {
             entries.TryRemove(key, out _);
-            failures = Array.Empty<KyrolusValidationFailure>();
+            failures = [];
             return false;
         }
 
