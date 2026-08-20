@@ -10,7 +10,7 @@ public sealed class KyrolusDictionaryValidationErrorLocalizer(
     IReadOnlyDictionary<string, string>? invariantMap = null) : IKyrolusValidationErrorLocalizer
 {
     private readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> cultureMaps = cultureMaps
-        ?? throw new ArgumentNullException(nameof(cultureMaps));
+        ?? throw new ArgumentNullException(nameof(cultureMaps), "You should add at least one culture map");
     private readonly IReadOnlyDictionary<string, string>? invariantMap = invariantMap;
 
     public string Localize(KyrolusValidationFailure failure, CultureInfo? culture = null)

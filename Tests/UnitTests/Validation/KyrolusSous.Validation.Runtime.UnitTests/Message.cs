@@ -304,4 +304,3 @@ public enum InvalidRequestKind
     CacheModeIsNone,
     ZeroTtl
 }
-
