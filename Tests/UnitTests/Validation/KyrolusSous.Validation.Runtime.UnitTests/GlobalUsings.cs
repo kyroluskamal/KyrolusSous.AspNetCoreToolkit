@@ -1,3 +1,4 @@
+global using System.Diagnostics;
 global using System.Globalization;
 global using KyrolusSous.Validation.Abstractions;
 global using Microsoft.Extensions.DependencyInjection;

@@ -29,8 +29,8 @@ Within a phase the order is loose - what matters is not starting a phase before 
 | 2 | `Mediator.Runtime` | ✅ | 62 tests. 3 defects fixed, pipeline cached |
 | 3 | `Mediator.Reflection` | ✅ | 52 unit tests covering dispatch, exception unwrapping, Assembly scanning, open generics, and caching (100% coverage) |
 | 4 | `Mediator.Generator` | ✅ | 14 tests incl. incremental caching. Roslyn component properties verified |
-| 5 | `Validation.Abstractions` | ⚡ | |
-| 6 | `Validation.Runtime` | ⚡ | |
+| 5 | `Validation.Abstractions` | ✅ | 100% coverage via unit tests in Runtime suite |
+| 6 | `Validation.Runtime` | ✅ | 100 unit tests covering caching, negative TTL, composite validation, mappers, localizers, metrics, tracing, cancellation, and profiles (100% coverage) |
 | 7 | `Validation.DataAnnotations` | ✅ | 8 unit tests covering null requests, property & object-level validation, DI registration, CancellationToken, and context propagation (100% coverage) |
 | 8 | `Validation.FluentValidation` | ⚡ | |
 | 9 | `Validation.FluentValidation.Scanning` | ⬜ | 19 lines |
