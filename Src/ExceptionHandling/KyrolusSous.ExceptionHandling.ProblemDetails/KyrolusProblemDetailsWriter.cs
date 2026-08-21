@@ -1,5 +1,5 @@
 global using KyrolusSous.ExceptionHandling.Abstractions.Models;
-global using KyrolusSous.ExceptionHandling.Interfaces;
+global using KyrolusSous.ExceptionHandling.Runtime.Interfaces;
 global using Microsoft.AspNetCore.Http;
 global using MvcProblemDetails = Microsoft.AspNetCore.Mvc.ProblemDetails;
 global using System.Text.Json;

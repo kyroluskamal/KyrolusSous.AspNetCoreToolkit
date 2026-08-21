@@ -103,7 +103,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.EndpointKit.Gen
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.EndpointKit.Marten", "Src\EndpointKit\KyrolusSous.EndpointKit.Marten\KyrolusSous.EndpointKit.Marten.csproj", "{1C15EF87-0316-4558-BD2A-904FBD6B260A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.ExceptionHandling", "Src\ExceptionHandling\KyrolusSous.ExceptionHandling\KyrolusSous.ExceptionHandling.csproj", "{EB3FBBA7-A3C4-4A97-B669-D79BBA4DCC2B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.ExceptionHandling.Runtime", "Src\ExceptionHandling\KyrolusSous.ExceptionHandling.Runtime\KyrolusSous.ExceptionHandling.Runtime.csproj", "{EB3FBBA7-A3C4-4A97-B669-D79BBA4DCC2B}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.ExceptionHandling.Abstractions", "Src\ExceptionHandling\KyrolusSous.ExceptionHandling.Abstractions\KyrolusSous.ExceptionHandling.Abstractions.csproj", "{E298D61E-920A-4A49-8F8A-46FE6619ADB4}"
 EndProject
@@ -216,6 +216,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.FluentValidation.Scanning.UnitTests", "Tests\UnitTests\Validation\KyrolusSous.Validation.FluentValidation.Scanning.UnitTests\KyrolusSous.Validation.FluentValidation.Scanning.UnitTests.csproj", "{58CC10E5-4F02-4273-AAB3-4468278760FB}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.Generator.UnitTests", "Tests\UnitTests\Validation\KyrolusSous.Validation.Generator.UnitTests\KyrolusSous.Validation.Generator.UnitTests.csproj", "{EEC30777-DEAE-46BD-B07C-6C64BD4B3B9E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ExceptionHandling", "ExceptionHandling", "{82A27A28-ED18-B9C1-2BD3-8846E6A141EB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.ExceptionHandling.Runtime.UnitTests", "Tests\UnitTests\ExceptionHandling\KyrolusSous.ExceptionHandling.Runtime.UnitTests\KyrolusSous.ExceptionHandling.Runtime.UnitTests.csproj", "{ADF41324-A971-4323-9216-FA00C86182EA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -1235,6 +1239,18 @@ Global
 		{EEC30777-DEAE-46BD-B07C-6C64BD4B3B9E}.Release|x64.Build.0 = Release|Any CPU
 		{EEC30777-DEAE-46BD-B07C-6C64BD4B3B9E}.Release|x86.ActiveCfg = Release|Any CPU
 		{EEC30777-DEAE-46BD-B07C-6C64BD4B3B9E}.Release|x86.Build.0 = Release|Any CPU
+		{ADF41324-A971-4323-9216-FA00C86182EA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ADF41324-A971-4323-9216-FA00C86182EA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ADF41324-A971-4323-9216-FA00C86182EA}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{ADF41324-A971-4323-9216-FA00C86182EA}.Debug|x64.Build.0 = Debug|Any CPU
+		{ADF41324-A971-4323-9216-FA00C86182EA}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{ADF41324-A971-4323-9216-FA00C86182EA}.Debug|x86.Build.0 = Debug|Any CPU
+		{ADF41324-A971-4323-9216-FA00C86182EA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ADF41324-A971-4323-9216-FA00C86182EA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ADF41324-A971-4323-9216-FA00C86182EA}.Release|x64.ActiveCfg = Release|Any CPU
+		{ADF41324-A971-4323-9216-FA00C86182EA}.Release|x64.Build.0 = Release|Any CPU
+		{ADF41324-A971-4323-9216-FA00C86182EA}.Release|x86.ActiveCfg = Release|Any CPU
+		{ADF41324-A971-4323-9216-FA00C86182EA}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1345,5 +1361,7 @@ Global
 		{8C7B81A3-178C-442A-944E-420B1DBE3B22} = {5B8C8C49-7F60-44D0-BB82-932F39B1F5D9}
 		{58CC10E5-4F02-4273-AAB3-4468278760FB} = {5B8C8C49-7F60-44D0-BB82-932F39B1F5D9}
 		{EEC30777-DEAE-46BD-B07C-6C64BD4B3B9E} = {5B8C8C49-7F60-44D0-BB82-932F39B1F5D9}
+		{82A27A28-ED18-B9C1-2BD3-8846E6A141EB} = {30785934-E017-5D9F-2777-3D61460A5281}
+		{ADF41324-A971-4323-9216-FA00C86182EA} = {82A27A28-ED18-B9C1-2BD3-8846E6A141EB}
 	EndGlobalSection
 EndGlobal

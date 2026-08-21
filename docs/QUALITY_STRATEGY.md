@@ -72,6 +72,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Validation.Generator - Unit | unit | 6 | none | yes |
 | Validation.DataAnnotations - Unit | unit | 8 | none | yes |
 | Validation.DataAnnotations.Generator - Unit | unit | 1 | none | yes |
+| ExceptionHandling.Runtime - Unit | unit | 0 | none | yes |
 | Swagger - Integration | integration | 10 | none | yes |
 | **Total** | | **1311** | | |
 

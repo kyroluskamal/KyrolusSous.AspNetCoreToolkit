@@ -19,7 +19,7 @@ using KyrolusSous.EndpointKit.Marten.BaseKyrolusModule;
 using KyrolusSous.EndpointKit.Marten.BaseKyrolusModule.Interfaces;
 using KyrolusSous.EndpointKit.Marten;
 using KyrolusSous.EndpointKit.Marten.Config;
-using KyrolusSous.ExceptionHandling;
+using KyrolusSous.ExceptionHandling.Runtime;
 using KyrolusSous.ExceptionHandling.Abstractions.Exceptions;
 using KyrolusSous.ExceptionHandling.FluentValidation;
 using KyrolusSous.ExceptionHandling.Redis;

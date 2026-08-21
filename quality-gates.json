@@ -129,6 +129,13 @@
       "ci": true
     },
     {
+      "name": "ExceptionHandling.Runtime - Unit",
+      "project": "Tests/UnitTests/ExceptionHandling/KyrolusSous.ExceptionHandling.Runtime.UnitTests/KyrolusSous.ExceptionHandling.Runtime.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
       "name": "Swagger - Integration",
       "project": "Tests/IntegrationTests/KyrolusSous.Swagger.IntegrationTests/KyrolusSous.Swagger.IntegrationTests.csproj",
       "kind": "integration",

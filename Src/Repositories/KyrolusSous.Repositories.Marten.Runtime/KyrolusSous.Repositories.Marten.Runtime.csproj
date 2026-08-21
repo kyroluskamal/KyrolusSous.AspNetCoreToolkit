@@ -9,7 +9,7 @@
     <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic.Workspaces" Version="5.6.0" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\ExceptionHandling\KyrolusSous.ExceptionHandling\KyrolusSous.ExceptionHandling.csproj" />
+    <ProjectReference Include="..\..\ExceptionHandling\KyrolusSous.ExceptionHandling.Runtime\KyrolusSous.ExceptionHandling.Runtime.csproj" />
     <ProjectReference Include="..\KyrolusSous.Repositories.Marten.Abstractions\KyrolusSous.Repositories.Marten.Abstractions.csproj" />
   </ItemGroup>
   <PropertyGroup>

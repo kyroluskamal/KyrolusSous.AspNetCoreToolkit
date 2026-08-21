@@ -36,7 +36,7 @@ Within a phase the order is loose - what matters is not starting a phase before 
 | 9 | `Validation.FluentValidation.Scanning` | ✅ | 2 unit tests covering reflection-based assembly scanning for DI (100% coverage) |
 | 10 | `Validation.Generator` | ✅ | 4 unit tests covering Roslyn Incremental Generator code emission for DI validators & profiles (100% coverage) |
 | 11 | `ExceptionHandling.Abstractions` | ⚡ | |
-| 12 | `ExceptionHandling` | ⚡ | 1138 lines |
+| 12 | `ExceptionHandling.Runtime` | ⚡ | 1138 lines |
 | 13 | `ExceptionHandling.ProblemDetails` | ⚡ | |
 | 14 | `ExceptionHandling.EntityFramework` | ⬜ | |
 | 15 | `ExceptionHandling.FluentValidation` | ⚡ | |

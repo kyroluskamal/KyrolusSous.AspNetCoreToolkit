@@ -25,16 +25,16 @@ using KyrolusSous.EndpointKit.Core.Envelope;
 using KyrolusSous.EndpointKit.Core.FieldSelection;
 using KyrolusSous.EndpointKit.Core.Hateoas;
 using KyrolusSous.EndpointKit.Marten.BaseKyrolusModule;
-using KyrolusSous.ExceptionHandling;
 using KyrolusSous.ExceptionHandling.Abstractions.Interfaces;
 using KyrolusSous.ExceptionHandling.Abstractions.Models;
 using KyrolusSous.ExceptionHandling.Abstractions.Exceptions;
-using KyrolusSous.ExceptionHandling.ClasesAndHelpers;
 using KyrolusSous.ExceptionHandling.FluentValidation;
-using KyrolusSous.ExceptionHandling.Handlers;
-using KyrolusSous.ExceptionHandling.Interfaces;
-using KyrolusSous.ExceptionHandling.Mapping;
-using KyrolusSous.ExceptionHandling.Writers;
+using KyrolusSous.ExceptionHandling.Runtime;
+using KyrolusSous.ExceptionHandling.Runtime.ClasesAndHelpers;
+using KyrolusSous.ExceptionHandling.Runtime.Handlers;
+using KyrolusSous.ExceptionHandling.Runtime.Interfaces;
+using KyrolusSous.ExceptionHandling.Runtime.Mapping;
+using KyrolusSous.ExceptionHandling.Runtime.Writers;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Models;
 using KyrolusSous.Repositories.Marten.Abstractions.Authorization;
 using KyrolusSous.Repositories.Marten.Abstractions;
@@ -511,11 +511,11 @@ public static partial class RepositoryRuntimeDiagnostics
         }
 
         var valEx = new ValidationException([new ValidationFailure("Name", "Name is required")]);
-        var validationHandler = new ValidationExceptionHandler(loggerFactory.CreateLogger<ValidationExceptionHandler>());
-        var validationContext = CreateExceptionHandlerContext();
-        if (await validationHandler.TryHandleAsync(validationContext, valEx, cancellationToken).ConfigureAwait(false) &&
-            validationContext.Response.StatusCode == StatusCodes.Status400BadRequest &&
-            !await validationHandler.TryHandleAsync(CreateExceptionHandlerContext(), new InvalidOperationException("ignored"), cancellationToken).ConfigureAwait(false))
+        var validationMapper = new KyrolusFluentValidationExceptionMapper();
+        var errorCtx = new KyrolusErrorContext("trace-id", null, null, null, "/test", "GET", null);
+        if (validationMapper.TryMap(valEx, errorCtx, out var valMapping) &&
+            valMapping.StatusCode == HttpStatusCode.BadRequest &&
+            !validationMapper.TryMap(new InvalidOperationException("ignored"), errorCtx, out _))
         {
             checks++;
         }
@@ -529,14 +529,9 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
-        var npgsqlHandler = new NpgsqlExceptionHandler(loggerFactory.CreateLogger<NpgsqlExceptionHandler>());
-        var npgsqlContext = CreateExceptionHandlerContext();
-        if (await npgsqlHandler.TryHandleAsync(
-                npgsqlContext,
-                new PostgresException("npgsql", "ERROR", "ERROR", PostgresErrorCodes.SerializationFailure),
-                cancellationToken).ConfigureAwait(false) &&
-            npgsqlContext.Response.StatusCode == StatusCodes.Status500InternalServerError &&
-            !await npgsqlHandler.TryHandleAsync(CreateExceptionHandlerContext(), new InvalidOperationException("ignored"), cancellationToken).ConfigureAwait(false))
+        var defaultMapper = new KyrolusDefaultExceptionMapper();
+        if (defaultMapper.TryMap(new InvalidOperationException("boom"), errorCtx, out var defaultMapping) &&
+            defaultMapping.StatusCode == HttpStatusCode.InternalServerError)
         {
             checks++;
         }

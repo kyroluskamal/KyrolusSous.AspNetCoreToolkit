@@ -3,7 +3,7 @@
     <ProjectReference Include="..\KyrolusSous.EndpointKit.Core\KyrolusSous.EndpointKit.Core.csproj" />
     <ProjectReference Include="..\..\CQRS\KyrolusSous.CQRS.EF\KyrolusSous.CQRS.EF.csproj" />
     <ProjectReference Include="..\..\Caching\KyrolusSous.Caching.Abstractions\KyrolusSous.Caching.Abstractions.csproj" />
-    <ProjectReference Include="..\..\ExceptionHandling\KyrolusSous.ExceptionHandling\KyrolusSous.ExceptionHandling.csproj" />
+    <ProjectReference Include="..\..\ExceptionHandling\KyrolusSous.ExceptionHandling.Runtime\KyrolusSous.ExceptionHandling.Runtime.csproj" />
     <ProjectReference Include="..\..\ExceptionHandling\KyrolusSous.ExceptionHandling.ProblemDetails\KyrolusSous.ExceptionHandling.ProblemDetails.csproj" />
     <ProjectReference Include="..\..\Validation\KyrolusSous.Validation.Abstractions\KyrolusSous.Validation.Abstractions.csproj" />
   </ItemGroup>

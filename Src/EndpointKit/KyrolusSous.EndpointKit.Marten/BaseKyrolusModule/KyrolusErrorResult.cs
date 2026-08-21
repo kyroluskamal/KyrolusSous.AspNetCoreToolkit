@@ -1,6 +1,6 @@
-using KyrolusSous.ExceptionHandling;
 using KyrolusSous.ExceptionHandling.Abstractions.Models;
-using KyrolusSous.ExceptionHandling.Interfaces;
+using KyrolusSous.ExceptionHandling.Runtime;
+using KyrolusSous.ExceptionHandling.Runtime.Interfaces;
 
 namespace KyrolusSous.EndpointKit.Marten.BaseKyrolusModule;
 

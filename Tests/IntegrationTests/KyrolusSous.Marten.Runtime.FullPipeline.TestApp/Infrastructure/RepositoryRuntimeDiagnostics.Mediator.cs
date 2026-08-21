@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using KyrolusSous.Mediator.Abstractions.Attributes;
 using KyrolusSous.Mediator.Abstractions.Interfaces;

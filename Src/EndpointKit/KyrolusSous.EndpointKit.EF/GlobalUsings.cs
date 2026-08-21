@@ -9,7 +9,7 @@ global using KyrolusSous.CQRS.EF.Command.Bulk;
 global using KyrolusSous.CQRS.EF.Command.SoftDelete;
 global using KyrolusSous.CQRS.EF.Query;
 global using KyrolusSous.CQRS.Abstractions.Models;
-global using KyrolusSous.ExceptionHandling.ClasesAndHelpers;
+global using KyrolusSous.EndpointKit.Core.Envelope;
 global using KyrolusSous.Mediator.Abstractions.Interfaces;
 global using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
 global using KyrolusSous.Repositories.EF.Abstractions.Query;

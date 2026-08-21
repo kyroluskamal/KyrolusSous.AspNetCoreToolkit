@@ -7,7 +7,7 @@ global using KyrolusSous.CQRS.Marten.Command.Update;
 global using KyrolusSous.CQRS.Marten.Command.Patch;
 global using KyrolusSous.CQRS.Marten.Query;
 global using KyrolusSous.CQRS.Abstractions.Models;
-global using KyrolusSous.ExceptionHandling.ClasesAndHelpers;
+global using KyrolusSous.EndpointKit.Core.Envelope;
 global using KyrolusSous.Mediator.Abstractions.Interfaces;
 global using KyrolusSous.Repositories.Marten.Abstractions.Interfaces;
 global using KyrolusSous.Repositories.Marten.Abstractions.Records;
