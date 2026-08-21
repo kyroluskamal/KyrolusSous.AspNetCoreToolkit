@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\KyrolusSous.Swagger.TestApp\KyrolusSous.Swagger.TestApp.csproj" />
+    <ProjectReference Include="..\KyrolusSous.OpenApi.TestApp\KyrolusSous.OpenApi.TestApp.csproj" />
   </ItemGroup>
 
   <ItemGroup>

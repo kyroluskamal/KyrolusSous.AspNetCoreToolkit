@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -37,7 +37,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "RabbitMQ", "RabbitMQ", "{67
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Repositories", "Repositories", "{F36F803F-876D-4ECA-BF6E-6526ED0DD006}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Swagger", "Swagger", "{ACDD022A-FE33-4E03-BCB9-2A6B9C2E2ADA}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "OpenApi", "OpenApi", "{ACDD022A-FE33-4E03-BCB9-2A6B9C2E2ADA}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Validation", "Validation", "{82A4620A-484E-4054-9805-02C401EECED9}"
 EndProject
@@ -151,7 +151,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.Ma
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.Marten.Runtime", "Src\Repositories\KyrolusSous.Repositories.Marten.Runtime\KyrolusSous.Repositories.Marten.Runtime.csproj", "{7C775D18-7656-408A-81AF-BAE2A5C1E303}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Swagger", "Src\Swagger\KyrolusSous.Swagger\KyrolusSous.Swagger.csproj", "{E1B27A4A-017B-4EB4-828D-AF62900569FF}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.OpenApi", "Src\OpenApi\KyrolusSous.OpenApi\KyrolusSous.OpenApi.csproj", "{E1B27A4A-017B-4EB4-828D-AF62900569FF}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.Abstractions", "Src\Validation\KyrolusSous.Validation.Abstractions\KyrolusSous.Validation.Abstractions.csproj", "{D4F23664-627D-4DDC-B731-CB44AA9DE4FC}"
 EndProject
@@ -187,9 +187,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.EF
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestApp.postgresql", "Tests\IntegrationTests\KyrolusSous.Repositories.EF.Runtime.TestApp.postgresql\TestApp.postgresql.csproj", "{FAD93012-C1C4-472B-A078-7EA60AE2DB35}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Swagger.IntegrationTests", "Tests\IntegrationTests\KyrolusSous.Swagger.IntegrationTests\KyrolusSous.Swagger.IntegrationTests.csproj", "{28914130-0389-4888-81A1-9FC221F6255D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.OpenApi.IntegrationTests", "Tests\IntegrationTests\KyrolusSous.OpenApi.IntegrationTests\KyrolusSous.OpenApi.IntegrationTests.csproj", "{28914130-0389-4888-81A1-9FC221F6255D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Swagger.TestApp", "Tests\IntegrationTests\KyrolusSous.Swagger.TestApp\KyrolusSous.Swagger.TestApp.csproj", "{6AAD63C2-A812-4179-AC1F-D2229344A9E2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.OpenApi.TestApp", "Tests\IntegrationTests\KyrolusSous.OpenApi.TestApp\KyrolusSous.OpenApi.TestApp.csproj", "{6AAD63C2-A812-4179-AC1F-D2229344A9E2}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Logging.Tests", "Tests\UnitTests\Logging\KyrolusSous.Logging.UnitTests\KyrolusSous.Logging.Tests.csproj", "{A1CF9F1C-DF71-4193-B9F2-436277A3C7FA}"
 EndProject

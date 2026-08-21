@@ -9,7 +9,7 @@ keeps ad-hoc local runs possible without editing the config.
 Examples:
   python scripts/coverage-gate.py
   python scripts/coverage-gate.py --config quality-gates.json
-  python scripts/coverage-gate.py --min-line 80 --package KyrolusSous.Swagger:50:40
+  python scripts/coverage-gate.py --min-line 80 --package KyrolusSous.OpenApi:50:40
 """
 
 from __future__ import annotations

@@ -1,14 +1,9 @@
-using System.Reflection;
-using KyrolusSous.Swagger;
+using KyrolusSous.OpenApi;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Logging.ClearProviders();
-builder.Logging.AddDebug();
-
-builder.Services.AddSwaggerService(options =>
+builder.Services.AddKyrolusOpenApi(options =>
 {
     options.EnableApiVersioning = true;
     options.ApiVersions =
@@ -33,10 +28,6 @@ builder.Services.AddSwaggerService(options =>
         }
     ];
 
-    options.EnableXmlComments = true;
-    var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
-    options.XmlDocAbsolutePaths.Add(Path.Combine(AppContext.BaseDirectory, xmlFile));
-
     options.EnableJwtBearerAuth = true;
     options.JwtBearerDescription = "My custom JWT auth description.";
 
@@ -52,18 +43,12 @@ builder.Services.AddSwaggerService(options =>
         { "api.write", "Grants write access to API" }
     };
 
-    options.EnableAnnotations = true;
-    options.EnableNullableReferenceTypesSupport = true;
-    options.SupportNonNullableReferenceTypes = true;
+    options.EnableScalarUi = true;
+    options.ScalarRoutePrefix = "scalar";
 
-    options.UiRoutePrefix = "my-docs";
+    options.EnableSwaggerUi = true;
+    options.SwaggerUiRoutePrefix = "my-docs";
     options.UiDocumentTitle = "Custom API Documentation";
-    options.UiDisplayRequestDuration = true;
-    options.UiEnableDeepLinking = false;
-    options.UiEnableFilter = true;
-    options.UiShowExtensions = true;
-    options.UiEnablePersistAuthorization = true;
-    options.UiSupportedSubmitMethods = ["get", "post", "put", "delete", "patch"];
 });
 
 builder.Services.AddAuthentication(options =>
@@ -84,10 +69,7 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
-app.UseConfiguredSwaggerUI(uiOptions =>
-{
-    uiOptions.DocExpansion(Swashbuckle.AspNetCore.SwaggerUI.DocExpansion.None);
-});
+app.MapKyrolusOpenApi();
 
 app.UseHttpsRedirection();
 app.UseAuthentication();
@@ -108,7 +90,9 @@ app.MapGet("/weatherforecast", () =>
         )).ToArray();
 
     return Results.Ok(forecast);
-}).WithName("GetWeatherForecast");
+})
+.WithName("GetWeatherForecast")
+.WithTags("Weather");
 
 await app.RunAsync();
 

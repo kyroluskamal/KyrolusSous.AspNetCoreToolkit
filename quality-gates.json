@@ -136,8 +136,8 @@
       "ci": true
     },
     {
-      "name": "Swagger - Integration",
-      "project": "Tests/IntegrationTests/KyrolusSous.Swagger.IntegrationTests/KyrolusSous.Swagger.IntegrationTests.csproj",
+      "name": "OpenApi - Integration",
+      "project": "Tests/IntegrationTests/KyrolusSous.OpenApi.IntegrationTests/KyrolusSous.OpenApi.IntegrationTests.csproj",
       "kind": "integration",
       "services": [],
       "ci": true
@@ -158,7 +158,7 @@
       { "prefix": "CQRS", "title": "CQRS pipeline" },
       { "prefix": "EndpointKit", "title": "EndpointKit" },
       { "prefix": "OpenIddictAuth", "title": "Auth" },
-      { "prefix": "Swagger", "title": "Swagger" },
+      { "prefix": "OpenApi", "title": "OpenAPI & Documentation" },
       { "prefix": "RabbitMQUtils", "title": "RabbitMQ" },
       { "prefix": "IRabbitMQUtilsInterfaces", "title": "RabbitMQ" }
     ]

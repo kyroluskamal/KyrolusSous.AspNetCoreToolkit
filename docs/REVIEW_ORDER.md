@@ -108,7 +108,7 @@ Nothing depends on these and they depend on nothing. Any time.
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 55 | `Swagger` | ✅ | 10 integration tests |
+| 55 | `OpenApi` | ✅ | Migrated to official Microsoft.AspNetCore.OpenApi (.NET 10) + Scalar UI + Swagger UI, covered by integration suite |
 | 56 | `OpenIddictAuth` | ⬜ | 181 lines |
 | 57 | `IRabbitMQUtilsInterfaces` | 🚫 | 32 lines, contracts only |
 | 58 | `RabbitMQUtils` | ⬜ | 218 lines |

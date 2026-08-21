@@ -1,0 +1,15 @@
+global using System.Diagnostics.CodeAnalysis;
+global using System.Reflection;
+global using System.Text.RegularExpressions;
+global using Microsoft.AspNetCore.Builder;
+global using Microsoft.AspNetCore.Hosting;
+global using Microsoft.AspNetCore.Http;
+global using Microsoft.AspNetCore.OpenApi;
+global using Microsoft.AspNetCore.Routing;
+global using Microsoft.Extensions.Configuration;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Hosting;
+global using Microsoft.Extensions.Options;
+global using Microsoft.OpenApi;
+global using Scalar.AspNetCore;
+global using Swashbuckle.AspNetCore.SwaggerUI;
