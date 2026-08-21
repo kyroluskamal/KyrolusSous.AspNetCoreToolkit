@@ -8,14 +8,30 @@ public sealed class KyrolusDomainExceptionMapper : IKyrolusExceptionMapper
     {
         if (exception is KyrolusException kyrolusException)
         {
+            var title = kyrolusException.Title;
+            var statusCode = kyrolusException.StatusCode;
+
+            if (KyrolusErrorCodeRegistry.TryGet(kyrolusException.Code, out var definition))
+            {
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    title = definition.Title;
+                }
+
+                if (statusCode == 0)
+                {
+                    statusCode = definition.StatusCode;
+                }
+            }
+
             mapping = new KyrolusExceptionMapping(
                 new KyrolusErrorEnvelope(
                     kyrolusException.Code,
-                    kyrolusException.Title,
+                    title,
                     kyrolusException.Detail ?? kyrolusException.Message,
                     context.TraceId,
                     kyrolusException.Errors),
-                kyrolusException.StatusCode,
+                statusCode,
                 kyrolusException.IsTransient);
             return true;
         }

@@ -5,6 +5,7 @@ using KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Interfaces;
 using KyrolusSous.EndpointKit.Core.Batch;
 using KyrolusSous.EndpointKit.Marten.BaseKyrolusModule.Interfaces;
 using KyrolusSous.ExceptionHandling.Abstractions;
+using KyrolusSous.ExceptionHandling.Abstractions.Exceptions;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Models;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Infrastructure;
 using KyrolusSous.Repositories.Marten.Abstractions.Interfaces;

@@ -812,7 +812,7 @@ app.MapGet("/api/diagnostics/exception/{kind}", (string kind) =>
     throw kind switch
     {
         "bad-request" => new KyrolusBadRequestException("Bad input", "Simulated failure"),
-        "not-found" => new KyrolusSous.ExceptionHandling.Abstractions.KyrolusNotFoundException("MenuItem", "42"),
+        "not-found" => new KyrolusNotFoundException("MenuItem", "42"),
         "unauthorized" => new KyrolusUnauthorizedException("Unauthorized diagnostics request."),
         "framework-unauthorized" => new UnauthorizedAccessException("Access denied."),
         "timeout" => new TimeoutException("Timed out."),
