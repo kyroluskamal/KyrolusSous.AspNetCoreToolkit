@@ -74,7 +74,8 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Validation.DataAnnotations.Generator - Unit | unit | 1 | none | yes |
 | ExceptionHandling.Runtime - Unit | unit | 0 | none | yes |
 | OpenApi - Integration | integration | 7 | none | yes |
-| **Total** | | **1308** | | |
+| Elasticsearch - Unit | unit | 4 | none | yes |
+| **Total** | | **1312** | | |
 
 <!-- END:GENERATED:test-suites -->
 

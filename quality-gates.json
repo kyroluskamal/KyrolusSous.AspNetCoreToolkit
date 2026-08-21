@@ -141,6 +141,13 @@
       "kind": "integration",
       "services": [],
       "ci": true
+    },
+    {
+      "name": "Elasticsearch - Unit",
+      "project": "Tests/UnitTests/Search/KyrolusSous.Elasticsearch.UnitTests/KyrolusSous.Elasticsearch.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
     }
   ],
 
@@ -159,6 +166,7 @@
       { "prefix": "EndpointKit", "title": "EndpointKit" },
       { "prefix": "OpenIddictAuth", "title": "Auth" },
       { "prefix": "OpenApi", "title": "OpenAPI & Documentation" },
+      { "prefix": "Elasticsearch", "title": "Search & Elasticsearch" },
       { "prefix": "RabbitMQUtils", "title": "RabbitMQ" },
       { "prefix": "IRabbitMQUtilsInterfaces", "title": "RabbitMQ" }
     ]

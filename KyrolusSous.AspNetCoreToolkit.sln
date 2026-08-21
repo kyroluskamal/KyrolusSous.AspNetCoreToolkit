@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -220,6 +220,14 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ExceptionHandling", "ExceptionHandling", "{82A27A28-ED18-B9C1-2BD3-8846E6A141EB}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.ExceptionHandling.Runtime.UnitTests", "Tests\UnitTests\ExceptionHandling\KyrolusSous.ExceptionHandling.Runtime.UnitTests\KyrolusSous.ExceptionHandling.Runtime.UnitTests.csproj", "{ADF41324-A971-4323-9216-FA00C86182EA}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Elasticsearch", "Elasticsearch", "{682CCCCD-D79E-B233-B174-6173AB11FCA6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Elasticsearch", "Src\Elasticsearch\KyrolusSous.Elasticsearch\KyrolusSous.Elasticsearch.csproj", "{E1B1D342-FC0A-434A-8BC2-CDAA6D9B11BD}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Search", "Search", "{DF32FB9D-362C-F24B-F104-1E8D4F48539D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Elasticsearch.UnitTests", "Tests\UnitTests\Search\KyrolusSous.Elasticsearch.UnitTests\KyrolusSous.Elasticsearch.UnitTests.csproj", "{55EA40BE-A93F-4937-9A31-11566F68E8BD}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -1251,6 +1259,30 @@ Global
 		{ADF41324-A971-4323-9216-FA00C86182EA}.Release|x64.Build.0 = Release|Any CPU
 		{ADF41324-A971-4323-9216-FA00C86182EA}.Release|x86.ActiveCfg = Release|Any CPU
 		{ADF41324-A971-4323-9216-FA00C86182EA}.Release|x86.Build.0 = Release|Any CPU
+		{E1B1D342-FC0A-434A-8BC2-CDAA6D9B11BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E1B1D342-FC0A-434A-8BC2-CDAA6D9B11BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E1B1D342-FC0A-434A-8BC2-CDAA6D9B11BD}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E1B1D342-FC0A-434A-8BC2-CDAA6D9B11BD}.Debug|x64.Build.0 = Debug|Any CPU
+		{E1B1D342-FC0A-434A-8BC2-CDAA6D9B11BD}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E1B1D342-FC0A-434A-8BC2-CDAA6D9B11BD}.Debug|x86.Build.0 = Debug|Any CPU
+		{E1B1D342-FC0A-434A-8BC2-CDAA6D9B11BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E1B1D342-FC0A-434A-8BC2-CDAA6D9B11BD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E1B1D342-FC0A-434A-8BC2-CDAA6D9B11BD}.Release|x64.ActiveCfg = Release|Any CPU
+		{E1B1D342-FC0A-434A-8BC2-CDAA6D9B11BD}.Release|x64.Build.0 = Release|Any CPU
+		{E1B1D342-FC0A-434A-8BC2-CDAA6D9B11BD}.Release|x86.ActiveCfg = Release|Any CPU
+		{E1B1D342-FC0A-434A-8BC2-CDAA6D9B11BD}.Release|x86.Build.0 = Release|Any CPU
+		{55EA40BE-A93F-4937-9A31-11566F68E8BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{55EA40BE-A93F-4937-9A31-11566F68E8BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{55EA40BE-A93F-4937-9A31-11566F68E8BD}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{55EA40BE-A93F-4937-9A31-11566F68E8BD}.Debug|x64.Build.0 = Debug|Any CPU
+		{55EA40BE-A93F-4937-9A31-11566F68E8BD}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{55EA40BE-A93F-4937-9A31-11566F68E8BD}.Debug|x86.Build.0 = Debug|Any CPU
+		{55EA40BE-A93F-4937-9A31-11566F68E8BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{55EA40BE-A93F-4937-9A31-11566F68E8BD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{55EA40BE-A93F-4937-9A31-11566F68E8BD}.Release|x64.ActiveCfg = Release|Any CPU
+		{55EA40BE-A93F-4937-9A31-11566F68E8BD}.Release|x64.Build.0 = Release|Any CPU
+		{55EA40BE-A93F-4937-9A31-11566F68E8BD}.Release|x86.ActiveCfg = Release|Any CPU
+		{55EA40BE-A93F-4937-9A31-11566F68E8BD}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1363,5 +1395,9 @@ Global
 		{EEC30777-DEAE-46BD-B07C-6C64BD4B3B9E} = {5B8C8C49-7F60-44D0-BB82-932F39B1F5D9}
 		{82A27A28-ED18-B9C1-2BD3-8846E6A141EB} = {30785934-E017-5D9F-2777-3D61460A5281}
 		{ADF41324-A971-4323-9216-FA00C86182EA} = {82A27A28-ED18-B9C1-2BD3-8846E6A141EB}
+		{682CCCCD-D79E-B233-B174-6173AB11FCA6} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{E1B1D342-FC0A-434A-8BC2-CDAA6D9B11BD} = {682CCCCD-D79E-B233-B174-6173AB11FCA6}
+		{DF32FB9D-362C-F24B-F104-1E8D4F48539D} = {30785934-E017-5D9F-2777-3D61460A5281}
+		{55EA40BE-A93F-4937-9A31-11566F68E8BD} = {DF32FB9D-362C-F24B-F104-1E8D4F48539D}
 	EndGlobalSection
 EndGlobal

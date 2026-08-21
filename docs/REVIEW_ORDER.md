@@ -112,6 +112,7 @@ Nothing depends on these and they depend on nothing. Any time.
 | 56 | `OpenIddictAuth` | ⬜ | 181 lines |
 | 57 | `IRabbitMQUtilsInterfaces` | 🚫 | 32 lines, contracts only |
 | 58 | `RabbitMQUtils` | ⬜ | 218 lines |
+| 59 | `Elasticsearch` | ⚡ | Modern Elasticsearch client (v8.17) with repository, fluent search, auto-index lifecycle, and health checks |
 
 ---
 
