@@ -77,44 +77,12 @@ public static class OpenApiServiceExtensions
 
         if (options.EnableScalarUi)
         {
-            var firstVersion = versions[0];
-            app.MapScalarApiReference(options.ScalarRoutePrefix, scalarOptions =>
-            {
-                scalarOptions.WithOpenApiRoutePattern($"/openapi/{firstVersion.Version}.json");
-                scalarOptions.WithTitle(options.UiDocumentTitle ?? firstVersion.Title);
-                scalarOptions.WithTheme(options.ScalarTheme);
-
-                if (!string.IsNullOrWhiteSpace(options.ScalarSearchHotKey))
-                {
-                    scalarOptions.WithSearchHotKey(options.ScalarSearchHotKey);
-                }
-
-                if (!string.IsNullOrWhiteSpace(options.CustomCss))
-                {
-                    scalarOptions.WithCustomCss(options.CustomCss);
-                }
-
-                if (!string.IsNullOrWhiteSpace(options.FaviconUrl))
-                {
-                    scalarOptions.WithFavicon(options.FaviconUrl);
-                }
-            });
+            MapScalarEndpoint(app, options, versions);
         }
 
         if (options.EnableSwaggerUi)
         {
-            app.UseSwaggerUI(swaggerUiOptions =>
-            {
-                swaggerUiOptions.RoutePrefix = options.SwaggerUiRoutePrefix;
-                swaggerUiOptions.DocumentTitle = options.UiDocumentTitle ?? versions[0].Title;
-
-                foreach (var version in versions)
-                {
-                    swaggerUiOptions.SwaggerEndpoint($"/openapi/{version.Version}.json", $"{version.Title} {version.Version}");
-                }
-
-                configureSwaggerUi?.Invoke(swaggerUiOptions);
-            });
+            MapSwaggerUiEndpoint(app, options, versions, configureSwaggerUi);
         }
 
         if (options.EnableReDocUi)
@@ -123,6 +91,52 @@ public static class OpenApiServiceExtensions
         }
 
         return app;
+    }
+
+    private static void MapScalarEndpoint(WebApplication app, KyrolusOpenApiOptions options, List<ApiVersionInfo> versions)
+    {
+        var firstVersion = versions[0];
+        app.MapScalarApiReference(options.ScalarRoutePrefix, scalarOptions =>
+        {
+            scalarOptions.WithOpenApiRoutePattern($"/openapi/{firstVersion.Version}.json");
+            scalarOptions.WithTitle(options.UiDocumentTitle ?? firstVersion.Title);
+            scalarOptions.WithTheme(options.ScalarTheme);
+
+            if (!string.IsNullOrWhiteSpace(options.ScalarSearchHotKey))
+            {
+                scalarOptions.WithSearchHotKey(options.ScalarSearchHotKey);
+            }
+
+            if (!string.IsNullOrWhiteSpace(options.CustomCss))
+            {
+                scalarOptions.WithCustomCss(options.CustomCss);
+            }
+
+            if (!string.IsNullOrWhiteSpace(options.FaviconUrl))
+            {
+                scalarOptions.WithFavicon(options.FaviconUrl);
+            }
+        });
+    }
+
+    private static void MapSwaggerUiEndpoint(
+        WebApplication app,
+        KyrolusOpenApiOptions options,
+        List<ApiVersionInfo> versions,
+        Action<SwaggerUIOptions>? configureSwaggerUi)
+    {
+        app.UseSwaggerUI(swaggerUiOptions =>
+        {
+            swaggerUiOptions.RoutePrefix = options.SwaggerUiRoutePrefix;
+            swaggerUiOptions.DocumentTitle = options.UiDocumentTitle ?? versions[0].Title;
+
+            foreach (var version in versions)
+            {
+                swaggerUiOptions.SwaggerEndpoint($"/openapi/{version.Version}.json", $"{version.Title} {version.Version}");
+            }
+
+            configureSwaggerUi?.Invoke(swaggerUiOptions);
+        });
     }
 
     private static void MapReDocEndpoint(WebApplication app, KyrolusOpenApiOptions options, List<ApiVersionInfo> versions)
