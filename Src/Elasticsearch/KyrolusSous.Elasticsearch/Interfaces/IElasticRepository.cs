@@ -25,6 +25,34 @@ public interface IElasticRepository<TDocument, TId> where TDocument : class
     Task<SearchResult<TDocument>> SearchAsync(
         Action<SearchRequestDescriptor<TDocument>> configureSearch,
         CancellationToken cancellationToken = default);
+
+    Task<SearchResult<TDocument>> SmartSearchAsync(
+        Action<SmartSearchBuilder<TDocument>> build,
+        CancellationToken cancellationToken = default);
+
+    Task<SearchResult<TDocument>> VectorSearchAsync(
+        float[] vector,
+        string vectorField = "embedding",
+        int topK = 10,
+        CancellationToken cancellationToken = default);
+
+    Task<SearchResult<TDocument>> HybridSearchAsync(
+        string queryText,
+        float[] vector,
+        string vectorField = "embedding",
+        int topK = 10,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<string>> AutocompleteAsync(
+        string prefix,
+        Expression<Func<TDocument, object>> field,
+        int limit = 5,
+        CancellationToken cancellationToken = default);
+
+    IAsyncEnumerable<TDocument> StreamAllAsync(
+        Action<SmartSearchBuilder<TDocument>>? configure = null,
+        int batchSize = 1000,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IElasticIndexManager
@@ -42,4 +70,8 @@ public interface IElasticIndexManager
     Task<bool> RemoveAliasAsync(string indexName, string aliasName, CancellationToken cancellationToken = default);
 
     Task<bool> SwapAliasAsync(string aliasName, string oldIndexName, string newIndexName, CancellationToken cancellationToken = default);
+
+    Task<bool> CreateMonthlyIndexAsync<TDocument>(DateTime date, CancellationToken cancellationToken = default) where TDocument : class;
+
+    Task<int> CleanupIndicesOlderThanAsync(string prefix, TimeSpan maxAge, CancellationToken cancellationToken = default);
 }

@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+
 namespace KyrolusSous.Elasticsearch;
 
 public static class ElasticsearchServiceExtensions
@@ -31,6 +33,19 @@ public static class ElasticsearchServiceExtensions
         return RegisterElasticsearchServices(services, options);
     }
 
+    public static IServiceCollection AddElasticsearchTenantProvider<TTenantProvider>(this IServiceCollection services)
+        where TTenantProvider : class, ITenantProvider
+    {
+        services.AddScoped<ITenantProvider, TTenantProvider>();
+        return services;
+    }
+
+    public static IServiceCollection AddElasticsearchEfSync(this IServiceCollection services)
+    {
+        services.AddScoped<ElasticSyncInterceptor>();
+        return services;
+    }
+
     public static IHealthChecksBuilder AddElasticsearchHealthCheck(
         this IHealthChecksBuilder builder,
         string name = "elasticsearch",
@@ -58,6 +73,7 @@ public static class ElasticsearchServiceExtensions
 
         services.AddScoped<IElasticIndexManager, ElasticIndexManager>();
         services.AddScoped(typeof(IElasticRepository<,>), typeof(ElasticRepository<,>));
+        services.AddScoped<ElasticSyncInterceptor>();
 
         if (options.AutoCreateIndices)
         {

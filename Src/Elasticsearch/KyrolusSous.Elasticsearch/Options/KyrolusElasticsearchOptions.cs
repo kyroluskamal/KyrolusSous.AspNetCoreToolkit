@@ -33,4 +33,8 @@ public class KyrolusElasticsearchOptions
     public string? IndexPrefix { get; set; }
 
     public string? IndexSuffix { get; set; }
+
+    public bool EnableMultiTenancy { get; set; } = false;
+
+    public TenantIsolationMode TenantIsolationMode { get; set; } = TenantIsolationMode.IndexPerTenant;
 }
