@@ -14,14 +14,10 @@ public sealed class KyrolusDomainExceptionMapper : IKyrolusExceptionMapper
             if (KyrolusErrorCodeRegistry.TryGet(kyrolusException.Code, out var definition))
             {
                 if (string.IsNullOrWhiteSpace(title))
-                {
                     title = definition.Title;
-                }
 
                 if (statusCode == 0)
-                {
                     statusCode = definition.StatusCode;
-                }
             }
 
             mapping = new KyrolusExceptionMapping(

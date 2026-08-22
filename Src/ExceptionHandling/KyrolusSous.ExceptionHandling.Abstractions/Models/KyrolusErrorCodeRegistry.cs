@@ -18,19 +18,13 @@ public static partial class KyrolusErrorCodeRegistry
         ArgumentNullException.ThrowIfNull(definition);
 
         if (string.IsNullOrWhiteSpace(definition.Code))
-        {
             throw new KyrolusErrorCodeRegistryException("Error code cannot be empty.");
-        }
 
         if (!CodePattern.IsMatch(definition.Code))
-        {
             throw new KyrolusErrorCodeRegistryException($"Error code '{definition.Code}' does not match the naming convention.");
-        }
 
         if (!Registry.TryAdd(definition.Code, definition))
-        {
             throw new KyrolusErrorCodeRegistryException($"Error code '{definition.Code}' is already registered.");
-        }
     }
 
     public static void RegisterRange(IEnumerable<KyrolusErrorCodeDefinition> definitions)
@@ -42,19 +36,13 @@ public static partial class KyrolusErrorCodeRegistry
     }
 
     public static bool TryGet(string code, out KyrolusErrorCodeDefinition definition)
-    {
-        return Registry.TryGetValue(code, out definition!);
-    }
+        => Registry.TryGetValue(code, out definition!);
 
     public static IReadOnlyCollection<KyrolusErrorCodeDefinition> Snapshot()
-    {
-        return [.. Registry.Values];
-    }
+        => [.. Registry.Values];
 
     public static bool IsValidCode(string code)
-    {
-        return !string.IsNullOrWhiteSpace(code) && CodePattern.IsMatch(code);
-    }
+        => !string.IsNullOrWhiteSpace(code) && CodePattern.IsMatch(code);
 
     private static void RegisterCoreDefaults()
     {

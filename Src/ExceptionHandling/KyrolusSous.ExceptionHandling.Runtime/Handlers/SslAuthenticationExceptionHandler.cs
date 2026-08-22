@@ -6,15 +6,15 @@ public class SslAuthenticationException : AuthenticationException
     public SslAuthenticationException(string message, Exception innerException) : base(message, innerException) { }
 }
 
-public class AuthenticationExceptionHandler(ILogger<AuthenticationExceptionHandler> logger) : IExceptionHandler
+public class SslAuthenticationExceptionHandler(ILogger<SslAuthenticationExceptionHandler> logger) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        if (exception is SslAuthenticationException sslAuthenticationException)
+        if (exception is SslAuthenticationException or AuthenticationException)
         {
             await KyrolusExceptionHandlerHelper.WriteEnvelopeAsync(
                 logger, httpContext, HttpStatusCode.BadGateway, KyrolusErrorCodes.ExternalService,
-                "Authentication failed", sslAuthenticationException.Message, cancellationToken: cancellationToken).ConfigureAwait(false);
+                "SSL Authentication failed", exception.Message, cancellationToken: cancellationToken).ConfigureAwait(false);
             return true;
         }
         return false;

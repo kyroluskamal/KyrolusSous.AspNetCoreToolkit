@@ -3,7 +3,7 @@ namespace KyrolusSous.ExceptionHandling.Runtime.Handlers;
 public class UnauthorizedException : Exception
 {
     public UnauthorizedException(string message) : base(message) { }
-    public UnauthorizedException(string entityName, string key) : base($"{entityName} with key {key} not found") { }
+    public UnauthorizedException(string message, Exception innerException) : base(message, innerException) { }
 }
 
 public class UnauthorizedExceptionHandler(ILogger<UnauthorizedExceptionHandler> logger) : IExceptionHandler

@@ -113,6 +113,7 @@ Nothing depends on these and they depend on nothing. Any time.
 | 57 | `IRabbitMQUtilsInterfaces` | 🚫 | 32 lines, contracts only |
 | 58 | `RabbitMQUtils` | ⬜ | 218 lines |
 | 59 | `Elasticsearch` | ⚡ | Modern Elasticsearch client (v8.17) with repository, fluent search, auto-index lifecycle, and health checks |
+| 60 | `Resilience` | ⚡ | Enterprise Polly v8 & Microsoft.Extensions.Resilience with smart IsTransient evaluation, circuit breaker, and HttpClient extensions |
 
 ---
 

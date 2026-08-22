@@ -75,7 +75,8 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | ExceptionHandling.Runtime - Unit | unit | 0 | none | yes |
 | OpenApi - Integration | integration | 7 | none | yes |
 | Elasticsearch - Unit | unit | 7 | none | yes |
-| **Total** | | **1315** | | |
+| Resilience - Unit | unit | 9 | none | yes |
+| **Total** | | **1324** | | |
 
 <!-- END:GENERATED:test-suites -->
 

@@ -4,8 +4,6 @@ global using System.Reflection;
 global using System.Runtime.CompilerServices;
 global using Elastic.Clients.Elasticsearch;
 global using Elastic.Clients.Elasticsearch.Aggregations;
-global using Elastic.Clients.Elasticsearch.Core.Bulk;
-global using Elastic.Clients.Elasticsearch.IndexManagement;
 global using Elastic.Clients.Elasticsearch.Mapping;
 global using Elastic.Clients.Elasticsearch.QueryDsl;
 global using Elastic.Transport;

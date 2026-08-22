@@ -483,7 +483,7 @@ public static partial class RepositoryRuntimeDiagnostics
                 }
             };
 
-        var authenticationHandler = new AuthenticationExceptionHandler(loggerFactory.CreateLogger<AuthenticationExceptionHandler>());
+        var authenticationHandler = new SslAuthenticationExceptionHandler(loggerFactory.CreateLogger<SslAuthenticationExceptionHandler>());
         var authenticationContext = CreateExceptionHandlerContext();
         if (await authenticationHandler.TryHandleAsync(authenticationContext, new SslAuthenticationException("ssl"), cancellationToken).ConfigureAwait(false) &&
             authenticationContext.Response.StatusCode == StatusCodes.Status502BadGateway &&

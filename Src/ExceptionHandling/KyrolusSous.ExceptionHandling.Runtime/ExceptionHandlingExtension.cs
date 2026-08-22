@@ -5,9 +5,7 @@ public static class ExceptionHandlingExtension
     public static IServiceCollection AddKyrolusExceptionHandling(this IServiceCollection services, Action<KyrolusExceptionHandlingOptions>? configure = null)
     {
         if (configure is not null)
-        {
             services.Configure(configure);
-        }
 
         services.TryAddSingleton<IHttpContextAccessor, HttpContextAccessor>();
         services.TryAddSingleton<KyrolusHttpErrorContextFactory>();
@@ -28,9 +26,7 @@ public static class ExceptionHandlingExtension
     }
 
     public static IApplicationBuilder UseKyrolusExceptionHandling(this IApplicationBuilder app)
-    {
-        return app.UseMiddleware<ExceptionHandlingMiddleware>();
-    }
+        => app.UseMiddleware<ExceptionHandlingMiddleware>();
 
     public static IServiceCollection AddKyrolusExceptionHandlingLocalization<TResource>(this IServiceCollection services)
     {
