@@ -9,6 +9,7 @@ global using System.Text.Json.Serialization;
 global using KyrolusSous.ExceptionHandling.Abstractions.Exceptions;
 global using KyrolusSous.ExceptionHandling.Abstractions.Interfaces;
 global using KyrolusSous.ExceptionHandling.Abstractions.Models;
+global using KyrolusSous.ExceptionHandling.Abstractions.Helpers;
 global using KyrolusSous.ExceptionHandling.Runtime.ClasesAndHelpers;
 global using KyrolusSous.ExceptionHandling.Runtime.Interfaces;
 global using KyrolusSous.ExceptionHandling.Runtime.Mapping;

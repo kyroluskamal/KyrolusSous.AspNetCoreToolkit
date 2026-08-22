@@ -4,3 +4,4 @@ global using System.Globalization;
 global using System.Collections.Concurrent;
 global using System.Text.RegularExpressions;
 global using KyrolusSous.ExceptionHandling.Abstractions.Exceptions;
+global using System.Net.Sockets;

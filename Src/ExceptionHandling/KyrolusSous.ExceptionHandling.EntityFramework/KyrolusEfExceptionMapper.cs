@@ -2,6 +2,7 @@ global using System.Data.Common;
 global using System.Net;
 global using KyrolusSous.ExceptionHandling.Abstractions.Interfaces;
 global using KyrolusSous.ExceptionHandling.Abstractions.Models;
+global using KyrolusSous.ExceptionHandling.Abstractions.Helpers;
 global using Microsoft.EntityFrameworkCore;
 
 namespace KyrolusSous.ExceptionHandling.EntityFramework;
@@ -14,11 +15,15 @@ public sealed class KyrolusEfExceptionMapper : IKyrolusExceptionMapper
     {
         if (exception is DbUpdateConcurrencyException)
         {
-            mapping = new KyrolusExceptionMapping(
-                new KyrolusErrorEnvelope(KyrolusErrorCodes.ConcurrencyConflict, "Concurrency conflict", exception.Message, context.TraceId),
-                HttpStatusCode.Conflict,
-                IsTransient: false,
-                ShouldLog: true);
+            mapping = KyrolusExceptionMapping.Create(
+                code: KyrolusErrorCodes.ConcurrencyConflict,
+                title: "Concurrency conflict",
+                statusCode: HttpStatusCode.Conflict,
+                detail: exception.Message,
+                traceId: context.TraceId,
+                metadata: KyrolusMetadataExtractor.Extract(exception))
+                .AsTransient();
+
             return true;
         }
 
@@ -29,11 +34,15 @@ public sealed class KyrolusEfExceptionMapper : IKyrolusExceptionMapper
                 or OperationCanceledException
                 or DbException;
 
-            mapping = new KyrolusExceptionMapping(
-                new KyrolusErrorEnvelope(KyrolusErrorCodes.DatabaseError, "Database error", updateException.Message, context.TraceId),
-                HttpStatusCode.InternalServerError,
-                IsTransient: isTransient,
-                ShouldLog: true);
+            mapping = KyrolusExceptionMapping.Create(
+                code: KyrolusErrorCodes.DatabaseError,
+                title: "Database error",
+                statusCode: HttpStatusCode.InternalServerError,
+                detail: updateException.Message,
+                traceId: context.TraceId,
+                metadata: KyrolusMetadataExtractor.Extract(updateException))
+                .AsTransient(isTransient);
+
             return true;
         }
 

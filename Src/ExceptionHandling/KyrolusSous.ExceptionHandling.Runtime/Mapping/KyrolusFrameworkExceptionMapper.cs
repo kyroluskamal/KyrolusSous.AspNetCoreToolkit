@@ -6,20 +6,21 @@ public sealed class KyrolusFrameworkExceptionMapper : IKyrolusExceptionMapper
 
     public bool TryMap(Exception exception, KyrolusErrorContext context, out KyrolusExceptionMapping mapping)
     {
-        KyrolusExceptionMapping? candidate = exception switch
+        (HttpStatusCode StatusCode, string Code, string Title, bool IsTransient, bool ShouldLog)? candidate = exception switch
         {
-            UnauthorizedAccessException => Create(HttpStatusCode.Unauthorized, KyrolusErrorCodes.Unauthorized, "Unauthorized"),
-            AuthenticationException => Create(HttpStatusCode.Unauthorized, KyrolusErrorCodes.Unauthorized, "Unauthorized"),
-            KeyNotFoundException => Create(HttpStatusCode.NotFound, KyrolusErrorCodes.NotFound, "Not found"),
-            TimeoutException => Create(HttpStatusCode.GatewayTimeout, KyrolusErrorCodes.Timeout, "Timeout", isTransient: true),
-            TaskCanceledException => Create(HttpStatusCode.RequestTimeout, KyrolusErrorCodes.Cancelled, "Request cancelled", isTransient: true),
-            OperationCanceledException => Create(HttpStatusCode.RequestTimeout, KyrolusErrorCodes.Cancelled, "Request cancelled", isTransient: true),
-            HttpRequestException httpEx when httpEx.StatusCode.HasValue => Create(httpEx.StatusCode.Value, KyrolusErrorCodes.ExternalService, "External service error", isTransient: true),
-            HttpRequestException => Create(HttpStatusCode.BadGateway, KyrolusErrorCodes.ExternalService, "External service error", isTransient: true),
-            SocketException => Create(HttpStatusCode.BadGateway, KyrolusErrorCodes.ExternalService, "External service error", isTransient: true),
-            JsonException => Create(HttpStatusCode.BadRequest, KyrolusErrorCodes.InvalidJson, "Invalid JSON"),
-            ArgumentException => Create(HttpStatusCode.BadRequest, KyrolusErrorCodes.BadRequest, "Bad request"),
-            NotSupportedException => Create(HttpStatusCode.BadRequest, KyrolusErrorCodes.BadRequest, "Bad request"),
+            UnauthorizedAccessException => (HttpStatusCode.Unauthorized, KyrolusErrorCodes.Unauthorized, "Unauthorized access", false, false),
+            AuthenticationException => (HttpStatusCode.BadGateway, KyrolusErrorCodes.ExternalService, "SSL authentication failed", true, true),
+            KeyNotFoundException => (HttpStatusCode.NotFound, KyrolusErrorCodes.NotFound, "Resource key not found", false, false),
+            TimeoutException => (HttpStatusCode.GatewayTimeout, KyrolusErrorCodes.Timeout, "Operation timeout", true, true),
+            TaskCanceledException => (HttpStatusCode.RequestTimeout, KyrolusErrorCodes.Cancelled, "Request cancelled", true, false),
+            OperationCanceledException => (HttpStatusCode.RequestTimeout, KyrolusErrorCodes.Cancelled, "Operation cancelled", true, false),
+            HttpRequestException httpEx when httpEx.StatusCode.HasValue => (httpEx.StatusCode.Value, KyrolusErrorCodes.ExternalService, "External HTTP request failed", true, true),
+            HttpRequestException => (HttpStatusCode.BadGateway, KyrolusErrorCodes.ExternalService, "Upstream HTTP service error", true, true),
+            SocketException => (HttpStatusCode.BadGateway, KyrolusErrorCodes.ExternalService, "Network connection failed", true, true),
+            JsonException => (HttpStatusCode.BadRequest, KyrolusErrorCodes.InvalidJson, "Invalid JSON payload", false, false),
+            CultureNotFoundException => (HttpStatusCode.BadRequest, KyrolusErrorCodes.BadRequest, "Invalid culture", false, false),
+            ArgumentException => (HttpStatusCode.BadRequest, KyrolusErrorCodes.BadRequest, "Invalid argument", false, false),
+            NotSupportedException => (HttpStatusCode.BadRequest, KyrolusErrorCodes.BadRequest, "Operation not supported", false, false),
             _ => null
         };
 
@@ -29,18 +30,18 @@ public sealed class KyrolusFrameworkExceptionMapper : IKyrolusExceptionMapper
             return false;
         }
 
-        mapping = candidate with
-        {
-            Error = candidate.Error with { Detail = exception.Message, TraceId = context.TraceId }
-        };
-        return true;
-    }
+        var (statusCode, code, title, isTransient, shouldLog) = candidate.Value;
 
-    private static KyrolusExceptionMapping Create(HttpStatusCode statusCode, string code, string title, bool isTransient = false)
-    {
-        return new KyrolusExceptionMapping(
-            new KyrolusErrorEnvelope(code, title),
-            statusCode,
-            isTransient);
+        mapping = KyrolusExceptionMapping.Create(
+            code: code,
+            title: title,
+            statusCode: statusCode,
+            detail: exception.Message,
+            traceId: context.TraceId,
+            metadata: KyrolusMetadataExtractor.Extract(exception))
+            .AsTransient(isTransient)
+            .WithLogging(shouldLog);
+
+        return true;
     }
 }

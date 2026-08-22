@@ -17,7 +17,7 @@ public sealed class KyrolusErrorResult(
 
     public Task ExecuteAsync(HttpContext httpContext)
     {
-        var errorContext = contextFactory.Create(exception ?? new Exception(mapping.Error.Code));
+        var errorContext = contextFactory.Create(httpContext);
         return writer.WriteAsync(httpContext, mapping, errorContext, httpContext.RequestAborted);
     }
 }

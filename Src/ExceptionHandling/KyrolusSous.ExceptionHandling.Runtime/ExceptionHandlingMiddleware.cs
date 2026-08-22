@@ -21,13 +21,16 @@ public sealed class ExceptionHandlingMiddleware(
         }
         catch (Exception ex)
         {
-            var errorContext = contextFactory.Create(ex);
+            var errorContext = contextFactory.Create(context);
             var mapping = mappingService.Map(ex, errorContext);
-            var includeDetails = ShouldIncludeExceptionDetails();
+            var includeDetails = KyrolusExceptionEnrichmentHelper.ShouldIncludeDetails(options, environment);
             KyrolusExceptionActivityEnricher.Enrich(Activity.Current, mapping, errorContext, ex, includeDetails);
-            mapping = ApplyExceptionDetails(mapping, ex, errorContext, includeDetails);
+            mapping = KyrolusExceptionEnrichmentHelper.ApplyExceptionDetails(mapping, ex, errorContext, options, metadataSanitizer, includeDetails);
 
-            if (mapping.ShouldLog && options.LogUnhandledExceptions)
+            var isIgnoredLogType = options.IgnoredExceptionLogTypes.Count > 0 &&
+                                   options.IgnoredExceptionLogTypes.Any(t => t.IsInstanceOfType(ex));
+
+            if (mapping.ShouldLog && options.LogUnhandledExceptions && !isIgnoredLogType)
             {
                 LogException(mapping, ex, errorContext);
             }
@@ -36,71 +39,17 @@ public sealed class ExceptionHandlingMiddleware(
         }
     }
 
-    private KyrolusExceptionMapping ApplyExceptionDetails(KyrolusExceptionMapping mapping, Exception exception, KyrolusErrorContext context, bool includeDetails)
-    {
-        Dictionary<string, object?>? metadata = mapping.Error.Metadata is null
-            ? null
-            : new Dictionary<string, object?>(mapping.Error.Metadata, StringComparer.OrdinalIgnoreCase);
-
-        if (options.IncludeContextMetadata)
-        {
-            metadata ??= new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-            if (!string.IsNullOrWhiteSpace(context.CorrelationId))
-            {
-                metadata["correlationId"] = context.CorrelationId;
-            }
-
-            if (!string.IsNullOrWhiteSpace(context.UserId))
-            {
-                metadata["userId"] = context.UserId;
-            }
-
-            if (!string.IsNullOrWhiteSpace(context.TenantId))
-            {
-                metadata["tenantId"] = context.TenantId;
-            }
-        }
-
-        if (includeDetails)
-        {
-            metadata ??= new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-            metadata["exceptionType"] = exception.GetType().FullName;
-            metadata["stackTrace"] = exception.StackTrace;
-
-            if (exception.InnerException is not null)
-            {
-                metadata["innerException"] = exception.InnerException.Message;
-            }
-        }
-
-        if (metadata is null)
-        {
-            return mapping;
-        }
-
-        var sanitized = metadataSanitizer.Sanitize(metadata, context);
-        var envelope = mapping.Error with { Metadata = sanitized };
-        return mapping with { Error = envelope };
-    }
-
-    private bool ShouldIncludeExceptionDetails()
-    {
-        if (options.IncludeExceptionDetailsInResponse)
-        {
-            return true;
-        }
-
-        return environment.IsDevelopment() && options.IncludeExceptionDetailsInDevelopment;
-    }
-
     private void LogException(KyrolusExceptionMapping mapping, Exception exception, KyrolusErrorContext context)
     {
-        if (!logger.IsEnabled(LogLevel.Error))
+        var logLevel = options.LogLevelSelector(mapping, exception);
+
+        if (!logger.IsEnabled(logLevel))
         {
             return;
         }
 
-        logger.LogError(
+        logger.Log(
+            logLevel,
             exception,
             "Unhandled exception mapped to {ErrorCode} ({StatusCode}). TraceId={TraceId}, CorrelationId={CorrelationId}, UserId={UserId}, TenantId={TenantId}, Path={Path}, Method={Method}",
             mapping.Error.Code,

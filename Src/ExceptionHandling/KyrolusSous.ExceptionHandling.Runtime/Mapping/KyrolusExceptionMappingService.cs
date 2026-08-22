@@ -9,19 +9,26 @@ public sealed class KyrolusExceptionMappingService(
 
     public KyrolusExceptionMapping Map(Exception exception, KyrolusErrorContext context)
     {
+        KyrolusExceptionMapping? mapping = null;
+
         foreach (var mapper in mappers)
-            if (mapper.TryMap(exception, context, out var mapping))
-                return Localize(mapping, context.Culture);
+        {
+            if (mapper.TryMap(exception, context, out var maped))
+            {
+                mapping = maped;
+                break;
+            }
+        }
 
-        var fallback = new KyrolusExceptionMapping(
-            new KyrolusErrorEnvelope(
-                KyrolusErrorCodes.InternalError,
-                "Internal server error",
-                "An unexpected error occurred.",
-                context.TraceId),
-            HttpStatusCode.InternalServerError);
+        mapping ??= KyrolusExceptionMapping.Create(
+            code: KyrolusErrorCodes.InternalError,
+            title: "Internal server error",
+            statusCode: HttpStatusCode.InternalServerError,
+            detail: "An unexpected error occurred.",
+            traceId: context.TraceId,
+            metadata: KyrolusMetadataExtractor.Extract(exception));
 
-        return Localize(fallback, context.Culture);
+        return Localize(mapping, context.Culture);
     }
 
     private KyrolusExceptionMapping Localize(KyrolusExceptionMapping mapping, CultureInfo? culture)

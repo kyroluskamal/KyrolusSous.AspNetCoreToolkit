@@ -6,13 +6,13 @@ public sealed class KyrolusDefaultExceptionMapper : IKyrolusExceptionMapper
 
     public bool TryMap(Exception exception, KyrolusErrorContext context, out KyrolusExceptionMapping mapping)
     {
-        mapping = new KyrolusExceptionMapping(
-            new KyrolusErrorEnvelope(
-                KyrolusErrorCodes.InternalError,
-                "Internal server error",
-                "An unexpected error occurred.",
-                context.TraceId),
-            HttpStatusCode.InternalServerError);
+        mapping = KyrolusExceptionMapping.Create(
+            code: KyrolusErrorCodes.InternalError,
+            title: "Internal server error",
+            statusCode: HttpStatusCode.InternalServerError,
+            detail: "An unexpected error occurred.",
+            traceId: context.TraceId,
+            metadata: KyrolusMetadataExtractor.Extract(exception));
 
         return true;
     }

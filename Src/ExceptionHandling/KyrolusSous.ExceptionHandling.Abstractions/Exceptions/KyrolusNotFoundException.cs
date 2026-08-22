@@ -5,8 +5,8 @@ public sealed class KyrolusNotFoundException : KyrolusException
     public string? EntityName { get; }
     public string? Key { get; }
 
-    public KyrolusNotFoundException(string title, string? detail = null, Exception? innerException = null)
-        : base(HttpStatusCode.NotFound, KyrolusErrorCodes.NotFound, title, detail, null, false, innerException)
+    public KyrolusNotFoundException(string entityName, string key, Exception? innerException = null)
+        : this(entityName, (object)key, innerException)
     {
     }
 
@@ -17,6 +17,8 @@ public sealed class KyrolusNotFoundException : KyrolusException
             $"{entityName} not found",
             $"{entityName} with key '{key}' was not found.",
             null,
+            new Dictionary<string, object?> { ["entityName"] = entityName, ["key"] = key?.ToString() },
+            false,
             false,
             innerException)
     {

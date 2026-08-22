@@ -1,15 +1,18 @@
+using Microsoft.AspNetCore.Localization;
+
 namespace KyrolusSous.ExceptionHandling.Runtime;
 
-public sealed class KyrolusHttpErrorContextFactory(IHttpContextAccessor accessor, IOptions<KyrolusExceptionHandlingOptions> options)
+public sealed class KyrolusHttpErrorContextFactory(
+    IOptions<KyrolusExceptionHandlingOptions> options,
+    IHttpContextAccessor? accessor = null)
 {
-    private readonly IHttpContextAccessor accessor = accessor;
+    private readonly IHttpContextAccessor? accessor = accessor;
     private readonly KyrolusExceptionHandlingOptions options = options.Value;
 
-    public KyrolusErrorContext Create(Exception exception)
+    public KyrolusErrorContext Create(HttpContext? context = null)
     {
-        var context = accessor.HttpContext;
+        context ??= accessor?.HttpContext;
         if (context is null)
-        {
             return new KyrolusErrorContext(
                 TraceId: Activity.Current?.Id,
                 CorrelationId: null,
@@ -18,7 +21,6 @@ public sealed class KyrolusHttpErrorContextFactory(IHttpContextAccessor accessor
                 Path: null,
                 Method: null,
                 Culture: null);
-        }
 
         var traceId = options.IncludeTraceId ? (Activity.Current?.Id ?? context.TraceIdentifier) : null;
         var correlationId = options.IncludeCorrelationId
@@ -41,28 +43,34 @@ public sealed class KyrolusHttpErrorContextFactory(IHttpContextAccessor accessor
 
     private static string? ResolveCorrelationId(HttpContext context, string headerName)
     {
-        if (context.Request.Headers.TryGetValue(headerName, out var header))
-        {
+        if (context.Request.Headers.TryGetValue(headerName, out var header) && !string.IsNullOrWhiteSpace(header))
             return header.ToString();
-        }
 
         return context.TraceIdentifier;
     }
 
     private static CultureInfo? ResolveCulture(HttpContext context)
     {
+        var cultureFeature = context.Features.Get<IRequestCultureFeature>();
+        if (cultureFeature?.RequestCulture.Culture is not null)
+            return cultureFeature.RequestCulture.Culture;
+
         if (context.Request.Headers.TryGetValue("Accept-Language", out var languages))
         {
-            var cultureName = languages.ToString().Split(',').FirstOrDefault();
-            if (!string.IsNullOrWhiteSpace(cultureName))
+            var rawLanguages = languages.ToString().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            foreach (var lang in rawLanguages)
             {
+                var cultureName = lang.Split(';')[0].Trim();
+                if (string.IsNullOrWhiteSpace(cultureName)) continue;
+
                 try
                 {
                     return CultureInfo.GetCultureInfo(cultureName);
                 }
                 catch (CultureNotFoundException)
                 {
-                    return null;
+                    continue;
                 }
             }
         }
@@ -72,11 +80,7 @@ public sealed class KyrolusHttpErrorContextFactory(IHttpContextAccessor accessor
 
     private static string? ResolveClaim(ClaimsPrincipal user, string? claimType)
     {
-        if (string.IsNullOrWhiteSpace(claimType))
-        {
-            return null;
-        }
-
+        if (string.IsNullOrWhiteSpace(claimType)) return null;
         return user.FindFirstValue(claimType);
     }
 }

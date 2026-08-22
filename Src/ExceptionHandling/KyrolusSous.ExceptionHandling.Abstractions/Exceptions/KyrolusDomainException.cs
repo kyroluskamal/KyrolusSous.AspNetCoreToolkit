@@ -6,7 +6,9 @@ public class KyrolusDomainException : KyrolusException
         string code,
         string? detail = null,
         IReadOnlyList<KyrolusErrorItem>? errors = null,
-        bool isTransient = false,
+        IReadOnlyDictionary<string, object?>? metadata = null,
+        bool? isTransient = null,
+        bool? shouldLog = null,
         Exception? innerException = null)
         : base(
             ResolveStatusCode(code),
@@ -14,8 +16,20 @@ public class KyrolusDomainException : KyrolusException
             ResolveTitle(code),
             detail,
             errors,
-            isTransient,
+            metadata,
+            isTransient ?? ResolveIsTransient(code),
+            shouldLog ?? ResolveShouldLog(code),
             innerException)
+    {
+    }
+
+    public KyrolusDomainException(
+        string code,
+        string? detail,
+        IReadOnlyList<KyrolusErrorItem>? errors,
+        bool isTransient,
+        Exception? innerException = null)
+        : this(code, detail, errors, null, isTransient, null, innerException)
     {
     }
 
@@ -25,9 +39,11 @@ public class KyrolusDomainException : KyrolusException
         string title,
         string? detail = null,
         IReadOnlyList<KyrolusErrorItem>? errors = null,
+        IReadOnlyDictionary<string, object?>? metadata = null,
         bool isTransient = false,
+        bool shouldLog = true,
         Exception? innerException = null)
-        : base(statusCode, code, title, detail, errors, isTransient, innerException)
+        : base(statusCode, code, title, detail, errors, metadata, isTransient, shouldLog, innerException)
     {
     }
 
@@ -43,5 +59,15 @@ public class KyrolusDomainException : KyrolusException
         return KyrolusErrorCodeRegistry.TryGet(code, out var definition)
             ? definition.Title
             : code;
+    }
+
+    private static bool ResolveIsTransient(string code)
+    {
+        return KyrolusErrorCodeRegistry.TryGet(code, out var definition) && definition.IsTransient;
+    }
+
+    private static bool ResolveShouldLog(string code)
+    {
+        return !KyrolusErrorCodeRegistry.TryGet(code, out var definition) || definition.ShouldLog;
     }
 }

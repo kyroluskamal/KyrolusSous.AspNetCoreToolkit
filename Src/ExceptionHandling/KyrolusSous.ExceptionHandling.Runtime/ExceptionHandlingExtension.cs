@@ -7,7 +7,6 @@ public static class ExceptionHandlingExtension
         if (configure is not null)
             services.Configure(configure);
 
-        services.TryAddSingleton<IHttpContextAccessor, HttpContextAccessor>();
         services.TryAddSingleton<KyrolusHttpErrorContextFactory>();
         services.TryAddSingleton<KyrolusExceptionMappingService>();
 

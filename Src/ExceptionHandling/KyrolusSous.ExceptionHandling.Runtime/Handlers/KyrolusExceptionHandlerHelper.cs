@@ -30,11 +30,12 @@ internal static class KyrolusExceptionHandlerHelper
         string code,
         string title,
         string? detail,
+        IReadOnlyDictionary<string, object?>? metadata = null,
         CancellationToken cancellationToken = default)
         => WriteEnvelopeAsync(
             logger,
             httpContext,
             statusCode,
-            new KyrolusErrorEnvelope(code, title, detail, httpContext.TraceIdentifier),
+            new KyrolusErrorEnvelope(code, title, detail, httpContext.TraceIdentifier, null, metadata),
             cancellationToken);
 }

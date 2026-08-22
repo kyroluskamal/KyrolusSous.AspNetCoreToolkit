@@ -1,7 +1,8 @@
+global using System.Net;
 global using FluentValidation;
 global using KyrolusSous.ExceptionHandling.Abstractions.Interfaces;
 global using KyrolusSous.ExceptionHandling.Abstractions.Models;
-global using System.Net;
+global using KyrolusSous.ExceptionHandling.Abstractions.Helpers;
 
 namespace KyrolusSous.ExceptionHandling.FluentValidation;
 
@@ -11,24 +12,25 @@ public sealed class KyrolusFluentValidationExceptionMapper : IKyrolusExceptionMa
 
     public bool TryMap(Exception exception, KyrolusErrorContext context, out KyrolusExceptionMapping mapping)
     {
-        if (exception is ValidationException validationException)
+        if (exception is not ValidationException validationException)
         {
-            var errors = validationException.Errors
-                .Select(error => new KyrolusErrorItem(error.PropertyName, error.ErrorCode, error.ErrorMessage))
-                .ToArray();
-
-            mapping = new KyrolusExceptionMapping(
-                new KyrolusErrorEnvelope(
-                    KyrolusErrorCodes.Validation,
-                    "Validation failed",
-                    validationException.Message,
-                    context.TraceId,
-                    errors),
-                HttpStatusCode.BadRequest);
-            return true;
+            mapping = null!;
+            return false;
         }
 
-        mapping = default!;
-        return false;
+        var errors = validationException.Errors
+            .Select(error => new KyrolusErrorItem(error.PropertyName, error.ErrorCode ?? "validation_error", error.ErrorMessage))
+            .ToArray();
+
+        mapping = KyrolusExceptionMapping.Create(
+            code: KyrolusErrorCodes.Validation,
+            title: "Validation failed",
+            statusCode: HttpStatusCode.BadRequest,
+            errors: [.. errors],
+            detail: "One or more validation errors occurred.",
+            traceId: context.TraceId)
+            .WithoutLogging();
+
+        return true;
     }
 }

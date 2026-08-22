@@ -6,33 +6,23 @@ public sealed class KyrolusDomainExceptionMapper : IKyrolusExceptionMapper
 
     public bool TryMap(Exception exception, KyrolusErrorContext context, out KyrolusExceptionMapping mapping)
     {
-        if (exception is KyrolusException kyrolusException)
+        if (exception is not KyrolusException kyEx)
         {
-            var title = kyrolusException.Title;
-            var statusCode = kyrolusException.StatusCode;
-
-            if (KyrolusErrorCodeRegistry.TryGet(kyrolusException.Code, out var definition))
-            {
-                if (string.IsNullOrWhiteSpace(title))
-                    title = definition.Title;
-
-                if (statusCode == 0)
-                    statusCode = definition.StatusCode;
-            }
-
-            mapping = new KyrolusExceptionMapping(
-                new KyrolusErrorEnvelope(
-                    kyrolusException.Code,
-                    title,
-                    kyrolusException.Detail ?? kyrolusException.Message,
-                    context.TraceId,
-                    kyrolusException.Errors),
-                statusCode,
-                kyrolusException.IsTransient);
-            return true;
+            mapping = null!;
+            return false;
         }
 
-        mapping = default!;
-        return false;
+        mapping = KyrolusExceptionMapping.Create(
+            code: kyEx.Code,
+            title: kyEx.Title,
+            statusCode: kyEx.StatusCode,
+            errors: kyEx.Errors,
+            detail: kyEx.Detail,
+            traceId: context.TraceId,
+            metadata: KyrolusMetadataExtractor.Extract(kyEx, kyEx.Metadata))
+            .AsTransient(kyEx.IsTransient)
+            .WithLogging(kyEx.ShouldLog);
+
+        return true;
     }
 }

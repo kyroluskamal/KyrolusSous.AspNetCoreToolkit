@@ -201,8 +201,8 @@ public static partial class RepositoryRuntimeDiagnostics
             "runtime-auth"));
         accessor.HttpContext = cultureContext;
 
-        var contextFactory = new KyrolusHttpErrorContextFactory(accessor, options);
-        var resolvedContext = contextFactory.Create(new Exception("context"));
+        var contextFactory = new KyrolusHttpErrorContextFactory(options, accessor);
+        var resolvedContext = contextFactory.Create();
         if (resolvedContext.CorrelationId == "corr-context" &&
             resolvedContext.UserId == "runtime-user" &&
             resolvedContext.TenantId == "runtime-tenant" &&
@@ -212,7 +212,7 @@ public static partial class RepositoryRuntimeDiagnostics
         }
 
         cultureContext.Request.Headers["Accept-Language"] = "___invalid-culture___";
-        var invalidCultureContext = contextFactory.Create(new Exception("invalid-culture"));
+        var invalidCultureContext = contextFactory.Create();
         if (invalidCultureContext.Culture is null)
         {
             checks++;
@@ -276,8 +276,7 @@ public static partial class RepositoryRuntimeDiagnostics
             .AddLogging()
             .AddKyrolusExceptionHandling();
         using var registeredProvider = registeredServices.BuildServiceProvider();
-        if (registeredProvider.GetRequiredService<IHttpContextAccessor>() is HttpContextAccessor &&
-            registeredProvider.GetRequiredService<KyrolusHttpErrorContextFactory>() is not null &&
+        if (registeredProvider.GetRequiredService<KyrolusHttpErrorContextFactory>() is not null &&
             registeredProvider.GetRequiredService<KyrolusExceptionMappingService>() is not null &&
             registeredProvider.GetRequiredService<IKyrolusErrorResponseWriter>() is KyrolusJsonErrorResponseWriter &&
             registeredProvider.GetServices<IKyrolusExceptionMapper>().Count() >= 3)
