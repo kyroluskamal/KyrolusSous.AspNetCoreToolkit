@@ -5,7 +5,7 @@ global using KyrolusSous.ExceptionHandling.Abstractions.Exceptions;
 global using KyrolusSous.ExceptionHandling.Abstractions.Interfaces;
 global using KyrolusSous.ExceptionHandling.Abstractions.Models;
 global using KyrolusSous.ExceptionHandling.Runtime;
-global using KyrolusSous.ExceptionHandling.Runtime.ClasesAndHelpers;
+global using KyrolusSous.ExceptionHandling.Runtime.Helpers;
 global using KyrolusSous.ExceptionHandling.Runtime.Handlers;
 global using KyrolusSous.ExceptionHandling.Runtime.Interfaces;
 global using KyrolusSous.ExceptionHandling.Runtime.Mapping;
@@ -15,7 +15,9 @@ global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.Hosting;
 global using Microsoft.Extensions.Logging;
 global using Microsoft.Extensions.Options;
+global using Microsoft.Extensions.Logging.Abstractions;
 global using Shouldly;
 global using Xunit;
-
+global using System.Diagnostics;
+global using Microsoft.Extensions.FileProviders;
 [assembly: System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]

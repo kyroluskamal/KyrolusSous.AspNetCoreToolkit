@@ -16,14 +16,19 @@ public class CultureNotFoundExceptionHandler(ILogger<CultureNotFoundExceptionHan
                 metadata["paramName"] = cultureEx.ParamName;
             }
 
+            var envelope = new KyrolusErrorEnvelope(
+                KyrolusErrorCodes.BadRequest,
+                "Invalid culture",
+                cultureEx.Message,
+                httpContext.TraceIdentifier,
+                null,
+                metadata.Count > 0 ? metadata : null);
+
             await KyrolusExceptionHandlerHelper.WriteEnvelopeAsync(
                 logger,
                 httpContext,
                 HttpStatusCode.BadRequest,
-                KyrolusErrorCodes.BadRequest,
-                "Invalid culture",
-                cultureEx.Message,
-                metadata.Count > 0 ? metadata : null,
+                envelope,
                 cancellationToken).ConfigureAwait(false);
 
             return true;

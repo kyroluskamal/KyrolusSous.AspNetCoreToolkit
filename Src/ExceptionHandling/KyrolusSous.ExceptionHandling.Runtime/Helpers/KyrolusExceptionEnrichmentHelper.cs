@@ -1,4 +1,4 @@
-namespace KyrolusSous.ExceptionHandling.Runtime;
+namespace KyrolusSous.ExceptionHandling.Runtime.Helpers;
 
 public static class KyrolusExceptionEnrichmentHelper
 {
@@ -43,7 +43,8 @@ public static class KyrolusExceptionEnrichmentHelper
                 metadata["innerException"] = exception.InnerException.Message;
         }
 
-        if (metadata.Count == 0) return mapping;
+        if (metadata.Count == 0)
+            return mapping;
 
         var sanitized = metadataSanitizer.Sanitize(metadata, context);
         var envelope = mapping.Error with { Metadata = sanitized };

@@ -1,4 +1,4 @@
-namespace KyrolusSous.ExceptionHandling.Runtime.ClasesAndHelpers;
+namespace KyrolusSous.ExceptionHandling.Runtime.Helpers;
 
 public class ErrorContextInfo
 {
@@ -14,18 +14,18 @@ public class ErrorContextInfo
     {
         if (context is null) return;
 
-        RequestPath = context.Request?.Path.Value ?? string.Empty;
-        HttpMethod = context.Request?.Method ?? string.Empty;
+        RequestPath = context.Request.Path.ToString();
+        HttpMethod = context.Request.Method;
 
-        var routeValues = context.GetRouteData()?.Values;
-        Controller = routeValues?["controller"]?.ToString();
-        Action = routeValues?["action"]?.ToString();
+        var routeValues = context.Request.RouteValues;
+        Controller = routeValues["controller"]?.ToString();
+        Action = routeValues["action"]?.ToString();
 
         var endpoint = context.GetEndpoint();
         if (endpoint is not null)
         {
             EndpointName = endpoint.Metadata.GetMetadata<IEndpointNameMetadata>()?.EndpointName
-                           ?? endpoint.DisplayName;
+                            ?? endpoint.DisplayName;
         }
     }
 }

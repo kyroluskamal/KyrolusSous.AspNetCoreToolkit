@@ -30,7 +30,7 @@ using KyrolusSous.ExceptionHandling.Abstractions.Models;
 using KyrolusSous.ExceptionHandling.Abstractions.Exceptions;
 using KyrolusSous.ExceptionHandling.FluentValidation;
 using KyrolusSous.ExceptionHandling.Runtime;
-using KyrolusSous.ExceptionHandling.Runtime.ClasesAndHelpers;
+using KyrolusSous.ExceptionHandling.Runtime.Helpers;
 using KyrolusSous.ExceptionHandling.Runtime.Handlers;
 using KyrolusSous.ExceptionHandling.Runtime.Interfaces;
 using KyrolusSous.ExceptionHandling.Runtime.Mapping;

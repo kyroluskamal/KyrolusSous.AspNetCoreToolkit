@@ -1,6 +1,6 @@
-namespace KyrolusSous.ExceptionHandling.Runtime.Handlers;
+namespace KyrolusSous.ExceptionHandling.Runtime.Helpers;
 
-internal static class KyrolusExceptionHandlerHelper
+public static class KyrolusExceptionHandlerHelper
 {
     public static async ValueTask WriteEnvelopeAsync(
         ILogger logger,
@@ -30,12 +30,11 @@ internal static class KyrolusExceptionHandlerHelper
         string code,
         string title,
         string? detail,
-        IReadOnlyDictionary<string, object?>? metadata = null,
         CancellationToken cancellationToken = default)
         => WriteEnvelopeAsync(
             logger,
             httpContext,
             statusCode,
-            new KyrolusErrorEnvelope(code, title, detail, httpContext.TraceIdentifier, null, metadata),
+            new KyrolusErrorEnvelope(code, title, detail, httpContext.TraceIdentifier, null, null),
             cancellationToken);
 }
