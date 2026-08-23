@@ -264,6 +264,124 @@ public class KyrolusExceptionHandlersTests
         ssl2.InnerException.ShouldBeSameAs(innerSsl);
     }
 
+    [Fact(DisplayName = "Handler should handle custom exception with both metadata and errors")]
+    public async Task Handler_Should_Handle_Custom_Exception_With_Both_Metadata_And_Errors()
+    {
+        var logger = new TestLogger();
+        var handler = new TestPaymentFailedExceptionHandler(logger);
+        var exception = new TestPaymentFailedException("ORD-99", "TX-123", "Account balance is too low");
+
+        var context = new DefaultHttpContext();
+        context.Request.Path = "/api/checkout";
+        using var responseStream = new MemoryStream();
+        context.Response.Body = responseStream;
+
+        var handled = await handler.TryHandleAsync(context, exception, CancellationToken.None);
+
+        handled.ShouldBeTrue();
+        context.Response.StatusCode.ShouldBe((int)HttpStatusCode.PaymentRequired);
+        context.Response.ContentType.ShouldBe("application/json");
+
+        responseStream.Seek(0, SeekOrigin.Begin);
+        using var reader = new StreamReader(responseStream);
+        var json = await reader.ReadToEndAsync();
+
+        json.ShouldContain("payment_failed");
+        json.ShouldContain("Payment Failed");
+        json.ShouldContain("ORD-99");
+        json.ShouldContain("TX-123");
+        json.ShouldContain("insufficient_funds");
+        json.ShouldContain("Amount");
+
+        logger.Logs.Count.ShouldBe(1);
+        logger.Logs[0].Level.ShouldBe(LogLevel.Error);
+        logger.Logs[0].Message.ShouldContain("payment_failed");
+        logger.Logs[0].Message.ShouldContain("/api/checkout");
+    }
+
+    [Fact(DisplayName = "Handler should use overridden ExtractErrors when provided")]
+    public async Task Handler_Should_Use_Overridden_ExtractErrors()
+    {
+        var logger = new TestLogger();
+        var handler = new TestOverriddenExceptionHandler(logger);
+        var exception = new InvalidOperationException("Operation failed");
+
+        var context = new DefaultHttpContext();
+        using var responseStream = new MemoryStream();
+        context.Response.Body = responseStream;
+
+        var handled = await handler.TryHandleAsync(context, exception, CancellationToken.None);
+
+        handled.ShouldBeTrue();
+        context.Response.StatusCode.ShouldBe(400);
+
+        responseStream.Seek(0, SeekOrigin.Begin);
+        using var reader = new StreamReader(responseStream);
+        var json = await reader.ReadToEndAsync();
+
+        json.ShouldContain("custom_field");
+        json.ShouldContain("custom_code");
+    }
+
+    [Fact(DisplayName = "AddKyrolusBuiltInExceptionHandlers should register all 10 built-in exception handlers in IServiceCollection")]
+    public void AddKyrolusBuiltInExceptionHandlers_Should_Register_All_10_Handlers()
+    {
+        var services = new ServiceCollection();
+        services.AddKyrolusBuiltInExceptionHandlers();
+
+        var handlerDescriptors = services
+            .Where(d => d.ServiceType == typeof(IExceptionHandler))
+            .Select(d => d.ImplementationType)
+            .ToList();
+
+        handlerDescriptors.Count.ShouldBe(10);
+        handlerDescriptors.ShouldContain(typeof(CultureNotFoundExceptionHandler));
+        handlerDescriptors.ShouldContain(typeof(JsonExceptionHandler));
+        handlerDescriptors.ShouldContain(typeof(ArgumentExceptionHandler));
+        handlerDescriptors.ShouldContain(typeof(SocketExceptionHandler));
+        handlerDescriptors.ShouldContain(typeof(HttpRequestExceptionHandler));
+        handlerDescriptors.ShouldContain(typeof(TimeoutExceptionHandler));
+        handlerDescriptors.ShouldContain(typeof(NotFoundExceptionHandler));
+        handlerDescriptors.ShouldContain(typeof(UnauthorizedExceptionHandler));
+        handlerDescriptors.ShouldContain(typeof(SslAuthenticationExceptionHandler));
+        handlerDescriptors.ShouldContain(typeof(GeneralExceptionHandler));
+    }
+
+    private sealed class TestOverriddenExceptionHandler(ILogger logger)
+        : KyrolusExceptionHandlerBase<InvalidOperationException>(
+            logger,
+            HttpStatusCode.BadRequest,
+            KyrolusErrorCodes.BadRequest,
+            "Operation error")
+    {
+        protected override IReadOnlyList<KyrolusErrorItem>? ExtractErrors(InvalidOperationException exception) =>
+        [
+            new KyrolusErrorItem("custom_field", "custom_code", exception.Message)
+        ];
+    }
+
+    private sealed class TestPaymentFailedException(string orderId, string transactionId, string reason)
+        : Exception($"Payment failed for order {orderId}: {reason}"), IKyrolusExceptionWithMetadata, IKyrolusExceptionWithErrors
+    {
+        public IReadOnlyDictionary<string, object?> GetMetadata() => new Dictionary<string, object?>
+        {
+            ["orderId"] = orderId,
+            ["transactionId"] = transactionId
+        };
+
+        public IReadOnlyList<KyrolusErrorItem>? GetErrors() =>
+        [
+            new KyrolusErrorItem("Amount", "insufficient_funds", "Account balance is too low")
+        ];
+    }
+
+    private sealed class TestPaymentFailedExceptionHandler(ILogger logger)
+        : KyrolusExceptionHandlerBase<TestPaymentFailedException>(
+            logger,
+            HttpStatusCode.PaymentRequired,
+            "payment_failed",
+            "Payment Failed");
+
     private sealed class TestValidationException(string message, IReadOnlyList<KyrolusErrorItem> errors)
         : Exception(message), IKyrolusExceptionWithErrors
     {
