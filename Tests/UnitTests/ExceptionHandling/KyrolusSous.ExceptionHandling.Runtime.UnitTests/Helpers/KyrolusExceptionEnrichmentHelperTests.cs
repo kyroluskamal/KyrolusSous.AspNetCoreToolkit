@@ -249,14 +249,6 @@ public class KyrolusExceptionEnrichmentHelperTests
         mapped.Error.Metadata["safeKey"].ShouldBe("safeValue");
     }
 
-    private sealed class TestHostEnvironment(string environmentName = "Development") : IHostEnvironment
-    {
-        public string EnvironmentName { get; set; } = environmentName;
-        public string ApplicationName { get; set; } = "TestApp";
-        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
-        public IFileProvider ContentRootFileProvider { get; set; } = null!;
-    }
-
     private sealed class TestMetadataSanitizer : IKyrolusErrorMetadataSanitizer
     {
         public IReadOnlyDictionary<string, object?> Sanitize(

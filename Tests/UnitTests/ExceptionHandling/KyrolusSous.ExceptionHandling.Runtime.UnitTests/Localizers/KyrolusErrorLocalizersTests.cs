@@ -75,22 +75,4 @@ public class KyrolusErrorLocalizersTests
 
         result.ShouldBe(defaultMessage);
     }
-
-    private sealed class TestStringLocalizer(IReadOnlyDictionary<string, string> translations) : IStringLocalizer
-    {
-        public LocalizedString this[string name]
-        {
-            get
-            {
-                var found = translations.TryGetValue(name, out var value);
-                return new LocalizedString(name, value ?? name, !found);
-            }
-        }
-
-        public LocalizedString this[string name, params object[] arguments]
-            => this[name];
-
-        public IEnumerable<LocalizedString> GetAllStrings(bool includeParentCultures)
-            => translations.Select(t => new LocalizedString(t.Key, t.Value, false));
-    }
 }

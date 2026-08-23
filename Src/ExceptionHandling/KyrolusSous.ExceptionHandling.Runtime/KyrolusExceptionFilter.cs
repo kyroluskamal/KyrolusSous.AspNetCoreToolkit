@@ -15,10 +15,7 @@ public sealed class KyrolusExceptionFilter(
 
     public async Task OnExceptionAsync(ExceptionContext context)
     {
-        if (context.ExceptionHandled)
-        {
-            return;
-        }
+        if (context.ExceptionHandled)            return;
 
         var errorContext = contextFactory.Create(context.HttpContext);
         var mapping = translator.TranslateToMapping(context.Exception, errorContext);

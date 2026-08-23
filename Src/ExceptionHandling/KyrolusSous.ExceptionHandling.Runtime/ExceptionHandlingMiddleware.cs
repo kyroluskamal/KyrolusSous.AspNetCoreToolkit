@@ -26,9 +26,7 @@ public sealed class ExceptionHandlingMiddleware(
                                    options.IgnoredExceptionLogTypes.Any(t => t.IsInstanceOfType(ex));
 
             if (mapping.ShouldLog && options.LogUnhandledExceptions && !isIgnoredLogType)
-            {
                 LogException(mapping, ex, errorContext);
-            }
 
             await responseWriter.WriteAsync(context, mapping, errorContext, context.RequestAborted).ConfigureAwait(false);
         }
@@ -38,10 +36,7 @@ public sealed class ExceptionHandlingMiddleware(
     {
         var logLevel = options.LogLevelSelector(mapping, exception);
 
-        if (!logger.IsEnabled(logLevel))
-        {
-            return;
-        }
+        if (!logger.IsEnabled(logLevel)) return;
 
         logger.Log(
             logLevel,

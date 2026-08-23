@@ -43,18 +43,6 @@ public abstract class KyrolusException : Exception
         }
     }
 
-    protected KyrolusException(
-        HttpStatusCode statusCode,
-        string code,
-        string title,
-        string? detail,
-        IReadOnlyList<KyrolusErrorItem>? errors,
-        bool isTransient,
-        Exception? innerException = null)
-        : this(statusCode, code, title, detail, errors, null, isTransient, true, innerException)
-    {
-    }
-
     public KyrolusException WithMetadata(string key, object? value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
