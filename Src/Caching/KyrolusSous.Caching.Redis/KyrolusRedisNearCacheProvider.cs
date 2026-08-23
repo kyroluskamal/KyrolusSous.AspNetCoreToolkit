@@ -268,6 +268,48 @@ public sealed class KyrolusRedisNearCacheProvider : ICacheProvider, IDisposable
         return value;
     }
 
+    public async Task<long> IncrementAsync(string cacheKey, long value = 1, TimeSpan? expirationTime = null, CancellationToken cancellationToken = default)
+    {
+        var result = await l2.IncrementAsync(cacheKey, value, expirationTime, cancellationToken).ConfigureAwait(false);
+        var resolvedKey = ResolveKey(cacheKey, null);
+        l1.Remove(resolvedKey);
+        PublishInvalidation(KyrolusCacheInvalidationKind.Key, resolvedKey);
+        return result;
+    }
+
+    public async Task<long> DecrementAsync(string cacheKey, long value = 1, TimeSpan? expirationTime = null, CancellationToken cancellationToken = default)
+    {
+        var result = await l2.DecrementAsync(cacheKey, value, expirationTime, cancellationToken).ConfigureAwait(false);
+        var resolvedKey = ResolveKey(cacheKey, null);
+        l1.Remove(resolvedKey);
+        PublishInvalidation(KyrolusCacheInvalidationKind.Key, resolvedKey);
+        return result;
+    }
+
+    public async Task<bool> HashSetAsync<TField>(string cacheKey, string field, TField value, TimeSpan? expirationTime = null, CancellationToken cancellationToken = default)
+    {
+        var result = await l2.HashSetAsync(cacheKey, field, value, expirationTime, cancellationToken).ConfigureAwait(false);
+        var resolvedKey = ResolveKey(cacheKey, null);
+        l1.Remove(resolvedKey);
+        PublishInvalidation(KyrolusCacheInvalidationKind.Key, resolvedKey);
+        return result;
+    }
+
+    public Task<TField?> HashGetAsync<TField>(string cacheKey, string field, CancellationToken cancellationToken = default) =>
+        l2.HashGetAsync<TField>(cacheKey, field, cancellationToken);
+
+    public Task<IDictionary<string, TField?>> HashGetAllAsync<TField>(string cacheKey, CancellationToken cancellationToken = default) =>
+        l2.HashGetAllAsync<TField>(cacheKey, cancellationToken);
+
+    public async Task<bool> HashDeleteAsync(string cacheKey, string field, CancellationToken cancellationToken = default)
+    {
+        var result = await l2.HashDeleteAsync(cacheKey, field, cancellationToken).ConfigureAwait(false);
+        var resolvedKey = ResolveKey(cacheKey, null);
+        l1.Remove(resolvedKey);
+        PublishInvalidation(KyrolusCacheInvalidationKind.Key, resolvedKey);
+        return result;
+    }
+
     public void Dispose()
     {
         subscription?.Dispose();

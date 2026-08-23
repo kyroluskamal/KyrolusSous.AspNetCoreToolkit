@@ -1,0 +1,95 @@
+using KyrolusSous.Caching.Abstractions;
+using StackExchange.Redis;
+
+namespace KyrolusSous.Caching.Redis;
+
+/// <summary>
+/// Implements type-safe Redis Pub/Sub messaging using <see cref="IKyrolusRedisPubSub"/>.
+/// </summary>
+public sealed class KyrolusRedisPubSub : IKyrolusRedisPubSub
+{
+    private readonly IConnectionMultiplexer multiplexer;
+    private readonly ISubscriber subscriber;
+    private readonly IKyrolusCacheSerializer serializer;
+    private readonly IKyrolusCacheKeyFactory keyFactory;
+    private readonly KyrolusRedisCacheOptions options;
+
+    public KyrolusRedisPubSub(
+        IConnectionMultiplexer multiplexer,
+        IKyrolusCacheSerializer serializer,
+        IKyrolusCacheKeyFactory? keyFactory = null,
+        KyrolusRedisCacheOptions? options = null)
+    {
+        this.multiplexer = multiplexer ?? throw new ArgumentNullException(nameof(multiplexer));
+        this.subscriber = multiplexer.GetSubscriber();
+        this.serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        this.options = options ?? new KyrolusRedisCacheOptions();
+        this.keyFactory = keyFactory ?? new KyrolusCacheKeyFactory(this.options.KeyPrefix);
+    }
+
+    public async Task PublishAsync<T>(string channel, T message, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(channel);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var resolvedChannel = keyFactory.BuildKey(channel).ToString();
+        var payload = serializer.Serialize(message);
+
+        await subscriber.PublishAsync(
+            RedisChannel.Literal(resolvedChannel),
+            payload,
+            options.WriteCommandFlags).ConfigureAwait(false);
+    }
+
+    public async Task<IAsyncDisposable> SubscribeAsync<T>(string channel, Func<T, Task> handler, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(channel);
+        ArgumentNullException.ThrowIfNull(handler);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var resolvedChannel = keyFactory.BuildKey(channel).ToString();
+        var redisChannel = RedisChannel.Literal(resolvedChannel);
+
+        await subscriber.SubscribeAsync(redisChannel, async (_, value) =>
+        {
+            if (value.IsNullOrEmpty) return;
+            try
+            {
+                var deserialized = serializer.Deserialize<T>(value!);
+                if (deserialized is not null)
+                {
+                    await handler(deserialized).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+                // Best-effort message handling
+            }
+        }, options.ReadCommandFlags).ConfigureAwait(false);
+
+        return new SubscriptionHandle(subscriber, redisChannel, options.WriteCommandFlags);
+    }
+
+    private sealed class SubscriptionHandle : IAsyncDisposable
+    {
+        private readonly ISubscriber subscriber;
+        private readonly RedisChannel channel;
+        private readonly CommandFlags flags;
+        private int unsubscribed;
+
+        public SubscriptionHandle(ISubscriber subscriber, RedisChannel channel, CommandFlags flags)
+        {
+            this.subscriber = subscriber;
+            this.channel = channel;
+            this.flags = flags;
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (Interlocked.Exchange(ref unsubscribed, 1) == 0)
+            {
+                await subscriber.UnsubscribeAsync(channel, flags: flags).ConfigureAwait(false);
+            }
+        }
+    }
+}

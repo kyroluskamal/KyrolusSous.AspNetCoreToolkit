@@ -35,30 +35,30 @@ Within a phase the order is loose - what matters is not starting a phase before 
 | 8 | `Validation.FluentValidation` | ✅ | 9 unit tests covering FluentValidation adapter, custom groups, severity mapping, Egyptian National ID, URL validation, and DI assembly scanning (100% coverage) |
 | 9 | `Validation.FluentValidation.Scanning` | ✅ | 2 unit tests covering reflection-based assembly scanning for DI (100% coverage) |
 | 10 | `Validation.Generator` | ✅ | 4 unit tests covering Roslyn Incremental Generator code emission for DI validators & profiles (100% coverage) |
-| 11 | `ExceptionHandling.Abstractions` | ✅ | |
-| 12 | `ExceptionHandling.Runtime` | ✅ | 1138 lines |
-| 13 | `ExceptionHandling.ProblemDetails` | ⚡ | |
-| 14 | `ExceptionHandling.EntityFramework` | ⬜ | |
-| 15 | `ExceptionHandling.FluentValidation` | ⚡ | |
-| 16 | `ExceptionHandling.Redis` | ⚡ | |
+| 11 | `ExceptionHandling.Abstractions` | ✅ | 100% coverage across built-in domain exceptions, models, registry, and metadata extractors |
+| 12 | `ExceptionHandling.Runtime` | ✅ | 187 unit tests covering middleware, filter, options, translators, mappers, localizers, and sanitizers (100% coverage) |
+| 13 | `ExceptionHandling.ProblemDetails` | ✅ | 9 unit tests covering RFC 7807 problem details writer, DI, and NativeAOT source generator context (100% coverage) |
+| 14 | `ExceptionHandling.EntityFramework` | ✅ | 6 unit tests covering EF Core exception mapper and DI registration (100% coverage) |
+| 15 | `ExceptionHandling.FluentValidation` | ✅ | 4 unit tests covering FluentValidation mapper, metadata extraction, and DI registration (100% coverage) |
+| 16 | `ExceptionHandling.Redis` | ✅ | 6 unit tests covering Redis exception mapper and DI registration (100% coverage) |
 | 17 | `Caching.Abstractions` | ⚡ | 748 lines. CI gate is 10% - a placeholder, not a real target |
 | 18 | `Caching.Redis` | ⚡ | 2728 lines |
 | 19 | `Mapping.Abstractions` | 🚫 | 8 lines |
 | 20 | `Mapping.Mapster` | ⬜ | 30 lines |
 | 21 | `Logging.Abstractions` | 🚫 | 23 lines |
 | 22 | `Logging.Runtime` | ⬜ | 79 lines |
-| 23 | `Logging.Serilog` | ✅ | 28 tests |
+| 23 | `Logging.Serilog` | ⬜ | 28 tests |
 
 ## Phase 2 - Repositories
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 24 | `Repositories.EF.Abstractions` | ✅ | Gate 65%/55%. Unparseable route keys fixed to throw FormatException (yielding 400 instead of 500) |
-| 25 | `Repositories.EF.Runtime` | ✅ | 475 integration + 106 unit. Gate 95%/85% |
-| 26 | `Repositories.EF.Generator` | ✅ | 133 integration + 67 unit |
+| 24 | `Repositories.EF.Abstractions` | ⬜ | Gate 65%/55%. Unparseable route keys fixed to throw FormatException (yielding 400 instead of 500) |
+| 25 | `Repositories.EF.Runtime` | ⬜ | 475 integration + 106 unit. Gate 95%/85% |
+| 26 | `Repositories.EF.Generator` | ⬜ | 133 integration + 67 unit |
 | 27 | `Repositories.EF.Cache.Distributed` | ⬜ | 220 lines |
 | 28 | `Repositories.Marten.Abstractions` | ⚡ | 2927 lines |
-| 29 | `Repositories.Marten.Runtime` | ✅ | 235 tests via FullPipeline |
+| 29 | `Repositories.Marten.Runtime` | ⬜ | 235 tests via FullPipeline |
 | 30 | `Repositories.Marten.Generator` | ⬜ | **2950 lines, zero tests.** Compare against the EF generator, which is tested |
 
 ## Phase 3 - CQRS
@@ -108,7 +108,7 @@ Nothing depends on these and they depend on nothing. Any time.
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 55 | `OpenApi` | ✅ | Migrated to official Microsoft.AspNetCore.OpenApi (.NET 10) + Scalar UI + Swagger UI, covered by integration suite |
+| 55 | `OpenApi` | ⬜ | Migrated to official Microsoft.AspNetCore.OpenApi (.NET 10) + Scalar UI + Swagger UI, covered by integration suite |
 | 56 | `OpenIddictAuth` | ⬜ | 181 lines |
 | 57 | `IRabbitMQUtilsInterfaces` | 🚫 | 32 lines, contracts only |
 | 58 | `RabbitMQUtils` | ⬜ | 218 lines |

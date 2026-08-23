@@ -1301,5 +1301,191 @@ public sealed class RedisCacheProvider : ICacheProvider
         if (observer is KyrolusNullCacheObserver) return Task.CompletedTask;
         return observer.OnObservationAsync(context);
     }
+
+    public async Task<long> IncrementAsync(string cacheKey, long value = 1, TimeSpan? expirationTime = null, CancellationToken cancellationToken = default)
+    {
+        var (region, tenantId) = ResolveNamespace(null);
+        var resolvedKey = ResolveKey(cacheKey, null);
+        using var activity = StartActivity(KyrolusCacheOperation.Set, cacheKey, region, tenantId);
+        if (!await EnsureConnectedAsync(KyrolusCacheOperation.Set, cacheKey, typeof(long), region, tenantId).ConfigureAwait(false))
+            return value;
+
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var result = await database.StringIncrementAsync(resolvedKey, value, flags: writeFlags).ConfigureAwait(false);
+            if (expirationTime.HasValue && expirationTime.Value > TimeSpan.Zero)
+            {
+                await database.KeyExpireAsync(resolvedKey, expirationTime.Value, writeFlags).ConfigureAwait(false);
+            }
+            sw.Stop();
+            KyrolusCacheInstrumentation.RecordLatency(KyrolusCacheOperation.Set, ProviderName, sw.Elapsed);
+            KyrolusCacheInstrumentation.RecordSet(KyrolusCacheOperation.Set, ProviderName);
+            await ObserveAsync(new KyrolusCacheObserverContext(Key: cacheKey, Operation: KyrolusCacheOperation.Set, Observation: KyrolusCacheObservation.Set, ValueType: typeof(long), Duration: sw.Elapsed, Region: region, TenantId: tenantId, Exception: null)).ConfigureAwait(false);
+            return result;
+        }
+        catch (Exception ex) when (IsGracefulFallback(ex))
+        {
+            await HandleGracefulFallbackAsync(ex, KyrolusCacheOperation.Set, cacheKey, typeof(long), region, tenantId, sw).ConfigureAwait(false);
+            return value;
+        }
+    }
+
+    public async Task<long> DecrementAsync(string cacheKey, long value = 1, TimeSpan? expirationTime = null, CancellationToken cancellationToken = default)
+    {
+        var (region, tenantId) = ResolveNamespace(null);
+        var resolvedKey = ResolveKey(cacheKey, null);
+        using var activity = StartActivity(KyrolusCacheOperation.Set, cacheKey, region, tenantId);
+        if (!await EnsureConnectedAsync(KyrolusCacheOperation.Set, cacheKey, typeof(long), region, tenantId).ConfigureAwait(false))
+            return -value;
+
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var result = await database.StringDecrementAsync(resolvedKey, value, flags: writeFlags).ConfigureAwait(false);
+            if (expirationTime.HasValue && expirationTime.Value > TimeSpan.Zero)
+            {
+                await database.KeyExpireAsync(resolvedKey, expirationTime.Value, writeFlags).ConfigureAwait(false);
+            }
+            sw.Stop();
+            KyrolusCacheInstrumentation.RecordLatency(KyrolusCacheOperation.Set, ProviderName, sw.Elapsed);
+            KyrolusCacheInstrumentation.RecordSet(KyrolusCacheOperation.Set, ProviderName);
+            await ObserveAsync(new KyrolusCacheObserverContext(Key: cacheKey, Operation: KyrolusCacheOperation.Set, Observation: KyrolusCacheObservation.Set, ValueType: typeof(long), Duration: sw.Elapsed, Region: region, TenantId: tenantId, Exception: null)).ConfigureAwait(false);
+            return result;
+        }
+        catch (Exception ex) when (IsGracefulFallback(ex))
+        {
+            await HandleGracefulFallbackAsync(ex, KyrolusCacheOperation.Set, cacheKey, typeof(long), region, tenantId, sw).ConfigureAwait(false);
+            return -value;
+        }
+    }
+
+    public async Task<bool> HashSetAsync<TField>(string cacheKey, string field, TField value, TimeSpan? expirationTime = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(field);
+        var (region, tenantId) = ResolveNamespace(null);
+        var resolvedKey = ResolveKey(cacheKey, null);
+        using var activity = StartActivity(KyrolusCacheOperation.Set, cacheKey, region, tenantId);
+        if (!await EnsureConnectedAsync(KyrolusCacheOperation.Set, cacheKey, typeof(TField), region, tenantId).ConfigureAwait(false))
+            return false;
+
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var payload = serializer.Serialize(value);
+            var result = await database.HashSetAsync(resolvedKey, (RedisValue)field, (RedisValue)payload, flags: writeFlags).ConfigureAwait(false);
+            if (expirationTime.HasValue && expirationTime.Value > TimeSpan.Zero)
+            {
+                await database.KeyExpireAsync(resolvedKey, expirationTime.Value, writeFlags).ConfigureAwait(false);
+            }
+            sw.Stop();
+            KyrolusCacheInstrumentation.RecordLatency(KyrolusCacheOperation.Set, ProviderName, sw.Elapsed);
+            KyrolusCacheInstrumentation.RecordSet(KyrolusCacheOperation.Set, ProviderName);
+            await ObserveAsync(new KyrolusCacheObserverContext(Key: cacheKey, Operation: KyrolusCacheOperation.Set, Observation: KyrolusCacheObservation.Set, ValueType: typeof(TField), Duration: sw.Elapsed, Region: region, TenantId: tenantId, Exception: null)).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex) when (IsGracefulFallback(ex))
+        {
+            await HandleGracefulFallbackAsync(ex, KyrolusCacheOperation.Set, cacheKey, typeof(TField), region, tenantId, sw).ConfigureAwait(false);
+            return false;
+        }
+    }
+
+    public async Task<TField?> HashGetAsync<TField>(string cacheKey, string field, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(field);
+        var (region, tenantId) = ResolveNamespace(null);
+        var resolvedKey = ResolveKey(cacheKey, null);
+        using var activity = StartActivity(KyrolusCacheOperation.Get, cacheKey, region, tenantId);
+        if (!await EnsureConnectedAsync(KyrolusCacheOperation.Get, cacheKey, typeof(TField), region, tenantId).ConfigureAwait(false))
+            return default;
+
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var value = await database.HashGetAsync(resolvedKey, (RedisValue)field, readFlags).ConfigureAwait(false);
+            sw.Stop();
+            KyrolusCacheInstrumentation.RecordLatency(KyrolusCacheOperation.Get, ProviderName, sw.Elapsed);
+            if (value.IsNull)
+            {
+                KyrolusCacheInstrumentation.RecordMiss(KyrolusCacheOperation.Get, ProviderName);
+                await ObserveAsync(new KyrolusCacheObserverContext(Key: cacheKey, Operation: KyrolusCacheOperation.Get, Observation: KyrolusCacheObservation.Miss, ValueType: typeof(TField), Duration: sw.Elapsed, Region: region, TenantId: tenantId, Exception: null)).ConfigureAwait(false);
+                return default;
+            }
+
+            KyrolusCacheInstrumentation.RecordHit(KyrolusCacheOperation.Get, ProviderName);
+            await ObserveAsync(new KyrolusCacheObserverContext(Key: cacheKey, Operation: KyrolusCacheOperation.Get, Observation: KyrolusCacheObservation.Hit, ValueType: typeof(TField), Duration: sw.Elapsed, Region: region, TenantId: tenantId, Exception: null)).ConfigureAwait(false);
+            return serializer.Deserialize<TField>(value!);
+        }
+        catch (Exception ex) when (IsGracefulFallback(ex))
+        {
+            await HandleGracefulFallbackAsync(ex, KyrolusCacheOperation.Get, cacheKey, typeof(TField), region, tenantId, sw).ConfigureAwait(false);
+            return default;
+        }
+    }
+
+    public async Task<IDictionary<string, TField?>> HashGetAllAsync<TField>(string cacheKey, CancellationToken cancellationToken = default)
+    {
+        var (region, tenantId) = ResolveNamespace(null);
+        var resolvedKey = ResolveKey(cacheKey, null);
+        using var activity = StartActivity(KyrolusCacheOperation.Get, cacheKey, region, tenantId);
+        if (!await EnsureConnectedAsync(KyrolusCacheOperation.Get, cacheKey, typeof(TField), region, tenantId).ConfigureAwait(false))
+            return new Dictionary<string, TField?>(StringComparer.Ordinal);
+
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var entries = await database.HashGetAllAsync(resolvedKey, readFlags).ConfigureAwait(false);
+            sw.Stop();
+            KyrolusCacheInstrumentation.RecordLatency(KyrolusCacheOperation.Get, ProviderName, sw.Elapsed);
+
+            var dict = new Dictionary<string, TField?>(entries.Length, StringComparer.Ordinal);
+            foreach (var entry in entries)
+            {
+                dict[entry.Name!] = entry.Value.IsNull ? default : serializer.Deserialize<TField>(entry.Value!);
+            }
+
+            KyrolusCacheInstrumentation.RecordHit(KyrolusCacheOperation.Get, ProviderName);
+            await ObserveAsync(new KyrolusCacheObserverContext(Key: cacheKey, Operation: KyrolusCacheOperation.Get, Observation: KyrolusCacheObservation.Hit, ValueType: typeof(TField), Duration: sw.Elapsed, Region: region, TenantId: tenantId, Exception: null)).ConfigureAwait(false);
+            return dict;
+        }
+        catch (Exception ex) when (IsGracefulFallback(ex))
+        {
+            await HandleGracefulFallbackAsync(ex, KyrolusCacheOperation.Get, cacheKey, typeof(TField), region, tenantId, sw).ConfigureAwait(false);
+            return new Dictionary<string, TField?>(StringComparer.Ordinal);
+        }
+    }
+
+    public async Task<bool> HashDeleteAsync(string cacheKey, string field, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(field);
+        var (region, tenantId) = ResolveNamespace(null);
+        var resolvedKey = ResolveKey(cacheKey, null);
+        using var activity = StartActivity(KyrolusCacheOperation.Remove, cacheKey, region, tenantId);
+        if (!await EnsureConnectedAsync(KyrolusCacheOperation.Remove, cacheKey, null, region, tenantId).ConfigureAwait(false))
+            return false;
+
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var deleted = await database.HashDeleteAsync(resolvedKey, (RedisValue)field, writeFlags).ConfigureAwait(false);
+            sw.Stop();
+            KyrolusCacheInstrumentation.RecordLatency(KyrolusCacheOperation.Remove, ProviderName, sw.Elapsed);
+            KyrolusCacheInstrumentation.RecordRemove(KyrolusCacheOperation.Remove, ProviderName);
+            await ObserveAsync(new KyrolusCacheObserverContext(Key: cacheKey, Operation: KyrolusCacheOperation.Remove, Observation: KyrolusCacheObservation.Remove, ValueType: null, Duration: sw.Elapsed, Region: region, TenantId: tenantId, Exception: null)).ConfigureAwait(false);
+            return deleted;
+        }
+        catch (Exception ex) when (IsGracefulFallback(ex))
+        {
+            await HandleGracefulFallbackAsync(ex, KyrolusCacheOperation.Remove, cacheKey, null, region, tenantId, sw).ConfigureAwait(false);
+            return false;
+        }
+    }
 }
 

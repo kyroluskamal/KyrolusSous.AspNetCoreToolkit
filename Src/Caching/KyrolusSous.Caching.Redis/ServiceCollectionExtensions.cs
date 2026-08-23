@@ -1,4 +1,7 @@
 using KyrolusSous.Caching.Abstractions;
+using Microsoft.AspNetCore.OutputCaching;
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -8,6 +11,9 @@ namespace KyrolusSous.Caching.Redis;
 
 public static class ServiceCollectionExtensions
 {
+    /// <summary>
+    /// Adds Kyrolus Redis Cache Provider, Distributed Locking (<see cref="IDistributedLockProvider"/>), and Typed Pub/Sub (<see cref="IKyrolusRedisPubSub"/>).
+    /// </summary>
     public static IServiceCollection AddKyrolusRedisCacheProvider(
         this IServiceCollection services,
         Action<KyrolusRedisCacheOptions>? configure = null)
@@ -18,6 +24,19 @@ public static class ServiceCollectionExtensions
             configure?.Invoke(options);
             KyrolusRedisCacheOptionsValidator.Validate(options);
             return options;
+        });
+
+        // Ensure IConnectionMultiplexer is resolved: if ConnectionString is provided in options, register it
+        services.TryAddSingleton<IConnectionMultiplexer>(sp =>
+        {
+            var options = sp.GetRequiredService<KyrolusRedisCacheOptions>();
+            if (!string.IsNullOrWhiteSpace(options.ConnectionString))
+            {
+                return ConnectionMultiplexer.Connect(options.ConnectionString);
+            }
+
+            throw new InvalidOperationException(
+                "No IConnectionMultiplexer was registered, and no ConnectionString was configured in KyrolusRedisCacheOptions.");
         });
 
         services.TryAddSingleton<IKyrolusCacheSerializer>(CreateCacheSerializer);
@@ -40,9 +59,97 @@ public static class ServiceCollectionExtensions
 
         services.TryAddSingleton<RedisCacheProvider>();
         services.TryAddSingleton<ICacheProvider>(sp => sp.GetRequiredService<RedisCacheProvider>());
+
+        // Standalone Distributed Lock & Typed Pub/Sub
+        services.TryAddSingleton<IDistributedLockProvider, RedisDistributedLockProvider>();
+        services.TryAddSingleton<IKyrolusRedisPubSub, KyrolusRedisPubSub>();
+
         return services;
     }
 
+    /// <summary>
+    /// Adds Kyrolus Redis Cache with connection string.
+    /// </summary>
+    public static IServiceCollection AddKyrolusRedisCacheProvider(
+        this IServiceCollection services,
+        string connectionString,
+        Action<KyrolusRedisCacheOptions>? configure = null)
+    {
+        services.TryAddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(connectionString));
+        return services.AddKyrolusRedisCacheProvider(opts =>
+        {
+            opts.ConnectionString = connectionString;
+            configure?.Invoke(opts);
+        });
+    }
+
+    /// <summary>
+    /// Shortcut alias for <see cref="AddKyrolusRedisCacheProvider(IServiceCollection, Action{KyrolusRedisCacheOptions}?)"/>.
+    /// </summary>
+    public static IServiceCollection AddKyrolusRedisCache(
+        this IServiceCollection services,
+        Action<KyrolusRedisCacheOptions>? configure = null) =>
+        services.AddKyrolusRedisCacheProvider(configure);
+
+    /// <summary>
+    /// Shortcut alias for <see cref="AddKyrolusRedisCacheProvider(IServiceCollection, string, Action{KyrolusRedisCacheOptions}?)"/>.
+    /// </summary>
+    public static IServiceCollection AddKyrolusRedisCache(
+        this IServiceCollection services,
+        string connectionString,
+        Action<KyrolusRedisCacheOptions>? configure = null) =>
+        services.AddKyrolusRedisCacheProvider(connectionString, configure);
+
+    /// <summary>
+    /// Adds Kyrolus Redis Cache by automatically binding from <see cref="IConfiguration"/> (e.g. from appsettings.json section "Redis" or "ConnectionStrings:Redis").
+    /// </summary>
+    public static IServiceCollection AddKyrolusRedisCache(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        string sectionName = "Redis",
+        Action<KyrolusRedisCacheOptions>? configure = null)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        return services.AddKyrolusRedisCacheProvider(options =>
+        {
+            var section = configuration.GetSection(sectionName);
+            if (section.Exists())
+            {
+                section.Bind(options);
+            }
+
+            if (string.IsNullOrWhiteSpace(options.ConnectionString))
+            {
+                options.ConnectionString = configuration.GetConnectionString("Redis")
+                    ?? configuration.GetConnectionString(sectionName);
+            }
+
+            configure?.Invoke(options);
+        });
+    }
+
+    /// <summary>
+    /// Registers <see cref="KyrolusRedisDistributedCacheAdapter"/> as ASP.NET Core <see cref="IDistributedCache"/>.
+    /// </summary>
+    public static IServiceCollection AddKyrolusRedisDistributedCache(this IServiceCollection services)
+    {
+        services.TryAddSingleton<IDistributedCache, KyrolusRedisDistributedCacheAdapter>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="KyrolusRedisOutputCacheStore"/> as ASP.NET Core <see cref="IOutputCacheStore"/>.
+    /// </summary>
+    public static IServiceCollection AddKyrolusRedisOutputCache(this IServiceCollection services)
+    {
+        services.TryAddSingleton<IOutputCacheStore, KyrolusRedisOutputCacheStore>();
+        return services;
+    }
+
+    /// <summary>
+    /// Adds logging observer for cache events.
+    /// </summary>
     public static IServiceCollection AddKyrolusCacheLoggingObserver(
         this IServiceCollection services,
         Action<KyrolusCacheLoggingObserverOptions>? configure = null)
@@ -56,14 +163,6 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IKyrolusCacheObserver, KyrolusCacheLoggingObserver>();
         return services;
-    }
-    public static IServiceCollection AddKyrolusRedisCacheProvider(
-            this IServiceCollection services,
-            string connectionString,
-            Action<KyrolusRedisCacheOptions>? configure = null)
-    {
-        services.TryAddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(connectionString));
-        return services.AddKyrolusRedisCacheProvider(configure);
     }
 
     private static IKyrolusCacheSerializer CreateCacheSerializer(IServiceProvider serviceProvider)
@@ -80,11 +179,12 @@ public static class ServiceCollectionExtensions
 
         if (options.EnableCompression)
         {
-            transformers.Add(WrapOrdered(
-                new KyrolusGzipCachePayloadTransformer(
-                    options.CompressionThresholdBytes,
-                    options.CompressionLevel),
-                options.CompressionOrder));
+            var compressor = new KyrolusCompressionCachePayloadTransformer(
+                options.CompressionAlgorithm,
+                options.CompressionThresholdBytes,
+                options.CompressionLevel);
+
+            transformers.Add(WrapOrdered(compressor, options.CompressionOrder));
         }
 
         if (options.EnableEncryption)
@@ -142,7 +242,9 @@ public static class ServiceCollectionExtensions
             : new KyrolusOrderedCachePayloadTransformer(transformer, defaultOrder);
     }
 
-
+    /// <summary>
+    /// Adds two-tier near cache (L1 In-Memory + L2 Redis) with automatic invalidation via Pub/Sub.
+    /// </summary>
     public static IServiceCollection AddKyrolusRedisNearCache(
         this IServiceCollection services,
         Action<KyrolusRedisCacheOptions>? configure = null,
@@ -182,7 +284,11 @@ public static class ServiceCollectionExtensions
         Action<KyrolusRedisNearCacheOptions>? configureNearCache = null)
     {
         services.TryAddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(connectionString));
-        return services.AddKyrolusRedisNearCache(configure, configureNearCache);
+        return services.AddKyrolusRedisNearCache(opts =>
+        {
+            opts.ConnectionString = connectionString;
+            configure?.Invoke(opts);
+        }, configureNearCache);
     }
 
     public static IServiceCollection AddKyrolusRedisInvalidationBus(

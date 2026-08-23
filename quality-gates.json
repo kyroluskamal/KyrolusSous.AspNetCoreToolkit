@@ -136,6 +136,34 @@
       "ci": true
     },
     {
+      "name": "ExceptionHandling.ProblemDetails - Unit",
+      "project": "Tests/UnitTests/ExceptionHandling/KyrolusSous.ExceptionHandling.ProblemDetails.UnitTests/KyrolusSous.ExceptionHandling.ProblemDetails.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "ExceptionHandling.EntityFramework - Unit",
+      "project": "Tests/UnitTests/ExceptionHandling/KyrolusSous.ExceptionHandling.EntityFramework.UnitTests/KyrolusSous.ExceptionHandling.EntityFramework.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "ExceptionHandling.FluentValidation - Unit",
+      "project": "Tests/UnitTests/ExceptionHandling/KyrolusSous.ExceptionHandling.FluentValidation.UnitTests/KyrolusSous.ExceptionHandling.FluentValidation.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "ExceptionHandling.Redis - Unit",
+      "project": "Tests/UnitTests/ExceptionHandling/KyrolusSous.ExceptionHandling.Redis.UnitTests/KyrolusSous.ExceptionHandling.Redis.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
       "name": "OpenApi - Integration",
       "project": "Tests/IntegrationTests/KyrolusSous.OpenApi.IntegrationTests/KyrolusSous.OpenApi.IntegrationTests.csproj",
       "kind": "integration",
