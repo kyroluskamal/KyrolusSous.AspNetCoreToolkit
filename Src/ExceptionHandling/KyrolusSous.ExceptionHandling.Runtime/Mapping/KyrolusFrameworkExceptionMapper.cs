@@ -36,6 +36,7 @@ public sealed class KyrolusFrameworkExceptionMapper : IKyrolusExceptionMapper
             code: code,
             title: title,
             statusCode: statusCode,
+            errors: (exception as IKyrolusExceptionWithErrors)?.GetErrors(),
             detail: exception.Message,
             traceId: context.TraceId,
             metadata: KyrolusMetadataExtractor.Extract(exception))

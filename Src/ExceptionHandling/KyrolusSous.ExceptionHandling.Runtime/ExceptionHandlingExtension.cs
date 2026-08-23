@@ -4,8 +4,7 @@ public static class ExceptionHandlingExtension
 {
     public static IServiceCollection AddKyrolusExceptionHandling(this IServiceCollection services, Action<KyrolusExceptionHandlingOptions>? configure = null)
     {
-        if (configure is not null)
-            services.Configure(configure);
+        if (configure is not null)            services.Configure(configure);
 
         services.TryAddSingleton<KyrolusHttpErrorContextFactory>();
         services.TryAddSingleton<KyrolusExceptionMappingService>();
@@ -20,6 +19,22 @@ public static class ExceptionHandlingExtension
         services.TryAddSingleton<KyrolusExceptionHandlingDependencies>();
         services.TryAddSingleton<KyrolusExceptionTranslator>();
         services.TryAddSingleton<KyrolusExceptionFilter>();
+
+        return services;
+    }
+
+    public static IServiceCollection AddKyrolusBuiltInExceptionHandlers(this IServiceCollection services)
+    {
+        services.AddExceptionHandler<CultureNotFoundExceptionHandler>();
+        services.AddExceptionHandler<JsonExceptionHandler>();
+        services.AddExceptionHandler<ArgumentExceptionHandler>();
+        services.AddExceptionHandler<SocketExceptionHandler>();
+        services.AddExceptionHandler<HttpRequestExceptionHandler>();
+        services.AddExceptionHandler<TimeoutExceptionHandler>();
+        services.AddExceptionHandler<NotFoundExceptionHandler>();
+        services.AddExceptionHandler<UnauthorizedExceptionHandler>();
+        services.AddExceptionHandler<SslAuthenticationExceptionHandler>();
+        services.AddExceptionHandler<GeneralExceptionHandler>();
 
         return services;
     }
