@@ -13,6 +13,7 @@ global using KyrolusSous.ExceptionHandling.Abstractions.Helpers;
 global using KyrolusSous.ExceptionHandling.Runtime.Handlers;
 global using KyrolusSous.ExceptionHandling.Runtime.Helpers;
 global using KyrolusSous.ExceptionHandling.Runtime.Interfaces;
+global using KyrolusSous.ExceptionHandling.Runtime.Localizers;
 global using KyrolusSous.ExceptionHandling.Runtime.Mapping;
 global using KyrolusSous.ExceptionHandling.Runtime.Writers;
 global using Microsoft.AspNetCore.Builder;

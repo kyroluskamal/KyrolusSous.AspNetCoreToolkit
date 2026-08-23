@@ -1,4 +1,4 @@
-namespace KyrolusSous.ExceptionHandling.Runtime;
+namespace KyrolusSous.ExceptionHandling.Runtime.Localizers;
 
 public sealed class KyrolusStringLocalizerErrorLocalizer(IStringLocalizer localizer)
     : IKyrolusErrorLocalizer

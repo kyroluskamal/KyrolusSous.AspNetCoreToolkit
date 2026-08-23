@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using Microsoft.Extensions.FileProviders;
 
 namespace KyrolusSous.ExceptionHandling.Runtime.UnitTests.Helpers;
@@ -17,7 +17,7 @@ public class KyrolusExceptionEnrichmentHelperTests
         HttpStatusCode.BadRequest,
         "This is test",
         TraceId,
-        new Dictionary<string, object?>
+        metadata: new Dictionary<string, object?>
         {
             { "name", "kyrolus" }
         }
@@ -226,7 +226,7 @@ public class KyrolusExceptionEnrichmentHelperTests
     {
         var mappingWithSecrets = KyrolusExceptionMapping.Create(
             KyrolusErrorCodes.InternalError, "Error", HttpStatusCode.InternalServerError,
-            "Test", TraceId, new Dictionary<string, object?>
+            "Test", TraceId, metadata: new Dictionary<string, object?>
             {
                 { "password", "SuperSecret123" },
                 { "safeKey", "safeValue" }

@@ -33,6 +33,7 @@ using KyrolusSous.ExceptionHandling.Runtime;
 using KyrolusSous.ExceptionHandling.Runtime.Helpers;
 using KyrolusSous.ExceptionHandling.Runtime.Handlers;
 using KyrolusSous.ExceptionHandling.Runtime.Interfaces;
+using KyrolusSous.ExceptionHandling.Runtime.Localizers;
 using KyrolusSous.ExceptionHandling.Runtime.Mapping;
 using KyrolusSous.ExceptionHandling.Runtime.Writers;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Models;
@@ -238,11 +239,9 @@ public static partial class RepositoryRuntimeDiagnostics
 
         accessor.HttpContext = filterContextHttp;
         var filter = new KyrolusExceptionFilter(
-            mappingService,
+            scoped.GetRequiredService<KyrolusExceptionTranslator>(),
             scoped.GetRequiredService<IKyrolusErrorResponseWriter>(),
             contextFactory,
-            metadataSanitizer,
-            scoped.GetRequiredService<IHostEnvironment>(),
             options,
             scoped.GetRequiredService<ILogger<KyrolusExceptionFilter>>());
 

@@ -31,7 +31,7 @@ public class KyrolusExceptionHandlersTests
             },
             {
                 new ArgumentExceptionHandler(NullLogger<ArgumentExceptionHandler>.Instance),
-                new ArgumentException("Invalid param", "id"),
+                new ArgumentException("Invalid param"),
                 HttpStatusCode.BadRequest,
                 KyrolusErrorCodes.BadRequest,
                 "Invalid argument"

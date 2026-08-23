@@ -1,19 +1,15 @@
 namespace KyrolusSous.ExceptionHandling.Runtime;
 
 public sealed class KyrolusExceptionFilter(
-    KyrolusExceptionMappingService mappingService,
+    KyrolusExceptionTranslator translator,
     IKyrolusErrorResponseWriter responseWriter,
     KyrolusHttpErrorContextFactory contextFactory,
-    IKyrolusErrorMetadataSanitizer metadataSanitizer,
-    IHostEnvironment environment,
     IOptions<KyrolusExceptionHandlingOptions> options,
     ILogger<KyrolusExceptionFilter> logger) : IAsyncExceptionFilter
 {
-    private readonly KyrolusExceptionMappingService mappingService = mappingService;
+    private readonly KyrolusExceptionTranslator translator = translator;
     private readonly IKyrolusErrorResponseWriter responseWriter = responseWriter;
     private readonly KyrolusHttpErrorContextFactory contextFactory = contextFactory;
-    private readonly IKyrolusErrorMetadataSanitizer metadataSanitizer = metadataSanitizer;
-    private readonly IHostEnvironment environment = environment;
     private readonly KyrolusExceptionHandlingOptions options = options.Value;
     private readonly ILogger<KyrolusExceptionFilter> logger = logger;
 
@@ -25,9 +21,7 @@ public sealed class KyrolusExceptionFilter(
         }
 
         var errorContext = contextFactory.Create(context.HttpContext);
-        var mapping = mappingService.Map(context.Exception, errorContext);
-        var includeDetails = KyrolusExceptionEnrichmentHelper.ShouldIncludeDetails(options, environment);
-        KyrolusExceptionActivityEnricher.Enrich(Activity.Current, mapping, errorContext, context.Exception, includeDetails);
+        var mapping = translator.TranslateToMapping(context.Exception, errorContext);
 
         var isIgnoredLogType = options.IgnoredExceptionLogTypes.Count > 0 &&
                                options.IgnoredExceptionLogTypes.Any(t => t.IsInstanceOfType(context.Exception));
@@ -52,17 +46,9 @@ public sealed class KyrolusExceptionFilter(
             }
         }
 
-        var enriched = KyrolusExceptionEnrichmentHelper.ApplyExceptionDetails(
-            mapping,
-            context.Exception,
-            errorContext,
-            options,
-            metadataSanitizer,
-            includeDetails);
-
         context.ExceptionHandled = true;
         context.HttpContext.Response.Clear();
-        await responseWriter.WriteAsync(context.HttpContext, enriched, errorContext, context.HttpContext.RequestAborted).ConfigureAwait(false);
+        await responseWriter.WriteAsync(context.HttpContext, mapping, errorContext, context.HttpContext.RequestAborted).ConfigureAwait(false);
         context.Result = new EmptyResult();
     }
 }

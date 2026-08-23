@@ -18,27 +18,9 @@ public sealed record KyrolusExceptionMapping(
         HttpStatusCode statusCode,
         string? detail = null,
         string? traceId = null,
-        IReadOnlyDictionary<string, object?>? metadata = null)
-        => new(
-            new KyrolusErrorEnvelope(code, title, detail, traceId, null, metadata),
-            statusCode);
-
-    public static KyrolusExceptionMapping Create(
-        string code,
-        string title,
-        HttpStatusCode statusCode,
-        IReadOnlyList<KyrolusErrorItem>? errors,
-        string? detail = null,
-        string? traceId = null,
+        IReadOnlyList<KyrolusErrorItem>? errors = null,
         IReadOnlyDictionary<string, object?>? metadata = null)
         => new(
             new KyrolusErrorEnvelope(code, title, detail, traceId, errors, metadata),
             statusCode);
-
-    public static KyrolusExceptionMapping Create(
-        KyrolusErrorEnvelope error,
-        HttpStatusCode statusCode,
-        bool isTransient = false,
-        bool shouldLog = true)
-        => new(error, statusCode, isTransient, shouldLog);
 }

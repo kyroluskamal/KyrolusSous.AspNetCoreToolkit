@@ -1,4 +1,4 @@
-namespace KyrolusSous.ExceptionHandling.Runtime;
+namespace KyrolusSous.ExceptionHandling.Runtime.Localizers;
 
 public sealed class KyrolusDictionaryErrorLocalizer(IReadOnlyDictionary<string, string> translations)
     : IKyrolusErrorLocalizer
@@ -7,7 +7,10 @@ public sealed class KyrolusDictionaryErrorLocalizer(IReadOnlyDictionary<string, 
 
     public string? Localize(string code, string? defaultMessage, CultureInfo? culture)
     {
-        if (string.IsNullOrWhiteSpace(code)) return defaultMessage;
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return defaultMessage;
+        }
 
         return translations.TryGetValue(code, out var value) ? value : defaultMessage;
     }

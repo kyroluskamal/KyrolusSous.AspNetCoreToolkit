@@ -5,11 +5,9 @@ public sealed class ExceptionHandlingMiddleware(
     KyrolusExceptionHandlingDependencies dependencies)
 {
     private readonly RequestDelegate next = next;
-    private readonly KyrolusExceptionMappingService mappingService = dependencies.MappingService;
+    private readonly KyrolusExceptionTranslator translator = dependencies.Translator;
     private readonly IKyrolusErrorResponseWriter responseWriter = dependencies.ResponseWriter;
     private readonly KyrolusHttpErrorContextFactory contextFactory = dependencies.ContextFactory;
-    private readonly IKyrolusErrorMetadataSanitizer metadataSanitizer = dependencies.MetadataSanitizer;
-    private readonly IHostEnvironment environment = dependencies.Environment;
     private readonly KyrolusExceptionHandlingOptions options = dependencies.Options;
     private readonly ILogger logger = dependencies.Logger;
 
@@ -22,10 +20,7 @@ public sealed class ExceptionHandlingMiddleware(
         catch (Exception ex)
         {
             var errorContext = contextFactory.Create(context);
-            var mapping = mappingService.Map(ex, errorContext);
-            var includeDetails = KyrolusExceptionEnrichmentHelper.ShouldIncludeDetails(options, environment);
-            KyrolusExceptionActivityEnricher.Enrich(Activity.Current, mapping, errorContext, ex, includeDetails);
-            mapping = KyrolusExceptionEnrichmentHelper.ApplyExceptionDetails(mapping, ex, errorContext, options, metadataSanitizer, includeDetails);
+            var mapping = translator.TranslateToMapping(ex, errorContext);
 
             var isIgnoredLogType = options.IgnoredExceptionLogTypes.Count > 0 &&
                                    options.IgnoredExceptionLogTypes.Any(t => t.IsInstanceOfType(ex));
