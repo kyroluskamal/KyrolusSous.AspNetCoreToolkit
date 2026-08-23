@@ -1,4 +1,3 @@
-
 namespace KyrolusSous.ExceptionHandling.Abstractions.Helpers;
 
 public static class KyrolusMetadataExtractor
@@ -12,6 +11,7 @@ public static class KyrolusMetadataExtractor
             : new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
         ExtractExceptionData(exception, dict);
+        ExtractCustomMetadata(exception, dict);
         ExtractSpecificMetadata(exception, dict);
 
         return dict.Count > 0 ? dict : null;
@@ -33,7 +33,29 @@ public static class KyrolusMetadataExtractor
         }
     }
 
+    private static void ExtractCustomMetadata(Exception exception, Dictionary<string, object?> dict)
+    {
+        if (exception is IKyrolusExceptionWithMetadata metadataEx)
+        {
+            var customMetadata = metadataEx.GetMetadata();
+            if (customMetadata is { Count: > 0 })
+            {
+                foreach (var (key, value) in customMetadata)
+                {
+                    dict[key] = value;
+                }
+            }
+        }
+    }
+
     private static void ExtractSpecificMetadata(Exception exception, Dictionary<string, object?> dict)
+    {
+        ExtractArgumentMetadata(exception, dict);
+        ExtractNetworkMetadata(exception, dict);
+        ExtractJsonAndIoMetadata(exception, dict);
+    }
+
+    private static void ExtractArgumentMetadata(Exception exception, Dictionary<string, object?> dict)
     {
         switch (exception)
         {
@@ -48,16 +70,67 @@ public static class KyrolusMetadataExtractor
                 }
                 break;
 
+            case ArgumentOutOfRangeException outOfRangeEx:
+                if (!string.IsNullOrWhiteSpace(outOfRangeEx.ParamName))
+                {
+                    dict["paramName"] = outOfRangeEx.ParamName;
+                }
+                if (outOfRangeEx.ActualValue is not null)
+                {
+                    dict["actualValue"] = outOfRangeEx.ActualValue;
+                }
+                break;
+
             case ArgumentException argEx when !string.IsNullOrWhiteSpace(argEx.ParamName):
                 dict["paramName"] = argEx.ParamName;
                 break;
+        }
+    }
 
+    private static void ExtractNetworkMetadata(Exception exception, Dictionary<string, object?> dict)
+    {
+        switch (exception)
+        {
             case SocketException sockEx:
                 dict["socketErrorCode"] = sockEx.SocketErrorCode.ToString();
+                dict["nativeErrorCode"] = sockEx.NativeErrorCode;
                 break;
 
-            case HttpRequestException httpEx when httpEx.StatusCode.HasValue:
-                dict["httpStatusCode"] = (int)httpEx.StatusCode.Value;
+            case HttpRequestException httpEx:
+                if (httpEx.StatusCode.HasValue)
+                {
+                    dict["httpStatusCode"] = (int)httpEx.StatusCode.Value;
+                }
+                dict["httpRequestError"] = httpEx.HttpRequestError.ToString();
+                break;
+        }
+    }
+
+    private static void ExtractJsonAndIoMetadata(Exception exception, Dictionary<string, object?> dict)
+    {
+        switch (exception)
+        {
+            case JsonException jsonEx:
+                if (jsonEx.LineNumber.HasValue)
+                {
+                    dict["lineNumber"] = jsonEx.LineNumber.Value;
+                }
+                if (jsonEx.BytePositionInLine.HasValue)
+                {
+                    dict["bytePositionInLine"] = jsonEx.BytePositionInLine.Value;
+                }
+                if (!string.IsNullOrWhiteSpace(jsonEx.Path))
+                {
+                    dict["jsonPath"] = jsonEx.Path;
+                }
+                break;
+
+            case FileNotFoundException fileEx when !string.IsNullOrWhiteSpace(fileEx.FileName):
+                dict["fileName"] = fileEx.FileName;
+                break;
+
+            case DirectoryNotFoundException dirEx:
+                dict["message"] = dirEx.Message;
                 break;
         }
     }

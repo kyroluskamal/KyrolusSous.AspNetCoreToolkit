@@ -84,23 +84,7 @@ public class KyrolusExceptionHandlerHelperTests
         logger.Logs[0].Message.ShouldContain("Path=/api/users/42");
         logger.Logs[0].Message.ShouldContain("Message=User 42 does not exist");
     }
-    private sealed class TestLogger : ILogger
-    {
-        public List<(LogLevel Level, string Message)> Logs { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            Logs.Add((logLevel, formatter(state, exception)));
-        }
-    }
+    
 }
 
 
