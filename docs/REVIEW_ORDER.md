@@ -14,7 +14,7 @@ Within a phase the order is loose - what matters is not starting a phase before 
 | Mark | Meaning |
 |---|---|
 | ✅ | Reviewed and tested |
-| 🔧 | In progress |
+| 🔧 | In progress / Ready for review & tests |
 | ⬜ | Not started |
 | ⚡ | Exercised by the Marten FullPipeline suite - adding tests here is cheap, the harness exists |
 | 🚫 | Needs no tests (contracts only, no logic) |
@@ -26,61 +26,65 @@ Within a phase the order is loose - what matters is not starting a phase before 
 | # | Project | Status | Notes |
 |---|---|---|---|
 | 1 | `Mediator.Abstractions` | ✅ | 51 types documented. Behaviour covered via `Mediator.Tests` |
-| 2 | `Mediator.Runtime` | ✅ | 62 tests. 3 defects fixed, pipeline cached |
+| 2 | `Mediator.Runtime` | ✅ | 101 unit tests. 3 defects fixed, pipeline cached (100% coverage) |
 | 3 | `Mediator.Reflection` | ✅ | 52 unit tests covering dispatch, exception unwrapping, Assembly scanning, open generics, and caching (100% coverage) |
 | 4 | `Mediator.Generator` | ✅ | 14 tests incl. incremental caching. Roslyn component properties verified |
 | 5 | `Validation.Abstractions` | ✅ | 100% coverage via unit tests in Runtime suite |
 | 6 | `Validation.Runtime` | ✅ | 100 unit tests covering caching, negative TTL, composite validation, mappers, localizers, metrics, tracing, cancellation, and profiles (100% coverage) |
 | 7 | `Validation.DataAnnotations` | ✅ | 8 unit tests covering null requests, property & object-level validation, DI registration, CancellationToken, and context propagation (100% coverage) |
-| 8 | `Validation.FluentValidation` | ✅ | 9 unit tests covering FluentValidation adapter, custom groups, severity mapping, Egyptian National ID, URL validation, and DI assembly scanning (100% coverage) |
-| 9 | `Validation.FluentValidation.Scanning` | ✅ | 2 unit tests covering reflection-based assembly scanning for DI (100% coverage) |
-| 10 | `Validation.Generator` | ✅ | 4 unit tests covering Roslyn Incremental Generator code emission for DI validators & profiles (100% coverage) |
-| 11 | `ExceptionHandling.Abstractions` | ✅ | 100% coverage across built-in domain exceptions, models, registry, and metadata extractors |
-| 12 | `ExceptionHandling.Runtime` | ✅ | 187 unit tests covering middleware, filter, options, translators, mappers, localizers, and sanitizers (100% coverage) |
-| 13 | `ExceptionHandling.ProblemDetails` | ✅ | 9 unit tests covering RFC 7807 problem details writer, DI, and NativeAOT source generator context (100% coverage) |
-| 14 | `ExceptionHandling.EntityFramework` | ✅ | 6 unit tests covering EF Core exception mapper and DI registration (100% coverage) |
-| 15 | `ExceptionHandling.FluentValidation` | ✅ | 4 unit tests covering FluentValidation mapper, metadata extraction, and DI registration (100% coverage) |
-| 16 | `ExceptionHandling.Redis` | ✅ | 6 unit tests covering Redis exception mapper and DI registration (100% coverage) |
-| 17 | `Caching.Abstractions` | ⚡ | 748 lines. CI gate is 10% - a placeholder, not a real target |
-| 18 | `Caching.Redis` | ⚡ | 2728 lines |
-| 19 | `Mapping.Abstractions` | 🚫 | 8 lines |
-| 20 | `Mapping.Mapster` | ⬜ | 30 lines |
-| 21 | `Logging.Abstractions` | 🚫 | 23 lines |
-| 22 | `Logging.Runtime` | ⬜ | 79 lines |
-| 23 | `Logging.Serilog` | ⬜ | 28 tests |
+| 8 | `Validation.DataAnnotations.Generator` | ✅ | Roslyn Incremental Generator for DataAnnotations validation code emission |
+| 9 | `Validation.Fluent` | ✅ | Built-in lightweight fluent validation rules, validators, and extensions |
+| 10 | `Validation.FluentValidation` | ✅ | 9 unit tests covering FluentValidation adapter, custom groups, severity mapping, Egyptian National ID, URL validation, and DI assembly scanning (100% coverage) |
+| 11 | `Validation.FluentValidation.Scanning` | ✅ | 2 unit tests covering reflection-based assembly scanning for DI (100% coverage) |
+| 12 | `Validation.Generator` | ✅ | 4 unit tests covering Roslyn Incremental Generator code emission for DI validators & profiles (100% coverage) |
+| 13 | `ExceptionHandling.Abstractions` | ✅ | 100% coverage across built-in domain exceptions, models, registry, and metadata extractors |
+| 14 | `ExceptionHandling.Runtime` | ✅ | 187 unit tests covering middleware, filter, options, translators, mappers, localizers, and sanitizers (100% coverage) |
+| 15 | `ExceptionHandling.ProblemDetails` | ✅ | 9 unit tests covering RFC 7807 problem details writer, DI, and NativeAOT source generator context (100% coverage) |
+| 16 | `ExceptionHandling.EntityFramework` | ✅ | 6 unit tests covering EF Core exception mapper and DI registration (100% coverage) |
+| 17 | `ExceptionHandling.FluentValidation` | ✅ | 4 unit tests covering FluentValidation mapper, metadata extraction, and DI registration (100% coverage) |
+| 18 | `ExceptionHandling.Redis` | ✅ | 6 unit tests covering Redis exception mapper and DI registration (100% coverage) |
+| 19 | `Compression` | 🔧 | 6 compression algorithms (Brotli, Zstd, LZ4, Snappy, Gzip, Deflate), stream support, byte/string extensions, and ASP.NET Core ResponseCompressionMiddleware |
+| 20 | `Caching.Abstractions` | 🔧 | Core caching abstractions, IDistributedLockProvider, IKyrolusRedisPubSub, atomic/hash operations, payload transformers |
+| 21 | `Caching.Redis` | 🔧 | Redis L2 & NearCache (L1+L2), Lua-based distributed locking, Pub/Sub bus, ASP.NET Core IDistributedCache & IOutputCacheStore adapters |
+| 22 | `Caching.MessagePack` | 🔧 | High-performance binary MessagePack cache serializer with optional LZ4 block compression |
+| 23 | `Mapping.Abstractions` | 🚫 | 8 lines |
+| 24 | `Mapping.Mapster` | ⬜ | 30 lines |
+| 25 | `Logging.Abstractions` | 🚫 | 23 lines |
+| 26 | `Logging.Runtime` | ⬜ | 79 lines |
+| 27 | `Logging.Serilog` | ⬜ | 28 tests |
 
 ## Phase 2 - Repositories
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 24 | `Repositories.EF.Abstractions` | ⬜ | Gate 65%/55%. Unparseable route keys fixed to throw FormatException (yielding 400 instead of 500) |
-| 25 | `Repositories.EF.Runtime` | ⬜ | 475 integration + 106 unit. Gate 95%/85% |
-| 26 | `Repositories.EF.Generator` | ⬜ | 133 integration + 67 unit |
-| 27 | `Repositories.EF.Cache.Distributed` | ⬜ | 220 lines |
-| 28 | `Repositories.Marten.Abstractions` | ⚡ | 2927 lines |
-| 29 | `Repositories.Marten.Runtime` | ⬜ | 235 tests via FullPipeline |
-| 30 | `Repositories.Marten.Generator` | ⬜ | **2950 lines, zero tests.** Compare against the EF generator, which is tested |
+| 28 | `Repositories.EF.Abstractions` | ⬜ | Gate 65%/55%. Unparseable route keys fixed to throw FormatException (yielding 400 instead of 500) |
+| 29 | `Repositories.EF.Runtime` | ⬜ | 475 integration + 106 unit. Gate 95%/85% |
+| 30 | `Repositories.EF.Generator` | ⬜ | 133 integration + 67 unit |
+| 31 | `Repositories.EF.Cache.Distributed` | ⬜ | 220 lines |
+| 32 | `Repositories.Marten.Abstractions` | ⚡ | 2927 lines |
+| 33 | `Repositories.Marten.Runtime` | ⬜ | 235 tests via FullPipeline |
+| 34 | `Repositories.Marten.Generator` | ⬜ | **2950 lines, zero tests.** Compare against the EF generator, which is tested |
 
 ## Phase 3 - CQRS
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 31 | `CQRS.Abstractions` | ⚡ | 27 lines |
-| 32 | `CQRS.Validation` | ⚡ | |
-| 33 | `CQRS.Mapping` | ⬜ | 23 lines |
-| 34 | `CQRS.ExceptionHandling` | ⚡ | |
-| 35 | `CQRS.Caching` | ⬜ | Holds the Redis caching behaviour |
-| 36 | `CQRS.EF` | ⬜ | **2007 lines, zero tests, no TestApp.** Highest risk in this phase |
-| 37 | `CQRS.Marten` | ⚡ | |
+| 35 | `CQRS.Abstractions` | ⚡ | 27 lines |
+| 36 | `CQRS.Validation` | ⚡ | |
+| 37 | `CQRS.Mapping` | ⬜ | 23 lines |
+| 38 | `CQRS.ExceptionHandling` | ⚡ | |
+| 39 | `CQRS.Caching` | ⬜ | Holds the Redis caching behaviour |
+| 40 | `CQRS.EF` | ⬜ | **2007 lines, zero tests, no TestApp.** Highest risk in this phase |
+| 41 | `CQRS.Marten` | ⚡ | |
 
 ## Phase 4 - EndpointKit
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 38 | `EndpointKit.Core` | ⚡ | 2878 lines |
-| 39 | `EndpointKit.Generator` | ⬜ | 1229 lines, zero tests |
-| 40 | `EndpointKit.EF` | ⬜ | **5107 lines, zero tests, no TestApp.** Highest risk in the repo |
-| 41 | `EndpointKit.Marten` | ⚡ | 5189 lines. **Open finding:** `(dynamic)` in `SendCommandAsync` breaks AOT and trimming, contradicting the README's AOT claim |
+| 42 | `EndpointKit.Core` | ⚡ | 2878 lines |
+| 43 | `EndpointKit.Generator` | ⬜ | 1229 lines, zero tests |
+| 44 | `EndpointKit.EF` | ⬜ | **5107 lines, zero tests, no TestApp.** Highest risk in the repo |
+| 45 | `EndpointKit.Marten` | ⚡ | 5189 lines. **Open finding:** `(dynamic)` in `SendCommandAsync` breaks AOT and trimming, contradicting the README's AOT claim |
 
 ## Phase 5 - DataProtection
 
@@ -88,19 +92,19 @@ Independent of everything else. Can be done at any point.
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 42 | `DataProtection.Abstractions` | ⚡ | |
-| 43 | `DataProtection.Runtime` | ⚡ | 1254 lines |
-| 44 | `DataProtection.Ephemeral` | ⬜ | 17 lines |
-| 45 | `DataProtection.FileSystem` | ⬜ | 28 lines |
-| 46 | `DataProtection.CustomXml` | ⬜ | 42 lines |
-| 47 | `DataProtection.EntityFramework` | ⬜ | 51 lines |
-| 48 | `DataProtection.Redis` | ⚡ | |
-| 49 | `DataProtection.Marten` | ⬜ | |
-| 50 | `DataProtection.AzureStorage` | ⬜ | Cloud - wiring test only, no integration |
-| 51 | `DataProtection.AzureKeyVault` | ⬜ | Cloud - wiring test only |
-| 52 | `DataProtection.AwsKms` | ⬜ | Cloud - wiring test only |
-| 53 | `DataProtection.GoogleKms` | ⬜ | Cloud - wiring test only |
-| 54 | `DataProtection.Cli` | ⬜ | 629 lines |
+| 46 | `DataProtection.Abstractions` | ⚡ | |
+| 47 | `DataProtection.Runtime` | ⚡ | 1254 lines |
+| 48 | `DataProtection.Ephemeral` | ⬜ | 17 lines |
+| 49 | `DataProtection.FileSystem` | ⬜ | 28 lines |
+| 50 | `DataProtection.CustomXml` | ⬜ | 42 lines |
+| 51 | `DataProtection.EntityFramework` | ⬜ | 51 lines |
+| 52 | `DataProtection.Redis` | ⚡ | |
+| 53 | `DataProtection.Marten` | ⬜ | |
+| 54 | `DataProtection.AzureStorage` | ⬜ | Cloud - wiring test only, no integration |
+| 55 | `DataProtection.AzureKeyVault` | ⬜ | Cloud - wiring test only |
+| 56 | `DataProtection.AwsKms` | ⬜ | Cloud - wiring test only |
+| 57 | `DataProtection.GoogleKms` | ⬜ | Cloud - wiring test only |
+| 58 | `DataProtection.Cli` | ⬜ | 629 lines |
 
 ## Phase 6 - Standalone
 
@@ -108,12 +112,12 @@ Nothing depends on these and they depend on nothing. Any time.
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 55 | `OpenApi` | ⬜ | Migrated to official Microsoft.AspNetCore.OpenApi (.NET 10) + Scalar UI + Swagger UI, covered by integration suite |
-| 56 | `OpenIddictAuth` | ⬜ | 181 lines |
-| 57 | `IRabbitMQUtilsInterfaces` | 🚫 | 32 lines, contracts only |
-| 58 | `RabbitMQUtils` | ⬜ | 218 lines |
-| 59 | `Elasticsearch` | ⚡ | Modern Elasticsearch client (v8.17) with repository, fluent search, auto-index lifecycle, and health checks |
-| 60 | `Resilience` | ⚡ | Enterprise Polly v8 & Microsoft.Extensions.Resilience with smart IsTransient evaluation, circuit breaker, and HttpClient extensions |
+| 59 | `OpenApi` | ⬜ | Migrated to official Microsoft.AspNetCore.OpenApi (.NET 10) + Scalar UI + Swagger UI, covered by integration suite |
+| 60 | `OpenIddictAuth` | ⬜ | 181 lines |
+| 61 | `IRabbitMQUtilsInterfaces` | 🚫 | 32 lines, contracts only |
+| 62 | `RabbitMQUtils` | ⬜ | 218 lines |
+| 63 | `Elasticsearch` | ⚡ | Modern Elasticsearch client (v8.17) with repository, fluent search, auto-index lifecycle, and health checks |
+| 64 | `Resilience` | ⚡ | Enterprise Polly v8 & Microsoft.Extensions.Resilience with smart IsTransient evaluation, circuit breaker, and HttpClient extensions |
 
 ---
 
