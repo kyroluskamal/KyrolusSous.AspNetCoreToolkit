@@ -1,8 +1,8 @@
 global using System.Net;
 global using FluentValidation;
+global using KyrolusSous.ExceptionHandling.Abstractions.Helpers;
 global using KyrolusSous.ExceptionHandling.Abstractions.Interfaces;
 global using KyrolusSous.ExceptionHandling.Abstractions.Models;
-global using KyrolusSous.ExceptionHandling.Abstractions.Helpers;
 
 namespace KyrolusSous.ExceptionHandling.FluentValidation;
 
@@ -26,9 +26,10 @@ public sealed class KyrolusFluentValidationExceptionMapper : IKyrolusExceptionMa
             code: KyrolusErrorCodes.Validation,
             title: "Validation failed",
             statusCode: HttpStatusCode.BadRequest,
-            errors: [.. errors],
             detail: "One or more validation errors occurred.",
-            traceId: context.TraceId)
+            traceId: context.TraceId,
+            errors: [.. errors],
+            metadata: KyrolusMetadataExtractor.Extract(validationException))
             .WithoutLogging();
 
         return true;

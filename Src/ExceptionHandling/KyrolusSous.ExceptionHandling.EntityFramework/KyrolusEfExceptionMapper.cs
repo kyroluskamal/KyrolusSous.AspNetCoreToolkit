@@ -1,8 +1,8 @@
 global using System.Data.Common;
 global using System.Net;
+global using KyrolusSous.ExceptionHandling.Abstractions.Helpers;
 global using KyrolusSous.ExceptionHandling.Abstractions.Interfaces;
 global using KyrolusSous.ExceptionHandling.Abstractions.Models;
-global using KyrolusSous.ExceptionHandling.Abstractions.Helpers;
 global using Microsoft.EntityFrameworkCore;
 
 namespace KyrolusSous.ExceptionHandling.EntityFramework;
@@ -21,6 +21,7 @@ public sealed class KyrolusEfExceptionMapper : IKyrolusExceptionMapper
                 statusCode: HttpStatusCode.Conflict,
                 detail: exception.Message,
                 traceId: context.TraceId,
+                errors: (exception as IKyrolusExceptionWithErrors)?.GetErrors(),
                 metadata: KyrolusMetadataExtractor.Extract(exception))
                 .AsTransient();
 
@@ -40,6 +41,7 @@ public sealed class KyrolusEfExceptionMapper : IKyrolusExceptionMapper
                 statusCode: HttpStatusCode.InternalServerError,
                 detail: updateException.Message,
                 traceId: context.TraceId,
+                errors: (exception as IKyrolusExceptionWithErrors)?.GetErrors(),
                 metadata: KyrolusMetadataExtractor.Extract(updateException))
                 .AsTransient(isTransient);
 

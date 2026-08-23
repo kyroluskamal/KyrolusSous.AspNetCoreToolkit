@@ -9,13 +9,6 @@ namespace KyrolusSous.ExceptionHandling.ProblemDetails;
 
 public sealed class KyrolusProblemDetailsWriter : IKyrolusErrorResponseWriter
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = false
-    };
-
     public Task WriteAsync(HttpContext context, KyrolusExceptionMapping mapping, KyrolusErrorContext errorContext, CancellationToken cancellationToken)
     {
         var problemType = BuildProblemType(mapping.Error.Code);
@@ -33,30 +26,26 @@ public sealed class KyrolusProblemDetailsWriter : IKyrolusErrorResponseWriter
         details.Extensions["errors"] = mapping.Error.Errors;
 
         if (mapping.Error.Metadata is not null)
-        {
             foreach (var (key, value) in mapping.Error.Metadata)
-            {
                 details.Extensions[key] = value;
-            }
-        }
 
         context.Response.StatusCode = details.Status ?? (int)mapping.StatusCode;
         context.Response.ContentType = "application/problem+json";
 
-        return context.Response.WriteAsync(JsonSerializer.Serialize(details, JsonOptions), cancellationToken);
+        return JsonSerializer.SerializeAsync(
+            context.Response.Body,
+            details,
+            KyrolusProblemDetailsJsonContext.Default.ProblemDetails,
+            cancellationToken);
     }
 
     private static string BuildProblemType(string? code)
     {
         if (string.IsNullOrWhiteSpace(code))
-        {
             return "about:blank";
-        }
 
         if (Uri.TryCreate(code, UriKind.Absolute, out _))
-        {
             return code;
-        }
 
         return $"urn:kyrolus:error:{code}";
     }

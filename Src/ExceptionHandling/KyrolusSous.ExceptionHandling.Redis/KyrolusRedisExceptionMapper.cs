@@ -1,7 +1,7 @@
 global using System.Net;
+global using KyrolusSous.ExceptionHandling.Abstractions.Helpers;
 global using KyrolusSous.ExceptionHandling.Abstractions.Interfaces;
 global using KyrolusSous.ExceptionHandling.Abstractions.Models;
-global using KyrolusSous.ExceptionHandling.Abstractions.Helpers;
 global using StackExchange.Redis;
 
 namespace KyrolusSous.ExceptionHandling.Redis;
@@ -20,6 +20,7 @@ public sealed class KyrolusRedisExceptionMapper : IKyrolusExceptionMapper
                 statusCode: HttpStatusCode.GatewayTimeout,
                 detail: exception.Message,
                 traceId: context.TraceId,
+                errors: (exception as IKyrolusExceptionWithErrors)?.GetErrors(),
                 metadata: KyrolusMetadataExtractor.Extract(exception))
                 .AsTransient();
 
@@ -34,6 +35,7 @@ public sealed class KyrolusRedisExceptionMapper : IKyrolusExceptionMapper
                 statusCode: HttpStatusCode.BadGateway,
                 detail: exception.Message,
                 traceId: context.TraceId,
+                errors: (exception as IKyrolusExceptionWithErrors)?.GetErrors(),
                 metadata: KyrolusMetadataExtractor.Extract(exception))
                 .AsTransient();
 

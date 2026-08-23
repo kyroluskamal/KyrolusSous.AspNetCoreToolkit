@@ -8,7 +8,6 @@ global using KyrolusSous.ExceptionHandling.Abstractions.Exceptions;
 global using KyrolusSous.ExceptionHandling.Abstractions.Helpers;
 global using KyrolusSous.ExceptionHandling.Abstractions.Interfaces;
 global using KyrolusSous.ExceptionHandling.Abstractions.Models;
-global using KyrolusSous.ExceptionHandling.Runtime;
 global using KyrolusSous.ExceptionHandling.Runtime.Helpers;
 global using KyrolusSous.ExceptionHandling.Runtime.Handlers;
 global using KyrolusSous.ExceptionHandling.Runtime.Interfaces;
