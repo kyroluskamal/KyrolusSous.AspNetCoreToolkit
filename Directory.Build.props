@@ -29,13 +29,19 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
-  <!-- NuGet package metadata shared by every publishable project. -->
+  <!--
+    NuGet package metadata shared by every publishable project.
+
+    PackageLicenseExpression MUST match the LICENSE file at the repo root. They disagreed
+    once (expression said MIT, LICENSE was Apache-2.0), which would have shipped packages
+    under a licence the source was never released under. If you change one, change both.
+  -->
   <PropertyGroup Condition="'$(IsToolkitPackage)' == 'true'">
     <Authors>Kyrolus Sous</Authors>
     <Company>KyrolusSous</Company>
     <Product>KyrolusSous.AspNetCoreToolkit</Product>
     <Copyright>Copyright (c) Kyrolus Sous</Copyright>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/kyroluskamal/KyrolusSous.AspNetCoreToolkit</PackageProjectUrl>
     <RepositoryUrl>https://github.com/kyroluskamal/KyrolusSous.AspNetCoreToolkit</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
