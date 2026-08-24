@@ -22,21 +22,10 @@ public static class KyrolusCollectionMappingHelper
             return true;
         }
 
-        if (type.IsGenericType)
+        if (type.IsGenericType && IsStandardGenericCollection(type.GetGenericTypeDefinition()))
         {
-            var genType = type.GetGenericTypeDefinition();
-            if (genType == typeof(IEnumerable<>) ||
-                genType == typeof(IReadOnlyList<>) ||
-                genType == typeof(IReadOnlyCollection<>) ||
-                genType == typeof(IList<>) ||
-                genType == typeof(ICollection<>) ||
-                genType == typeof(List<>) ||
-                genType == typeof(HashSet<>) ||
-                genType == typeof(ISet<>))
-            {
-                elementType = type.GetGenericArguments()[0];
-                return true;
-            }
+            elementType = type.GetGenericArguments()[0];
+            return true;
         }
 
         var enumInterface = type.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>));
@@ -66,52 +55,101 @@ public static class KyrolusCollectionMappingHelper
             return null;
         }
 
-        var count = (source as ICollection)?.Count ?? (source as IReadOnlyCollection<object>)?.Count ?? 0;
+        var count = GetEstimatedCount(source);
 
-        // If target is array: TTarget[]
         if (targetCollectionType.IsArray)
         {
-            var list = new List<object?>(count);
-            foreach (var item in source)
-            {
-                list.Add(item is null ? null : elementMapper(item, context));
-            }
-
-            var array = Array.CreateInstance(targetElementType, list.Count);
-            for (var i = 0; i < list.Count; i++)
-            {
-                array.SetValue(list[i], i);
-            }
-
-            return array;
+            return MapToArray(source, targetElementType, elementMapper, context, count);
         }
 
-        // If target is HashSet<TTarget>
-        if (targetCollectionType.IsGenericType && (targetCollectionType.GetGenericTypeDefinition() == typeof(HashSet<>) || targetCollectionType.GetGenericTypeDefinition() == typeof(ISet<>)))
+        if (IsSetType(targetCollectionType))
         {
-            var hashSetType = typeof(HashSet<>).MakeGenericType(targetElementType);
-            var hashSet = Activator.CreateInstance(hashSetType)!;
-            var addMethod = hashSetType.GetMethod("Add")!;
-
-            foreach (var item in source)
-            {
-                var mapped = item is null ? null : elementMapper(item, context);
-                addMethod.Invoke(hashSet, [mapped]);
-            }
-
-            return hashSet;
+            return MapToHashSet(source, targetElementType, elementMapper, context);
         }
 
-        // Default to List<TTarget> for IEnumerable<T>, IList<T>, IReadOnlyList<T>, List<T>
-        var targetListType = typeof(List<>).MakeGenericType(targetElementType);
-        var targetList = (IList)Activator.CreateInstance(targetListType, count)!;
+        return MapToList(source, targetElementType, elementMapper, context, count);
+    }
+
+    private static bool IsStandardGenericCollection(Type genType) =>
+        genType == typeof(IEnumerable<>) ||
+        genType == typeof(IReadOnlyList<>) ||
+        genType == typeof(IReadOnlyCollection<>) ||
+        genType == typeof(IList<>) ||
+        genType == typeof(ICollection<>) ||
+        genType == typeof(List<>) ||
+        genType == typeof(HashSet<>) ||
+        genType == typeof(ISet<>);
+
+    private static bool IsSetType(Type type) =>
+        type.IsGenericType &&
+        (type.GetGenericTypeDefinition() == typeof(HashSet<>) || type.GetGenericTypeDefinition() == typeof(ISet<>));
+
+    private static int GetEstimatedCount(IEnumerable source) =>
+        (source as ICollection)?.Count ?? (source as IReadOnlyCollection<object>)?.Count ?? 0;
+
+    private static Array MapToArray(
+        IEnumerable source,
+        Type targetElementType,
+        Func<object, KyrolusMappingContext, object?> elementMapper,
+        KyrolusMappingContext context,
+        int estimatedCount)
+    {
+        var list = new List<object?>(estimatedCount);
+        foreach (var item in source)
+        {
+            list.Add(MapElement(item, elementMapper, context));
+        }
+
+        var array = Array.CreateInstance(targetElementType, list.Count);
+        for (var i = 0; i < list.Count; i++)
+        {
+            array.SetValue(list[i], i);
+        }
+
+        return array;
+    }
+
+    private static object MapToHashSet(
+        IEnumerable source,
+        Type targetElementType,
+        Func<object, KyrolusMappingContext, object?> elementMapper,
+        KyrolusMappingContext context)
+    {
+        var hashSetType = typeof(HashSet<>).MakeGenericType(targetElementType);
+        var hashSet = Activator.CreateInstance(hashSetType)!;
+        var addMethod = hashSetType.GetMethod("Add")!;
 
         foreach (var item in source)
         {
-            var mapped = item is null ? null : elementMapper(item, context);
+            var mapped = MapElement(item, elementMapper, context);
+            addMethod.Invoke(hashSet, [mapped]);
+        }
+
+        return hashSet;
+    }
+
+    private static IList MapToList(
+        IEnumerable source,
+        Type targetElementType,
+        Func<object, KyrolusMappingContext, object?> elementMapper,
+        KyrolusMappingContext context,
+        int estimatedCount)
+    {
+        var targetListType = typeof(List<>).MakeGenericType(targetElementType);
+        var targetList = (IList)Activator.CreateInstance(targetListType, estimatedCount)!;
+
+        foreach (var item in source)
+        {
+            var mapped = MapElement(item, elementMapper, context);
             targetList.Add(mapped);
         }
 
         return targetList;
     }
+
+    private static object? MapElement(
+        object? item,
+        Func<object, KyrolusMappingContext, object?> elementMapper,
+        KyrolusMappingContext context) =>
+        item is null ? null : elementMapper(item, context);
 }
