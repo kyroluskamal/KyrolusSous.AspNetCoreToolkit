@@ -3,7 +3,7 @@ using Serilog.Parsing;
 using static KyrolusSous.Logging.Serilog.LoggingOptions;
 using KyrolusSous.Logging.Serilog.Theming;
 
-namespace KyrolusSous.Logging.Tests;
+namespace KyrolusSous.Logging.UnitTests;
 
 public class FormatterAndStrictnessTests
 {

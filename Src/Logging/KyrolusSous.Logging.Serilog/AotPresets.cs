@@ -1,5 +1,7 @@
+using KyrolusSous.Logging.Serilog.Formatters;
 using KyrolusSous.Logging.Serilog.Theming;
 using Serilog.Configuration;
+using Serilog.Formatting;
 
 namespace KyrolusSous.Logging.Serilog;
 
@@ -31,7 +33,13 @@ public static class AotPresets
         }
 
         options.AotSinkRegistrations.Insert(0, cfg =>
-            cfg.WriteTo.Console(formatter: new CustomTextFormatter(options.FormatterOptionsBySink.GetValueOrDefault("Console", options.DefaultFormatterOptions))));
+        {
+            ITextFormatter formatter = options.EnableEcsFormatting
+                ? new KyrolusEcsJsonFormatter()
+                : new CustomTextFormatter(options.FormatterOptionsBySink.GetValueOrDefault("Console", options.DefaultFormatterOptions));
+
+            cfg.WriteTo.Console(formatter: formatter);
+        });
 
         options.AotSinkRegistrations.Add(cfg =>
             cfg.WriteTo.File(
@@ -42,4 +50,3 @@ public static class AotPresets
         options.AotDefaultsApplied = true;
     }
 }
-

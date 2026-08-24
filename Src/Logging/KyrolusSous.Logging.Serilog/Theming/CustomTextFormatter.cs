@@ -1,3 +1,4 @@
+using KyrolusSous.Logging.Core.Exceptions;
 using Serilog.Formatting;
 
 namespace KyrolusSous.Logging.Serilog.Theming;
@@ -44,13 +45,26 @@ public class TextFormatterOptions
 /// <summary>
 /// A colored text formatter that can be customized via <see cref="TextFormatterOptions"/>.
 /// </summary>
-public class CustomTextFormatter(TextFormatterOptions? options = null) : ITextFormatter
+public class CustomTextFormatter : ITextFormatter
 {
     private const string Reset = "\x1b[0m";
-    private readonly TextFormatterOptions _options = options ?? new TextFormatterOptions();
+    private readonly TextFormatterOptions _options;
+    private readonly KyrolusExceptionSanitizer _exceptionSanitizer;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CustomTextFormatter"/> class.
+    /// </summary>
+    public CustomTextFormatter(TextFormatterOptions? options = null, KyrolusExceptionSanitizer? exceptionSanitizer = null)
+    {
+        _options = options ?? new TextFormatterOptions();
+        _exceptionSanitizer = exceptionSanitizer ?? new KyrolusExceptionSanitizer();
+    }
 
     public void Format(LogEvent logEvent, TextWriter output)
     {
+        ArgumentNullException.ThrowIfNull(logEvent);
+        ArgumentNullException.ThrowIfNull(output);
+
         WriteHeader(logEvent, output);
 
         if (_options.ShowProperties && logEvent.Properties.Count > 0)
@@ -92,32 +106,34 @@ public class CustomTextFormatter(TextFormatterOptions? options = null) : ITextFo
         var ex = logEvent.Exception;
         if (ex == null)
         {
-            // No exception to write about.
             return;
         }
+
+        var sanitizedMsg = _exceptionSanitizer.SanitizeMessage(ex.Message);
 
         switch (detailLevel)
         {
             case TextFormatterOptions.ExceptionDetailLevel.None:
                 return;
             case TextFormatterOptions.ExceptionDetailLevel.MessageOnly:
-                output.WriteLine($"  Exception: {ex.Message}");
+                output.WriteLine($"  Exception: {sanitizedMsg}");
                 return;
             case TextFormatterOptions.ExceptionDetailLevel.TypeAndMessage:
-                output.WriteLine($"  Exception: {ex.GetType().Name}: {ex.Message}");
+                output.WriteLine($"  Exception: {ex.GetType().Name}: {sanitizedMsg}");
                 return;
             case TextFormatterOptions.ExceptionDetailLevel.Full:
-                WriteFullException(ex, output);
+                WriteFullException(ex, output, sanitizedMsg);
                 return;
         }
     }
 
-    private static void WriteFullException(Exception ex, TextWriter output)
+    private void WriteFullException(Exception ex, TextWriter output, string sanitizedMsg)
     {
-        output.WriteLine($"  Exception: {ex.GetType().Name}: {ex.Message}");
+        output.WriteLine($"  Exception: {ex.GetType().Name}: {sanitizedMsg}");
         if (ex.InnerException != null)
         {
-            output.WriteLine($"  Inner: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
+            var innerSanitized = _exceptionSanitizer.SanitizeMessage(ex.InnerException.Message);
+            output.WriteLine($"  Inner: {ex.InnerException.GetType().Name}: {innerSanitized}");
         }
         if (!string.IsNullOrWhiteSpace(ex.StackTrace))
         {
@@ -137,4 +153,3 @@ public class CustomTextFormatter(TextFormatterOptions? options = null) : ITextFo
             _ => level.ToString()
         };
 }
-

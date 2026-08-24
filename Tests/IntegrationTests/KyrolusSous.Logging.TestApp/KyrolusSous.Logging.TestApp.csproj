@@ -17,7 +17,7 @@
     <PackageReference Include="Serilog.Enrichers.Thread" Version="4.0.0" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Src\Logging\KyrolusSous.Logging.Runtime\KyrolusSous.Logging.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\Src\Logging\KyrolusSous.Logging.Core\KyrolusSous.Logging.Core.csproj" />
     <ProjectReference Include="..\..\..\Src\Logging\KyrolusSous.Logging.Serilog\KyrolusSous.Logging.Serilog.csproj" />
   </ItemGroup>
   <ItemGroup>

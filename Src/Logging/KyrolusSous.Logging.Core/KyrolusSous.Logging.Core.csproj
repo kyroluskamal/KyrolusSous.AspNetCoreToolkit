@@ -4,12 +4,15 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <RootNamespace>KyrolusSous.Logging.Runtime</RootNamespace>
+    <RootNamespace>KyrolusSous.Logging.Core</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\KyrolusSous.Logging.Abstractions\KyrolusSous.Logging.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>
-

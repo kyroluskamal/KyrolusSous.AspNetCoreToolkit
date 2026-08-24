@@ -1,10 +1,6 @@
-
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.DependencyInjection;
-
 using static KyrolusSous.Logging.Serilog.LoggingOptions;
 
-namespace KyrolusSous.Logging.Tests;
+namespace KyrolusSous.Logging.IntegrationTests;
 
 public class InMemoryTestSink : ILogEventSink
 {
@@ -14,11 +10,12 @@ public class InMemoryTestSink : ILogEventSink
         Events.Add(logEvent);
     }
 }
+
 public class LoggingIntegrationTestBase : IClassFixture<WebApplicationFactory<Program>>, IDisposable
 {
     protected readonly WebApplicationFactory<Program> _factory;
     protected readonly string _logDirectory;
-    private bool _disposed = false;
+    private bool _disposed;
 
     public LoggingIntegrationTestBase(WebApplicationFactory<Program> factory)
     {
@@ -38,7 +35,7 @@ public class LoggingIntegrationTestBase : IClassFixture<WebApplicationFactory<Pr
 
         try
         {
-            for (int i = 0; i < 5; i++)
+            for (var i = 0; i < 5; i++)
             {
                 try
                 {
@@ -57,11 +54,11 @@ public class LoggingIntegrationTestBase : IClassFixture<WebApplicationFactory<Pr
         }
         catch (IOException)
         {
-            // Swallow if the file is locked by an external process; tests rely on new writes, not deletion failure.
+            // Swallow if the file is locked by an external process
         }
         catch (UnauthorizedAccessException)
         {
-            // Swallow if the file is locked by an external process; tests rely on new writes, not deletion failure.
+            // Swallow if the file is locked by an external process
         }
     }
 
@@ -89,17 +86,13 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
     [Fact(DisplayName = "Integration: default options should create and write to file sink")]
     public async Task Build_WithDefaultOptions_CreatesAndWritesToDefaultFileSink()
     {
-        // Arrange
         var start = DateTime.UtcNow;
         var factory1 = new WebApplicationFactory<Program>();
         var client = factory1.CreateClient();
 
-        // Act
         await client.GetAsync("/");
         await factory1.DisposeAsync();
-        // ---------------------
 
-        // Assert
         Directory.Exists(_logDirectory).ShouldBeTrue();
 
         var logFiles = Directory.GetFiles(_logDirectory, "log-*.txt")
@@ -112,10 +105,10 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
         var fileContent = await ReadFileWithRetryAsync(newest.FullName);
         fileContent.ShouldContain("Integration Test: Information Message");
     }
+
     [Fact(DisplayName = "Integration: clearing sinks should not create default log file")]
     public async Task Build_WithClearDefaultSinks_DoesNotCreateDefaultLogFile()
     {
-        // Arrange
         var start = DateTime.UtcNow;
         var client = _factory.WithWebHostBuilder(builder =>
         {
@@ -128,10 +121,8 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
             });
         }).CreateClient();
 
-        // Act
         await client.GetAsync("/");
 
-        // Assert
         if (!Directory.Exists(_logDirectory))
         {
             return;
@@ -147,7 +138,6 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
     [Fact(DisplayName = "Integration: custom file sink options should write to custom path")]
     public async Task Build_WithCustomFileSinkOptions_WritesToCustomPath()
     {
-        // Arrange
         var start = DateTime.UtcNow;
         string? customLogPath = null;
         var factory2 = _factory.WithWebHostBuilder(builder =>
@@ -165,11 +155,9 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
                     }
                     catch (IOException)
                     {
-                        // Ignore cleanup failures caused by file locks.
                     }
                     catch (UnauthorizedAccessException)
                     {
-                        // Ignore cleanup failures caused by file locks.
                     }
                 }
                 services.PostConfigure<LoggingOptions>(options =>
@@ -186,11 +174,9 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
 
         var client = factory2.CreateClient();
 
-        // Act
         await client.GetAsync("/");
         await factory2.DisposeAsync();
 
-        // Assert
         Directory.Exists(customLogPath).ShouldBeTrue();
         var logFiles = Directory.GetFiles(customLogPath!, "custom-log*.txt")
             .Select(f => new FileInfo(f))
@@ -202,27 +188,21 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
         var fileContent = await ReadFileWithRetryAsync(newest.FullName);
         fileContent.ShouldContain("Integration Test: Information Message");
 
-        // Cleanup
         try
         {
             Directory.Delete(customLogPath, true);
         }
         catch (IOException)
         {
-            // Ignore cleanup failures caused by file locks.
         }
         catch (UnauthorizedAccessException)
         {
-            // Ignore cleanup failures caused by file locks.
         }
     }
 
-    /// <summary>
-    /// Helper method to read a file with a short retry mechanism to handle file lock race conditions.
-    /// </summary>
     private static async Task<string> ReadFileWithRetryAsync(string filePath, int retries = 5, int delayMs = 100)
     {
-        for (int i = 0; i < retries; i++)
+        for (var i = 0; i < retries; i++)
         {
             try
             {
@@ -236,10 +216,10 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
         }
         return string.Empty;
     }
+
     [Fact(DisplayName = "Integration: custom sink type should be used when configured")]
     public async Task Build_WithCustomSinkType_UsesTheCustomSink()
     {
-        // Arrange
         InMemoryTestSink.Events.Clear();
         var client = _factory.WithWebHostBuilder(builder =>
         {
@@ -256,23 +236,18 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
             });
         }).CreateClient();
         InMemoryTestSink.Events.Clear();
-        // Act
-        await client.GetAsync("/");
-        // Assert
-        var loggedEvent = InMemoryTestSink.Events.FirstOrDefault(e => e.MessageTemplate.Text.Contains("Integration Test: Information Message, endpoint '/' was hit."));
 
+        await client.GetAsync("/");
+
+        var loggedEvent = InMemoryTestSink.Events.FirstOrDefault(e => e.MessageTemplate.Text.Contains("Integration Test: Information Message, endpoint '/' was hit."));
         loggedEvent.ShouldNotBeNull("An event containing the test message should have been logged.");
     }
+
     [Fact(DisplayName = "Integration: sink options dictionary should create file sink")]
     public async Task Build_WithSinkOptionsAsDictionary_CreatesAndWritesToFileSink()
     {
-        // Arrange
         var start = DateTime.UtcNow;
         string? customLogPath = null;
-        if (Directory.Exists(customLogPath))
-        {
-            Directory.Delete(customLogPath, true);
-        }
 
         var factory3 = _factory.WithWebHostBuilder(builder =>
         {
@@ -281,23 +256,22 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
                 var serviceProvider = services.BuildServiceProvider();
                 var appEnvironment = serviceProvider.GetRequiredService<IHostEnvironment>();
                 customLogPath = Path.Combine(appEnvironment.ContentRootPath, "DictionaryLogs");
+                if (Directory.Exists(customLogPath))
+                {
+                    Directory.Delete(customLogPath, true);
+                }
+
                 services.PostConfigure<LoggingOptions>(options =>
                 {
-                    // We start clean for this test
                     options.Sinks.Clear();
                     options.Sinks.Add(new SinkConfiguration
                     {
                         CommonType = CommonSinkType.File,
-
-                        // --- THIS IS THE KEY PART ---
-                        // We are providing the parameters as a dictionary,
-                        // simulating an advanced user.
                         SinkOptions = new Dictionary<string, object?>
                         {
-                        // Note: Keys must match the parameter names of the target method
-                        { "path", Path.Combine(customLogPath, "dict-log.txt") },
-                        { "rollingInterval", RollingInterval.Day },
-                        { "outputTemplate", options.DefaultOutputTemplate }
+                            { "path", Path.Combine(customLogPath, "dict-log.txt") },
+                            { "rollingInterval", RollingInterval.Day },
+                            { "outputTemplate", options.DefaultOutputTemplate }
                         }
                     });
                 });
@@ -306,32 +280,26 @@ public class IntegrationTests(WebApplicationFactory<Program> factory) : LoggingI
 
         var client = factory3.CreateClient();
 
-        // Act
         await client.GetAsync("/");
         await factory3.DisposeAsync();
 
-        // Assert
         Directory.Exists(customLogPath).ShouldBeTrue("The directory should be created based on dictionary configuration.");
 
-        var logFiles = Directory.GetFiles(customLogPath, "dict-log*.txt")
+        var logFiles = Directory.GetFiles(customLogPath!, "dict-log*.txt")
             .Select(f => new FileInfo(f))
             .Where(f => f.LastWriteTimeUtc >= start.AddSeconds(-1))
             .ToList();
         logFiles.ShouldNotBeEmpty("The log file should be created using parameters from the dictionary.");
 
-        // Cleanup
         try
         {
             Directory.Delete(customLogPath, true);
         }
         catch (IOException)
         {
-            // Ignore cleanup failures caused by file locks.
         }
         catch (UnauthorizedAccessException)
         {
-            // Ignore cleanup failures caused by file locks.
         }
     }
 }
-

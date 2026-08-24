@@ -2,7 +2,7 @@ using System.Reflection;
 using static KyrolusSous.Logging.Serilog.LoggingOptions;
 using Serilog.Context;
 
-namespace KyrolusSous.Logging.Tests;
+namespace KyrolusSous.Logging.UnitTests;
 
 public class BuilderCoverageTests
 {

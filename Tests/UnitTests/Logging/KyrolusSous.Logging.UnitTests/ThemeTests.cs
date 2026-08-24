@@ -1,7 +1,7 @@
 using KyrolusSous.Logging.Serilog.Theming;
 using Serilog.Sinks.SystemConsole.Themes;
 
-namespace KyrolusSous.Logging.Tests;
+namespace KyrolusSous.Logging.UnitTests;
 
 public class ThemeTests
 {
@@ -59,16 +59,43 @@ public class ThemeTests
         writer.ToString().ShouldBe("\x1b[0m");
     }
 
-    [Fact(DisplayName = "CustomConsoleThemeColors should expose predefined theme")]
-    public void CustomConsoleThemeColors_Should_Expose_Predefined_Theme()
+    [Fact(DisplayName = "CustomConsoleThemeColors should expose all modern themes")]
+    public void CustomConsoleThemeColors_Should_Expose_All_Modern_Themes()
     {
-        var theme = CustomConsoleThemeColors.VisualStudioMacLight;
-        using var writer = new StringWriter();
+        CustomConsoleTheme.Dracula.ShouldNotBeNull();
+        CustomConsoleTheme.Nord.ShouldNotBeNull();
+        CustomConsoleTheme.OneDark.ShouldNotBeNull();
+        CustomConsoleTheme.Cyberpunk.ShouldNotBeNull();
+        CustomConsoleTheme.MonokaiPro.ShouldNotBeNull();
+        CustomConsoleTheme.GitHubDark.ShouldNotBeNull();
+        CustomConsoleTheme.SolarizedDark.ShouldNotBeNull();
+        CustomConsoleTheme.VisualStudioMacLight.ShouldNotBeNull();
+    }
 
-        var len = theme.Set(writer, ConsoleThemeStyle.LevelInformation);
+    [Fact(DisplayName = "CustomAnsiConsoleTheme should expose all modern themes")]
+    public void CustomAnsiConsoleTheme_Should_Expose_All_Modern_Themes()
+    {
+        CustomAnsiConsoleTheme.Dracula.ShouldNotBeNull();
+        CustomAnsiConsoleTheme.Nord.ShouldNotBeNull();
+        CustomAnsiConsoleTheme.OneDark.ShouldNotBeNull();
+        CustomAnsiConsoleTheme.Cyberpunk.ShouldNotBeNull();
+        CustomAnsiConsoleTheme.MonokaiPro.ShouldNotBeNull();
+        CustomAnsiConsoleTheme.GitHubDark.ShouldNotBeNull();
+        CustomAnsiConsoleTheme.SolarizedDark.ShouldNotBeNull();
+        CustomAnsiConsoleTheme.VisualStudioMacLight.ShouldNotBeNull();
+    }
 
-        writer.ToString().ShouldBe("\u001b[42;1m\u001b[37;1m");
-        len.ShouldBe("\u001b[42;1m\u001b[37;1m".Length);
+    [Fact(DisplayName = "Dracula and Nord themes format levels correctly")]
+    public void ModernThemes_FormatLevels_Correctly()
+    {
+        using var draculaWriter = new StringWriter();
+        var draculaLen = CustomAnsiConsoleTheme.Dracula.Set(draculaWriter, ConsoleThemeStyle.LevelError);
+        draculaLen.ShouldBeGreaterThan(0);
+        draculaWriter.ToString().ShouldContain("255;85;85");
+
+        using var nordWriter = new StringWriter();
+        var nordLen = CustomAnsiConsoleTheme.Nord.Set(nordWriter, ConsoleThemeStyle.LevelInformation);
+        nordLen.ShouldBeGreaterThan(0);
+        nordWriter.ToString().ShouldContain("163;190;140");
     }
 }
-

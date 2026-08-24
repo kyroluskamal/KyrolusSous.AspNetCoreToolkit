@@ -4,7 +4,6 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <LangVersion>13.0</LangVersion>
     <RootNamespace>KyrolusSous.Logging.Serilog</RootNamespace>
   </PropertyGroup>
 
@@ -14,5 +13,9 @@
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
   </ItemGroup>
 
-</Project>
+  <ItemGroup>
+    <ProjectReference Include="..\KyrolusSous.Logging.Abstractions\KyrolusSous.Logging.Abstractions.csproj" />
+    <ProjectReference Include="..\KyrolusSous.Logging.Core\KyrolusSous.Logging.Core.csproj" />
+  </ItemGroup>
 
+</Project>

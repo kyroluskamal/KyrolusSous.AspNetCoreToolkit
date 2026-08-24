@@ -46,7 +46,7 @@
     <RepositoryUrl>https://github.com/kyroluskamal/KyrolusSous.AspNetCoreToolkit</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageTags>aspnetcore;cqrs;mediator;repository;efcore;marten;caching;validation;aot</PackageTags>
+    <PackageTags>aspnetcore;cqrs;mediator;repository;efcore;marten;caching;validation;logging;serilog;opentelemetry;observability;ecs;redaction;aot</PackageTags>
   </PropertyGroup>
 
   <!-- Deterministic, source-linked builds so consumers can debug into the packages. -->

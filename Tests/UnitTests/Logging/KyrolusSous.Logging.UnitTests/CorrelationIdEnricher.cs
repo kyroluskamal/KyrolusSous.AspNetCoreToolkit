@@ -1,4 +1,4 @@
-namespace KyrolusSous.Logging.Tests;
+namespace KyrolusSous.Logging.UnitTests;
 
 public static class MyCorrelationIdContext
 {

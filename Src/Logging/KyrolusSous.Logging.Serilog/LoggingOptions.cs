@@ -121,6 +121,132 @@ public class LoggingOptions
     internal bool AotDefaultsApplied { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether automated PII and sensitive data masking is enabled. Default is <c>true</c>.
+    /// </summary>
+    public bool EnableMasking { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets custom sensitive property names to be automatically masked.
+    /// </summary>
+    public List<string> CustomSensitiveKeywords { get; set; } = [];
+
+    /// <summary>
+    /// Adds and configures a console logging sink.
+    /// </summary>
+    public LoggingOptions AddConsole(Action<ConsoleSinkOptions>? configure = null)
+    {
+        var sinkOptions = new ConsoleSinkOptions
+        {
+            OutputTemplate = DefaultOutputTemplate
+        };
+        configure?.Invoke(sinkOptions);
+        Sinks.Add(new SinkConfiguration
+        {
+            CommonType = CommonSinkType.Console,
+            SinkOptions = sinkOptions
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Adds and configures a rolling file logging sink.
+    /// </summary>
+    public LoggingOptions AddFile(string path = "Logs/log-.txt", Action<FileSinkOptions>? configure = null)
+    {
+        var fileOptions = new FileSinkOptions
+        {
+            Path = path,
+            RollingInterval = RollingInterval.Day,
+            RetainedFileCountLimit = 31,
+            OutputTemplate = DefaultOutputTemplate
+        };
+        configure?.Invoke(fileOptions);
+        Sinks.Add(new SinkConfiguration
+        {
+            CommonType = CommonSinkType.File,
+            SinkOptions = fileOptions
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Adds and configures a Seq logging sink.
+    /// </summary>
+    public LoggingOptions AddSeq(string serverUrl = "http://localhost:5341", string? apiKey = null)
+    {
+        Sinks.Add(new SinkConfiguration
+        {
+            CommonType = CommonSinkType.Seq,
+            SinkOptions = new SeqSinkOptions { ServerUrl = serverUrl, ApiKey = apiKey }
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a custom generic sink configuration delegate (100% Native AOT friendly).
+    /// </summary>
+    public LoggingOptions AddCustomSink(Action<LoggerConfiguration> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        AotSinkRegistrations.Add(configure);
+        return this;
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether log storm flood protection / rate limiting is enabled.
+    /// </summary>
+    public bool EnableRateLimiting { get; set; }
+
+    /// <summary>
+    /// Gets or sets the max duplicates per rate limiting window.
+    /// </summary>
+    public int MaxDuplicateMessagesPerWindow { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets the sliding window duration for rate limiting.
+    /// </summary>
+    public TimeSpan RateLimitingWindow { get; set; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// Gets or sets a value indicating whether Elastic Common Schema (ECS) formatted JSON is enabled.
+    /// </summary>
+    public bool EnableEcsFormatting { get; set; }
+
+    /// <summary>
+    /// Gets or sets a dynamic level switch instance to change log levels in runtime.
+    /// </summary>
+    public LoggingLevelSwitch? DynamicLevelSwitch { get; set; }
+
+    /// <summary>
+    /// Configures log storm rate limiting.
+    /// </summary>
+    public LoggingOptions EnableRateLimiter(int maxDuplicates = 5, TimeSpan? window = null)
+    {
+        EnableRateLimiting = true;
+        MaxDuplicateMessagesPerWindow = maxDuplicates;
+        RateLimitingWindow = window ?? TimeSpan.FromMinutes(1);
+        return this;
+    }
+
+    /// <summary>
+    /// Enables Elastic Common Schema (ECS) JSON log formatting.
+    /// </summary>
+    public LoggingOptions UseEcsFormatting()
+    {
+        EnableEcsFormatting = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Attaches a dynamic level switch for runtime level manipulation.
+    /// </summary>
+    public LoggingOptions UseDynamicLevelSwitch(LoggingLevelSwitch levelSwitch)
+    {
+        DynamicLevelSwitch = levelSwitch ?? throw new ArgumentNullException(nameof(levelSwitch));
+        return this;
+    }
+
+    /// <summary>
     /// Default formatter options applied when no per-sink override is provided.
     /// </summary>
     public TextFormatterOptions DefaultFormatterOptions { get; set; } = new();

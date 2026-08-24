@@ -61,7 +61,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | EF.Generator - Integration<br><sub>Runs against an in-process SQLite TestApp.</sub> | integration | 133 | none | yes |
 | EF.Generator - Unit | unit | 67 | none | yes |
 | Marten.Runtime - FullPipeline | integration | 235 | postgres, redis | yes |
-| Logging | unit | 28 | none | yes |
+| Logging | unit | 59 | none | yes |
 | Mediator.Runtime - Unit | unit | 101 | none | yes |
 | Mediator.Generator - Unit | unit | 14 | none | yes |
 | Mediator.Reflection - Unit | unit | 52 | none | yes |
@@ -83,7 +83,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Elasticsearch - Unit | unit | 7 | none | yes |
 | Resilience - Unit | unit | 9 | none | yes |
 | Mapping - Unit | unit | 54 | none | yes |
-| **Total** | | **1687** | | |
+| **Total** | | **1718** | | |
 
 <!-- END:GENERATED:test-suites -->
 

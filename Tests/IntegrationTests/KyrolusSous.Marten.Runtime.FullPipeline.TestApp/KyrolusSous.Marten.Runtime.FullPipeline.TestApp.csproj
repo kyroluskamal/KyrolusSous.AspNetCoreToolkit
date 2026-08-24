@@ -26,7 +26,7 @@
     <ProjectReference Include="..\..\..\Src\ExceptionHandling\KyrolusSous.ExceptionHandling.Redis\KyrolusSous.ExceptionHandling.Redis.csproj" />
     <ProjectReference Include="..\..\..\Src\ExceptionHandling\KyrolusSous.ExceptionHandling.Runtime\KyrolusSous.ExceptionHandling.Runtime.csproj" />
     <ProjectReference Include="..\..\..\Src\Logging\KyrolusSous.Logging.Serilog\KyrolusSous.Logging.Serilog.csproj" />
-    <ProjectReference Include="..\..\..\Src\Logging\KyrolusSous.Logging.Runtime\KyrolusSous.Logging.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\Src\Logging\KyrolusSous.Logging.Core\KyrolusSous.Logging.Core.csproj" />
     <ProjectReference Include="..\..\..\Src\Mediator\KyrolusSous.Mediator.Runtime\KyrolusSous.Mediator.Runtime.csproj" />
     <!-- This app discovers its handlers by scanning, which now lives in the reflection package. -->
     <ProjectReference Include="..\..\..\Src\Mediator\KyrolusSous.Mediator.Reflection\KyrolusSous.Mediator.Reflection.csproj" />

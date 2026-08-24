@@ -57,9 +57,9 @@ Within a phase the order is loose - what matters is not starting a phase before 
 | 30 | `Mapping.Abstractions` | ✅ | 88.5% line coverage. Contracts, attributes, context, circular reference tracking, custom converters and resolvers |
 | 31 | `Mapping.Runtime` | ✅ | 85.7% line coverage. Zero-dependency pure .NET mapper engine, nested mapping, collections, flattening, and LINQ projections |
 | 32 | `Mapping.Generator` | ✅ | 88.6% line coverage. Roslyn Incremental Generator emitting pure C# 100% Native AOT mapping extension methods |
-| 32 | `Logging.Abstractions` | 🚫 | 23 lines |
-| 33 | `Logging.Runtime` | ⬜ | 79 lines |
-| 34 | `Logging.Serilog` | ⬜ | 28 tests |
+| 33 | `Logging.Abstractions` | ✅ | Contracts, Timers, LevelSwitch, Extensions (97.3% coverage) |
+| 34 | `Logging.Core` | ✅ | Pure Core logging engine, DataMasker, StringRedactor, ExceptionSanitizer, LogRateLimiter, HttpMiddleware (94.6% coverage) |
+| 35 | `Logging.Serilog` | ✅ | Serilog integration, ECS v1.12+ formatter, 8 Modern ANSI themes, Destructuring Policy, RateLimiting Filter, 64 tests (91.1% coverage) |
 
 ## Phase 2 - Repositories
 

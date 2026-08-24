@@ -1,7 +1,7 @@
 global using Serilog.Core;
 global using Serilog.Events;
 
-namespace KyrolusSous.Logging.Tests;
+namespace KyrolusSous.Logging.UnitTests;
 
 public class TestSink : ILogEventSink
 {

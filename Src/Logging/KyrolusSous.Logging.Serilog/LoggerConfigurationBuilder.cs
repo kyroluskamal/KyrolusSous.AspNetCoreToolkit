@@ -36,13 +36,34 @@ namespace KyrolusSous.Logging.Serilog
         };
         public static void Build(LoggerConfiguration loggerConfig, LoggingOptions options, IHostEnvironment environment)
         {
-            loggerConfig
-                .MinimumLevel.Is(options.MinimumLevel)
-                .Enrich.WithProperty("Application", options.ApplicationName);
+            if (options.DynamicLevelSwitch is not null)
+            {
+                loggerConfig.MinimumLevel.ControlledBy(options.DynamicLevelSwitch);
+            }
+            else
+            {
+                loggerConfig.MinimumLevel.Is(options.MinimumLevel);
+            }
+
+            loggerConfig.Enrich.WithProperty("Application", options.ApplicationName);
+
+            if (options.EnableRateLimiting)
+            {
+                var limiter = new KyrolusSous.Logging.Core.Filters.KyrolusLogRateLimiter(
+                    options.MaxDuplicateMessagesPerWindow,
+                    options.RateLimitingWindow);
+                loggerConfig.Filter.With(new KyrolusSous.Logging.Serilog.Filters.KyrolusSerilogRateLimitingFilter(limiter));
+            }
 
             foreach (var overrideRule in options.MinimumLevelOverrides)
             {
                 loggerConfig.MinimumLevel.Override(overrideRule.Key, overrideRule.Value);
+            }
+
+            if (options.EnableMasking)
+            {
+                var masker = new KyrolusSous.Logging.Core.Masking.KyrolusSensitiveDataMasker(options.CustomSensitiveKeywords);
+                loggerConfig.Destructure.With(new KyrolusSous.Logging.Serilog.Destructuring.KyrolusSerilogDestructuringPolicy(masker));
             }
 
             if (options.UseReflectionDiscovery)
@@ -164,10 +185,12 @@ namespace KyrolusSous.Logging.Serilog
                 return;
             }
 
-            // If this is the console sink and no formatter was explicitly provided, inject a CustomTextFormatter using the per-sink or default options.
+            // If this is the console sink and no formatter was explicitly provided, inject an ECS or CustomTextFormatter using the per-sink or default options.
             if (config.CommonType == CommonSinkType.Console && config.SinkOptions is LoggingOptions.ConsoleSinkOptions consoleSinkOptions && consoleSinkOptions.Formatter is null)
             {
-                consoleSinkOptions.Formatter = new CustomTextFormatter(formatterOptions);
+                consoleSinkOptions.Formatter = options.EnableEcsFormatting
+                    ? new KyrolusSous.Logging.Serilog.Formatters.KyrolusEcsJsonFormatter()
+                    : new CustomTextFormatter(formatterOptions);
             }
 
             var parameters = ConvertOptionsToDictionary(config.SinkOptions);
@@ -176,7 +199,9 @@ namespace KyrolusSous.Logging.Serilog
 
             if (config.CommonType == CommonSinkType.Console && !parameters.ContainsKey("formatter"))
             {
-                parameters["formatter"] = new CustomTextFormatter(formatterOptions);
+                parameters["formatter"] = options.EnableEcsFormatting
+                    ? new KyrolusSous.Logging.Serilog.Formatters.KyrolusEcsJsonFormatter()
+                    : new CustomTextFormatter(formatterOptions);
             }
 
             var label = config.CommonType != CommonSinkType.None

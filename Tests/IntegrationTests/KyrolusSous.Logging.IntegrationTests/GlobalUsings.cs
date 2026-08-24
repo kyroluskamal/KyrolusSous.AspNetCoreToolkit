@@ -1,0 +1,17 @@
+global using System;
+global using System.Collections.Generic;
+global using System.IO;
+global using System.Linq;
+global using System.Threading;
+global using System.Threading.Tasks;
+global using KyrolusSous.Logging.Abstractions;
+global using KyrolusSous.Logging.Core;
+global using KyrolusSous.Logging.Serilog;
+global using Microsoft.AspNetCore.Mvc.Testing;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Hosting;
+global using Serilog;
+global using Serilog.Core;
+global using Serilog.Events;
+global using Shouldly;
+global using Xunit;

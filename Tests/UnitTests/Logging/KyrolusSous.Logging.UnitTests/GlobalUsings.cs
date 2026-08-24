@@ -1,1 +1,14 @@
+global using KyrolusSous.Logging.Abstractions;
+global using KyrolusSous.Logging.Abstractions.Attributes;
+global using KyrolusSous.Logging.Abstractions.Timers;
+global using KyrolusSous.Logging.Core;
+global using KyrolusSous.Logging.Core.Correlation;
+global using KyrolusSous.Logging.Core.Masking;
+global using KyrolusSous.Logging.Core.Middleware;
 global using KyrolusSous.Logging.Serilog;
+global using Microsoft.Extensions.Configuration;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Logging;
+global using Microsoft.Extensions.Options;
+global using Shouldly;
+global using Xunit;

@@ -4,7 +4,7 @@ global using Serilog;
 global using Shouldly;
 using Serilog.Context;
 using static KyrolusSous.Logging.Serilog.LoggingOptions;
-namespace KyrolusSous.Logging.Tests;
+namespace KyrolusSous.Logging.UnitTests;
 #pragma warning disable S2094
 public class NotAnEnricher { }
 #pragma warning restore S2094
