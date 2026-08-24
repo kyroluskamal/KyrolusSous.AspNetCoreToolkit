@@ -21,15 +21,9 @@ public class KyrolusMartenSoftDeleteRepositoryAsync<TSession, TEntity, TKey>
 
     private void RefreshSoftDeletePolicy()
     {
-        var configuredName = SoftDeletePolicy?.PropertyName?.Trim();
-        if (string.IsNullOrWhiteSpace(configuredName))
-        {
-            enabled = false;
-            filterByDefault = false;
-            isDeletedPropertyName = string.Empty;
-            isDeletedProperty = null;
-            return;
-        }
+        var configuredName = string.IsNullOrWhiteSpace(SoftDeletePolicy?.PropertyName)
+            ? "IsDeleted"
+            : SoftDeletePolicy.PropertyName.Trim();
 
         var prop = isDeletedProperty;
         if (prop is null || !string.Equals(prop.Name, configuredName, StringComparison.OrdinalIgnoreCase))
@@ -374,19 +368,23 @@ public class KyrolusMartenSoftDeleteRepositoryAsync<TSession, TEntity, TKey>
 
     public async Task<bool> RestoreRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(entities);
         await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         RefreshSoftDeletePolicy();
         if (!enabled || string.IsNullOrEmpty(isDeletedPropertyName)) return false;
-        foreach (var entity in entities)
+        var array = entities.ToArray();
+        foreach (var entity in array)
         {
             ApplyProperty(entity, isDeletedPropertyName, false);
             Session.Store(entity);
         }
+        await InvalidateCacheAsync(array, tenantId, cancellationToken).ConfigureAwait(false);
         return true;
     }
 
     public async Task<int> RestoreWhereAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(filter);
         await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         RefreshSoftDeletePolicy();
         if (!enabled || string.IsNullOrEmpty(isDeletedPropertyName)) return 0;
@@ -397,10 +395,11 @@ public class KyrolusMartenSoftDeleteRepositoryAsync<TSession, TEntity, TKey>
 
     private async Task<bool> RestoreInternalAsync(TKey id, CancellationToken cancellationToken)
     {
-        var result = await base.GetByIdAsync(id, null, cancellationToken).ConfigureAwait(false);
+        var result = await base.GetByIdAsync(id, new MartenQueryOptions<TEntity>(IncludeSoftDeleted: true), cancellationToken).ConfigureAwait(false);
         if (result?.Entity is null) return false;
         ApplyProperty(result.Entity, isDeletedPropertyName, false);
         Session.Store(result.Entity);
+        await InvalidateCacheAsync(id, null, cancellationToken).ConfigureAwait(false);
         return true;
     }
 }

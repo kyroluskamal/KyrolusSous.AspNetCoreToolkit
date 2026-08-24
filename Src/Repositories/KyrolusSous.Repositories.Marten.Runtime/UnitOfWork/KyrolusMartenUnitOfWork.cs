@@ -1,12 +1,16 @@
 using KyrolusSous.Repositories.Marten.Abstractions.Interfaces;
+using KyrolusSous.Repositories.Marten.Abstractions.Outbox;
 using KyrolusSous.Repositories.Marten.Runtime.Repository;
 
 namespace KyrolusSous.Repositories.Marten.Runtime.UnitOfWork;
 
+/// <summary>
+/// Unit of work implementation for Marten document sessions with integrated outbox capabilities.
+/// </summary>
 public sealed class KyrolusMartenUnitOfWork<TSession>(
     TSession session,
     IServiceProvider? serviceProvider = null,
-    Func<Type, object?>? repositoryFactory = null) : IKyrolusMartenUnitOfWork<TSession>
+    Func<Type, object?>? repositoryFactory = null) : IKyrolusMartenUnitOfWork<TSession>, IKyrolusMartenOutboxStore
     where TSession : class, IDocumentSession
 {
     private readonly TSession session = session ?? throw new ArgumentNullException(nameof(session));
@@ -17,6 +21,8 @@ public sealed class KyrolusMartenUnitOfWork<TSession>(
 
     public TRepo GetRepository<TRepo>() where TRepo : class
     {
+        ObjectDisposedException.ThrowIf(disposed, this);
+
         var type = typeof(TRepo);
         if (cache.TryGetValue(type, out var existing)) return (TRepo)existing;
 
@@ -32,7 +38,6 @@ public sealed class KyrolusMartenUnitOfWork<TSession>(
     private object? BuildRepository(Type type)
     {
         if (serviceProvider is null) return null;
-        // handle IKyrolusMartenRepositoryAsync<TSession,TEntity,TKey>
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IKyrolusMartenRepositoryAsync<,,>))
         {
             var args = type.GetGenericArguments();
@@ -41,7 +46,6 @@ public sealed class KyrolusMartenUnitOfWork<TSession>(
                 .MakeGenericMethod(args);
             return factory.Invoke(null, [serviceProvider, session, null, true]);
         }
-        // handle soft delete specialization
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IKyrolusMartenSoftDeleteRepositoryAsync<,,>))
         {
             var args = type.GetGenericArguments();
@@ -64,16 +68,41 @@ public sealed class KyrolusMartenUnitOfWork<TSession>(
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        var sw = Stopwatch.StartNew();
-        try
+        ObjectDisposedException.ThrowIf(disposed, this);
+        await session.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return 1;
+    }
+
+    public Task EnqueueAsync(KyrolusMartenOutboxMessage message, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        ArgumentNullException.ThrowIfNull(message);
+        session.Store(message);
+        return Task.CompletedTask;
+    }
+
+    public async Task<IReadOnlyList<KyrolusMartenOutboxMessage>> GetPendingMessagesAsync(int batchSize = 100, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        var size = batchSize <= 0 ? 100 : batchSize;
+        var list = await session.Query<KyrolusMartenOutboxMessage>()
+            .Where(x => !x.Processed)
+            .OrderBy(x => x.OccurredOnUtc)
+            .Take(size)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return list;
+    }
+
+    public async Task MarkProcessedAsync(Guid messageId, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        var msg = await session.LoadAsync<KyrolusMartenOutboxMessage>(messageId, cancellationToken).ConfigureAwait(false);
+        if (msg is not null)
         {
-            await session.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            sw.Stop();
-            return 1;
-        }
-        finally
-        {
-            // no observer here; keep minimal for runtime baseline
+            msg.Processed = true;
+            msg.ProcessedAtUtc = DateTime.UtcNow;
+            session.Store(msg);
         }
     }
 

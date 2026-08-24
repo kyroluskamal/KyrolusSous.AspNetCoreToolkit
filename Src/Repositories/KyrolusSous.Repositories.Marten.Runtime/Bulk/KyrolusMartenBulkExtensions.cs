@@ -23,6 +23,7 @@ public static class KyrolusMartenBulkExtensions
             return Task.CompletedTask;
         }
 
-        return store.BulkInsertAsync(documents, batchSize: batchSize, cancellation: cancellationToken);
+        var normalizedBatchSize = batchSize <= 0 ? 1000 : batchSize;
+        return store.BulkInsertAsync(documents, batchSize: normalizedBatchSize, cancellation: cancellationToken);
     }
 }
