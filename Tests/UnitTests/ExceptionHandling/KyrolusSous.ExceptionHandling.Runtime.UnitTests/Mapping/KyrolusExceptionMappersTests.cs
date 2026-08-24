@@ -409,6 +409,45 @@ public class KyrolusExceptionMappersTests
         result.Error.Errors[0].Code.ShouldBe("invalid");
     }
 
+    [Fact(DisplayName = "KyrolusExceptionMappingService should unwrap TargetInvocationException and map inner exception")]
+    public void KyrolusExceptionMappingService_Should_Unwrap_TargetInvocationException()
+    {
+        var mappers = new IKyrolusExceptionMapper[]
+        {
+            new KyrolusDomainExceptionMapper(),
+            new KyrolusFrameworkExceptionMapper()
+        };
+
+        var service = new KyrolusExceptionMappingService(mappers);
+        var domainEx = new KyrolusDomainException(HttpStatusCode.NotFound, "user_not_found", "User Not Found", "User 42 does not exist");
+        var tie = new System.Reflection.TargetInvocationException("Invocation error", domainEx);
+
+        var result = service.Map(tie, TestContext);
+
+        result.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        result.Error.Code.ShouldBe("user_not_found");
+        result.Error.Title.ShouldBe("User Not Found");
+    }
+
+    [Fact(DisplayName = "KyrolusExceptionMappingService should unwrap single AggregateException and map inner exception")]
+    public void KyrolusExceptionMappingService_Should_Unwrap_Single_AggregateException()
+    {
+        var mappers = new IKyrolusExceptionMapper[]
+        {
+            new KyrolusDomainExceptionMapper(),
+            new KyrolusFrameworkExceptionMapper()
+        };
+
+        var service = new KyrolusExceptionMappingService(mappers);
+        var argEx = new ArgumentException("Invalid price specified");
+        var aggregate = new AggregateException("Task failed", argEx);
+
+        var result = service.Map(aggregate, TestContext);
+
+        result.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        result.Error.Code.ShouldBe(KyrolusErrorCodes.BadRequest);
+    }
+
     public sealed class TestOrderLockedException(string orderId, string lockedBy, string reason)
         : Exception($"Order {orderId} is locked: {reason}"), IKyrolusExceptionWithMetadata, IKyrolusExceptionWithErrors
     {

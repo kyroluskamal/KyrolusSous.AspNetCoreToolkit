@@ -48,7 +48,19 @@ public class KyrolusDefaultErrorMetadataSanitizerTests
         result.ShouldBeSameAs(metadata);
     }
 
-    [Fact(DisplayName = "Sanitize should remove all default sensitive keys case-insensitively")]
+    [Fact(DisplayName = "Sanitize should return non-null dictionary when metadata is null")]
+    public void Sanitize_Should_Return_NonNull_When_Metadata_Is_Null()
+    {
+        var options = Options.Create(new KyrolusExceptionHandlingOptions());
+        var sanitizer = new KyrolusDefaultErrorMetadataSanitizer(options);
+
+        var result = sanitizer.Sanitize(null, TestErrorContext);
+
+        result.ShouldNotBeNull();
+        result.Count.ShouldBe(0);
+    }
+
+    [Fact(DisplayName = "Sanitize should remove all default sensitive keys and partial sensitive substrings")]
     public void Sanitize_Should_Remove_Sensitive_Keys_CaseInsensitively()
     {
         var options = Options.Create(new KyrolusExceptionHandlingOptions());
@@ -57,13 +69,17 @@ public class KyrolusDefaultErrorMetadataSanitizerTests
         var metadata = new Dictionary<string, object?>
         {
             ["PASSWORD"] = "secret1",
+            ["user_password"] = "secret1-sub",
+            ["db_secret_key"] = "db-pass",
             ["Pwd"] = "secret2",
             ["secret"] = "secret3",
             ["TOKEN"] = "token1",
+            ["auth_token"] = "jwt-val",
             ["Authorization"] = "Bearer token",
             ["cookie"] = "session=123",
             ["Set-Cookie"] = "session=123",
             ["api-key"] = "key1",
+            ["custom_apiKey_header"] = "key-sub",
             ["APIKEY"] = "key2",
             ["access_token"] = "token2",
             ["Refresh_Token"] = "token3",
@@ -81,13 +97,17 @@ public class KyrolusDefaultErrorMetadataSanitizerTests
         result.ShouldContainKey("attempt");
 
         result.ShouldNotContainKey("PASSWORD");
+        result.ShouldNotContainKey("user_password");
+        result.ShouldNotContainKey("db_secret_key");
         result.ShouldNotContainKey("Pwd");
         result.ShouldNotContainKey("secret");
         result.ShouldNotContainKey("TOKEN");
+        result.ShouldNotContainKey("auth_token");
         result.ShouldNotContainKey("Authorization");
         result.ShouldNotContainKey("cookie");
         result.ShouldNotContainKey("Set-Cookie");
         result.ShouldNotContainKey("api-key");
+        result.ShouldNotContainKey("custom_apiKey_header");
         result.ShouldNotContainKey("APIKEY");
         result.ShouldNotContainKey("access_token");
         result.ShouldNotContainKey("Refresh_Token");

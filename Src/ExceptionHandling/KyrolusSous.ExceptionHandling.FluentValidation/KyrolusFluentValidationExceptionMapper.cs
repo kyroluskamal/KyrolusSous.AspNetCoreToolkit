@@ -18,16 +18,17 @@ public sealed class KyrolusFluentValidationExceptionMapper : IKyrolusExceptionMa
             return false;
         }
 
-        var errors = validationException.Errors
+        var errors = validationException.Errors?
+            .Where(e => e is not null)
             .Select(error => new KyrolusErrorItem(error.PropertyName, error.ErrorCode ?? "validation_error", error.ErrorMessage))
-            .ToArray();
+            .ToArray() ?? [];
 
         mapping = KyrolusExceptionMapping.Create(
             code: KyrolusErrorCodes.Validation,
             title: "Validation failed",
             statusCode: HttpStatusCode.BadRequest,
             detail: "One or more validation errors occurred.",
-            traceId: context.TraceId,
+            traceId: context?.TraceId,
             errors: [.. errors],
             metadata: KyrolusMetadataExtractor.Extract(validationException))
             .WithoutLogging();

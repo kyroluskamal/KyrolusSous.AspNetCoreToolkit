@@ -20,6 +20,8 @@ public sealed class KyrolusFrameworkExceptionMapper : IKyrolusExceptionMapper
             JsonException => (HttpStatusCode.BadRequest, KyrolusErrorCodes.InvalidJson, "Invalid JSON payload", false, false),
             CultureNotFoundException => (HttpStatusCode.BadRequest, KyrolusErrorCodes.BadRequest, "Invalid culture", false, false),
             ArgumentException => (HttpStatusCode.BadRequest, KyrolusErrorCodes.BadRequest, "Invalid argument", false, false),
+            FormatException => (HttpStatusCode.BadRequest, KyrolusErrorCodes.BadRequest, "Invalid format", false, false),
+            NotImplementedException => (HttpStatusCode.NotImplemented, KyrolusErrorCodes.InternalError, "Feature not implemented", false, true),
             NotSupportedException => (HttpStatusCode.BadRequest, KyrolusErrorCodes.BadRequest, "Operation not supported", false, false),
             _ => null
         };
@@ -38,7 +40,7 @@ public sealed class KyrolusFrameworkExceptionMapper : IKyrolusExceptionMapper
             statusCode: statusCode,
             errors: (exception as IKyrolusExceptionWithErrors)?.GetErrors(),
             detail: exception.Message,
-            traceId: context.TraceId,
+            traceId: context?.TraceId,
             metadata: KyrolusMetadataExtractor.Extract(exception))
             .AsTransient(isTransient)
             .WithLogging(shouldLog);

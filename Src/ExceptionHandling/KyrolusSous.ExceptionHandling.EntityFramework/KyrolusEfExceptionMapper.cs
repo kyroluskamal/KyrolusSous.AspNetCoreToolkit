@@ -20,7 +20,7 @@ public sealed class KyrolusEfExceptionMapper : IKyrolusExceptionMapper
                 title: "Concurrency conflict",
                 statusCode: HttpStatusCode.Conflict,
                 detail: exception.Message,
-                traceId: context.TraceId,
+                traceId: context?.TraceId,
                 errors: (exception as IKyrolusExceptionWithErrors)?.GetErrors(),
                 metadata: KyrolusMetadataExtractor.Extract(exception))
                 .AsTransient();
@@ -40,7 +40,7 @@ public sealed class KyrolusEfExceptionMapper : IKyrolusExceptionMapper
                 title: "Database error",
                 statusCode: HttpStatusCode.InternalServerError,
                 detail: updateException.Message,
-                traceId: context.TraceId,
+                traceId: context?.TraceId,
                 errors: (exception as IKyrolusExceptionWithErrors)?.GetErrors(),
                 metadata: KyrolusMetadataExtractor.Extract(updateException))
                 .AsTransient(isTransient);
