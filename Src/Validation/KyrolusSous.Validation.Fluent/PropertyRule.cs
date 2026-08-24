@@ -62,9 +62,9 @@ public sealed class PropertyRule<T, TProperty> : IRuleBuilder<T, TProperty>, IVa
 
     public IRuleBuilder<T, TProperty> WithMessage(string message)
     {
-        foreach (var step in _steps)
+        if (_steps.Count > 0)
         {
-            step.CustomMessage = message;
+            _steps[^1].CustomMessage = message;
         }
         return this;
     }

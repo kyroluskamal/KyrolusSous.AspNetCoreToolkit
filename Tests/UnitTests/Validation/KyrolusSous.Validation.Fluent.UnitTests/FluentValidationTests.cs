@@ -62,6 +62,33 @@ public sealed class FluentValidationTests
         failures.ShouldBeEmpty();
     }
 
+    [Fact(DisplayName = "Chained WithMessage keeps distinct messages per rule step")]
+    public async Task Chained_WithMessage_keeps_distinct_messages_per_rule()
+    {
+        var validator = new ChainedMessageValidator();
+        
+        // Empty email should trigger NotEmpty custom message, NOT EmailAddress message
+        var emptyEmailResult = await validator.ValidateAsync(new ChainedTarget(""));
+        emptyEmailResult.Count.ShouldBe(1);
+        emptyEmailResult[0].ErrorMessage.ShouldBe("Email is required.");
+
+        // Non-empty but invalid format should trigger EmailAddress custom message
+        var invalidEmailResult = await validator.ValidateAsync(new ChainedTarget("not-an-email"));
+        invalidEmailResult.Count.ShouldBe(1);
+        invalidEmailResult[0].ErrorMessage.ShouldBe("Email format is invalid.");
+    }
+
+    private sealed record ChainedTarget(string Email);
+    private sealed class ChainedMessageValidator : KyrolusAbstractValidator<ChainedTarget>
+    {
+        public ChainedMessageValidator()
+        {
+            RuleFor(x => x.Email)
+                .NotEmpty().WithMessage("Email is required.")
+                .EmailAddress().WithMessage("Email format is invalid.");
+        }
+    }
+
     [Fact(DisplayName = "Valid Egyptian National ID succeeds validation")]
     public void Valid_Egyptian_National_ID_succeeds()
     {
@@ -105,11 +132,17 @@ public sealed class FluentValidationTests
         AdvancedRuleBuilderExtensions.IsJsonValid("{malformed_json}").ShouldBeFalse();
     }
 
-    [Fact(DisplayName = "Base64 validator correctly evaluates base64 strings")]
+    [Fact(DisplayName = "Base64 validator correctly evaluates base64 strings and large inputs")]
     public void Base64_validator_evaluates_correctly()
     {
         AdvancedRuleBuilderExtensions.IsBase64Valid("SGVsbG8gV29ybGQ=").ShouldBeTrue();
         AdvancedRuleBuilderExtensions.IsBase64Valid("!!!NotBase64!!!").ShouldBeFalse();
+
+        // Large Base64 string test (exercises ArrayPool path)
+        var largeBytes = new byte[1024];
+        new Random(42).NextBytes(largeBytes);
+        var largeBase64 = Convert.ToBase64String(largeBytes);
+        AdvancedRuleBuilderExtensions.IsBase64Valid(largeBase64).ShouldBeTrue();
     }
 
     [Fact(DisplayName = "Coordinates validator correctly evaluates latitude and longitude")]

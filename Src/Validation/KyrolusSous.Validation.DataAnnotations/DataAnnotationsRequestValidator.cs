@@ -3,8 +3,11 @@ using KyrolusSous.Validation.Abstractions;
 
 namespace KyrolusSous.Validation.DataAnnotations;
 
-public sealed class DataAnnotationsRequestValidator<TRequest> : IKyrolusRequestValidatorWithContext<TRequest>
+public sealed class DataAnnotationsRequestValidator<TRequest>(IServiceProvider? serviceProvider = null)
+    : IKyrolusRequestValidatorWithContext<TRequest>
 {
+    private readonly IServiceProvider? _serviceProvider = serviceProvider;
+
     public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(
         TRequest request, CancellationToken cancellationToken = default) => ValidateAsync(request, KyrolusValidationContext.Default, cancellationToken);
 
@@ -20,12 +23,12 @@ public sealed class DataAnnotationsRequestValidator<TRequest> : IKyrolusRequestV
                 [new KyrolusValidationFailure(string.Empty, "Request is required.")]);
 
         var results = new List<ValidationResult>();
-        var validationContext = new ValidationContext(request, serviceProvider: null, items: null);
+        var validationContext = new ValidationContext(request, serviceProvider: _serviceProvider, items: null);
         if (context is not null)
             validationContext.Items[nameof(KyrolusValidationContext)] = context;
 
         var isValid = Validator.TryValidateObject(request, validationContext, results, validateAllProperties: true);
-        
+
         if (isValid)
             return ValueTask.FromResult<IReadOnlyList<KyrolusValidationFailure>>([]);
 

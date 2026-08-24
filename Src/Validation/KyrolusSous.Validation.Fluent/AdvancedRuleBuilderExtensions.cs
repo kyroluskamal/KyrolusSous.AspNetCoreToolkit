@@ -39,7 +39,7 @@ public static class AdvancedRuleBuilderExtensions
             int month = int.Parse(sanitized.Substring(3, 2));
             int day = int.Parse(sanitized.Substring(5, 2));
 
-            if (!DateTime.TryParse($"{year:D4}-{month:D2}-{day:D2}", out _)) return false;
+            if (!DateOnly.TryParseExact($"{year:D4}-{month:D2}-{day:D2}", "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _)) return false;
 
             // Governorate code check (01 to 88)
             int govCode = int.Parse(sanitized.Substring(7, 2));
@@ -138,13 +138,30 @@ public static class AdvancedRuleBuilderExtensions
     }
 
     /// <summary>
-    /// Validates Base64 encoded strings.
+    /// Validates Base64 encoded strings safely without risking StackOverflowException on large inputs.
     /// </summary>
     public static bool IsBase64Valid(string? base64)
     {
         if (string.IsNullOrWhiteSpace(base64)) return false;
-        Span<byte> buffer = stackalloc byte[base64.Length];
-        return Convert.TryFromBase64String(base64, buffer, out _);
+        var trimmed = base64.Trim();
+        if (trimmed.Length % 4 != 0) return false;
+
+        const int StackAllocThreshold = 256;
+        if (trimmed.Length <= StackAllocThreshold)
+        {
+            Span<byte> buffer = stackalloc byte[StackAllocThreshold];
+            return Convert.TryFromBase64String(trimmed, buffer, out _);
+        }
+
+        byte[] rented = System.Buffers.ArrayPool<byte>.Shared.Rent(trimmed.Length);
+        try
+        {
+            return Convert.TryFromBase64String(trimmed, rented, out _);
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<byte>.Shared.Return(rented);
+        }
     }
 
     /// <summary>

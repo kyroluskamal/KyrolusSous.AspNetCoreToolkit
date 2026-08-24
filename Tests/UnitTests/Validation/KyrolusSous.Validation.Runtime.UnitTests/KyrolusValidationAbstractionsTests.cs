@@ -12,15 +12,24 @@ public class KyrolusValidationAbstractionsTests
     #endregion
 
     #region KyrolusValidationException
-    [Fact(DisplayName = "KyrolusValidationException should store errors list and default message")]
+    [Fact(DisplayName = "KyrolusValidationException should format rich message and store errors list")]
     public void KyrolusValidationException_ShouldStoreErrorsAndMessage()
     {
-        IReadOnlyList<KyrolusValidationFailure> errors = [new KyrolusValidationFailure("Prop", "Error")];
+        IReadOnlyList<KyrolusValidationFailure> errors = [
+            new KyrolusValidationFailure("Email", "Email is required"),
+            new KyrolusValidationFailure("Age", "Must be at least 18")
+        ];
         var exception = new KyrolusValidationException(errors);
 
-        exception.Message.ShouldBe("Validation failed.");
+        exception.Message.ShouldBe("Validation failed for 2 rule(s): Email: Email is required; Age: Must be at least 18");
         exception.Errors.ShouldBe(errors);
-        exception.Errors.Count.ShouldBe(1);
+        exception.Errors.Count.ShouldBe(2);
+
+        var customMsgEx = new KyrolusValidationException("Custom failure message", errors);
+        customMsgEx.Message.ShouldBe("Custom failure message");
+
+        var emptyEx = new KyrolusValidationException([]);
+        emptyEx.Message.ShouldBe("Validation failed.");
     }
     #endregion
 
