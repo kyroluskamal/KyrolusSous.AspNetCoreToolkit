@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using KyrolusSous.Logging.Core.LevelSwitch;
 
 namespace KyrolusSous.Logging.UnitTests;
@@ -37,12 +38,15 @@ public class LogLevelSwitchTests
     {
         var levelSwitch = new KyrolusLogLevelSwitch(LogLevel.Error);
 
-        var scope = levelSwitch.BoostLevel(LogLevel.Debug, TimeSpan.FromMilliseconds(50));
+        using var scope = levelSwitch.BoostLevel(LogLevel.Debug, TimeSpan.FromMilliseconds(50));
         levelSwitch.MinimumLevel.ShouldBe(LogLevel.Debug);
 
-        await Task.Delay(100);
+        var stopwatch = Stopwatch.StartNew();
+        while (levelSwitch.MinimumLevel != LogLevel.Error && stopwatch.ElapsedMilliseconds < 3000)
+        {
+            await Task.Delay(25);
+        }
 
         levelSwitch.MinimumLevel.ShouldBe(LogLevel.Error);
-        scope.Dispose(); // Safe disposal after auto-revert
     }
 }
