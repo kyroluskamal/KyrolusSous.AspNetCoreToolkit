@@ -1,9 +1,13 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net10.0;netstandard2.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageId>KyrolusSous.Mapping.Abstractions</PackageId>
+    <Description>Contracts, attributes, context, and interfaces for the KyrolusSous high-performance, Native AOT object mapping ecosystem.</Description>
   </PropertyGroup>
 
 </Project>

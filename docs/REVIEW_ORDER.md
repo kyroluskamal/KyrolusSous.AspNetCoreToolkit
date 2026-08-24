@@ -54,8 +54,9 @@ Within a phase the order is loose - what matters is not starting a phase before 
 | 27 | `Caching.Abstractions` | ✅ | 94.4% line coverage. Serializers, multi-algorithm payload transformers, key factories, telemetry & policies |
 | 28 | `Caching.Redis` | ✅ | Redis L2 & NearCache (L1+L2), Lua-based distributed locking, Pub/Sub bus, IDistributedCache & IOutputCacheStore adapters |
 | 29 | `Caching.MessagePack` | ✅ | 100% line coverage. Binary MessagePack cache serializer with optional LZ4 block compression |
-| 30 | `Mapping.Abstractions` | 🚫 | 8 lines |
-| 31 | `Mapping.Mapster` | ⬜ | 30 lines |
+| 30 | `Mapping.Abstractions` | ✅ | 88.5% line coverage. Contracts, attributes, context, circular reference tracking, custom converters and resolvers |
+| 31 | `Mapping.Runtime` | ✅ | 85.7% line coverage. Zero-dependency pure .NET mapper engine, nested mapping, collections, flattening, and LINQ projections |
+| 32 | `Mapping.Generator` | ✅ | 88.6% line coverage. Roslyn Incremental Generator emitting pure C# 100% Native AOT mapping extension methods |
 | 32 | `Logging.Abstractions` | 🚫 | 23 lines |
 | 33 | `Logging.Runtime` | ⬜ | 79 lines |
 | 34 | `Logging.Serilog` | ⬜ | 28 tests |

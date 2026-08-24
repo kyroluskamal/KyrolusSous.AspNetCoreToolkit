@@ -197,6 +197,13 @@
       "kind": "unit",
       "services": [],
       "ci": true
+    },
+    {
+      "name": "Mapping - Unit",
+      "project": "Tests/UnitTests/Mapping/KyrolusSous.Mapping.UnitTests/KyrolusSous.Mapping.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
     }
   ],
 

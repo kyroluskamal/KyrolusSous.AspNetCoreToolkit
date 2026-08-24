@@ -82,7 +82,8 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | OpenApi - Integration | integration | 7 | none | yes |
 | Elasticsearch - Unit | unit | 7 | none | yes |
 | Resilience - Unit | unit | 9 | none | yes |
-| **Total** | | **1633** | | |
+| Mapping - Unit | unit | 54 | none | yes |
+| **Total** | | **1687** | | |
 
 <!-- END:GENERATED:test-suites -->
 
