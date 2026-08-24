@@ -1,7 +1,20 @@
-using System.Collections.Concurrent;
-
 namespace KyrolusSous.Caching.Abstractions;
 
+/// <summary>
+/// Thread-safe registry providing hierarchical policy lookup for repository operations.
+/// Supports granular configurations per Tenant, Entity Type, Operation, or Global Defaults.
+/// </summary>
+/// <remarks>
+/// <b>Resolution Precedence Order:</b>
+/// <list type="number">
+///   <item><description>Tenant + Entity Type + Operation (<c>SetForTenantType&lt;T&gt;</c>)</description></item>
+///   <item><description>Tenant + Operation (<c>SetForTenantOperation</c>)</description></item>
+///   <item><description>Tenant Global (<c>SetForTenant</c>)</description></item>
+///   <item><description>Entity Type + Operation (<c>SetForType&lt;T&gt;</c>)</description></item>
+///   <item><description>Operation Global (<c>SetForOperation</c>)</description></item>
+///   <item><description>Fallback Default (<c>SetDefault</c>)</description></item>
+/// </list>
+/// </remarks>
 public sealed class KyrolusRepositoryCachePolicyRegistry : IKyrolusRepositoryCachePolicyProvider
 {
     private readonly ConcurrentDictionary<(string TenantId, Type, string), KyrolusCachePolicy> byTenantTypeAndOperation = new();
@@ -11,12 +24,23 @@ public sealed class KyrolusRepositoryCachePolicyRegistry : IKyrolusRepositoryCac
     private readonly ConcurrentDictionary<string, KyrolusCachePolicy> byOperation = new();
     private KyrolusCachePolicy? defaultPolicy;
 
+    /// <summary>
+    /// Sets the fallback default cache policy applied to all repository operations.
+    /// </summary>
+    /// <param name="policy">The fallback cache policy.</param>
+    /// <returns>The current registry instance for fluent chaining.</returns>
     public KyrolusRepositoryCachePolicyRegistry SetDefault(KyrolusCachePolicy policy)
     {
         defaultPolicy = policy ?? throw new ArgumentNullException(nameof(policy));
         return this;
     }
 
+    /// <summary>
+    /// Sets a cache policy applicable to any entity executing the specified operation (e.g. "GetById").
+    /// </summary>
+    /// <param name="operation">The repository operation name.</param>
+    /// <param name="policy">The policy to apply.</param>
+    /// <returns>The current registry instance for fluent chaining.</returns>
     public KyrolusRepositoryCachePolicyRegistry SetForOperation(string operation, KyrolusCachePolicy policy)
     {
         if (string.IsNullOrWhiteSpace(operation))
@@ -25,6 +49,12 @@ public sealed class KyrolusRepositoryCachePolicyRegistry : IKyrolusRepositoryCac
         return this;
     }
 
+    /// <summary>
+    /// Sets a tenant-wide cache policy applicable to all operations for the specified tenant.
+    /// </summary>
+    /// <param name="tenantId">The unique tenant ID.</param>
+    /// <param name="policy">The policy to apply.</param>
+    /// <returns>The current registry instance for fluent chaining.</returns>
     public KyrolusRepositoryCachePolicyRegistry SetForTenant(string tenantId, KyrolusCachePolicy policy)
     {
         if (string.IsNullOrWhiteSpace(tenantId))
@@ -33,6 +63,13 @@ public sealed class KyrolusRepositoryCachePolicyRegistry : IKyrolusRepositoryCac
         return this;
     }
 
+    /// <summary>
+    /// Sets a cache policy for a specific tenant and operation.
+    /// </summary>
+    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="operation">The repository operation name.</param>
+    /// <param name="policy">The policy to apply.</param>
+    /// <returns>The current registry instance for fluent chaining.</returns>
     public KyrolusRepositoryCachePolicyRegistry SetForTenantOperation(string tenantId, string operation, KyrolusCachePolicy policy)
     {
         if (string.IsNullOrWhiteSpace(tenantId))
@@ -43,6 +80,14 @@ public sealed class KyrolusRepositoryCachePolicyRegistry : IKyrolusRepositoryCac
         return this;
     }
 
+    /// <summary>
+    /// Sets a cache policy for a specific tenant, entity type <typeparamref name="T"/>, and operation.
+    /// </summary>
+    /// <typeparam name="T">The database entity type.</typeparam>
+    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="operation">The repository operation name.</param>
+    /// <param name="policy">The policy to apply.</param>
+    /// <returns>The current registry instance for fluent chaining.</returns>
     public KyrolusRepositoryCachePolicyRegistry SetForTenantType<T>(string tenantId, string operation, KyrolusCachePolicy policy)
     {
         if (string.IsNullOrWhiteSpace(tenantId))
@@ -53,6 +98,13 @@ public sealed class KyrolusRepositoryCachePolicyRegistry : IKyrolusRepositoryCac
         return this;
     }
 
+    /// <summary>
+    /// Sets a cache policy for an entity type <typeparamref name="T"/> and operation across all tenants.
+    /// </summary>
+    /// <typeparam name="T">The database entity type.</typeparam>
+    /// <param name="operation">The repository operation name.</param>
+    /// <param name="policy">The policy to apply.</param>
+    /// <returns>The current registry instance for fluent chaining.</returns>
     public KyrolusRepositoryCachePolicyRegistry SetForType<T>(string operation, KyrolusCachePolicy policy)
     {
         if (string.IsNullOrWhiteSpace(operation))
@@ -61,6 +113,7 @@ public sealed class KyrolusRepositoryCachePolicyRegistry : IKyrolusRepositoryCac
         return this;
     }
 
+    /// <inheritdoc />
     public ValueTask<KyrolusCachePolicy?> GetPolicyAsync(
         KyrolusRepositoryCachePolicyContext context,
         CancellationToken cancellationToken = default)

@@ -1,8 +1,15 @@
-using Microsoft.Extensions.Diagnostics.HealthChecks;
-using StackExchange.Redis;
-
 namespace KyrolusSous.Caching.Redis;
 
+/// <summary>
+/// ASP.NET Core <see cref="IHealthCheck"/> implementation for Redis cache connectivity and PING roundtrip latency.
+/// </summary>
+/// <remarks>
+/// <b>Real-World Use Case:</b>
+/// Integrated into <c>/health</c> and <c>/health/ready</c> HTTP endpoints to alert DevOps monitoring 
+/// or trigger Kubernetes automated pod restarts if the Redis connection drops.
+/// </remarks>
+/// <param name="multiplexer">The active Redis connection multiplexer.</param>
+/// <param name="options">Health check options.</param>
 public sealed class KyrolusRedisCacheHealthCheck(
     IConnectionMultiplexer multiplexer,
     KyrolusRedisCacheHealthCheckOptions? options = null) : IHealthCheck
@@ -10,6 +17,7 @@ public sealed class KyrolusRedisCacheHealthCheck(
     private readonly IConnectionMultiplexer multiplexer = multiplexer ?? throw new ArgumentNullException(nameof(multiplexer));
     private readonly KyrolusRedisCacheHealthCheckOptions options = options ?? new KyrolusRedisCacheHealthCheckOptions();
 
+    /// <inheritdoc />
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
         if (!multiplexer.IsConnected)

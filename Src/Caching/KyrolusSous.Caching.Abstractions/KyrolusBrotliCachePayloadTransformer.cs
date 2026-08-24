@@ -1,12 +1,22 @@
-using System.IO.Compression;
-using KyrolusSous.Compression;
-
 namespace KyrolusSous.Caching.Abstractions;
 
 /// <summary>
-/// Payload transformer utilizing Google's Brotli compression for maximum compression ratio.
-/// Uses native .NET BrotliStream (zero external dependencies).
+/// A high-performance payload transformer utilizing Google's Brotli compression algorithm for maximum compression ratio.
+/// Built exclusively on native .NET BCL <see cref="BrotliStream"/> with zero external dependencies.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>Payload Framing Format:</b>
+/// <c>[4-byte Magic Header 'KYCB'][1-byte Flag (0=Raw, 1=Compressed)][Payload Body]</c>
+/// </para>
+/// <para>
+/// <b>Threshold Optimization:</b>
+/// If the serialized payload size is smaller than <paramref name="minSizeBytes"/>, compression is skipped 
+/// to avoid wasting CPU cycles and CPU overhead on tiny objects. The payload is stored with the <c>RawFlag</c> (0).
+/// </para>
+/// </remarks>
+/// <param name="minSizeBytes">Minimum payload byte length required to trigger compression. Defaults to 1024 bytes (1 KB).</param>
+/// <param name="level">The compression quality/speed tradeoff level. Defaults to <see cref="CompressionLevel.Fastest"/>.</param>
 public sealed class KyrolusBrotliCachePayloadTransformer(
     int minSizeBytes = 1024,
     CompressionLevel level = CompressionLevel.Fastest) : IKyrolusCachePayloadTransformer
@@ -18,8 +28,15 @@ public sealed class KyrolusBrotliCachePayloadTransformer(
     private readonly int minSizeBytes = Math.Max(0, minSizeBytes);
     private readonly CompressionLevel level = level;
 
+    /// <summary>
+    /// Compresses the serialized byte payload using Brotli if size meets or exceeds <c>minSizeBytes</c>.
+    /// </summary>
+    /// <param name="payload">The original serialized byte array.</param>
+    /// <returns>A framed byte array containing the 'KYCB' header, compression flag, and the data.</returns>
     public byte[] Transform(byte[] payload)
     {
+        ArgumentNullException.ThrowIfNull(payload);
+
         if (payload.Length < minSizeBytes)
         {
             return BuildRawPayload(payload);
@@ -39,8 +56,15 @@ public sealed class KyrolusBrotliCachePayloadTransformer(
         return result;
     }
 
+    /// <summary>
+    /// Decompresses the Brotli-compressed byte array back to the original serialized payload.
+    /// </summary>
+    /// <param name="payload">The framed byte array read from cache.</param>
+    /// <returns>The uncompressed original serialized byte array.</returns>
     public byte[] Restore(byte[] payload)
     {
+        ArgumentNullException.ThrowIfNull(payload);
+
         if (!HasHeader(payload))
         {
             return payload;

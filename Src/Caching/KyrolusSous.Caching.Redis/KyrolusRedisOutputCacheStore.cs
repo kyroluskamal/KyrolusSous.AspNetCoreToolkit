@@ -1,12 +1,15 @@
-using KyrolusSous.Caching.Abstractions;
-using Microsoft.AspNetCore.OutputCaching;
-using StackExchange.Redis;
-
 namespace KyrolusSous.Caching.Redis;
 
 /// <summary>
-/// Implements ASP.NET Core <see cref="IOutputCacheStore"/> backed by Redis with tag invalidation support.
+/// Implements ASP.NET Core 7/8/9/10 <see cref="IOutputCacheStore"/> backed by Redis with atomic Lua tag-based invalidation.
 /// </summary>
+/// <remarks>
+/// <b>Real-World Use Case (Full HTTP Response Output Caching):</b>
+/// Allows decorating controller endpoints or Minimal APIs with <c>[OutputCache(Duration = 60, Tags = ["blog"])]</c>.
+/// The entire HTTP response (headers, status code, JSON/HTML body) is stored in Redis. 
+/// Subsequent HTTP GET requests are served directly from Redis in 1 millisecond without executing controller code or database queries.
+/// Calling <c>IOutputCacheStore.EvictByTagAsync("blog")</c> instantly evicts all cached blog pages.
+/// </remarks>
 public sealed class KyrolusRedisOutputCacheStore : IOutputCacheStore
 {
     private const string TagInvalidationScript =
@@ -30,6 +33,12 @@ public sealed class KyrolusRedisOutputCacheStore : IOutputCacheStore
     private readonly IKyrolusCacheKeyFactory keyFactory;
     private readonly KyrolusRedisCacheOptions options;
 
+    /// <summary>
+    /// Initializes a new instance of <see cref="KyrolusRedisOutputCacheStore"/>.
+    /// </summary>
+    /// <param name="multiplexer">The active Redis connection multiplexer.</param>
+    /// <param name="keyFactory">Optional key factory.</param>
+    /// <param name="options">Optional Redis options.</param>
     public KyrolusRedisOutputCacheStore(
         IConnectionMultiplexer multiplexer,
         IKyrolusCacheKeyFactory? keyFactory = null,
@@ -41,6 +50,7 @@ public sealed class KyrolusRedisOutputCacheStore : IOutputCacheStore
         this.keyFactory = keyFactory ?? new KyrolusCacheKeyFactory(this.options.KeyPrefix);
     }
 
+    /// <inheritdoc />
     public async ValueTask<byte[]?> GetAsync(string key, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
@@ -51,6 +61,7 @@ public sealed class KyrolusRedisOutputCacheStore : IOutputCacheStore
         return value.IsNull ? null : (byte[]?)value;
     }
 
+    /// <inheritdoc />
     public async ValueTask SetAsync(string key, byte[] value, string[]? tags, TimeSpan validFor, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
@@ -74,6 +85,7 @@ public sealed class KyrolusRedisOutputCacheStore : IOutputCacheStore
         }
     }
 
+    /// <inheritdoc />
     public async ValueTask EvictByTagAsync(string tag, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tag);

@@ -1,11 +1,15 @@
-using KyrolusSous.Caching.Abstractions;
-using StackExchange.Redis;
-
 namespace KyrolusSous.Caching.Redis;
 
 /// <summary>
-/// Implements type-safe Redis Pub/Sub messaging using <see cref="IKyrolusRedisPubSub"/>.
+/// Type-safe Redis Pub/Sub messaging implementation of <see cref="IKyrolusRedisPubSub"/>.
 /// </summary>
+/// <remarks>
+/// <b>Real-World Use Cases:</b>
+/// <list type="bullet">
+///   <item><description><b>Real-time User Notifications &amp; WebSockets:</b> When a user's order status changes, broadcasting an <c>OrderStatusUpdatedEvent</c> to all web nodes to push instant notifications through SignalR.</description></item>
+///   <item><description><b>Microservice Cache Sync:</b> Notifying worker services when reference tables (e.g. Tax rates, shipping zones) change.</description></item>
+/// </list>
+/// </remarks>
 public sealed class KyrolusRedisPubSub : IKyrolusRedisPubSub
 {
     private readonly IConnectionMultiplexer multiplexer;
@@ -14,6 +18,13 @@ public sealed class KyrolusRedisPubSub : IKyrolusRedisPubSub
     private readonly IKyrolusCacheKeyFactory keyFactory;
     private readonly KyrolusRedisCacheOptions options;
 
+    /// <summary>
+    /// Initializes a new instance of <see cref="KyrolusRedisPubSub"/>.
+    /// </summary>
+    /// <param name="multiplexer">The active Redis connection multiplexer.</param>
+    /// <param name="serializer">The serialization engine.</param>
+    /// <param name="keyFactory">Optional key factory.</param>
+    /// <param name="options">Optional Redis options.</param>
     public KyrolusRedisPubSub(
         IConnectionMultiplexer multiplexer,
         IKyrolusCacheSerializer serializer,
@@ -27,6 +38,7 @@ public sealed class KyrolusRedisPubSub : IKyrolusRedisPubSub
         this.keyFactory = keyFactory ?? new KyrolusCacheKeyFactory(this.options.KeyPrefix);
     }
 
+    /// <inheritdoc />
     public async Task PublishAsync<T>(string channel, T message, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(channel);
@@ -41,6 +53,7 @@ public sealed class KyrolusRedisPubSub : IKyrolusRedisPubSub
             options.WriteCommandFlags).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async Task<IAsyncDisposable> SubscribeAsync<T>(string channel, Func<T, Task> handler, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(channel);

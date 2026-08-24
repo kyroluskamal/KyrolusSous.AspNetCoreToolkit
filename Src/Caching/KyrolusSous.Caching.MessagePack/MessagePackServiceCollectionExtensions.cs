@@ -1,17 +1,21 @@
-using KyrolusSous.Caching.Abstractions;
-using MessagePack;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-
 namespace KyrolusSous.Caching.MessagePack;
 
+/// <summary>
+/// Provides extension methods for registering MessagePack cache serialization services into the dependency injection container.
+/// </summary>
 public static class MessagePackServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers <see cref="KyrolusMessagePackCacheSerializer"/> as the <see cref="IKyrolusCacheSerializer"/> in DI.
+    /// Registers <see cref="KyrolusMessagePackCacheSerializer"/> as the application-wide <see cref="IKyrolusCacheSerializer"/> in DI,
+    /// replacing the default JSON serializer.
     /// </summary>
+    /// <remarks>
+    /// <b>Real-World Use Case:</b>
+    /// When you want to speed up Redis serialization by up to 5x and reduce payload bandwidth across your entire microservice fleet.
+    /// </remarks>
     /// <param name="services">The service collection.</param>
-    /// <param name="options">Optional MessagePack serializer options.</param>
+    /// <param name="options">Optional custom MessagePack serializer options.</param>
+    /// <returns>The service collection for method chaining.</returns>
     public static IServiceCollection AddKyrolusMessagePackSerializer(
         this IServiceCollection services,
         MessagePackSerializerOptions? options = null)
@@ -25,8 +29,15 @@ public static class MessagePackServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers <see cref="KyrolusMessagePackCacheSerializer"/> with LZ4 compression enabled.
+    /// Registers <see cref="KyrolusMessagePackCacheSerializer"/> with LZ4 binary block compression enabled by default.
     /// </summary>
+    /// <remarks>
+    /// <b>Real-World Use Case:</b>
+    /// When caching large datasets (e.g., thousands of catalog items, customer invoices, or analytics tables) 
+    /// where you want maximum size reduction combined with high-speed binary decompression.
+    /// </remarks>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection for method chaining.</returns>
     public static IServiceCollection AddKyrolusMessagePackSerializerWithLz4(this IServiceCollection services)
     {
         var serializer = KyrolusMessagePackCacheSerializer.CreateWithLz4Compression();

@@ -171,6 +171,13 @@
       "ci": true
     },
     {
+      "name": "Caching - Unit",
+      "project": "Tests/UnitTests/Caching/KyrolusSous.Caching.UnitTests/KyrolusSous.Caching.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
       "name": "OpenApi - Integration",
       "project": "Tests/IntegrationTests/KyrolusSous.OpenApi.IntegrationTests/KyrolusSous.OpenApi.IntegrationTests.csproj",
       "kind": "integration",

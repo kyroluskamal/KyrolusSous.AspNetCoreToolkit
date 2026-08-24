@@ -1,0 +1,9 @@
+global using System.Collections.Concurrent;
+global using System.Diagnostics;
+global using System.Diagnostics.Metrics;
+global using System.IO.Compression;
+global using System.Security.Cryptography;
+global using System.Text.Json;
+global using System.Text.Json.Serialization;
+global using System.Text.Json.Serialization.Metadata;
+global using KyrolusSous.Compression;

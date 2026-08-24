@@ -269,6 +269,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Compression", "Compression"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Compression.UnitTests", "Tests\UnitTests\Compression\KyrolusSous.Compression.UnitTests\KyrolusSous.Compression.UnitTests.csproj", "{F7EBBF32-B141-4D4B-9355-AAB79AB3D242}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Caching", "Caching", "{4DB974BF-6682-F049-6BE3-DDFE8CA42A2E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Caching.UnitTests", "Tests\UnitTests\Caching\KyrolusSous.Caching.UnitTests\KyrolusSous.Caching.UnitTests.csproj", "{B72358F0-36AF-41D1-B29B-28CFED679ED0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1515,6 +1519,18 @@ Global
 		{F7EBBF32-B141-4D4B-9355-AAB79AB3D242}.Release|x64.Build.0 = Release|Any CPU
 		{F7EBBF32-B141-4D4B-9355-AAB79AB3D242}.Release|x86.ActiveCfg = Release|Any CPU
 		{F7EBBF32-B141-4D4B-9355-AAB79AB3D242}.Release|x86.Build.0 = Release|Any CPU
+		{B72358F0-36AF-41D1-B29B-28CFED679ED0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B72358F0-36AF-41D1-B29B-28CFED679ED0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B72358F0-36AF-41D1-B29B-28CFED679ED0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B72358F0-36AF-41D1-B29B-28CFED679ED0}.Debug|x64.Build.0 = Debug|Any CPU
+		{B72358F0-36AF-41D1-B29B-28CFED679ED0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B72358F0-36AF-41D1-B29B-28CFED679ED0}.Debug|x86.Build.0 = Debug|Any CPU
+		{B72358F0-36AF-41D1-B29B-28CFED679ED0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B72358F0-36AF-41D1-B29B-28CFED679ED0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B72358F0-36AF-41D1-B29B-28CFED679ED0}.Release|x64.ActiveCfg = Release|Any CPU
+		{B72358F0-36AF-41D1-B29B-28CFED679ED0}.Release|x64.Build.0 = Release|Any CPU
+		{B72358F0-36AF-41D1-B29B-28CFED679ED0}.Release|x86.ActiveCfg = Release|Any CPU
+		{B72358F0-36AF-41D1-B29B-28CFED679ED0}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1651,5 +1667,7 @@ Global
 		{63AFE14A-DDF8-48F9-ACD4-E0A3E3712C1F} = {0E301AE8-FC50-1778-7D95-68BC00B76EF6}
 		{C5CDC02D-3E28-9521-E61C-6582A177E45C} = {30785934-E017-5D9F-2777-3D61460A5281}
 		{F7EBBF32-B141-4D4B-9355-AAB79AB3D242} = {C5CDC02D-3E28-9521-E61C-6582A177E45C}
+		{4DB974BF-6682-F049-6BE3-DDFE8CA42A2E} = {30785934-E017-5D9F-2777-3D61460A5281}
+		{B72358F0-36AF-41D1-B29B-28CFED679ED0} = {4DB974BF-6682-F049-6BE3-DDFE8CA42A2E}
 	EndGlobalSection
 EndGlobal

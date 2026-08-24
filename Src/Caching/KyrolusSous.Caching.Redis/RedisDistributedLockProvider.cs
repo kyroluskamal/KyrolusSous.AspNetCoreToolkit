@@ -1,12 +1,14 @@
-using System.Diagnostics;
-using KyrolusSous.Caching.Abstractions;
-using StackExchange.Redis;
-
 namespace KyrolusSous.Caching.Redis;
 
 /// <summary>
-/// Implements <see cref="IDistributedLockProvider"/> using Redis with atomic Lua scripts.
+/// Production-grade implementation of <see cref="IDistributedLockProvider"/> using Redis Lua scripts (Redlock mutual exclusion).
 /// </summary>
+/// <remarks>
+/// <b>Real-World Concurrency Protection:</b>
+/// Guarantees that only one server instance can acquire the lock on a given key at any instant.
+/// Lock release is performed atomically via a Lua script that verifies the cryptographic owner token 
+/// to ensure a slow instance never accidentally releases a lock that has expired and been acquired by another instance.
+/// </remarks>
 public sealed class RedisDistributedLockProvider : IDistributedLockProvider
 {
     private const string AcquireLockScript =
@@ -20,6 +22,12 @@ public sealed class RedisDistributedLockProvider : IDistributedLockProvider
     private readonly IKyrolusCacheKeyFactory keyFactory;
     private readonly KyrolusRedisCacheOptions options;
 
+    /// <summary>
+    /// Initializes a new instance of <see cref="RedisDistributedLockProvider"/>.
+    /// </summary>
+    /// <param name="multiplexer">The active Redis connection multiplexer.</param>
+    /// <param name="keyFactory">Optional key factory.</param>
+    /// <param name="options">Optional Redis options.</param>
     public RedisDistributedLockProvider(
         IConnectionMultiplexer multiplexer,
         IKyrolusCacheKeyFactory? keyFactory = null,
@@ -31,6 +39,7 @@ public sealed class RedisDistributedLockProvider : IDistributedLockProvider
         this.keyFactory = keyFactory ?? new KyrolusCacheKeyFactory(this.options.KeyPrefix);
     }
 
+    /// <inheritdoc />
     public async Task<IDistributedLockHandle?> TryAcquireLockAsync(
         string key,
         TimeSpan timeout,
@@ -79,6 +88,7 @@ public sealed class RedisDistributedLockProvider : IDistributedLockProvider
         return null;
     }
 
+    /// <inheritdoc />
     public async Task<IDistributedLockHandle> AcquireLockAsync(
         string key,
         TimeSpan timeout,

@@ -1,9 +1,10 @@
-using System.Diagnostics;
-using KyrolusSous.Caching.Abstractions;
-using StackExchange.Redis;
-
 namespace KyrolusSous.Caching.Redis;
 
+/// <summary>
+/// Production-grade distributed caching provider backed by StackExchange.Redis.
+/// Supports batch operations, Tag Sets, sliding expiration, Jitter, negative caching, 
+/// distributed locking, Lua atomic invalidations, OpenTelemetry metrics, and Circuit Breaker resilience.
+/// </summary>
 public sealed class RedisCacheProvider : ICacheProvider
 {
     private const string ReleaseLockScript =

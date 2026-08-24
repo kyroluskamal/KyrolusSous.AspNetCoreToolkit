@@ -1,11 +1,19 @@
-using System.Collections.Concurrent;
-using System.Diagnostics;
-using KyrolusSous.Caching.Abstractions;
-using Microsoft.Extensions.Caching.Memory;
-using StackExchange.Redis;
-
 namespace KyrolusSous.Caching.Redis;
 
+/// <summary>
+/// High-performance hybrid two-tier cache provider (L1 In-Memory + L2 Distributed Redis) with automatic Pub/Sub synchronization.
+/// </summary>
+/// <remarks>
+/// <b>Real-World Use Case (Sub-microsecond Read Performance):</b>
+/// <para>
+/// <b>Read Path:</b> Checks L1 local in-process memory first (50 nanoseconds, zero network cost). 
+/// On an L1 cache miss, reads from L2 Redis (1-2 ms), populates L1, and returns the result.
+/// </para>
+/// <para>
+/// <b>Write Path:</b> Writes to L2 Redis, updates local L1, and broadcasts an invalidation event across 
+/// Redis Pub/Sub so that all other server nodes evict their stale L1 memory immediately.
+/// </para>
+/// </remarks>
 public sealed class KyrolusRedisNearCacheProvider : ICacheProvider, IDisposable
 {
     private const string L1ProviderName = "redis-near-l1";

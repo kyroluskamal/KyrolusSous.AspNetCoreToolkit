@@ -1,9 +1,14 @@
-using System.Text;
-using KyrolusSous.Caching.Abstractions;
-using StackExchange.Redis;
-
 namespace KyrolusSous.Caching.Redis;
 
+/// <summary>
+/// Redis Pub/Sub implementation of <see cref="IKyrolusCacheInvalidationBus"/> that broadcasts cache eviction 
+/// events across all server instances in a distributed cluster.
+/// </summary>
+/// <remarks>
+/// <b>Real-World Multi-Server Invalidation:</b>
+/// When Server 1 updates a record, it publishes a compact message to the Redis invalidation channel. 
+/// Servers 2, 3, and 4 receive the event and evict the record from their local L1 memory in real-time.
+/// </remarks>
 public sealed class KyrolusRedisInvalidationBus : IKyrolusCacheInvalidationBus
 {
     private const char MessageSeparator = ':';
@@ -13,6 +18,11 @@ public sealed class KyrolusRedisInvalidationBus : IKyrolusCacheInvalidationBus
     private readonly KyrolusRedisInvalidationOptions options;
     private readonly RedisChannel channel;
 
+    /// <summary>
+    /// Initializes a new instance of <see cref="KyrolusRedisInvalidationBus"/>.
+    /// </summary>
+    /// <param name="multiplexer">The active Redis connection multiplexer.</param>
+    /// <param name="options">Optional invalidation options.</param>
     public KyrolusRedisInvalidationBus(IConnectionMultiplexer multiplexer, KyrolusRedisInvalidationOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(multiplexer);
@@ -21,6 +31,7 @@ public sealed class KyrolusRedisInvalidationBus : IKyrolusCacheInvalidationBus
         channel = RedisChannel.Literal(this.options.Channel);
     }
 
+    /// <inheritdoc />
     public Task PublishAsync(KyrolusCacheInvalidationMessage message, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -33,6 +44,7 @@ public sealed class KyrolusRedisInvalidationBus : IKyrolusCacheInvalidationBus
         return subscriber.PublishAsync(channel, payload);
     }
 
+    /// <inheritdoc />
     public IDisposable Subscribe(Func<KyrolusCacheInvalidationMessage, Task> handler)
     {
         if (!options.Subscribe)

@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="10.0.1">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="NSubstitute" Version="5.3.0" />
+    <PackageReference Include="Shouldly" Version="4.3.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Src\Caching\KyrolusSous.Caching.Abstractions\KyrolusSous.Caching.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Caching\KyrolusSous.Caching.MessagePack\KyrolusSous.Caching.MessagePack.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Caching\KyrolusSous.Caching.Redis\KyrolusSous.Caching.Redis.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Compression\KyrolusSous.Compression.Abstractions\KyrolusSous.Compression.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Compression\KyrolusSous.Compression.Brotli\KyrolusSous.Compression.Brotli.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Compression\KyrolusSous.Compression.Gzip\KyrolusSous.Compression.Gzip.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Compression\KyrolusSous.Compression.Zstd\KyrolusSous.Compression.Zstd.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Compression\KyrolusSous.Compression.Lz4\KyrolusSous.Compression.Lz4.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Compression\KyrolusSous.Compression.Snappy\KyrolusSous.Compression.Snappy.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Compression\KyrolusSous.Compression.Core\KyrolusSous.Compression.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Shouldly" />
+    <Using Include="NSubstitute" />
+  </ItemGroup>
+
+</Project>

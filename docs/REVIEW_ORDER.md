@@ -51,9 +51,9 @@ Within a phase the order is loose - what matters is not starting a phase before 
 | 24 | `Compression.Zstd` | ✅ | 100% coverage across ZstdCompressor and DI extensions (ZstdSharp.Port) |
 | 25 | `Compression.Lz4` | ✅ | 100% coverage across Lz4Compressor and DI extensions (K4os.Compression.LZ4) |
 | 26 | `Compression.Snappy` | ✅ | 100% coverage across SnappyCompressor and DI extensions (Snappier) |
-| 27 | `Caching.Abstractions` | 🔧 | Core caching abstractions, IDistributedLockProvider, IKyrolusRedisPubSub, atomic/hash operations, payload transformers |
-| 28 | `Caching.Redis` | 🔧 | Redis L2 & NearCache (L1+L2), Lua-based distributed locking, Pub/Sub bus, ASP.NET Core IDistributedCache & IOutputCacheStore adapters |
-| 29 | `Caching.MessagePack` | 🔧 | High-performance binary MessagePack cache serializer with optional LZ4 block compression |
+| 27 | `Caching.Abstractions` | ✅ | 94.4% line coverage. Serializers, multi-algorithm payload transformers, key factories, telemetry & policies |
+| 28 | `Caching.Redis` | ✅ | Redis L2 & NearCache (L1+L2), Lua-based distributed locking, Pub/Sub bus, IDistributedCache & IOutputCacheStore adapters |
+| 29 | `Caching.MessagePack` | ✅ | 100% line coverage. Binary MessagePack cache serializer with optional LZ4 block compression |
 | 30 | `Mapping.Abstractions` | 🚫 | 8 lines |
 | 31 | `Mapping.Mapster` | ⬜ | 30 lines |
 | 32 | `Logging.Abstractions` | 🚫 | 23 lines |

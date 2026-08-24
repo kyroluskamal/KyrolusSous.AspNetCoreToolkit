@@ -1,8 +1,19 @@
-using System.IO.Compression;
-
 namespace KyrolusSous.Caching.Abstractions;
 
-public sealed class KyrolusGzipCachePayloadTransformer(int minSizeBytes = 1024, CompressionLevel level = CompressionLevel.Fastest) : IKyrolusCachePayloadTransformer
+/// <summary>
+/// A payload transformer utilizing the standard Gzip algorithm based on .NET's native <see cref="GZipStream"/>.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>Payload Framing Format:</b>
+/// <c>[4-byte Magic Header 'KYC0'][1-byte Flag (0=Raw, 1=Compressed)][Gzip Compressed Body]</c>
+/// </para>
+/// </remarks>
+/// <param name="minSizeBytes">Minimum byte length required to trigger compression. Defaults to 1024 bytes (1 KB).</param>
+/// <param name="level">The compression quality/speed tradeoff level. Defaults to <see cref="CompressionLevel.Fastest"/>.</param>
+public sealed class KyrolusGzipCachePayloadTransformer(
+    int minSizeBytes = 1024,
+    CompressionLevel level = CompressionLevel.Fastest) : IKyrolusCachePayloadTransformer
 {
     private const byte RawFlag = 0;
     private const byte CompressedFlag = 1;
@@ -11,8 +22,15 @@ public sealed class KyrolusGzipCachePayloadTransformer(int minSizeBytes = 1024, 
     private readonly int minSizeBytes = Math.Max(0, minSizeBytes);
     private readonly CompressionLevel level = level;
 
+    /// <summary>
+    /// Compresses the serialized payload using Gzip if the size meets or exceeds <c>minSizeBytes</c>.
+    /// </summary>
+    /// <param name="payload">The original serialized byte array.</param>
+    /// <returns>A framed byte array containing the 'KYC0' header and compressed data.</returns>
     public byte[] Transform(byte[] payload)
     {
+        ArgumentNullException.ThrowIfNull(payload);
+
         if (payload.Length < minSizeBytes)
         {
             return BuildRawPayload(payload);
@@ -29,8 +47,15 @@ public sealed class KyrolusGzipCachePayloadTransformer(int minSizeBytes = 1024, 
         return output.ToArray();
     }
 
+    /// <summary>
+    /// Decompresses the Gzip-compressed byte payload.
+    /// </summary>
+    /// <param name="payload">The framed byte array read from cache.</param>
+    /// <returns>The uncompressed original serialized byte array.</returns>
     public byte[] Restore(byte[] payload)
     {
+        ArgumentNullException.ThrowIfNull(payload);
+
         if (!HasHeader(payload))
         {
             return payload;

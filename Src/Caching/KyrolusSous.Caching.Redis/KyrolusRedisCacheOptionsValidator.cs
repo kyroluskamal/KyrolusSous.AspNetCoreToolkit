@@ -1,7 +1,15 @@
 namespace KyrolusSous.Caching.Redis;
 
+/// <summary>
+/// Provides startup validation routines to ensure cache options (TTL, encryption keys, timeouts, circuit breaker) 
+/// are strictly valid before the application starts accepting traffic.
+/// </summary>
 public static class KyrolusRedisCacheOptionsValidator
 {
+    /// <summary>
+    /// Validates the provided <see cref="KyrolusRedisCacheOptions"/> and throws descriptive exceptions upon misconfiguration.
+    /// </summary>
+    /// <param name="options">The options instance to validate.</param>
     public static void Validate(KyrolusRedisCacheOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -71,6 +79,10 @@ public static class KyrolusRedisCacheOptionsValidator
         }
     }
 
+    /// <summary>
+    /// Validates Near-Cache configuration options.
+    /// </summary>
+    /// <param name="options">The near cache options instance to validate.</param>
     public static void Validate(KyrolusRedisNearCacheOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -84,6 +96,10 @@ public static class KyrolusRedisCacheOptionsValidator
         EnsureNonNegative(options.L1Jitter, nameof(options.L1Jitter));
     }
 
+    /// <summary>
+    /// Validates Redis Pub/Sub invalidation options.
+    /// </summary>
+    /// <param name="options">The invalidation options instance to validate.</param>
     public static void Validate(KyrolusRedisInvalidationOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
