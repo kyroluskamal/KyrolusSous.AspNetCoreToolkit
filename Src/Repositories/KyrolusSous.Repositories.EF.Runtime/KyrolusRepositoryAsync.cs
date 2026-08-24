@@ -232,11 +232,12 @@ public class KyrolusRepositoryAsync<
     public async Task<IEnumerable<TEntity>> UpdateRangeAsync(IEnumerable<TEntity> entities, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(entities);
-        ArgumentOutOfRangeException.ThrowIfLessThan(entities.Count(), 1);
-        return await ExecuteWithNotificationsAsync(nameof(UpdateRangeAsync), entities, async ct =>
+        var list = entities as IList<TEntity> ?? [.. entities];
+        ArgumentOutOfRangeException.ThrowIfLessThan(list.Count, 1);
+        return await ExecuteWithNotificationsAsync(nameof(UpdateRangeAsync), list, async ct =>
         {
-            var updated = new List<TEntity>();
-            foreach (var entity in entities)
+            var updated = new List<TEntity>(list.Count);
+            foreach (var entity in list)
             {
                 var u = await UpdateAsync(entity, ct).ConfigureAwait(false);
                 updated.Add(u);
@@ -298,16 +299,21 @@ public class KyrolusRepositoryAsync<
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public async Task<bool> RemoveRangeAsync(IEnumerable<TEntity> entities, CancellationToken cancellationToken = default)
-    => await ExecuteWithNotificationsAsync(nameof(RemoveRangeAsync), entities, async ct =>
     {
-        var results = new List<bool>();
-        foreach (var entity in entities)
+        ArgumentNullException.ThrowIfNull(entities);
+        var list = entities as IList<TEntity> ?? [.. entities];
+        ArgumentOutOfRangeException.ThrowIfLessThan(list.Count, 1);
+        return await ExecuteWithNotificationsAsync(nameof(RemoveRangeAsync), list, async ct =>
         {
-            var r = await RemoveAsync(entity, ct).ConfigureAwait(false);
-            results.Add(r);
-        }
-        return results.All(r => r);
-    }, removed => new { Entities = entities, Removed = removed }, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
+            var results = new List<bool>(list.Count);
+            foreach (var entity in list)
+            {
+                var r = await RemoveAsync(entity, ct).ConfigureAwait(false);
+                results.Add(r);
+            }
+            return results.All(r => r);
+        }, removed => new { Entities = list, Removed = removed }, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
+    }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public async Task<bool> ExistAsync(Expression<Func<TEntity, bool>> filter, CancellationToken cancellationToken = default)
@@ -596,7 +602,7 @@ public class KyrolusRepositoryAsync<
         {
             try
             {
-                var restored = await RestoreInternalAsync(keyValues, cancellationToken).ConfigureAwait(false);
+                var restored = await RestoreInternalAsync(keyValues, ct).ConfigureAwait(false);
                 return RepositoryOperationResult<bool>.Success(restored);
             }
             catch (KeyNotFoundException)
@@ -607,7 +613,7 @@ public class KyrolusRepositoryAsync<
             {
                 return RepositoryOperationResult<bool>.Failed(ex);
             }
-        }, e => keyValues, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
+        }, e => new { KeyValues = keyValues }, ex => new { Exception = ex.Message }, cancellationToken).ConfigureAwait(false);
     }
     #endregion
     #region Query helpers

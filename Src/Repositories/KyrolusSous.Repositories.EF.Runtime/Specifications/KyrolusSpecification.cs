@@ -109,6 +109,17 @@ public class KyrolusSpecification<TEntity> : IKyrolusSpecification<TEntity>
         return this;
     }
 
+    public KyrolusSpecification<TEntity> Not()
+    {
+        if (Criteria is not null)
+        {
+            var param = Criteria.Parameters[0];
+            var negated = Expression.Not(Criteria.Body);
+            Criteria = Expression.Lambda<Func<TEntity, bool>>(negated, param);
+        }
+        return this;
+    }
+
     private static Expression<Func<TEntity, bool>> CombineAnd(
         Expression<Func<TEntity, bool>> left,
         Expression<Func<TEntity, bool>> right)

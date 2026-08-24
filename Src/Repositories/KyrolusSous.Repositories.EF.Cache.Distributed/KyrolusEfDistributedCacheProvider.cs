@@ -57,7 +57,10 @@ public sealed class KyrolusEfDistributedCacheProvider : ICacheProvider
 
     public async Task<IDictionary<string, T?>> GetManyAsync<T>(IReadOnlyCollection<string> cacheKeys, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(cacheKeys);
         var result = new Dictionary<string, T?>(StringComparer.Ordinal);
+        if (cacheKeys.Count == 0) return result;
+
         foreach (var key in cacheKeys)
         {
             result[key] = await GetAsync<T>(key, cancellationToken).ConfigureAwait(false);
@@ -68,6 +71,9 @@ public sealed class KyrolusEfDistributedCacheProvider : ICacheProvider
 
     public Task SetManyAsync<T>(IReadOnlyCollection<KeyValuePair<string, T>> items, TimeSpan expirationTime = default, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(items);
+        if (items.Count == 0) return Task.CompletedTask;
+
         var entryOptions = new DistributedCacheEntryOptions();
         if (expirationTime > TimeSpan.Zero)
         {
@@ -79,6 +85,9 @@ public sealed class KyrolusEfDistributedCacheProvider : ICacheProvider
 
     public Task SetManyAsync<T>(IReadOnlyCollection<KeyValuePair<string, T>> items, KyrolusCacheEntryOptions? options, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(items);
+        if (items.Count == 0) return Task.CompletedTask;
+
         var tasks = new List<Task>(items.Count);
         foreach (var item in items)
         {
@@ -92,6 +101,9 @@ public sealed class KyrolusEfDistributedCacheProvider : ICacheProvider
 
     public Task RemoveManyAsync(IReadOnlyCollection<string> cacheKeys, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(cacheKeys);
+        if (cacheKeys.Count == 0) return Task.CompletedTask;
+
         var tasks = new List<Task>(cacheKeys.Count);
         foreach (var key in cacheKeys)
         {

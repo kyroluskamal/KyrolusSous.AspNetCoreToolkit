@@ -9,8 +9,16 @@ public static class KyrolusIncludeGraphBuilder
             return new IncludeGraph<TEntity>();
         foreach (var path in paths)
         {
-            var expr = KyrolusEFRepositoryBase<TEntity>.BuildIncludeExpression(path);
-            if (expr is not null) includes.Add(expr);
+            if (string.IsNullOrWhiteSpace(path)) continue;
+            try
+            {
+                var expr = KyrolusEFRepositoryBase<TEntity>.BuildIncludeExpression(path);
+                if (expr is not null) includes.Add(expr);
+            }
+            catch (ArgumentException)
+            {
+                // Ignore invalid include paths gracefully in builder
+            }
         }
         return new IncludeGraph<TEntity>([.. includes]);
     }

@@ -52,7 +52,7 @@ public sealed class KyrolusConcurrencyResolver : IKyrolusConcurrencyResolver
 
                     foreach (var property in entry.Properties)
                     {
-                        if (property.IsModified)
+                        if (property.IsModified && !property.Metadata.IsPrimaryKey())
                         {
                             property.CurrentValue = currentValues[property.Metadata.Name];
                         }

@@ -19,6 +19,7 @@ public static class KyrolusKeysetQueryExtensions
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(specification);
+        ArgumentOutOfRangeException.ThrowIfLessThan(specification.PageSize, 1);
 
         var query = source;
 

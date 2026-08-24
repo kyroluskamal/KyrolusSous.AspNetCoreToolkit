@@ -21,6 +21,11 @@ public static class KyrolusQueryTaggingExtensions
         ArgumentNullException.ThrowIfNull(source);
 
         var fileName = Path.GetFileName(filePath);
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            fileName = "Unknown";
+        }
+
         var tag = string.IsNullOrWhiteSpace(customTag)
             ? $"Kyrolus: {memberName} [{fileName}:{lineNumber}]"
             : $"Kyrolus: {customTag} -> {memberName} [{fileName}:{lineNumber}]";

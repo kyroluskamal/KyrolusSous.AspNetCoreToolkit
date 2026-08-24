@@ -33,5 +33,9 @@ public static class KyrolusOutboxExtensions
         {
             await store.EnqueueAsync(message, cancellationToken).ConfigureAwait(false);
         }
+        else
+        {
+            throw new InvalidOperationException($"Unit of work '{unitOfWork.GetType().Name}' does not implement '{nameof(IKyrolusOutboxStore)}'.");
+        }
     }
 }

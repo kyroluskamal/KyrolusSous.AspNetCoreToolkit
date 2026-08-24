@@ -8,6 +8,18 @@ namespace KyrolusSous.Repositories.EF.Runtime.Interceptors;
 /// </summary>
 public sealed class KyrolusDomainEventInterceptor(IKyrolusDomainEventDispatcher? dispatcher = null) : SaveChangesInterceptor
 {
+    public override InterceptionResult<int> SavingChanges(
+        DbContextEventData eventData,
+        InterceptionResult<int> result)
+    {
+        if (eventData.Context is not null && dispatcher is not null)
+        {
+            DispatchDomainEventsAsync(eventData.Context, CancellationToken.None).GetAwaiter().GetResult();
+        }
+
+        return base.SavingChanges(eventData, result);
+    }
+
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData,
         InterceptionResult<int> result,

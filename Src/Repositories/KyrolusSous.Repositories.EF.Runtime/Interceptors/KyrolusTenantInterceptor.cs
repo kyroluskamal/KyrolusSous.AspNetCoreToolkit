@@ -6,8 +6,14 @@ namespace KyrolusSous.Repositories.EF.Runtime.Interceptors;
 /// <summary>
 /// EF Core <see cref="SaveChangesInterceptor"/> that automatically assigns the ambient <see cref="ICurrentTenantContext.TenantId"/> to newly created entities.
 /// </summary>
-public sealed class KyrolusTenantInterceptor(ICurrentTenantContext tenantContext) : SaveChangesInterceptor
+public sealed class KyrolusTenantInterceptor : SaveChangesInterceptor
 {
+    private readonly ICurrentTenantContext tenantContext;
+
+    public KyrolusTenantInterceptor(ICurrentTenantContext tenantContext)
+    {
+        this.tenantContext = tenantContext ?? throw new ArgumentNullException(nameof(tenantContext));
+    }
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
         if (eventData.Context is not null)

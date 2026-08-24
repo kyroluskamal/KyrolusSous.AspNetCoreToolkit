@@ -29,12 +29,18 @@ public class KyrolusSingleKeyRepositoryAsync<TDbContext, TEntity, TKey> :
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<TEntity?> GetByIdAsync(TKey id,
         List<string>? includeProperties = null, IncludeGraph<TEntity>? includeGraph = null, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default)
-    => GetByIdInternalAsync(new GetByIdCommand(nameof(GetByIdAsync), includeProperties is not { Count: > 0 } && includeGraph is not { Includes.Count: > 0 }, [id], includeProperties, includeGraph, asNoTracking, useSplitQuery, false, cancellationToken));
+    {
+        ArgumentNullException.ThrowIfNull(id);
+        return GetByIdInternalAsync(new GetByIdCommand(nameof(GetByIdAsync), includeProperties is not { Count: > 0 } && includeGraph is not { Includes.Count: > 0 }, [id], includeProperties, includeGraph, asNoTracking, useSplitQuery, false, cancellationToken));
+    }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public Task<TEntity?> GetByIdAsync(TKey id, bool? asNoTracking = null, bool? useSplitQuery = null, CancellationToken cancellationToken = default,
         params Expression<Func<TEntity, object?>>[] includeExpressions)
-        => GetByIdInternalAsync(new GetByIdCommand(nameof(GetByIdAsync), true, [id], null, null, asNoTracking, useSplitQuery, false, cancellationToken, includeExpressions));
+    {
+        ArgumentNullException.ThrowIfNull(id);
+        return GetByIdInternalAsync(new GetByIdCommand(nameof(GetByIdAsync), true, [id], null, null, asNoTracking, useSplitQuery, false, cancellationToken, includeExpressions));
+    }
 
     [RequiresUnreferencedCode("Uses expression tree builders; referenced members must be preserved when trimming.")]
     public async Task<TEntity?> GetByIdCompiledAsync(TKey id, CancellationToken cancellationToken = default)

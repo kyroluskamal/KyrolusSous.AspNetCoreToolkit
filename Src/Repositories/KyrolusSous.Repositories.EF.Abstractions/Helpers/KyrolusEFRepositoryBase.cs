@@ -97,6 +97,12 @@ public class KyrolusEFRepositoryBase<TEntity>
         if (underlying == typeof(Guid))
             return TryConvertGuid(value, out result);
 
+        if (underlying == typeof(DateOnly))
+            return TryConvertDateOnly(value, out result);
+
+        if (underlying == typeof(TimeOnly))
+            return TryConvertTimeOnly(value, out result);
+
         if (underlying == typeof(DateTimeOffset))
             return TryConvertDateTimeOffset(value, out result);
 
@@ -105,6 +111,38 @@ public class KyrolusEFRepositoryBase<TEntity>
 
         if (underlying == typeof(TimeSpan))
             return TryConvertTimeSpan(value, out result);
+
+        result = null;
+        return false;
+    }
+
+    private static bool TryConvertDateOnly(object value, out object? result)
+    {
+        if (value is string s)
+        {
+            if (DateOnly.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+            {
+                result = parsed;
+                return true;
+            }
+            throw new FormatException($"Value '{s}' is not a valid DateOnly.");
+        }
+
+        result = null;
+        return false;
+    }
+
+    private static bool TryConvertTimeOnly(object value, out object? result)
+    {
+        if (value is string s)
+        {
+            if (TimeOnly.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+            {
+                result = parsed;
+                return true;
+            }
+            throw new FormatException($"Value '{s}' is not a valid TimeOnly.");
+        }
 
         result = null;
         return false;

@@ -83,7 +83,7 @@ public static class KyrolusDynamicQueryExtensions
         var param = Expression.Parameter(typeof(TEntity), "e");
         var propertyAccess = Expression.Property(param, property);
         var targetType = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
-        var convertedValue = value is null ? null : Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture);
+        var convertedValue = ConvertFilterValue(value, targetType);
         var constant = Expression.Constant(convertedValue, property.PropertyType);
 
         Expression body = op switch
@@ -105,6 +105,29 @@ public static class KyrolusDynamicQueryExtensions
 
         var lambda = Expression.Lambda<Func<TEntity, bool>>(body, param);
         return query.Where(lambda);
+    }
+
+    private static object? ConvertFilterValue(object? value, Type targetType)
+    {
+        if (value is null) return null;
+        if (targetType.IsInstanceOfType(value)) return value;
+
+        if (targetType == typeof(Guid) && value is string strGuid)
+            return Guid.TryParse(strGuid, out var g) ? g : default;
+
+        if (targetType == typeof(DateOnly) && value is string strDate)
+            return DateOnly.TryParse(strDate, CultureInfo.InvariantCulture, out var d) ? d : default;
+
+        if (targetType == typeof(TimeOnly) && value is string strTime)
+            return TimeOnly.TryParse(strTime, CultureInfo.InvariantCulture, out var t) ? t : default;
+
+        if (targetType.IsEnum)
+        {
+            if (value is string strEnum) return Enum.Parse(targetType, strEnum, ignoreCase: true);
+            return Enum.ToObject(targetType, value);
+        }
+
+        return Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture);
     }
 
     private static List<KyrolusSortField> ParseSortExpression(string sortExpr)

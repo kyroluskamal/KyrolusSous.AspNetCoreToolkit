@@ -57,7 +57,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Suite | Kind | Test cases | Services | In CI |
 | --- | --- | ---: | --- | :---: |
 | EF.Runtime - PostgreSQL<br><sub>Primary confidence suite; also the coverage target.</sub> | integration | 475 | postgres | yes |
-| EF.Runtime - Unit | unit | 81 | none | yes |
+| EF.Runtime - Unit | unit | 89 | none | yes |
 | EF.Generator - Integration<br><sub>Runs against an in-process SQLite TestApp.</sub> | integration | 133 | none | yes |
 | EF.Generator - Unit | unit | 67 | none | yes |
 | Marten.Runtime - FullPipeline | integration | 235 | postgres, redis | yes |
@@ -83,7 +83,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Elasticsearch - Unit | unit | 7 | none | yes |
 | Resilience - Unit | unit | 9 | none | yes |
 | Mapping - Unit | unit | 54 | none | yes |
-| **Total** | | **1750** | | |
+| **Total** | | **1758** | | |
 
 <!-- END:GENERATED:test-suites -->
 

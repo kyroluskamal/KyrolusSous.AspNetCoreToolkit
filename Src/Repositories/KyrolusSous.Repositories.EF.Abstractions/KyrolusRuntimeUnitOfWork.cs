@@ -60,7 +60,7 @@ public sealed class KyrolusRuntimeUnitOfWork<TDbContext>(
     {
         ArgumentNullException.ThrowIfNull(work);
 
-        if (!useTransaction)
+        if (!useTransaction || db.Database.CurrentTransaction is not null)
         {
             await work().ConfigureAwait(false);
             return await SaveChangesWithRetryAsync(rowVersionPropertyName, cancellationToken).ConfigureAwait(false);
