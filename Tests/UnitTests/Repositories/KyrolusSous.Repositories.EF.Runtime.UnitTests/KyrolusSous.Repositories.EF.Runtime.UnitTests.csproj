@@ -13,6 +13,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.10" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageReference Include="Shouldly" Version="4.3.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -24,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\Src\Repositories\KyrolusSous.Repositories.EF.Runtime\KyrolusSous.Repositories.EF.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Repositories\KyrolusSous.Repositories.EF.Cache.Distributed\KyrolusSous.Repositories.EF.Cache.Distributed.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -33,5 +35,3 @@
     <AssemblyAttribute Include="System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverageAttribute" />
   </ItemGroup>
 </Project>
-
-

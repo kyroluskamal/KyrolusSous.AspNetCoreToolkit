@@ -57,33 +57,33 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Suite | Kind | Test cases | Services | In CI |
 | --- | --- | ---: | --- | :---: |
 | EF.Runtime - PostgreSQL<br><sub>Primary confidence suite; also the coverage target.</sub> | integration | 475 | postgres | yes |
-| EF.Runtime - Unit | unit | 62 | none | yes |
+| EF.Runtime - Unit | unit | 75 | none | yes |
 | EF.Generator - Integration<br><sub>Runs against an in-process SQLite TestApp.</sub> | integration | 133 | none | yes |
 | EF.Generator - Unit | unit | 67 | none | yes |
 | Marten.Runtime - FullPipeline | integration | 235 | postgres, redis | yes |
 | Logging | unit | 59 | none | yes |
-| Mediator.Runtime - Unit | unit | 101 | none | yes |
+| Mediator.Runtime - Unit | unit | 105 | none | yes |
 | Mediator.Generator - Unit | unit | 14 | none | yes |
 | Mediator.Reflection - Unit | unit | 52 | none | yes |
 | Validation.Runtime - Unit | unit | 87 | none | yes |
-| Validation.Fluent - Unit | unit | 14 | none | yes |
+| Validation.Fluent - Unit | unit | 15 | none | yes |
 | Validation.FluentValidation - Unit | unit | 16 | none | yes |
 | Validation.FluentValidation.Scanning - Unit | unit | 2 | none | yes |
 | Validation.Generator - Unit | unit | 6 | none | yes |
 | Validation.DataAnnotations - Unit | unit | 8 | none | yes |
 | Validation.DataAnnotations.Generator - Unit | unit | 1 | none | yes |
-| ExceptionHandling.Runtime - Unit | unit | 133 | none | yes |
+| ExceptionHandling.Runtime - Unit | unit | 136 | none | yes |
 | ExceptionHandling.ProblemDetails - Unit | unit | 5 | none | yes |
 | ExceptionHandling.EntityFramework - Unit | unit | 6 | none | yes |
 | ExceptionHandling.FluentValidation - Unit | unit | 4 | none | yes |
 | ExceptionHandling.Redis - Unit | unit | 6 | none | yes |
-| Compression - Unit | unit | 55 | none | yes |
-| Caching - Unit | unit | 100 | none | yes |
+| Compression - Unit | unit | 58 | none | yes |
+| Caching - Unit | unit | 102 | none | yes |
 | OpenApi - Integration | integration | 7 | none | yes |
 | Elasticsearch - Unit | unit | 7 | none | yes |
 | Resilience - Unit | unit | 9 | none | yes |
 | Mapping - Unit | unit | 54 | none | yes |
-| **Total** | | **1718** | | |
+| **Total** | | **1744** | | |
 
 <!-- END:GENERATED:test-suites -->
 

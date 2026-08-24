@@ -53,7 +53,7 @@
     },
     {
       "name": "Logging",
-      "project": "Tests/UnitTests/Logging/KyrolusSous.Logging.UnitTests/KyrolusSous.Logging.Tests.csproj",
+      "project": "Tests/UnitTests/Logging/KyrolusSous.Logging.UnitTests/KyrolusSous.Logging.UnitTests.csproj",
       "kind": "unit",
       "services": [],
       "ci": true
