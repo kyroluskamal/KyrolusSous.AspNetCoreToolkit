@@ -79,7 +79,7 @@ public class KyrolusMetadataExtractorTests
 
         result.ShouldNotBeNull();
         result["socketErrorCode"].ShouldBe(SocketError.ConnectionRefused.ToString());
-        result["nativeErrorCode"].ShouldBe((int)SocketError.ConnectionRefused);
+        result["nativeErrorCode"].ShouldBe(ex.NativeErrorCode);
     }
 
     [Fact(DisplayName = "Extract should extract HttpRequestException metadata")]

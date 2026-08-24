@@ -66,7 +66,16 @@ public sealed class KyrolusHttpErrorContextFactory(
 
                 try
                 {
-                    return CultureInfo.GetCultureInfo(cultureName);
+                    var ci = CultureInfo.GetCultureInfo(cultureName);
+                    // On Linux ICU, unknown non-standard culture tags produce synthetic cultures with "Unknown" EnglishName, "zzz" 3-letter code, or "iv" 2-letter code
+                    if (ci.ThreeLetterISOLanguageName.Equals("zzz", StringComparison.OrdinalIgnoreCase) ||
+                        ci.TwoLetterISOLanguageName.Equals("iv", StringComparison.OrdinalIgnoreCase) ||
+                        ci.EnglishName.Contains("Unknown", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    return ci;
                 }
                 catch (CultureNotFoundException)
                 {
