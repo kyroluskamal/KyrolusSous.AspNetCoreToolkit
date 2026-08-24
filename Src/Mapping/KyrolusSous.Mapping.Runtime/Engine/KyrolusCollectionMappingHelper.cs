@@ -45,7 +45,6 @@ public static class KyrolusCollectionMappingHelper
     public static object? MapCollection(
         IEnumerable? source,
         Type targetCollectionType,
-        Type sourceElementType,
         Type targetElementType,
         Func<object, KyrolusMappingContext, object?> elementMapper,
         KyrolusMappingContext context)

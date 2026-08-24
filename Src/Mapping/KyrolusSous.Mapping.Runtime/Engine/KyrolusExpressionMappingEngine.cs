@@ -59,7 +59,6 @@ public sealed class KyrolusExpressionMappingEngine
             return KyrolusCollectionMappingHelper.MapCollection(
                 (IEnumerable)source,
                 targetType,
-                sourceElem,
                 targetElem,
                 (elem, ctx) => Map(elem?.GetType() ?? sourceElem, targetElem, elem, ctx, mapper),
                 context);
