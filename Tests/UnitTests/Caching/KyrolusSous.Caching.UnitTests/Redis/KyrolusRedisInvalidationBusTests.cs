@@ -32,4 +32,28 @@ public sealed class KyrolusRedisInvalidationBusTests
 
         await subscriber.DidNotReceive().PublishAsync(Arg.Any<RedisChannel>(), Arg.Any<RedisValue>(), Arg.Any<CommandFlags>());
     }
+
+    [Fact(DisplayName = "KyrolusRedisInvalidationBus: When Subscribe is disabled, Subscribe should return noop subscription")]
+    public void Subscribe_WhenDisabled_ReturnsNoopSubscription()
+    {
+        var muxer = Substitute.For<IConnectionMultiplexer>();
+        var bus = new KyrolusRedisInvalidationBus(muxer, new KyrolusRedisInvalidationOptions { Subscribe = false });
+
+        var subscription = bus.Subscribe(_ => Task.CompletedTask);
+
+        subscription.ShouldNotBeNull();
+        subscription.Dispose(); // Should not throw
+    }
+
+    [Fact(DisplayName = "KyrolusRedisInvalidationBus: PublishAsync should throw when cancellation is requested")]
+    public async Task PublishAsync_Cancelled_Throws()
+    {
+        var muxer = Substitute.For<IConnectionMultiplexer>();
+        var bus = new KyrolusRedisInvalidationBus(muxer);
+        var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Should.ThrowAsync<OperationCanceledException>(async () =>
+            await bus.PublishAsync(new KyrolusCacheInvalidationMessage(KyrolusCacheInvalidationKind.Key, ["user:1"]), cts.Token));
+    }
 }

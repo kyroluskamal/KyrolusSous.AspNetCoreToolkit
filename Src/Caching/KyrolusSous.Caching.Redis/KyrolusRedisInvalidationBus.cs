@@ -53,14 +53,21 @@ public sealed class KyrolusRedisInvalidationBus : IKyrolusCacheInvalidationBus
         }
 
         var queue = subscriber.Subscribe(channel);
-        queue.OnMessage(message =>
+        queue.OnMessage(async message =>
         {
-            if (!TryDecodeMessage(message.Message, out var parsed))
+            try
             {
-                return;
-            }
+                if (!TryDecodeMessage(message.Message, out var parsed))
+                {
+                    return;
+                }
 
-            _ = handler(parsed);
+                await handler(parsed).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Invalidation subscriber should not bring down the channel queue on handler failure
+            }
         });
 
         return new RedisSubscription(queue);
@@ -81,23 +88,30 @@ public sealed class KyrolusRedisInvalidationBus : IKyrolusCacheInvalidationBus
             return false;
         }
 
-        var text = message.ToString();
-        var separatorIndex = text.IndexOf(MessageSeparator);
-        if (separatorIndex <= 0 || separatorIndex >= text.Length - 1)
+        try
+        {
+            var text = message.ToString();
+            var separatorIndex = text.IndexOf(MessageSeparator);
+            if (separatorIndex <= 0 || separatorIndex >= text.Length - 1)
+            {
+                return false;
+            }
+
+            if (!int.TryParse(text[..separatorIndex], out var kindValue))
+            {
+                return false;
+            }
+
+            var payload = text[(separatorIndex + 1)..];
+            var raw = Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+            var values = raw.Split(KeySeparator, StringSplitOptions.RemoveEmptyEntries);
+            parsed = new KyrolusCacheInvalidationMessage((KyrolusCacheInvalidationKind)kindValue, values);
+            return true;
+        }
+        catch
         {
             return false;
         }
-
-        if (!int.TryParse(text[..separatorIndex], out var kindValue))
-        {
-            return false;
-        }
-
-        var payload = text[(separatorIndex + 1)..];
-        var raw = Encoding.UTF8.GetString(Convert.FromBase64String(payload));
-        var values = raw.Split(KeySeparator, StringSplitOptions.RemoveEmptyEntries);
-        parsed = new KyrolusCacheInvalidationMessage((KyrolusCacheInvalidationKind)kindValue, values);
-        return true;
     }
 
     private sealed class RedisSubscription(ChannelMessageQueue queue) : IDisposable
