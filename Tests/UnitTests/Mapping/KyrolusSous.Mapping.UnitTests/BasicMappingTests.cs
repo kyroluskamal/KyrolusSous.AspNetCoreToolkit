@@ -12,6 +12,8 @@ public sealed class BasicMappingTests
         public Guid ExternalId { get; set; }
         public UserStatus Status { get; set; }
         public DateTime CreatedAt { get; set; }
+        public DateTime BirthDate { get; set; }
+        public TimeSpan ShiftStart { get; set; }
         [KyrolusIgnoreMap]
         public string PasswordHash { get; set; } = string.Empty;
     }
@@ -24,6 +26,8 @@ public sealed class BasicMappingTests
         public string ExternalId { get; set; } = string.Empty; // Type conversion Guid -> string
         public string Status { get; set; } = string.Empty; // Type conversion Enum -> string
         public DateTimeOffset CreatedAt { get; set; } // Type conversion DateTime -> DateTimeOffset
+        public DateOnly BirthDate { get; set; } // Type conversion DateTime -> DateOnly
+        public TimeOnly ShiftStart { get; set; } // Type conversion TimeSpan -> TimeOnly
         public string PasswordHash { get; set; } = "DefaultHash";
     }
 
@@ -39,6 +43,8 @@ public sealed class BasicMappingTests
             ExternalId = Guid.Parse("11111111-2222-3333-4444-555555555555"),
             Status = UserStatus.Active,
             CreatedAt = new DateTime(2026, 1, 15, 10, 30, 0, DateTimeKind.Utc),
+            BirthDate = new DateTime(1995, 6, 20),
+            ShiftStart = new TimeSpan(9, 0, 0),
             PasswordHash = "SecretHash123"
         };
 
@@ -51,6 +57,8 @@ public sealed class BasicMappingTests
         dto.ExternalId.ShouldBe("11111111-2222-3333-4444-555555555555");
         dto.Status.ShouldBe("Active");
         dto.CreatedAt.DateTime.ShouldBe(entity.CreatedAt);
+        dto.BirthDate.ShouldBe(new DateOnly(1995, 6, 20));
+        dto.ShiftStart.ShouldBe(new TimeOnly(9, 0, 0));
         dto.PasswordHash.ShouldBe("DefaultHash"); // Ignored
     }
 

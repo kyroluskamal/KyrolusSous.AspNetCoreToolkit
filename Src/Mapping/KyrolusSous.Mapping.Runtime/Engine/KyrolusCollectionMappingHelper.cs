@@ -54,13 +54,18 @@ public static class KyrolusCollectionMappingHelper
     /// Maps an enumerable source collection into a destination collection of the specified type.
     /// </summary>
     public static object? MapCollection(
-        IEnumerable source,
+        IEnumerable? source,
         Type targetCollectionType,
         Type sourceElementType,
         Type targetElementType,
         Func<object, KyrolusMappingContext, object?> elementMapper,
         KyrolusMappingContext context)
     {
+        if (source is null)
+        {
+            return null;
+        }
+
         var count = (source as ICollection)?.Count ?? (source as IReadOnlyCollection<object>)?.Count ?? 0;
 
         // If target is array: TTarget[]

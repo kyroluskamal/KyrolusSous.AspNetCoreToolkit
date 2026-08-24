@@ -387,12 +387,71 @@ public sealed class KyrolusExpressionMappingEngine
         // Guid conversions
         if (underlyingTarget == typeof(Guid) && value is string guidStr)
         {
-            return Guid.Parse(guidStr);
+            return Guid.TryParse(guidStr, out var parsedGuid) ? parsedGuid : Guid.Empty;
         }
 
         if (underlyingSource == typeof(Guid) && underlyingTarget == typeof(string))
         {
             return value.ToString();
+        }
+
+        // DateOnly conversions
+        if (underlyingTarget == typeof(DateOnly))
+        {
+            if (value is DateTime dateTime)
+            {
+                return DateOnly.FromDateTime(dateTime);
+            }
+
+            if (value is string dateStr && DateOnly.TryParse(dateStr, CultureInfo.InvariantCulture, out var parsedDate))
+            {
+                return parsedDate;
+            }
+        }
+
+        if (underlyingSource == typeof(DateOnly))
+        {
+            if (underlyingTarget == typeof(DateTime) && value is DateOnly dateOnlyVal)
+            {
+                return dateOnlyVal.ToDateTime(TimeOnly.MinValue);
+            }
+
+            if (underlyingTarget == typeof(string) && value is DateOnly dVal)
+            {
+                return dVal.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            }
+        }
+
+        // TimeOnly conversions
+        if (underlyingTarget == typeof(TimeOnly))
+        {
+            if (value is TimeSpan ts)
+            {
+                return TimeOnly.FromTimeSpan(ts);
+            }
+
+            if (value is DateTime dtTime)
+            {
+                return TimeOnly.FromDateTime(dtTime);
+            }
+
+            if (value is string timeStr && TimeOnly.TryParse(timeStr, CultureInfo.InvariantCulture, out var parsedTime))
+            {
+                return parsedTime;
+            }
+        }
+
+        if (underlyingSource == typeof(TimeOnly))
+        {
+            if (underlyingTarget == typeof(TimeSpan) && value is TimeOnly tOnlyVal)
+            {
+                return tOnlyVal.ToTimeSpan();
+            }
+
+            if (underlyingTarget == typeof(string) && value is TimeOnly tVal)
+            {
+                return tVal.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+            }
         }
 
         // DateTime / DateTimeOffset conversions
