@@ -43,7 +43,12 @@ public sealed class KyrolusSequentialNotificationPublishStrategy : IKyrolusNotif
     /// <inheritdoc />
     public async Task PublishAsync(IEnumerable<Func<CancellationToken, Task>> handlers, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(handlers);
+
         foreach (var handler in handlers)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             await handler(cancellationToken).ConfigureAwait(false);
+        }
     }
 }

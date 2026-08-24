@@ -86,7 +86,7 @@ public sealed class KyrolusMediatorPublisher : IKyrolusMediatorPublisher
             {
                 exceptions.Add(exception);
             }
-        }));
+        })).ToArray();
 
         await effectiveStrategy.PublishAsync(guarded, cancellationToken).ConfigureAwait(false);
 

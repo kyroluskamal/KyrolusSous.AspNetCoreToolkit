@@ -48,6 +48,24 @@ public sealed class KyrolusMediatorPublisherTests
         recorder.Entries.ShouldContain("first:x");
     }
 
+    [Fact(DisplayName = "PublishAsync aggregates multiple handler exceptions")]
+    public async Task Multiple_failing_handlers_aggregate_exceptions()
+    {
+        var services = new ServiceCollection();
+        services.AddKyrolusMediator();
+        services.AddKyrolusMediatorReflection();
+        services.AddTransient<INotificationHandler<SomethingHappened>, ThrowingNotificationHandler>();
+        services.AddTransient<INotificationHandler<SomethingHappened>, SecondThrowingNotificationHandler>();
+
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IKyrolusMediatorPublisher>();
+
+        var ex = await Should.ThrowAsync<AggregateException>(() => publisher.PublishAsync(new SomethingHappened("multi-throw")));
+        ex.InnerExceptions.Count.ShouldBe(2);
+        ex.InnerExceptions.Select(e => e.Message).ShouldContain("handler-one-failed");
+        ex.InnerExceptions.Select(e => e.Message).ShouldContain("handler-two-failed");
+    }
+
     [Fact(DisplayName = "Untyped PublishAsync dispatches notification object to registered handlers")]
     public async Task Untyped_publish_reaches_the_handlers()
     {

@@ -40,4 +40,18 @@ public sealed class KyrolusRequestPreProcessorBehaviorTests
         var relevant = recorder.Entries.Where(e => e is "pre" or "handler" || e.StartsWith("post:")).ToArray();
         relevant.ShouldBe(["pre", "handler", "post:pong:hi"]);
     }
+
+    [Fact(DisplayName = "PreProcessor respects cancellation token before calling handler")]
+    public async Task PreProcessor_throws_when_cancellation_requested()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var recorder = new Recorder();
+        await using var provider = TestHost.Standard(recorder).WithPingProcessors().BuildServiceProvider();
+        var mediator = provider.GetRequiredService<IKyrolusMediator>();
+
+        await Should.ThrowAsync<OperationCanceledException>(() => mediator.SendAsync(new Ping("cancelled"), cts.Token));
+        recorder.Entries.ShouldNotContain("handler");
+    }
 }

@@ -91,14 +91,19 @@ internal sealed class ReflectionNotificationDispatchSource : IKyrolusNotificatio
     /// </summary>
     internal static async Task InvokeAsync(MethodInfo method, object target, object?[] arguments)
     {
-        Task task;
+        Task? task;
         try
         {
-            task = (Task)method.Invoke(target, arguments)!;
+            task = (Task?)method.Invoke(target, arguments);
         }
         catch (TargetInvocationException exception) when (exception.InnerException is not null)
         {
             throw Rethrow(exception.InnerException);
+        }
+
+        if (task is null)
+        {
+            return;
         }
 
         await task.ConfigureAwait(false);
@@ -119,6 +124,9 @@ internal sealed class ReflectionNotificationDispatchSource : IKyrolusNotificatio
 [RequiresUnreferencedCode("Finds Execute and Handle by name, which trimming cannot see.")]
 internal sealed class ReflectionRequestExceptionDispatchSource : IKyrolusRequestExceptionDispatchSource
 {
+    private static readonly ConcurrentDictionary<Type, MethodInfo> s_actionExecuteMethods = new();
+    private static readonly ConcurrentDictionary<Type, MethodInfo> s_handlerHandleMethods = new();
+
     public IReadOnlyList<(Type ActionType, Func<CancellationToken, Task> Invoke)> CreateActionInvocations(
         Type requestType,
         Type exceptionType,
@@ -127,7 +135,7 @@ internal sealed class ReflectionRequestExceptionDispatchSource : IKyrolusRequest
         IServiceProvider serviceProvider)
     {
         var serviceType = typeof(IKyrolusRequestExceptionAction<,>).MakeGenericType(requestType, exceptionType);
-        var method = GetRequiredMethod(serviceType, "Execute");
+        var method = s_actionExecuteMethods.GetOrAdd(serviceType, static t => GetRequiredMethod(t, "Execute"));
 
         return
         [
@@ -150,7 +158,7 @@ internal sealed class ReflectionRequestExceptionDispatchSource : IKyrolusRequest
         IServiceProvider serviceProvider)
     {
         var serviceType = typeof(IKyrolusRequestExceptionHandler<,,>).MakeGenericType(requestType, exceptionType, responseType);
-        var method = GetRequiredMethod(serviceType, "Handle");
+        var method = s_handlerHandleMethods.GetOrAdd(serviceType, static t => GetRequiredMethod(t, "Handle"));
 
         return
         [

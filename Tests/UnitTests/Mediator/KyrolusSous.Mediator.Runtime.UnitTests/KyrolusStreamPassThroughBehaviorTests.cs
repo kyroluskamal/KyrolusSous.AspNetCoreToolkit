@@ -20,6 +20,21 @@ public sealed class KyrolusStreamPassThroughBehaviorTests
         items.ShouldBe([1, 2, 3, 4]);
     }
 
+    [Fact(DisplayName = "StreamAsync on empty stream produces no items")]
+    public async Task Stream_request_empty_produces_no_items()
+    {
+        await using var provider = Build(new Recorder());
+        var mediator = provider.GetRequiredService<IKyrolusMediator>();
+
+        var items = new List<int>();
+        await foreach (var item in mediator.StreamAsync(new CountTo(0)))
+        {
+            items.Add(item);
+        }
+
+        items.ShouldBeEmpty();
+    }
+
     [Fact(DisplayName = "Untyped StreamAsync yields boxed item stream from stream request handler")]
     public async Task Untyped_stream_yields_boxed_items()
     {

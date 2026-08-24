@@ -164,6 +164,18 @@ public static class MediatorReflectionExtensions
     {
         if (implType.ContainsGenericParameters)
         {
+            if (claimed.TryGetValue(ifaceDef, out var existingGeneric))
+            {
+                if (existingGeneric == implType) return;
+
+                if (configuration.ThrowOnDuplicateRequestHandlers)
+                    throw new InvalidOperationException(
+                        $"[KyrolusMediator] Two generic handlers are registered for {ifaceDef}: " +
+                        $"{existingGeneric.FullName} and {implType.FullName}. A request must have exactly one handler.");
+                return;
+            }
+
+            claimed[ifaceDef] = implType;
             services.TryAdd(new ServiceDescriptor(ifaceDef, implType, configuration.Lifetime));
             return;
         }

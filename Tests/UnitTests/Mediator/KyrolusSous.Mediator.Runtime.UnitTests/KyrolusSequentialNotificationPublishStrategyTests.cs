@@ -42,4 +42,19 @@ public sealed class KyrolusSequentialNotificationPublishStrategyTests
 
         recorder.Entries.ShouldBe(["first:x", "second:x"]);
     }
+
+    [Fact(DisplayName = "Sequential strategy stops and throws when cancellation is requested")]
+    public async Task Sequential_strategy_respects_cancellation_token()
+    {
+        var strategy = new Implementations.KyrolusSequentialNotificationPublishStrategy();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var handlers = new List<Func<CancellationToken, Task>>
+        {
+            _ => Task.CompletedTask
+        };
+
+        await Should.ThrowAsync<OperationCanceledException>(() => strategy.PublishAsync(handlers, cts.Token));
+    }
 }

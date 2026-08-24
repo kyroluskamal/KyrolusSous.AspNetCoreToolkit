@@ -100,22 +100,20 @@ public sealed class KyrolusReflectionDispatcher : IMediatorDispatcher
     /// <summary>
     /// Invokes the handler's <c>Handle</c> method and casts the result to <typeparamref name="TResult"/>.
     /// </summary>
-    /// <remarks>
-    /// One method covers all three dispatch shapes - <c>Task&lt;TResponse&gt;</c>, bare <c>Task</c>
-    /// and <c>IAsyncEnumerable&lt;TResponse&gt;</c> - because only the cast differs.
-    /// <para>
-    /// The catch is the reason this is worth centralising. Reflection wraps anything the handler
-    /// throws in a <see cref="TargetInvocationException"/>, so without unwrapping it a caller
-    /// catching <c>ValidationException</c> would never see one. Rethrowing through
-    /// <see cref="ExceptionDispatchInfo"/> rather than <c>throw exception.InnerException</c>
-    /// preserves the original stack trace instead of resetting it to this line.
-    /// </para>
-    /// </remarks>
     private static TResult Invoke<TResult>(MethodInfo handleMethod, object handler, object request, CancellationToken cancellationToken)
     {
         try
         {
-            return (TResult)handleMethod.Invoke(handler, [request, cancellationToken])!;
+            var result = handleMethod.Invoke(handler, [request, cancellationToken]);
+            if (result is null)
+            {
+                if (typeof(TResult) == typeof(Task))
+                {
+                    return (TResult)(object)Task.CompletedTask;
+                }
+                throw new InvalidOperationException($"[KyrolusMediator] Handler '{handler.GetType().FullName}' returned null {typeof(TResult).Name}.");
+            }
+            return (TResult)result;
         }
         catch (TargetInvocationException exception) when (exception.InnerException is not null)
         {
@@ -123,7 +121,7 @@ public sealed class KyrolusReflectionDispatcher : IMediatorDispatcher
         }
     }
 
-    [ExcludeFromCodeCoverage(Justification = "When I used throw; to make the compiler does not complain about missing return, it was not covered becasue it is unreachable. This method is only used to rethrow an exception and preserve the stack trace.")]
+    [ExcludeFromCodeCoverage(Justification = "When I used throw; to make the compiler does not complain about missing return, it was not covered because it is unreachable. This method is only used to rethrow an exception and preserve the stack trace.")]
     private static Exception Rethrow(Exception inner)
     {
         ExceptionDispatchInfo.Capture(inner).Throw();
