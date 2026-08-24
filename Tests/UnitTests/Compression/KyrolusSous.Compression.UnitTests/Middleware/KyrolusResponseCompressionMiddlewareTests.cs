@@ -472,6 +472,73 @@ public class KyrolusResponseCompressionMiddlewareTests
         context.Response.Headers.ContentEncoding.ToString().ShouldBe("br");
     }
 
+    [Fact(DisplayName = "Middleware should set Vary: Accept-Encoding header when response is compressed")]
+    public async Task Middleware_ShouldSetVaryHeader_WhenResponseCompressed()
+    {
+        var options = Options.Create(new KyrolusResponseCompressionOptions
+        {
+            MinSizeBytes = 10,
+            PreferredAlgorithm = CompressionAlgorithm.Brotli
+        });
+
+        var payloadBytes = Encoding.UTF8.GetBytes("Testing Vary Accept-Encoding header generation on compressed responses.");
+
+        var context = new DefaultHttpContext();
+        context.Request.Headers.AcceptEncoding = "br";
+        context.Response.ContentType = "application/json";
+
+        var responseStream = new MemoryStream();
+        context.Response.Body = responseStream;
+
+        var middleware = new KyrolusResponseCompressionMiddleware(
+            async ctx =>
+            {
+                ctx.Response.StatusCode = 200;
+                await ctx.Response.Body.WriteAsync(payloadBytes);
+            },
+            options,
+            _provider);
+
+        await middleware.InvokeAsync(context);
+
+        context.Response.Headers.Vary.ToString().ShouldContain("Accept-Encoding");
+    }
+
+    [Fact(DisplayName = "Middleware should not compress when client sends Accept-Encoding: identity")]
+    public async Task Middleware_ShouldNotCompress_WhenAcceptEncodingIsIdentity()
+    {
+        var options = Options.Create(new KyrolusResponseCompressionOptions
+        {
+            MinSizeBytes = 10,
+            PreferredAlgorithm = CompressionAlgorithm.Brotli
+        });
+
+        var payload = "Plain uncompressed text";
+        var payloadBytes = Encoding.UTF8.GetBytes(payload);
+
+        var context = new DefaultHttpContext();
+        context.Request.Headers.AcceptEncoding = "identity";
+        context.Response.ContentType = "application/json";
+
+        var responseStream = new MemoryStream();
+        context.Response.Body = responseStream;
+
+        var middleware = new KyrolusResponseCompressionMiddleware(
+            async ctx =>
+            {
+                ctx.Response.StatusCode = 200;
+                await ctx.Response.Body.WriteAsync(payloadBytes);
+            },
+            options,
+            _provider);
+
+        await middleware.InvokeAsync(context);
+
+        context.Response.Headers.ContainsKey("Content-Encoding").ShouldBeFalse();
+        responseStream.Position = 0;
+        Encoding.UTF8.GetString(responseStream.ToArray()).ShouldBe(payload);
+    }
+
     private sealed class SynchronousOnlyCompressor : ICompressor
     {
         public CompressionAlgorithm Algorithm => CompressionAlgorithm.Brotli;

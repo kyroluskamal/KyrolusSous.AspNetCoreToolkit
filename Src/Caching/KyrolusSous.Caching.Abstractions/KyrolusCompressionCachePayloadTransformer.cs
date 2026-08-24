@@ -97,9 +97,15 @@ public sealed class KyrolusCompressionCachePayloadTransformer : IKyrolusCachePay
         var algorithmByte = payload[Header.Length + 1];
         var algorithm = (CompressionAlgorithm)algorithmByte;
 
-        var comp = (algorithm == compressor.Algorithm)
-            ? compressor
-            : (provider?.GetCompressor(algorithm) ?? compressor);
+        ICompressor comp = compressor;
+        if (algorithm == compressor.Algorithm)
+        {
+            comp = compressor;
+        }
+        else if (provider is not null && provider.TryGetCompressor(algorithm, out var resolved) && resolved is not null)
+        {
+            comp = resolved;
+        }
 
         var compressed = SlicePayload(payload, Header.Length + 2);
         return comp.Decompress(compressed);

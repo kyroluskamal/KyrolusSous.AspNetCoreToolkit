@@ -23,6 +23,18 @@ public class Lz4CompressorTests : CompressorTestBase
         ex.Message.ShouldContain("header missing");
     }
 
+    [Fact(DisplayName = "Decompress negative length header should throw InvalidOperationException")]
+    public void Decompress_NegativeLengthHeader_ShouldThrowInvalidOperationException()
+    {
+        // 4 bytes indicating negative length -1 (0xFF, 0xFF, 0xFF, 0xFF)
+        var corrupted = new byte[] { 255, 255, 255, 255, 1, 2, 3 };
+
+        var ex = Should.Throw<InvalidOperationException>(() =>
+            Lz4Compressor.Instance.Decompress(corrupted));
+
+        ex.Message.ShouldContain("negative length");
+    }
+
     [Fact(DisplayName = "Decompress corrupted LZ4 block should throw InvalidOperationException")]
     public void Decompress_CorruptedLz4Block_ShouldThrowInvalidOperationException()
     {

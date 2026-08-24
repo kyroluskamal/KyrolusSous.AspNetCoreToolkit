@@ -47,15 +47,25 @@ public sealed class Lz4Compressor : ICompressor
         }
 
         var originalLength = BinaryPrimitives.ReadInt32LittleEndian(compressedData.Slice(0, 4));
+        if (originalLength < 0)
+        {
+            throw new InvalidOperationException("Invalid LZ4 compressed payload: negative length header.");
+        }
+
+        if (originalLength == 0)
+        {
+            return [];
+        }
+
         var output = new byte[originalLength];
 
         var decodedBytes = LZ4Codec.Decode(
             compressedData.Slice(4),
             output.AsSpan());
 
-        if (decodedBytes < 0)
+        if (decodedBytes < 0 || decodedBytes != originalLength)
         {
-            throw new InvalidOperationException("LZ4 decompression failed.");
+            throw new InvalidOperationException("LZ4 decompression failed: payload corrupted or size mismatch.");
         }
 
         return output;
@@ -69,6 +79,7 @@ public sealed class Lz4Compressor : ICompressor
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(destination);
+        cancellationToken.ThrowIfCancellationRequested();
 
         await using var lz4Stream = LZ4Stream.Encode(destination, MapLevel(level), leaveOpen: true);
         await source.CopyToAsync(lz4Stream, cancellationToken).ConfigureAwait(false);
@@ -82,6 +93,7 @@ public sealed class Lz4Compressor : ICompressor
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(destination);
+        cancellationToken.ThrowIfCancellationRequested();
 
         await using var lz4Stream = LZ4Stream.Decode(source, leaveOpen: true);
         await lz4Stream.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);

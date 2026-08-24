@@ -9,11 +9,13 @@ public sealed class KyrolusResponseCompressionMiddleware(
     IOptions<KyrolusResponseCompressionOptions> options,
     ICompressionProvider? provider = null)
 {
-    private readonly KyrolusResponseCompressionOptions _options = options.Value;
+    private readonly KyrolusResponseCompressionOptions _options = options?.Value ?? new KyrolusResponseCompressionOptions();
     private readonly ICompressionProvider _provider = provider ?? KyrolusCompressionProvider.Instance;
 
     public async Task InvokeAsync(HttpContext context)
     {
+        ArgumentNullException.ThrowIfNull(context);
+
         if (!ShouldProcessRequest(context))
         {
             await next(context).ConfigureAwait(false);
@@ -29,7 +31,6 @@ public sealed class KyrolusResponseCompressionMiddleware(
 
         if (!_provider.TryGetCompressor(algorithm.Value, out var compressor) || compressor is null)
         {
-            // If the requested algorithm compressor is not registered, proceed without compression
             await next(context).ConfigureAwait(false);
             return;
         }
@@ -75,9 +76,14 @@ public sealed class KyrolusResponseCompressionMiddleware(
 
     private CompressionAlgorithm? DetermineAlgorithm(HttpContext context)
     {
-        // Check if preferred algorithm is supported by client or requested explicitly
         var acceptEncoding = context.Request.Headers.AcceptEncoding.ToString();
         if (string.IsNullOrWhiteSpace(acceptEncoding)) return null;
+
+        var trimmed = acceptEncoding.Trim();
+        if (string.Equals(trimmed, "identity", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("*;q=0", StringComparison.OrdinalIgnoreCase))
+            return null;
+
         // Priority order: PreferredAlgorithm (if matched in Accept-Encoding) -> Brotli > Zstd > Gzip > Deflate
         if (IsEncodingSupported(acceptEncoding, _options.PreferredAlgorithm))
             return _options.PreferredAlgorithm;
@@ -216,6 +222,7 @@ public sealed class KyrolusResponseCompressionMiddleware(
             _compressionEnabled = true;
             _context.Response.Headers.ContentEncoding = GetEncodingHeaderValue(_compressor.Algorithm);
             _context.Response.Headers.Remove("Content-Length");
+            _context.Response.Headers.Append("Vary", "Accept-Encoding");
 
             _compressorStream = _compressor.CreateCompressionStream(_originalStream, _options.CompressionLevel, leaveOpen: true);
         }
@@ -247,9 +254,28 @@ public sealed class KyrolusResponseCompressionMiddleware(
             {
                 _isDisposed = true;
                 if (disposing)
+                {
+                    _compressorStream?.Flush();
                     _compressorStream?.Dispose();
+                    _compressorStream = null;
+                }
             }
             base.Dispose(disposing);
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            if (!_isDisposed)
+            {
+                _isDisposed = true;
+                if (_compressorStream is not null)
+                {
+                    await _compressorStream.FlushAsync().ConfigureAwait(false);
+                    await _compressorStream.DisposeAsync().ConfigureAwait(false);
+                    _compressorStream = null;
+                }
+            }
+            await base.DisposeAsync().ConfigureAwait(false);
         }
     }
 }
