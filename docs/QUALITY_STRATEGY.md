@@ -77,10 +77,11 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | ExceptionHandling.EntityFramework - Unit | unit | 6 | none | yes |
 | ExceptionHandling.FluentValidation - Unit | unit | 4 | none | yes |
 | ExceptionHandling.Redis - Unit | unit | 6 | none | yes |
+| Compression - Unit | unit | 55 | none | yes |
 | OpenApi - Integration | integration | 7 | none | yes |
 | Elasticsearch - Unit | unit | 7 | none | yes |
 | Resilience - Unit | unit | 9 | none | yes |
-| **Total** | | **1478** | | |
+| **Total** | | **1533** | | |
 
 <!-- END:GENERATED:test-suites -->
 

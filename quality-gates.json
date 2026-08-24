@@ -164,6 +164,13 @@
       "ci": true
     },
     {
+      "name": "Compression - Unit",
+      "project": "Tests/UnitTests/Compression/KyrolusSous.Compression.UnitTests/KyrolusSous.Compression.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
       "name": "OpenApi - Integration",
       "project": "Tests/IntegrationTests/KyrolusSous.OpenApi.IntegrationTests/KyrolusSous.OpenApi.IntegrationTests.csproj",
       "kind": "integration",
@@ -192,6 +199,7 @@
       { "prefix": "Mediator", "title": "Mediator" },
       { "prefix": "Validation", "title": "Validation" },
       { "prefix": "ExceptionHandling", "title": "Exception handling" },
+      { "prefix": "Compression", "title": "Compression" },
       { "prefix": "Caching", "title": "Caching" },
       { "prefix": "Mapping", "title": "Mapping" },
       { "prefix": "DataProtection", "title": "Data protection" },
