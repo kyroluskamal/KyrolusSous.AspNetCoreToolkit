@@ -49,6 +49,12 @@ public sealed class KyrolusHttpErrorContextFactory(
         return context.TraceIdentifier;
     }
 
+    private static readonly HashSet<string> PredefinedCultureNames = new(
+        CultureInfo.GetCultures(CultureTypes.AllCultures)
+            .Select(c => c.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name)),
+        StringComparer.OrdinalIgnoreCase);
+
     private static CultureInfo? ResolveCulture(HttpContext context)
     {
         var cultureFeature = context.Features.Get<IRequestCultureFeature>();
@@ -62,20 +68,16 @@ public sealed class KyrolusHttpErrorContextFactory(
             foreach (var lang in rawLanguages)
             {
                 var cultureName = lang.Split(';')[0].Trim();
-                if (string.IsNullOrWhiteSpace(cultureName)) continue;
+                if (string.IsNullOrWhiteSpace(cultureName) || cultureName == "*") continue;
+
+                if (!PredefinedCultureNames.Contains(cultureName))
+                {
+                    continue;
+                }
 
                 try
                 {
-                    var ci = CultureInfo.GetCultureInfo(cultureName);
-                    // On Linux ICU, unknown non-standard culture tags produce synthetic cultures with "Unknown" EnglishName, "zzz" 3-letter code, or "iv" 2-letter code
-                    if (ci.ThreeLetterISOLanguageName.Equals("zzz", StringComparison.OrdinalIgnoreCase) ||
-                        ci.TwoLetterISOLanguageName.Equals("iv", StringComparison.OrdinalIgnoreCase) ||
-                        ci.EnglishName.Contains("Unknown", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    return ci;
+                    return CultureInfo.GetCultureInfo(cultureName);
                 }
                 catch (CultureNotFoundException)
                 {
