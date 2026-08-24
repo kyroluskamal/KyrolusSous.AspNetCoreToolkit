@@ -27,44 +27,27 @@ public sealed class KyrolusExpressionMappingEngine
             return null;
         }
 
-        // Direct assignability check for immutable primitive types / strings
-        if (sourceType == typeof(string) || sourceType.IsPrimitive || sourceType.IsEnum || targetType == typeof(object))
+        if (IsDirectlyAssignable(sourceType, targetType))
         {
-            if (targetType.IsAssignableFrom(sourceType))
-            {
-                return source;
-            }
+            return source;
         }
 
-        // Check if a whole-type custom converter or rule is registered
         var rule = _configuration.FindRule(sourceType, targetType);
         if (rule?.CustomTypeConverter is not null)
         {
             return rule.CustomTypeConverter(source, context);
         }
 
-        // Check circular reference cache if tracking is enabled
-        if (_configuration.EnableCircularReferenceTracking && !sourceType.IsValueType && !targetType.IsValueType)
+        if (TryGetCircularReference(sourceType, targetType, source, context, out var existing))
         {
-            if (context.TryGetMapped(source, targetType, out var existing))
-            {
-                return existing;
-            }
+            return existing;
         }
 
-        // Check collection types
-        if (KyrolusCollectionMappingHelper.IsCollectionType(sourceType, out var sourceElem) &&
-            KyrolusCollectionMappingHelper.IsCollectionType(targetType, out var targetElem))
+        if (TryMapCollection(sourceType, targetType, source, context, mapper, out var collectionResult))
         {
-            return KyrolusCollectionMappingHelper.MapCollection(
-                (IEnumerable)source,
-                targetType,
-                targetElem,
-                (elem, ctx) => Map(elem?.GetType() ?? sourceElem, targetElem, elem, ctx, mapper),
-                context);
+            return collectionResult;
         }
 
-        // Execute or compile mapping delegate
         var mappingFunc = _mappingCache.GetOrAdd((sourceType, targetType), key => BuildMappingDelegate(key.Source, key.Target));
         return mappingFunc(source, context, mapper);
     }
@@ -83,151 +66,57 @@ public sealed class KyrolusExpressionMappingEngine
         inPlaceAction(source, target, context, mapper);
     }
 
+    private static bool IsDirectlyAssignable(Type sourceType, Type targetType) =>
+        (sourceType == typeof(string) || sourceType.IsPrimitive || sourceType.IsEnum || targetType == typeof(object)) &&
+        targetType.IsAssignableFrom(sourceType);
+
+    private bool TryGetCircularReference(Type sourceType, Type targetType, object source, KyrolusMappingContext context, out object? existing)
+    {
+        if (_configuration.EnableCircularReferenceTracking && !sourceType.IsValueType && !targetType.IsValueType)
+        {
+            return context.TryGetMapped(source, targetType, out existing);
+        }
+
+        existing = null;
+        return false;
+    }
+
+    private bool TryMapCollection(Type sourceType, Type targetType, object source, KyrolusMappingContext context, IKyrolusObjectMapper mapper, out object? result)
+    {
+        if (KyrolusCollectionMappingHelper.IsCollectionType(sourceType, out var sourceElem) &&
+            KyrolusCollectionMappingHelper.IsCollectionType(targetType, out var targetElem))
+        {
+            result = KyrolusCollectionMappingHelper.MapCollection(
+                (IEnumerable)source,
+                targetType,
+                targetElem,
+                (elem, ctx) => Map(elem?.GetType() ?? sourceElem, targetElem, elem, ctx, mapper),
+                context);
+            return true;
+        }
+
+        result = null;
+        return false;
+    }
+
     private Func<object, KyrolusMappingContext, IKyrolusObjectMapper, object> BuildMappingDelegate(Type sourceType, Type targetType)
     {
         var rule = _configuration.FindRule(sourceType, targetType);
+        var ctor = ResolveConstructor(targetType);
 
-        // Check for constructor binding (prefer parameterless constructor unless [KyrolusMapConstructor] is present or no parameterless ctor exists)
-        var constructors = targetType.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
-        var explicitCtor = constructors.FirstOrDefault(c => c.GetCustomAttribute<KyrolusMapConstructorAttribute>() is not null);
-        var parameterlessCtor = constructors.FirstOrDefault(c => c.GetParameters().Length == 0);
-        var ctor = explicitCtor ?? parameterlessCtor ?? constructors.OrderByDescending(c => c.GetParameters().Length).FirstOrDefault();
-
-        var sourceProps = sourceType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanRead)
-            .ToDictionary(p => p.Name, p => p, StringComparer.OrdinalIgnoreCase);
-
-        var targetProps = targetType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanWrite)
-            .ToList();
+        var sourceProps = GetReadableProperties(sourceType);
+        var targetProps = GetWritableProperties(targetType);
 
         return (src, ctx, mapper) =>
         {
-            object targetInstance;
             var boundConstructorProps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var targetInstance = CreateTargetInstance(sourceType, targetType, ctor, src, ctx, mapper, rule, sourceProps, boundConstructorProps);
 
-            // 1. Construct target
-            if (rule?.CustomConstructor is not null)
-            {
-                targetInstance = rule.CustomConstructor.DynamicInvoke(src)!;
-            }
-            else if (ctor is not null && ctor.GetParameters().Length > 0)
-            {
-                var parameters = ctor.GetParameters();
-                var args = new object?[parameters.Length];
-                for (var i = 0; i < parameters.Length; i++)
-                {
-                    var param = parameters[i];
-                    var paramName = param.Name ?? string.Empty;
-                    boundConstructorProps.Add(paramName);
+            TrackCircularReference(sourceType, targetType, src, targetInstance, ctx);
+            ExecuteHooks(rule?.BeforeMapActions, src, targetInstance, ctx);
 
-                    if (rule?.CustomMemberResolvers.TryGetValue(paramName, out var customResolver) == true)
-                    {
-                        args[i] = customResolver(src, ctx);
-                    }
-                    else if (sourceProps.TryGetValue(paramName, out var matchedSourceProp))
-                    {
-                        var rawVal = matchedSourceProp.GetValue(src);
-                        args[i] = MapValue(rawVal, matchedSourceProp.PropertyType, param.ParameterType, ctx, mapper);
-                    }
-                    else if (_configuration.EnableFlattening &&
-                             KyrolusMemberFlatteningResolver.ResolveFlattenedPath(sourceType, paramName) is { } path)
-                    {
-                        var rawVal = KyrolusMemberFlatteningResolver.EvaluatePath(path, src);
-                        args[i] = MapValue(rawVal, path.Last().PropertyType, param.ParameterType, ctx, mapper);
-                    }
-                    else
-                    {
-                        args[i] = param.HasDefaultValue ? param.DefaultValue : (param.ParameterType.IsValueType ? Activator.CreateInstance(param.ParameterType) : null);
-                    }
-                }
-
-                targetInstance = ctor.Invoke(args);
-            }
-            else
-            {
-                targetInstance = Activator.CreateInstance(targetType)!;
-            }
-
-            // Register in circular reference tracker
-            if (_configuration.EnableCircularReferenceTracking && !sourceType.IsValueType && !targetType.IsValueType)
-            {
-                ctx.RegisterMapped(src, targetInstance);
-            }
-
-            // BeforeMap hooks
-            if (rule?.BeforeMapActions.Count > 0)
-            {
-                foreach (var before in rule.BeforeMapActions)
-                {
-                    before(src, targetInstance, ctx);
-                }
-            }
-
-            // 2. Set writable properties
-            foreach (var targetProp in targetProps)
-            {
-                var propName = targetProp.Name;
-
-                // If property was already set via constructor parameter, don't overwrite
-                if (boundConstructorProps.Contains(propName))
-                {
-                    continue;
-                }
-
-                // Check ignore list
-                if (rule?.IgnoredMembers.Contains(propName) == true ||
-                    targetProp.GetCustomAttribute<KyrolusIgnoreMapAttribute>() is not null)
-                {
-                    continue;
-                }
-
-                // Check member condition predicate
-                if (rule?.MemberConditions.TryGetValue(propName, out var condition) == true && !condition(src, ctx))
-                {
-                    continue;
-                }
-
-                // Check custom member resolvers
-                if (rule?.CustomMemberResolvers.TryGetValue(propName, out var customResolver) == true)
-                {
-                    var resolved = customResolver(src, ctx);
-                    targetProp.SetValue(targetInstance, resolved);
-                    continue;
-                }
-
-                // Check MapProperty attribute on target
-                var mapAttr = targetProp.GetCustomAttribute<KyrolusMapPropertyAttribute>();
-                var sourceLookupName = mapAttr?.SourceName ?? (rule?.PropertyNameMappings.TryGetValue(propName, out var alias) == true ? alias : propName);
-
-                if (sourceProps.TryGetValue(sourceLookupName, out var sourceProp))
-                {
-                    if (sourceProp.GetCustomAttribute<KyrolusIgnoreMapAttribute>() is not null)
-                    {
-                        continue;
-                    }
-
-                    var rawVal = sourceProp.GetValue(src);
-                    var mappedVal = MapValue(rawVal, sourceProp.PropertyType, targetProp.PropertyType, ctx, mapper);
-                    targetProp.SetValue(targetInstance, mappedVal);
-                }
-                else if (_configuration.EnableFlattening &&
-                         KyrolusMemberFlatteningResolver.ResolveFlattenedPath(sourceType, propName) is { } path)
-                {
-                    var rawVal = KyrolusMemberFlatteningResolver.EvaluatePath(path, src);
-                    var mappedVal = MapValue(rawVal, path.Last().PropertyType, targetProp.PropertyType, ctx, mapper);
-                    targetProp.SetValue(targetInstance, mappedVal);
-                }
-            }
-
-            // AfterMap hooks
-            if (rule?.AfterMapActions.Count > 0)
-            {
-                foreach (var after in rule.AfterMapActions)
-                {
-                    after(src, targetInstance, ctx);
-                }
-            }
+            MapWritableProperties(sourceType, targetProps, boundConstructorProps, src, targetInstance, ctx, mapper, rule, sourceProps);
+            ExecuteHooks(rule?.AfterMapActions, src, targetInstance, ctx);
 
             return targetInstance;
         };
@@ -236,105 +125,313 @@ public sealed class KyrolusExpressionMappingEngine
     private Action<object, object, KyrolusMappingContext, IKyrolusObjectMapper> BuildInPlaceDelegate(Type sourceType, Type targetType)
     {
         var rule = _configuration.FindRule(sourceType, targetType);
-
-        var sourceProps = sourceType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanRead)
-            .ToDictionary(p => p.Name, p => p, StringComparer.OrdinalIgnoreCase);
-
-        var targetProps = targetType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanWrite)
-            .ToList();
+        var sourceProps = GetReadableProperties(sourceType);
+        var targetProps = GetWritableProperties(targetType);
 
         return (src, targetInstance, ctx, mapper) =>
         {
-            if (_configuration.EnableCircularReferenceTracking && !sourceType.IsValueType && !targetType.IsValueType)
-            {
-                ctx.RegisterMapped(src, targetInstance);
-            }
+            TrackCircularReference(sourceType, targetType, src, targetInstance, ctx);
+            ExecuteHooks(rule?.BeforeMapActions, src, targetInstance, ctx);
 
-            // BeforeMap hooks
-            if (rule?.BeforeMapActions.Count > 0)
-            {
-                foreach (var before in rule.BeforeMapActions)
-                {
-                    before(src, targetInstance, ctx);
-                }
-            }
-
-            foreach (var targetProp in targetProps)
-            {
-                var propName = targetProp.Name;
-
-                if (rule?.IgnoredMembers.Contains(propName) == true ||
-                    targetProp.GetCustomAttribute<KyrolusIgnoreMapAttribute>() is not null)
-                {
-                    continue;
-                }
-
-                // Check member condition predicate
-                if (rule?.MemberConditions.TryGetValue(propName, out var condition) == true && !condition(src, ctx))
-                {
-                    continue;
-                }
-
-                if (rule?.CustomMemberResolvers.TryGetValue(propName, out var customResolver) == true)
-                {
-                    var resolved = customResolver(src, ctx);
-                    targetProp.SetValue(targetInstance, resolved);
-                    continue;
-                }
-
-                var mapAttr = targetProp.GetCustomAttribute<KyrolusMapPropertyAttribute>();
-                var sourceLookupName = mapAttr?.SourceName ?? (rule?.PropertyNameMappings.TryGetValue(propName, out var alias) == true ? alias : propName);
-
-                if (sourceProps.TryGetValue(sourceLookupName, out var sourceProp))
-                {
-                    if (sourceProp.GetCustomAttribute<KyrolusIgnoreMapAttribute>() is not null)
-                    {
-                        continue;
-                    }
-
-                    var rawVal = sourceProp.GetValue(src);
-                    var shouldIgnoreNull = (rule?.IgnoreNullValues == true) ||
-                                           sourceType.GetCustomAttribute<KyrolusIgnoreNullAttribute>() is not null ||
-                                           sourceProp.GetCustomAttribute<KyrolusIgnoreNullAttribute>() is not null ||
-                                           targetProp.GetCustomAttribute<KyrolusIgnoreNullAttribute>() is not null;
-
-                    if (shouldIgnoreNull && rawVal is null)
-                    {
-                        continue;
-                    }
-
-                    var mappedVal = MapValue(rawVal, sourceProp.PropertyType, targetProp.PropertyType, ctx, mapper);
-                    targetProp.SetValue(targetInstance, mappedVal);
-                }
-                else if (_configuration.EnableFlattening &&
-                         KyrolusMemberFlatteningResolver.ResolveFlattenedPath(sourceType, propName) is { } path)
-                {
-                    var rawVal = KyrolusMemberFlatteningResolver.EvaluatePath(path, src);
-                    var shouldIgnoreNull = (rule?.IgnoreNullValues == true) ||
-                                           sourceType.GetCustomAttribute<KyrolusIgnoreNullAttribute>() is not null ||
-                                           targetProp.GetCustomAttribute<KyrolusIgnoreNullAttribute>() is not null;
-
-                    if (shouldIgnoreNull && rawVal is null)
-                    {
-                        continue;
-                    }
-
-                    var mappedVal = MapValue(rawVal, path.Last().PropertyType, targetProp.PropertyType, ctx, mapper);
-                    targetProp.SetValue(targetInstance, mappedVal);
-                }
-            }
-
-            // AfterMap hooks
-            if (rule?.AfterMapActions.Count > 0)
-            {
-                foreach (var after in rule.AfterMapActions)
-                {
-                    after(src, targetInstance, ctx);
-                }
-            }
+            MapWritablePropertiesInPlace(sourceType, targetProps, src, targetInstance, ctx, mapper, rule, sourceProps);
+            ExecuteHooks(rule?.AfterMapActions, src, targetInstance, ctx);
         };
+    }
+
+    private static ConstructorInfo? ResolveConstructor(Type targetType)
+    {
+        var constructors = targetType.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
+        var explicitCtor = constructors.FirstOrDefault(c => c.GetCustomAttribute<KyrolusMapConstructorAttribute>() is not null);
+        var parameterlessCtor = constructors.FirstOrDefault(c => c.GetParameters().Length == 0);
+        return explicitCtor ?? parameterlessCtor ?? constructors.OrderByDescending(c => c.GetParameters().Length).FirstOrDefault();
+    }
+
+    private static Dictionary<string, PropertyInfo> GetReadableProperties(Type type) =>
+        type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanRead)
+            .ToDictionary(p => p.Name, p => p, StringComparer.OrdinalIgnoreCase);
+
+    private static List<PropertyInfo> GetWritableProperties(Type type) =>
+        type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanWrite)
+            .ToList();
+
+    private object CreateTargetInstance(
+        Type sourceType,
+        Type targetType,
+        ConstructorInfo? ctor,
+        object src,
+        KyrolusMappingContext ctx,
+        IKyrolusObjectMapper mapper,
+        KyrolusTypeMappingRule? rule,
+        Dictionary<string, PropertyInfo> sourceProps,
+        HashSet<string> boundConstructorProps)
+    {
+        if (rule?.CustomConstructor is not null)
+        {
+            return rule.CustomConstructor.DynamicInvoke(src)!;
+        }
+
+        if (ctor is not null && ctor.GetParameters().Length > 0)
+        {
+            var args = BuildConstructorArgs(sourceType, ctor, src, ctx, mapper, rule, sourceProps, boundConstructorProps);
+            return ctor.Invoke(args);
+        }
+
+        return Activator.CreateInstance(targetType)!;
+    }
+
+    private object?[] BuildConstructorArgs(
+        Type sourceType,
+        ConstructorInfo ctor,
+        object src,
+        KyrolusMappingContext ctx,
+        IKyrolusObjectMapper mapper,
+        KyrolusTypeMappingRule? rule,
+        Dictionary<string, PropertyInfo> sourceProps,
+        HashSet<string> boundConstructorProps)
+    {
+        var parameters = ctor.GetParameters();
+        var args = new object?[parameters.Length];
+
+        for (var i = 0; i < parameters.Length; i++)
+        {
+            var param = parameters[i];
+            var paramName = param.Name ?? string.Empty;
+            boundConstructorProps.Add(paramName);
+
+            args[i] = ResolveConstructorParameterValue(sourceType, param, paramName, src, ctx, mapper, rule, sourceProps);
+        }
+
+        return args;
+    }
+
+    private object? ResolveConstructorParameterValue(
+        Type sourceType,
+        ParameterInfo param,
+        string paramName,
+        object src,
+        KyrolusMappingContext ctx,
+        IKyrolusObjectMapper mapper,
+        KyrolusTypeMappingRule? rule,
+        Dictionary<string, PropertyInfo> sourceProps)
+    {
+        if (rule?.CustomMemberResolvers.TryGetValue(paramName, out var customResolver) == true)
+        {
+            return customResolver(src, ctx);
+        }
+
+        if (sourceProps.TryGetValue(paramName, out var matchedSourceProp))
+        {
+            var rawVal = matchedSourceProp.GetValue(src);
+            return MapValue(rawVal, matchedSourceProp.PropertyType, param.ParameterType, ctx, mapper);
+        }
+
+        if (_configuration.EnableFlattening &&
+            KyrolusMemberFlatteningResolver.ResolveFlattenedPath(sourceType, paramName) is { } path)
+        {
+            var rawVal = KyrolusMemberFlatteningResolver.EvaluatePath(path, src);
+            return MapValue(rawVal, path.Last().PropertyType, param.ParameterType, ctx, mapper);
+        }
+
+        return param.HasDefaultValue
+            ? param.DefaultValue
+            : (param.ParameterType.IsValueType ? Activator.CreateInstance(param.ParameterType) : null);
+    }
+
+    private void MapWritableProperties(
+        Type sourceType,
+        List<PropertyInfo> targetProps,
+        HashSet<string> boundConstructorProps,
+        object src,
+        object targetInstance,
+        KyrolusMappingContext ctx,
+        IKyrolusObjectMapper mapper,
+        KyrolusTypeMappingRule? rule,
+        Dictionary<string, PropertyInfo> sourceProps)
+    {
+        foreach (var targetProp in targetProps)
+        {
+            if (boundConstructorProps.Contains(targetProp.Name))
+            {
+                continue;
+            }
+
+            MapSingleProperty(sourceType, targetProp, src, targetInstance, ctx, mapper, rule, sourceProps);
+        }
+    }
+
+    private void MapSingleProperty(
+        Type sourceType,
+        PropertyInfo targetProp,
+        object src,
+        object targetInstance,
+        KyrolusMappingContext ctx,
+        IKyrolusObjectMapper mapper,
+        KyrolusTypeMappingRule? rule,
+        Dictionary<string, PropertyInfo> sourceProps)
+    {
+        var propName = targetProp.Name;
+
+        if (IsPropertyIgnored(targetProp, propName, rule))
+        {
+            return;
+        }
+
+        if (rule?.MemberConditions.TryGetValue(propName, out var condition) == true && !condition(src, ctx))
+        {
+            return;
+        }
+
+        if (rule?.CustomMemberResolvers.TryGetValue(propName, out var customResolver) == true)
+        {
+            targetProp.SetValue(targetInstance, customResolver(src, ctx));
+            return;
+        }
+
+        var sourceLookupName = ResolveSourcePropertyName(targetProp, propName, rule);
+
+        if (sourceProps.TryGetValue(sourceLookupName, out var sourceProp))
+        {
+            if (sourceProp.GetCustomAttribute<KyrolusIgnoreMapAttribute>() is not null)
+            {
+                return;
+            }
+
+            var rawVal = sourceProp.GetValue(src);
+            var mappedVal = MapValue(rawVal, sourceProp.PropertyType, targetProp.PropertyType, ctx, mapper);
+            targetProp.SetValue(targetInstance, mappedVal);
+        }
+        else if (_configuration.EnableFlattening &&
+                 KyrolusMemberFlatteningResolver.ResolveFlattenedPath(sourceType, propName) is { } path)
+        {
+            var rawVal = KyrolusMemberFlatteningResolver.EvaluatePath(path, src);
+            var mappedVal = MapValue(rawVal, path.Last().PropertyType, targetProp.PropertyType, ctx, mapper);
+            targetProp.SetValue(targetInstance, mappedVal);
+        }
+    }
+
+    private void MapWritablePropertiesInPlace(
+        Type sourceType,
+        List<PropertyInfo> targetProps,
+        object src,
+        object targetInstance,
+        KyrolusMappingContext ctx,
+        IKyrolusObjectMapper mapper,
+        KyrolusTypeMappingRule? rule,
+        Dictionary<string, PropertyInfo> sourceProps)
+    {
+        foreach (var targetProp in targetProps)
+        {
+            MapSinglePropertyInPlace(sourceType, targetProp, src, targetInstance, ctx, mapper, rule, sourceProps);
+        }
+    }
+
+    private void MapSinglePropertyInPlace(
+        Type sourceType,
+        PropertyInfo targetProp,
+        object src,
+        object targetInstance,
+        KyrolusMappingContext ctx,
+        IKyrolusObjectMapper mapper,
+        KyrolusTypeMappingRule? rule,
+        Dictionary<string, PropertyInfo> sourceProps)
+    {
+        var propName = targetProp.Name;
+
+        if (IsPropertyIgnored(targetProp, propName, rule))
+        {
+            return;
+        }
+
+        if (rule?.MemberConditions.TryGetValue(propName, out var condition) == true && !condition(src, ctx))
+        {
+            return;
+        }
+
+        if (rule?.CustomMemberResolvers.TryGetValue(propName, out var customResolver) == true)
+        {
+            targetProp.SetValue(targetInstance, customResolver(src, ctx));
+            return;
+        }
+
+        var sourceLookupName = ResolveSourcePropertyName(targetProp, propName, rule);
+
+        if (sourceProps.TryGetValue(sourceLookupName, out var sourceProp))
+        {
+            if (sourceProp.GetCustomAttribute<KyrolusIgnoreMapAttribute>() is not null)
+            {
+                return;
+            }
+
+            var rawVal = sourceProp.GetValue(src);
+            if (ShouldIgnoreNull(sourceType, sourceProp, targetProp, rule, rawVal))
+            {
+                return;
+            }
+
+            var mappedVal = MapValue(rawVal, sourceProp.PropertyType, targetProp.PropertyType, ctx, mapper);
+            targetProp.SetValue(targetInstance, mappedVal);
+        }
+        else if (_configuration.EnableFlattening &&
+                 KyrolusMemberFlatteningResolver.ResolveFlattenedPath(sourceType, propName) is { } path)
+        {
+            var rawVal = KyrolusMemberFlatteningResolver.EvaluatePath(path, src);
+            if (ShouldIgnoreNull(sourceType, null, targetProp, rule, rawVal))
+            {
+                return;
+            }
+
+            var mappedVal = MapValue(rawVal, path.Last().PropertyType, targetProp.PropertyType, ctx, mapper);
+            targetProp.SetValue(targetInstance, mappedVal);
+        }
+    }
+
+    private static bool IsPropertyIgnored(PropertyInfo targetProp, string propName, KyrolusTypeMappingRule? rule) =>
+        (rule?.IgnoredMembers.Contains(propName) == true) ||
+        targetProp.GetCustomAttribute<KyrolusIgnoreMapAttribute>() is not null;
+
+    private static string ResolveSourcePropertyName(PropertyInfo targetProp, string propName, KyrolusTypeMappingRule? rule)
+    {
+        var mapAttr = targetProp.GetCustomAttribute<KyrolusMapPropertyAttribute>();
+        return mapAttr?.SourceName ?? (rule?.PropertyNameMappings.TryGetValue(propName, out var alias) == true ? alias : propName);
+    }
+
+    private static bool ShouldIgnoreNull(
+        Type sourceType,
+        PropertyInfo? sourceProp,
+        PropertyInfo targetProp,
+        KyrolusTypeMappingRule? rule,
+        object? rawVal)
+    {
+        if (rawVal is not null)
+        {
+            return false;
+        }
+
+        return (rule?.IgnoreNullValues == true) ||
+               sourceType.GetCustomAttribute<KyrolusIgnoreNullAttribute>() is not null ||
+               (sourceProp is not null && sourceProp.GetCustomAttribute<KyrolusIgnoreNullAttribute>() is not null) ||
+               targetProp.GetCustomAttribute<KyrolusIgnoreNullAttribute>() is not null;
+    }
+
+    private void TrackCircularReference(Type sourceType, Type targetType, object src, object targetInstance, KyrolusMappingContext ctx)
+    {
+        if (_configuration.EnableCircularReferenceTracking && !sourceType.IsValueType && !targetType.IsValueType)
+        {
+            ctx.RegisterMapped(src, targetInstance);
+        }
+    }
+
+    private static void ExecuteHooks(IReadOnlyList<Action<object, object, KyrolusMappingContext>>? hooks, object src, object targetInstance, KyrolusMappingContext ctx)
+    {
+        if (hooks is { Count: > 0 })
+        {
+            foreach (var hook in hooks)
+            {
+                hook(src, targetInstance, ctx);
+            }
+        }
     }
 
     private object? MapValue(object? value, Type sourceType, Type targetType, KyrolusMappingContext context, IKyrolusObjectMapper mapper)
@@ -346,13 +443,11 @@ public sealed class KyrolusExpressionMappingEngine
                 : null;
         }
 
-        // Direct matching types
         if (targetType.IsAssignableFrom(sourceType))
         {
             return value;
         }
 
-        // Nullable unwrap
         var underlyingTarget = Nullable.GetUnderlyingType(targetType) ?? targetType;
         var underlyingSource = Nullable.GetUnderlyingType(sourceType) ?? sourceType;
 
@@ -361,127 +456,200 @@ public sealed class KyrolusExpressionMappingEngine
             return value;
         }
 
-        // String conversions
         if (targetType == typeof(string))
         {
             return Convert.ToString(value, CultureInfo.InvariantCulture);
         }
 
-        // Enum conversions
-        if (underlyingTarget.IsEnum)
+        if (TryConvertEnum(value, underlyingSource, underlyingTarget, out var enumResult))
         {
-            if (value is string str)
+            return enumResult;
+        }
+
+        if (TryConvertGuid(value, underlyingSource, underlyingTarget, out var guidResult))
+        {
+            return guidResult;
+        }
+
+        if (TryConvertDateOnly(value, underlyingSource, underlyingTarget, out var dateResult))
+        {
+            return dateResult;
+        }
+
+        if (TryConvertTimeOnly(value, underlyingSource, underlyingTarget, out var timeResult))
+        {
+            return timeResult;
+        }
+
+        if (TryConvertDateTime(value, underlyingTarget, out var dtResult))
+        {
+            return dtResult;
+        }
+
+        if (TryConvertPrimitive(value, underlyingSource, underlyingTarget, out var primResult))
+        {
+            return primResult;
+        }
+
+        return Map(underlyingSource, underlyingTarget, value, context, mapper);
+    }
+
+    private static bool TryConvertEnum(object value, Type source, Type target, out object? result)
+    {
+        if (target.IsEnum)
+        {
+            result = value is string str
+                ? Enum.Parse(target, str, ignoreCase: true)
+                : Enum.ToObject(target, value);
+            return true;
+        }
+
+        if (source.IsEnum && target == typeof(string))
+        {
+            result = value.ToString();
+            return true;
+        }
+
+        result = null;
+        return false;
+    }
+
+    private static bool TryConvertGuid(object value, Type source, Type target, out object? result)
+    {
+        if (target == typeof(Guid) && value is string guidStr)
+        {
+            result = Guid.TryParse(guidStr, out var parsedGuid) ? parsedGuid : Guid.Empty;
+            return true;
+        }
+
+        if (source == typeof(Guid) && target == typeof(string))
+        {
+            result = value.ToString();
+            return true;
+        }
+
+        result = null;
+        return false;
+    }
+
+    private static bool TryConvertDateOnly(object value, Type source, Type target, out object? result)
+    {
+        if (target == typeof(DateOnly))
+        {
+            if (value is DateTime dt)
             {
-                return Enum.Parse(underlyingTarget, str, ignoreCase: true);
+                result = DateOnly.FromDateTime(dt);
+                return true;
             }
 
-            return Enum.ToObject(underlyingTarget, value);
-        }
-
-        if (underlyingSource.IsEnum && underlyingTarget == typeof(string))
-        {
-            return value.ToString();
-        }
-
-        // Guid conversions
-        if (underlyingTarget == typeof(Guid) && value is string guidStr)
-        {
-            return Guid.TryParse(guidStr, out var parsedGuid) ? parsedGuid : Guid.Empty;
-        }
-
-        if (underlyingSource == typeof(Guid) && underlyingTarget == typeof(string))
-        {
-            return value.ToString();
-        }
-
-        // DateOnly conversions
-        if (underlyingTarget == typeof(DateOnly))
-        {
-            if (value is DateTime dateTime)
+            if (value is string str && DateOnly.TryParse(str, CultureInfo.InvariantCulture, out var parsed))
             {
-                return DateOnly.FromDateTime(dateTime);
-            }
-
-            if (value is string dateStr && DateOnly.TryParse(dateStr, CultureInfo.InvariantCulture, out var parsedDate))
-            {
-                return parsedDate;
+                result = parsed;
+                return true;
             }
         }
 
-        if (underlyingSource == typeof(DateOnly))
+        if (source == typeof(DateOnly))
         {
-            if (underlyingTarget == typeof(DateTime) && value is DateOnly dateOnlyVal)
+            if (target == typeof(DateTime) && value is DateOnly d)
             {
-                return dateOnlyVal.ToDateTime(TimeOnly.MinValue);
+                result = d.ToDateTime(TimeOnly.MinValue);
+                return true;
             }
 
-            if (underlyingTarget == typeof(string) && value is DateOnly dVal)
+            if (target == typeof(string) && value is DateOnly dStr)
             {
-                return dVal.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                result = dStr.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                return true;
             }
         }
 
-        // TimeOnly conversions
-        if (underlyingTarget == typeof(TimeOnly))
+        result = null;
+        return false;
+    }
+
+    private static bool TryConvertTimeOnly(object value, Type source, Type target, out object? result)
+    {
+        if (target == typeof(TimeOnly))
         {
             if (value is TimeSpan ts)
             {
-                return TimeOnly.FromTimeSpan(ts);
+                result = TimeOnly.FromTimeSpan(ts);
+                return true;
             }
 
-            if (value is DateTime dtTime)
+            if (value is DateTime dt)
             {
-                return TimeOnly.FromDateTime(dtTime);
+                result = TimeOnly.FromDateTime(dt);
+                return true;
             }
 
-            if (value is string timeStr && TimeOnly.TryParse(timeStr, CultureInfo.InvariantCulture, out var parsedTime))
+            if (value is string str && TimeOnly.TryParse(str, CultureInfo.InvariantCulture, out var parsed))
             {
-                return parsedTime;
+                result = parsed;
+                return true;
             }
         }
 
-        if (underlyingSource == typeof(TimeOnly))
+        if (source == typeof(TimeOnly))
         {
-            if (underlyingTarget == typeof(TimeSpan) && value is TimeOnly tOnlyVal)
+            if (target == typeof(TimeSpan) && value is TimeOnly t)
             {
-                return tOnlyVal.ToTimeSpan();
+                result = t.ToTimeSpan();
+                return true;
             }
 
-            if (underlyingTarget == typeof(string) && value is TimeOnly tVal)
+            if (target == typeof(string) && value is TimeOnly tStr)
             {
-                return tVal.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+                result = tStr.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+                return true;
             }
         }
 
-        // DateTime / DateTimeOffset conversions
-        if (underlyingTarget == typeof(DateTimeOffset) && value is DateTime dt)
+        result = null;
+        return false;
+    }
+
+    private static bool TryConvertDateTime(object value, Type target, out object? result)
+    {
+        if (target == typeof(DateTimeOffset) && value is DateTime dt)
         {
             if (dt == DateTime.MinValue)
             {
-                return DateTimeOffset.MinValue;
+                result = DateTimeOffset.MinValue;
+                return true;
             }
 
             if (dt == DateTime.MaxValue)
             {
-                return DateTimeOffset.MaxValue;
+                result = DateTimeOffset.MaxValue;
+                return true;
             }
 
-            return dt.Kind == DateTimeKind.Unspecified
+            result = dt.Kind == DateTimeKind.Unspecified
                 ? new DateTimeOffset(dt, TimeSpan.Zero)
                 : new DateTimeOffset(dt);
+            return true;
         }
 
-        if (underlyingTarget == typeof(DateTime) && value is DateTimeOffset dto)
+        if (target == typeof(DateTime) && value is DateTimeOffset dto)
         {
-            return dto.DateTime;
+            result = dto.DateTime;
+            return true;
         }
 
-        // Primitive Convert.ChangeType
-        if (typeof(IConvertible).IsAssignableFrom(underlyingSource) && typeof(IConvertible).IsAssignableFrom(underlyingTarget))
+        result = null;
+        return false;
+    }
+
+    private static bool TryConvertPrimitive(object value, Type source, Type target, out object? result)
+    {
+        if (typeof(IConvertible).IsAssignableFrom(source) && typeof(IConvertible).IsAssignableFrom(target))
         {
             try
             {
-                return Convert.ChangeType(value, underlyingTarget, CultureInfo.InvariantCulture);
+                result = Convert.ChangeType(value, target, CultureInfo.InvariantCulture);
+                return true;
             }
             catch
             {
@@ -489,7 +657,7 @@ public sealed class KyrolusExpressionMappingEngine
             }
         }
 
-        // Complex / nested object recursion
-        return Map(underlyingSource, underlyingTarget, value, context, mapper);
+        result = null;
+        return false;
     }
 }
