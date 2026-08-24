@@ -1,5 +1,8 @@
 namespace KyrolusSous.Repositories.Marten.Runtime.EventStore;
 
+/// <summary>
+/// Default Marten-backed implementation of <see cref="IKyrolusMartenEventStore"/>.
+/// </summary>
 public class KyrolusMartenEventStore(IDocumentSession session) : IKyrolusMartenEventStore
 {
     private readonly IDocumentSession session = session ?? throw new ArgumentNullException(nameof(session));
@@ -23,10 +26,25 @@ public class KyrolusMartenEventStore(IDocumentSession session) : IKyrolusMartenE
         return [.. stream.Select(e => e.Data)];
     }
 
+    public Task<TAggregate?> AggregateStreamAsync<TAggregate, TId>(TId streamId, long version = 0, DateTimeOffset? timestamp = null, CancellationToken cancellationToken = default)
+        where TAggregate : class
+        where TId : notnull
+    {
+        var key = streamId.ToString() ?? throw new ArgumentNullException(nameof(streamId));
+        return session.Events.AggregateStreamAsync<TAggregate>(key, version, timestamp, token: cancellationToken);
+    }
+
     public async Task<bool> StreamExistsAsync<TId>(TId streamId, CancellationToken cancellationToken = default) where TId : notnull
     {
         var key = streamId.ToString() ?? throw new ArgumentNullException(nameof(streamId));
         var state = await session.Events.FetchStreamStateAsync(key, token: cancellationToken).ConfigureAwait(false);
         return state is not null;
+    }
+
+    public async Task ArchiveStreamAsync<TId>(TId streamId, CancellationToken cancellationToken = default) where TId : notnull
+    {
+        var key = streamId.ToString() ?? throw new ArgumentNullException(nameof(streamId));
+        session.Events.ArchiveStream(key);
+        await session.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }

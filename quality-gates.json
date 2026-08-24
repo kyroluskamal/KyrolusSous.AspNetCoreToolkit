@@ -52,6 +52,13 @@
       "ci": true
     },
     {
+      "name": "Marten.Runtime - Unit",
+      "project": "Tests/UnitTests/Repositories/KyrolusSous.Repositories.Marten.Runtime.UnitTests/KyrolusSous.Repositories.Marten.Runtime.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
       "name": "Logging",
       "project": "Tests/UnitTests/Logging/KyrolusSous.Logging.UnitTests/KyrolusSous.Logging.UnitTests.csproj",
       "kind": "unit",
