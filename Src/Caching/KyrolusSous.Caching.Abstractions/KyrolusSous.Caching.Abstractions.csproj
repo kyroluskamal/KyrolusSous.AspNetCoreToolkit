@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Compression\KyrolusSous.Compression\KyrolusSous.Compression.csproj" />
+    <ProjectReference Include="..\..\Compression\KyrolusSous.Compression.Abstractions\KyrolusSous.Compression.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>

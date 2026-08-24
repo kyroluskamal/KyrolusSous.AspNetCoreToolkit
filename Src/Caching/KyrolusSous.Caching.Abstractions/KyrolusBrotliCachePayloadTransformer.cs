@@ -5,6 +5,7 @@ namespace KyrolusSous.Caching.Abstractions;
 
 /// <summary>
 /// Payload transformer utilizing Google's Brotli compression for maximum compression ratio.
+/// Uses native .NET BrotliStream (zero external dependencies).
 /// </summary>
 public sealed class KyrolusBrotliCachePayloadTransformer(
     int minSizeBytes = 1024,
@@ -24,7 +25,13 @@ public sealed class KyrolusBrotliCachePayloadTransformer(
             return BuildRawPayload(payload);
         }
 
-        var compressed = BrotliCompressor.Instance.Compress(payload, level);
+        using var memoryStream = new MemoryStream();
+        using (var brotliStream = new BrotliStream(memoryStream, level, leaveOpen: true))
+        {
+            brotliStream.Write(payload, 0, payload.Length);
+        }
+
+        var compressed = memoryStream.ToArray();
         var result = new byte[Header.Length + 1 + compressed.Length];
         Buffer.BlockCopy(Header, 0, result, 0, Header.Length);
         result[Header.Length] = CompressedFlag;
@@ -51,7 +58,11 @@ public sealed class KyrolusBrotliCachePayloadTransformer(
         }
 
         var compressed = SlicePayload(payload, Header.Length + 1);
-        return BrotliCompressor.Instance.Decompress(compressed);
+        using var memoryStream = new MemoryStream(compressed);
+        using var brotliStream = new BrotliStream(memoryStream, CompressionMode.Decompress);
+        using var outputStream = new MemoryStream();
+        brotliStream.CopyTo(outputStream);
+        return outputStream.ToArray();
     }
 
     private static bool HasHeader(byte[] payload)

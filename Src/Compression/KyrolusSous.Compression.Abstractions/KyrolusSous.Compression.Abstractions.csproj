@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <RootNamespace>KyrolusSous.Compression</RootNamespace>
+    <AssemblyName>KyrolusSous.Compression.Abstractions</AssemblyName>
+    <Description>Core abstractions and contracts for the Kyrolus compression ecosystem (ICompressor, ICompressionProvider, CompressionAlgorithm).</Description>
+    <Authors>Kyrolus Sous</Authors>
+    <PackageTags>compression;abstractions;contracts;interfaces</PackageTags>
+  </PropertyGroup>
+
+</Project>

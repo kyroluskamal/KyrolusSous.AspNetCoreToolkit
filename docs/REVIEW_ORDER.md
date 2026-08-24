@@ -43,48 +43,55 @@ Within a phase the order is loose - what matters is not starting a phase before 
 | 16 | `ExceptionHandling.EntityFramework` | ✅ | 6 unit tests covering EF Core exception mapper and DI registration (100% coverage) |
 | 17 | `ExceptionHandling.FluentValidation` | ✅ | 4 unit tests covering FluentValidation mapper, metadata extraction, and DI registration (100% coverage) |
 | 18 | `ExceptionHandling.Redis` | ✅ | 6 unit tests covering Redis exception mapper and DI registration (100% coverage) |
-| 19 | `Compression` | 🔧 | 6 compression algorithms (Brotli, Zstd, LZ4, Snappy, Gzip, Deflate), stream support, byte/string extensions, and ASP.NET Core ResponseCompressionMiddleware |
-| 20 | `Caching.Abstractions` | 🔧 | Core caching abstractions, IDistributedLockProvider, IKyrolusRedisPubSub, atomic/hash operations, payload transformers |
-| 21 | `Caching.Redis` | 🔧 | Redis L2 & NearCache (L1+L2), Lua-based distributed locking, Pub/Sub bus, ASP.NET Core IDistributedCache & IOutputCacheStore adapters |
-| 22 | `Caching.MessagePack` | 🔧 | High-performance binary MessagePack cache serializer with optional LZ4 block compression |
-| 23 | `Mapping.Abstractions` | 🚫 | 8 lines |
-| 24 | `Mapping.Mapster` | ⬜ | 30 lines |
-| 25 | `Logging.Abstractions` | 🚫 | 23 lines |
-| 26 | `Logging.Runtime` | ⬜ | 79 lines |
-| 27 | `Logging.Serilog` | ⬜ | 28 tests |
+| 19 | `Compression.Abstractions` | ✅ | 100% coverage across ICompressor, ICompressionProvider, CompressionAlgorithm contracts |
+| 20 | `Compression.Core` | ✅ | 100% coverage across ResponseCompressionMiddleware, Options, CompressionExtensions, and KyrolusCompressionProvider |
+| 21 | `Compression.Brotli` | ✅ | 100% coverage across BrotliCompressor and DI extensions (Pure .NET) |
+| 22 | `Compression.Gzip` | ✅ | 100% coverage across GzipCompressor and DI extensions (Pure .NET) |
+| 23 | `Compression.Deflate` | ✅ | 100% coverage across DeflateCompressor and DI extensions (Pure .NET) |
+| 24 | `Compression.Zstd` | ✅ | 100% coverage across ZstdCompressor and DI extensions (ZstdSharp.Port) |
+| 25 | `Compression.Lz4` | ✅ | 100% coverage across Lz4Compressor and DI extensions (K4os.Compression.LZ4) |
+| 26 | `Compression.Snappy` | ✅ | 100% coverage across SnappyCompressor and DI extensions (Snappier) |
+| 27 | `Caching.Abstractions` | 🔧 | Core caching abstractions, IDistributedLockProvider, IKyrolusRedisPubSub, atomic/hash operations, payload transformers |
+| 28 | `Caching.Redis` | 🔧 | Redis L2 & NearCache (L1+L2), Lua-based distributed locking, Pub/Sub bus, ASP.NET Core IDistributedCache & IOutputCacheStore adapters |
+| 29 | `Caching.MessagePack` | 🔧 | High-performance binary MessagePack cache serializer with optional LZ4 block compression |
+| 30 | `Mapping.Abstractions` | 🚫 | 8 lines |
+| 31 | `Mapping.Mapster` | ⬜ | 30 lines |
+| 32 | `Logging.Abstractions` | 🚫 | 23 lines |
+| 33 | `Logging.Runtime` | ⬜ | 79 lines |
+| 34 | `Logging.Serilog` | ⬜ | 28 tests |
 
 ## Phase 2 - Repositories
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 28 | `Repositories.EF.Abstractions` | ⬜ | Gate 65%/55%. Unparseable route keys fixed to throw FormatException (yielding 400 instead of 500) |
-| 29 | `Repositories.EF.Runtime` | ⬜ | 475 integration + 106 unit. Gate 95%/85% |
-| 30 | `Repositories.EF.Generator` | ⬜ | 133 integration + 67 unit |
-| 31 | `Repositories.EF.Cache.Distributed` | ⬜ | 220 lines |
-| 32 | `Repositories.Marten.Abstractions` | ⚡ | 2927 lines |
-| 33 | `Repositories.Marten.Runtime` | ⬜ | 235 tests via FullPipeline |
-| 34 | `Repositories.Marten.Generator` | ⬜ | **2950 lines, zero tests.** Compare against the EF generator, which is tested |
+| 35 | `Repositories.EF.Abstractions` | ⬜ | Gate 65%/55%. Unparseable route keys fixed to throw FormatException (yielding 400 instead of 500) |
+| 36 | `Repositories.EF.Runtime` | ⬜ | 475 integration + 106 unit. Gate 95%/85% |
+| 37 | `Repositories.EF.Generator` | ⬜ | 133 integration + 67 unit |
+| 38 | `Repositories.EF.Cache.Distributed` | ⬜ | 220 lines |
+| 39 | `Repositories.Marten.Abstractions` | ⚡ | 2927 lines |
+| 40 | `Repositories.Marten.Runtime` | ⬜ | 235 tests via FullPipeline |
+| 41 | `Repositories.Marten.Generator` | ⬜ | **2950 lines, zero tests.** Compare against the EF generator, which is tested |
 
 ## Phase 3 - CQRS
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 35 | `CQRS.Abstractions` | ⚡ | 27 lines |
-| 36 | `CQRS.Validation` | ⚡ | |
-| 37 | `CQRS.Mapping` | ⬜ | 23 lines |
-| 38 | `CQRS.ExceptionHandling` | ⚡ | |
-| 39 | `CQRS.Caching` | ⬜ | Holds the Redis caching behaviour |
-| 40 | `CQRS.EF` | ⬜ | **2007 lines, zero tests, no TestApp.** Highest risk in this phase |
-| 41 | `CQRS.Marten` | ⚡ | |
+| 42 | `CQRS.Abstractions` | ⚡ | 27 lines |
+| 43 | `CQRS.Validation` | ⚡ | |
+| 44 | `CQRS.Mapping` | ⬜ | 23 lines |
+| 45 | `CQRS.ExceptionHandling` | ⚡ | |
+| 46 | `CQRS.Caching` | ⬜ | Holds the Redis caching behaviour |
+| 47 | `CQRS.EF` | ⬜ | **2007 lines, zero tests, no TestApp.** Highest risk in this phase |
+| 48 | `CQRS.Marten` | ⚡ | |
 
 ## Phase 4 - EndpointKit
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 42 | `EndpointKit.Core` | ⚡ | 2878 lines |
-| 43 | `EndpointKit.Generator` | ⬜ | 1229 lines, zero tests |
-| 44 | `EndpointKit.EF` | ⬜ | **5107 lines, zero tests, no TestApp.** Highest risk in the repo |
-| 45 | `EndpointKit.Marten` | ⚡ | 5189 lines. **Open finding:** `(dynamic)` in `SendCommandAsync` breaks AOT and trimming, contradicting the README's AOT claim |
+| 49 | `EndpointKit.Core` | ⚡ | 2878 lines |
+| 50 | `EndpointKit.Generator` | ⬜ | 1229 lines, zero tests |
+| 51 | `EndpointKit.EF` | ⬜ | **5107 lines, zero tests, no TestApp.** Highest risk in the repo |
+| 52 | `EndpointKit.Marten` | ⚡ | 5189 lines. **Open finding:** `(dynamic)` in `SendCommandAsync` breaks AOT and trimming, contradicting the README's AOT claim |
 
 ## Phase 5 - DataProtection
 
@@ -92,19 +99,19 @@ Independent of everything else. Can be done at any point.
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 46 | `DataProtection.Abstractions` | ⚡ | |
-| 47 | `DataProtection.Runtime` | ⚡ | 1254 lines |
-| 48 | `DataProtection.Ephemeral` | ⬜ | 17 lines |
-| 49 | `DataProtection.FileSystem` | ⬜ | 28 lines |
-| 50 | `DataProtection.CustomXml` | ⬜ | 42 lines |
-| 51 | `DataProtection.EntityFramework` | ⬜ | 51 lines |
-| 52 | `DataProtection.Redis` | ⚡ | |
-| 53 | `DataProtection.Marten` | ⬜ | |
-| 54 | `DataProtection.AzureStorage` | ⬜ | Cloud - wiring test only, no integration |
-| 55 | `DataProtection.AzureKeyVault` | ⬜ | Cloud - wiring test only |
-| 56 | `DataProtection.AwsKms` | ⬜ | Cloud - wiring test only |
-| 57 | `DataProtection.GoogleKms` | ⬜ | Cloud - wiring test only |
-| 58 | `DataProtection.Cli` | ⬜ | 629 lines |
+| 53 | `DataProtection.Abstractions` | ⚡ | |
+| 54 | `DataProtection.Runtime` | ⚡ | 1254 lines |
+| 55 | `DataProtection.Ephemeral` | ⬜ | 17 lines |
+| 56 | `DataProtection.FileSystem` | ⬜ | 28 lines |
+| 57 | `DataProtection.CustomXml` | ⬜ | 42 lines |
+| 58 | `DataProtection.EntityFramework` | ⬜ | 51 lines |
+| 59 | `DataProtection.Redis` | ⚡ | |
+| 60 | `DataProtection.Marten` | ⬜ | |
+| 61 | `DataProtection.AzureStorage` | ⬜ | Cloud - wiring test only, no integration |
+| 62 | `DataProtection.AzureKeyVault` | ⬜ | Cloud - wiring test only |
+| 63 | `DataProtection.AwsKms` | ⬜ | Cloud - wiring test only |
+| 64 | `DataProtection.GoogleKms` | ⬜ | Cloud - wiring test only |
+| 65 | `DataProtection.Cli` | ⬜ | 629 lines |
 
 ## Phase 6 - Standalone
 
@@ -112,12 +119,12 @@ Nothing depends on these and they depend on nothing. Any time.
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 59 | `OpenApi` | ⬜ | Migrated to official Microsoft.AspNetCore.OpenApi (.NET 10) + Scalar UI + Swagger UI, covered by integration suite |
-| 60 | `OpenIddictAuth` | ⬜ | 181 lines |
-| 61 | `IRabbitMQUtilsInterfaces` | 🚫 | 32 lines, contracts only |
-| 62 | `RabbitMQUtils` | ⬜ | 218 lines |
-| 63 | `Elasticsearch` | ⚡ | Modern Elasticsearch client (v8.17) with repository, fluent search, auto-index lifecycle, and health checks |
-| 64 | `Resilience` | ⚡ | Enterprise Polly v8 & Microsoft.Extensions.Resilience with smart IsTransient evaluation, circuit breaker, and HttpClient extensions |
+| 66 | `OpenApi` | ⬜ | Migrated to official Microsoft.AspNetCore.OpenApi (.NET 10) + Scalar UI + Swagger UI, covered by integration suite |
+| 67 | `OpenIddictAuth` | ⬜ | 181 lines |
+| 68 | `IRabbitMQUtilsInterfaces` | 🚫 | 32 lines, contracts only |
+| 69 | `RabbitMQUtils` | ⬜ | 218 lines |
+| 70 | `Elasticsearch` | ⚡ | Modern Elasticsearch client (v8.17) with repository, fluent search, auto-index lifecycle, and health checks |
+| 71 | `Resilience` | ⚡ | Enterprise Polly v8 & Microsoft.Extensions.Resilience with smart IsTransient evaluation, circuit breaker, and HttpClient extensions |
 
 ---
 

@@ -1,4 +1,5 @@
 using KyrolusSous.Caching.Abstractions;
+using KyrolusSous.Compression;
 using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Configuration;
@@ -179,12 +180,35 @@ public static class ServiceCollectionExtensions
 
         if (options.EnableCompression)
         {
-            var compressor = new KyrolusCompressionCachePayloadTransformer(
-                options.CompressionAlgorithm,
-                options.CompressionThresholdBytes,
-                options.CompressionLevel);
+            var compressor = serviceProvider.GetService<ICompressor>();
+            var provider = serviceProvider.GetService<ICompressionProvider>();
 
-            transformers.Add(WrapOrdered(compressor, options.CompressionOrder));
+            IKyrolusCachePayloadTransformer transformer;
+            if (compressor is not null)
+            {
+                transformer = new KyrolusCompressionCachePayloadTransformer(
+                    compressor,
+                    provider,
+                    options.CompressionThresholdBytes,
+                    options.CompressionLevel);
+            }
+            else if (provider is not null && provider.TryGetCompressor(options.CompressionAlgorithm, out var resolvedComp) && resolvedComp is not null)
+            {
+                transformer = new KyrolusCompressionCachePayloadTransformer(
+                    resolvedComp,
+                    provider,
+                    options.CompressionThresholdBytes,
+                    options.CompressionLevel);
+            }
+            else
+            {
+                // Fallback to pure built-in Brotli transformer
+                transformer = new KyrolusBrotliCachePayloadTransformer(
+                    options.CompressionThresholdBytes,
+                    options.CompressionLevel);
+            }
+
+            transformers.Add(WrapOrdered(transformer, options.CompressionOrder));
         }
 
         if (options.EnableEncryption)

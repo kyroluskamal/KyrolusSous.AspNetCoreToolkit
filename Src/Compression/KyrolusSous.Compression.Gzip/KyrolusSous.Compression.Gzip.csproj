@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <RootNamespace>KyrolusSous.Compression</RootNamespace>
+    <AssemblyName>KyrolusSous.Compression.Gzip</AssemblyName>
+    <Description>Standard Gzip compression algorithm provider for the Kyrolus compression ecosystem (Pure .NET, Zero external dependencies).</Description>
+    <Authors>Kyrolus Sous</Authors>
+    <PackageTags>compression;gzip;aspnetcore</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KyrolusSous.Compression.Abstractions\KyrolusSous.Compression.Abstractions.csproj" />
+    <ProjectReference Include="..\KyrolusSous.Compression.Core\KyrolusSous.Compression.Core.csproj" />
+  </ItemGroup>
+
+</Project>

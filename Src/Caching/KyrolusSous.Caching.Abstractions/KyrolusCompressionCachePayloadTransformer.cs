@@ -13,25 +13,20 @@ public sealed class KyrolusCompressionCachePayloadTransformer : IKyrolusCachePay
     private static readonly byte[] Header = [(byte)'K', (byte)'Y', (byte)'C', (byte)'X'];
 
     private readonly ICompressor compressor;
+    private readonly ICompressionProvider? provider;
     private readonly int minSizeBytes;
     private readonly CompressionLevel level;
 
     public KyrolusCompressionCachePayloadTransformer(
-        ICompressor? compressor = null,
+        ICompressor compressor,
+        ICompressionProvider? provider = null,
         int minSizeBytes = 1024,
         CompressionLevel level = CompressionLevel.Fastest)
     {
-        this.compressor = compressor ?? BrotliCompressor.Instance;
+        this.compressor = compressor ?? throw new ArgumentNullException(nameof(compressor));
+        this.provider = provider;
         this.minSizeBytes = Math.Max(0, minSizeBytes);
         this.level = level;
-    }
-
-    public KyrolusCompressionCachePayloadTransformer(
-        CompressionAlgorithm algorithm,
-        int minSizeBytes = 1024,
-        CompressionLevel level = CompressionLevel.Fastest)
-        : this(KyrolusCompressionProvider.Instance.GetCompressor(algorithm), minSizeBytes, level)
-    {
     }
 
     public byte[] Transform(byte[] payload)
@@ -41,7 +36,7 @@ public sealed class KyrolusCompressionCachePayloadTransformer : IKyrolusCachePay
             return BuildRawPayload(payload);
         }
 
-        var compressed = compressor.Compress(payload, level);
+        var compressed = compressor.Compress(payload);
         var result = new byte[Header.Length + 2 + compressed.Length];
         Buffer.BlockCopy(Header, 0, result, 0, Header.Length);
         result[Header.Length] = CompressedFlag;
@@ -70,7 +65,10 @@ public sealed class KyrolusCompressionCachePayloadTransformer : IKyrolusCachePay
 
         var algorithmByte = payload[Header.Length + 1];
         var algorithm = (CompressionAlgorithm)algorithmByte;
-        var comp = KyrolusCompressionProvider.Instance.GetCompressor(algorithm);
+
+        var comp = (algorithm == compressor.Algorithm)
+            ? compressor
+            : (provider?.GetCompressor(algorithm) ?? compressor);
 
         var compressed = SlicePayload(payload, Header.Length + 2);
         return comp.Decompress(compressed);
