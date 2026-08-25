@@ -2753,7 +2753,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
             return mediator.SendAsync(nonGeneric, cancellationToken);
         }
 
-        return mediator.SendAsync((dynamic)command, cancellationToken);
+        return mediator.SendAsync((object)command, cancellationToken);
     }
 
     private static void ApplyGetAllQueryOptions(

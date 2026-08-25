@@ -579,9 +579,10 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
     public async Task<bool> RemoveRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(entities);
+        var array = entities.ToArray();
+        if (array.Length == 0) return true;
         await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var session = ResolveSession(tenantId);
-        var array = entities.ToArray();
         session.Delete(array);
         await InvalidateCacheAsync(array, tenantId, cancellationToken).ConfigureAwait(false);
         return true;

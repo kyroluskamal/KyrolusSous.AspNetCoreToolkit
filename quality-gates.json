@@ -211,6 +211,13 @@
       "kind": "unit",
       "services": [],
       "ci": true
+    },
+    {
+      "name": "CQRS - Unit",
+      "project": "Tests/UnitTests/CQRS/KyrolusSous.CQRS.UnitTests/KyrolusSous.CQRS.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
     }
   ],
 

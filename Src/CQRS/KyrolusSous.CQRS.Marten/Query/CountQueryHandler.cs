@@ -8,6 +8,7 @@ public class CountQueryHandler<TSession, TResponse, TKey>(IKyrolusMartenUnitOfWo
 {
     public async Task<long> Handle(CountQuery<TResponse> query, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(query);
         var options = new MartenQueryOptions<TResponse>(
             Filter: query.Filter,
             OrderBy: null,
@@ -16,33 +17,10 @@ public class CountQueryHandler<TSession, TResponse, TKey>(IKyrolusMartenUnitOfWo
             TenantId: query.TenantId,
             IncludeSoftDeleted: query.IncludeDeleted);
 
-        if (query.IncludeDeleted)
-        {
-            var softRepo = TryResolveSoftRepository();
-            if (softRepo is not null)
-            {
-                // Get all including deleted and count them
-                var items = await softRepo.GetAllIncludingDeletedAsync(options, cancellationToken).ConfigureAwait(false);
-                return items.Count();
-            }
-        }
-
         var repo = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<TSession, TResponse, TKey>>();
         var page = new MartenPageRequest(1, 1);
         var pageResult = await repo.GetPageAsync(options, page, cancellationToken).ConfigureAwait(false);
         return pageResult.TotalCount;
-    }
-
-    private IKyrolusMartenSoftDeleteRepositoryAsync<TSession, TResponse, TKey>? TryResolveSoftRepository()
-    {
-        try
-        {
-            return unitOfWork.GetRepository<IKyrolusMartenSoftDeleteRepositoryAsync<TSession, TResponse, TKey>>();
-        }
-        catch (InvalidOperationException)
-        {
-            return null;
-        }
     }
 }
 

@@ -38,6 +38,19 @@ public sealed class KyrolusDefaultCacheKeyProvider : IKyrolusCacheKeyProvider
             }
         }
 
+        var pageNumber = TryGetPropertyValue(request, "PageNumber");
+        var pageSize = TryGetPropertyValue(request, "PageSize");
+        if (pageNumber is not null && pageSize is not null)
+        {
+            return $"{entityName}_{requestName}_p{pageNumber}_s{pageSize}";
+        }
+
+        var cursor = TryGetPropertyValue(request, "Cursor") ?? TryGetPropertyValue(request, "NextToken");
+        if (cursor is not null)
+        {
+            return $"{entityName}_{requestName}_c{cursor}";
+        }
+
         return $"{entityName}_{requestName}";
     }
 

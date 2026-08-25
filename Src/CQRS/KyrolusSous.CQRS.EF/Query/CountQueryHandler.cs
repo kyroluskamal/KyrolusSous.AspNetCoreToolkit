@@ -11,32 +11,7 @@ public class CountQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUnitOfWork u
 {
     public async Task<long> Handle(CountQuery<TResponse> query, CancellationToken cancellationToken)
     {
-        if (query.IncludeDeleted)
-        {
-            IKyrolusSingleKeySoftDeleteRepository<TResponse, TKey>? softRepo = null;
-            try
-            {
-                softRepo = unitOfWork.GetRepository<IKyrolusSingleKeySoftDeleteRepository<TResponse, TKey>>();
-            }
-            catch (InvalidOperationException)
-            {
-                softRepo = null;
-            }
-
-            if (softRepo is not null)
-            {
-                var allIncludingDeleted = await softRepo.GetAllIncludingDeletedAsync(
-                    query.Filter,
-                    orderBy: null,
-                    includeProperties: null,
-                    includeGraph: null,
-                    asNoTracking: true,
-                    useSplitQuery: null,
-                    cancellationToken).ConfigureAwait(false);
-                return allIncludingDeleted.Count;
-            }
-        }
-
+        ArgumentNullException.ThrowIfNull(query);
         var repo = unitOfWork.GetRepository<IKyrolusRepositoryAsync<TDbcontext, TResponse, TKey>>();
         var spec = new KyrolusEfPagedQuerySpecification<TResponse>(
             new SpecificationInputs<TResponse, TResponse>(

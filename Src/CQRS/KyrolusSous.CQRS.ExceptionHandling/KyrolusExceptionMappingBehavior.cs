@@ -5,11 +5,11 @@ namespace KyrolusSous.CQRS.ExceptionHandling;
 
 [PipelineOrder(-2000)]
 public sealed class KyrolusExceptionMappingBehavior<TRequest, TResponse>(
-    IEnumerable<IKyrolusExceptionMapper<TResponse>> mappers)
+    IEnumerable<IKyrolusExceptionMapper<TResponse>>? mappers = null)
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
     private readonly IReadOnlyList<IKyrolusExceptionMapper<TResponse>> _mappers =
-        mappers as IReadOnlyList<IKyrolusExceptionMapper<TResponse>> ?? [.. mappers];
+        mappers as IReadOnlyList<IKyrolusExceptionMapper<TResponse>> ?? (mappers is not null ? [.. mappers] : []);
 
     public async Task<TResponse> Handle(
         TRequest request,

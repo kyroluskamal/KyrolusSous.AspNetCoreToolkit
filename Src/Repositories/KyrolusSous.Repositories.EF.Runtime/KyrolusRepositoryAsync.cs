@@ -204,7 +204,7 @@ public class KyrolusRepositoryAsync<
     {
         ArgumentNullException.ThrowIfNull(entities);
         var entityList = entities as IList<TEntity> ?? [.. entities];
-        ArgumentOutOfRangeException.ThrowIfLessThan(entityList.Count, 1);
+        if (entityList.Count == 0) return [];
         return await ExecuteWithNotificationsAsync(nameof(AddRangeAsync), entityList, async ct =>
     {
         await set.AddRangeAsync(entityList, ct).ConfigureAwait(false);
@@ -233,7 +233,7 @@ public class KyrolusRepositoryAsync<
     {
         ArgumentNullException.ThrowIfNull(entities);
         var list = entities as IList<TEntity> ?? [.. entities];
-        ArgumentOutOfRangeException.ThrowIfLessThan(list.Count, 1);
+        if (list.Count == 0) return [];
         return await ExecuteWithNotificationsAsync(nameof(UpdateRangeAsync), list, async ct =>
         {
             var updated = new List<TEntity>(list.Count);
@@ -302,7 +302,7 @@ public class KyrolusRepositoryAsync<
     {
         ArgumentNullException.ThrowIfNull(entities);
         var list = entities as IList<TEntity> ?? [.. entities];
-        ArgumentOutOfRangeException.ThrowIfLessThan(list.Count, 1);
+        if (list.Count == 0) return true;
         return await ExecuteWithNotificationsAsync(nameof(RemoveRangeAsync), list, async ct =>
         {
             var results = new List<bool>(list.Count);

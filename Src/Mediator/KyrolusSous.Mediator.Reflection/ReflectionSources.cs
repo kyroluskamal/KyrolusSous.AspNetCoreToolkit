@@ -103,7 +103,7 @@ internal sealed class ReflectionNotificationDispatchSource : IKyrolusNotificatio
 
         if (task is null)
         {
-            return;
+            throw new InvalidOperationException($"[KyrolusMediator] Handler '{method.DeclaringType?.FullName}' returned a null Task.");
         }
 
         await task.ConfigureAwait(false);

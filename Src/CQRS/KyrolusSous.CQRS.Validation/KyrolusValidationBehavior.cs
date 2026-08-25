@@ -6,12 +6,12 @@ namespace KyrolusSous.CQRS.Validation;
 
 [PipelineOrder(-500)]
 public sealed class KyrolusValidationBehavior<TRequest, TResponse>(
-    IEnumerable<IKyrolusRequestValidator<TRequest>> validators,
+    IEnumerable<IKyrolusRequestValidator<TRequest>>? validators = null,
     IKyrolusValidationEngine? engine = null)
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
     private readonly IReadOnlyList<IKyrolusRequestValidator<TRequest>> _validators =
-        validators as IReadOnlyList<IKyrolusRequestValidator<TRequest>> ?? [.. validators];
+        validators as IReadOnlyList<IKyrolusRequestValidator<TRequest>> ?? (validators is not null ? [.. validators] : []);
     private readonly IKyrolusValidationEngine? _engine = engine;
 
     public async Task<TResponse> Handle(

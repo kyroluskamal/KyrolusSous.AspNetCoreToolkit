@@ -6,10 +6,13 @@ namespace KyrolusSous.CQRS.Caching;
 
 [PipelineOrder(-300)]
 public sealed class KyrolusQueryCachingBehavior<TRequest, TResponse>(
-    ICacheProvider cacheProvider,
-    IKyrolusCacheKeyProvider cacheKeyProvider)
+    ICacheProvider? cacheProvider = null,
+    IKyrolusCacheKeyProvider? cacheKeyProvider = null)
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
+    private readonly ICacheProvider? _cacheProvider = cacheProvider;
+    private readonly IKyrolusCacheKeyProvider _cacheKeyProvider = cacheKeyProvider ?? new KyrolusDefaultCacheKeyProvider();
+
     public async Task<TResponse> Handle(
         TRequest request,
         RequestHandlerDelegate<TResponse> next,
@@ -18,7 +21,7 @@ public sealed class KyrolusQueryCachingBehavior<TRequest, TResponse>(
         ArgumentNullException.ThrowIfNull(next);
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (request is not IKyrolusQueryBase)
+        if (request is not IKyrolusQueryBase || _cacheProvider is null)
         {
             return await next(cancellationToken).ConfigureAwait(false);
         }
@@ -28,13 +31,13 @@ public sealed class KyrolusQueryCachingBehavior<TRequest, TResponse>(
             return await next(cancellationToken).ConfigureAwait(false);
         }
 
-        var cacheKey = cacheKeyProvider.GetCacheKey(request!);
+        var cacheKey = _cacheKeyProvider.GetCacheKey(request!);
         if (string.IsNullOrWhiteSpace(cacheKey))
         {
             return await next(cancellationToken).ConfigureAwait(false);
         }
 
-        var cached = await cacheProvider.GetAsync<TResponse>(cacheKey, cancellationToken).ConfigureAwait(false);
+        var cached = await _cacheProvider.GetAsync<TResponse>(cacheKey, cancellationToken).ConfigureAwait(false);
         if (cached is not null)
         {
             return cached;
@@ -43,7 +46,7 @@ public sealed class KyrolusQueryCachingBehavior<TRequest, TResponse>(
         var response = await next(cancellationToken).ConfigureAwait(false);
         if (response is not null)
         {
-            await cacheProvider.SetAsync(cacheKey, response, cancellationToken: cancellationToken).ConfigureAwait(false);
+            await _cacheProvider.SetAsync(cacheKey, response, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
         return response;

@@ -8,6 +8,7 @@ public sealed class ExecuteDeleteCommandHandler<TDbcontext, TResponse, TKey>(IKy
 {
     public Task<int> Handle(ExecuteDeleteCommand<TResponse, TKey> command, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(command);
         var repo = unitOfWork.GetRepository<IKyrolusRepositoryAsync<TDbcontext, TResponse, TKey>>();
         return repo.ExecuteDeleteAsync(command.Filter, command.UseSplitQuery, cancellationToken);
     }

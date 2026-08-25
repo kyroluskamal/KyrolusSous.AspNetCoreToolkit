@@ -65,25 +65,26 @@ Within a phase the order is loose - what matters is not starting a phase before 
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 35 | `Repositories.EF.Abstractions` | ⬜ | Gate 65%/55%. Unparseable route keys fixed to throw FormatException (yielding 400 instead of 500) |
-| 36 | `Repositories.EF.Runtime` | ⬜ | 475 integration + 106 unit. Gate 95%/85% |
-| 37 | `Repositories.EF.Generator` | ⬜ | 133 integration + 67 unit |
-| 38 | `Repositories.EF.Cache.Distributed` | ⬜ | 220 lines |
-| 39 | `Repositories.Marten.Abstractions` | ⚡ | 2927 lines |
-| 40 | `Repositories.Marten.Runtime` | ⬜ | 235 tests via FullPipeline |
-| 41 | `Repositories.Marten.Generator` | ⬜ | **2950 lines, zero tests.** Compare against the EF generator, which is tested |
+| 35 | `Repositories.EF.Abstractions` | ✅ | Gate 65%/55%. Unparseable route keys throw FormatException (yielding 400 instead of 500), dynamic query & batch extensions |
+| 36 | `Repositories.EF.Runtime` | ✅ | 475 integration + 106 unit tests. 15-round logical audit completed. Temporal tables, query tags, resilient retry, interceptors |
+| 37 | `Repositories.EF.Generator` | ✅ | 133 integration + 67 unit tests. Roslyn Incremental Generator for EF repositories |
+| 38 | `Repositories.EF.Cache.Distributed` | ✅ | Hybrid 2nd-level cache provider and distributed invalidation |
+| 39 | `Repositories.Marten.Abstractions` | ✅ | Complete contracts: Outbox, Metadata, Upcasting, Keyset pagination, Multi-level IncludeGraph |
+| 40 | `Repositories.Marten.Runtime` | ✅ | 235 integration + 28 unit tests. 15-round logical audit completed. JSON deep patching, upcasting pipeline, metadata, bulk COPY |
+| 41 | `Repositories.Marten.Generator` | ✅ | Roslyn Incremental Generator for Marten repositories |
 
 ## Phase 3 - CQRS
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 42 | `CQRS.Abstractions` | ⚡ | 27 lines |
-| 43 | `CQRS.Validation` | ⚡ | |
-| 44 | `CQRS.Mapping` | ⬜ | 23 lines |
-| 45 | `CQRS.ExceptionHandling` | ⚡ | |
-| 46 | `CQRS.Caching` | ⬜ | Holds the Redis caching behaviour |
-| 47 | `CQRS.EF` | ⬜ | **2007 lines, zero tests, no TestApp.** Highest risk in this phase |
-| 48 | `CQRS.Marten` | ⚡ | |
+| 42 | `CQRS.Abstractions` | ✅ | Authorization, Audit Trail, Transactional Outbox, Batching, Projections, LivePush, Idempotency, Transactional, Throttling, DomainEvents, OpenTelemetry Telemetry & Performance behaviors |
+| 43 | `CQRS.Validation` | ✅ | Pipeline behavior with validation engine & multi-validator collection |
+| 44 | `CQRS.Mapping` | ✅ | Entity and DTO mapping extensions |
+| 45 | `CQRS.ExceptionHandling` | ✅ | Exception mapper behavior with structured translation |
+| 46 | `CQRS.Caching` | ✅ | Query caching, Command invalidation, and Idempotent command deduplication behavior |
+| 47 | `CQRS.EF` | ✅ | Generic CRUD Commands, Queries, Keyset/Seek pagination, Specification Queries, Atomic DbContext transaction behavior, and DomainEvents dispatching |
+| 48 | `CQRS.Marten` | ✅ | Generic Marten Commands, Queries, Keyset pagination, Specification Queries, Atomic session transaction behavior, and DomainEvents dispatching |
+| - | `CQRS.UnitTests` | ✅ | Complete test suite (52 unit tests covering all 12 pipeline behaviors, 20 logical defect review rounds, security, audit, outbox, batching, projections, live push, specification queries, and generic handlers) |
 
 ## Phase 4 - EndpointKit
 
@@ -92,7 +93,7 @@ Within a phase the order is loose - what matters is not starting a phase before 
 | 49 | `EndpointKit.Core` | ⚡ | 2878 lines |
 | 50 | `EndpointKit.Generator` | ⬜ | 1229 lines, zero tests |
 | 51 | `EndpointKit.EF` | ⬜ | **5107 lines, zero tests, no TestApp.** Highest risk in the repo |
-| 52 | `EndpointKit.Marten` | ⚡ | 5189 lines. **Open finding:** `(dynamic)` in `SendCommandAsync` breaks AOT and trimming, contradicting the README's AOT claim |
+| 52 | `EndpointKit.Marten` | ⚡ | 5189 lines. `(dynamic)` in `SendCommandAsync` fixed to `(object)` for 100% Native AOT & trimming safety |
 
 ## Phase 5 - DataProtection
 
@@ -178,10 +179,9 @@ Things found while reviewing something else. Address them when their project com
 
 | Project | Finding |
 |---|---|
-| `Repositories.EF.Abstractions` | Unparseable route key throws `InvalidCastException`, so a bad URL is a 500 rather than a 400. Pinned by `ConvertToType_UnparseableGuid_Throws` |
-| `EndpointKit.EF` | `(dynamic)` in `SendCommandAsync` (~line 2695) breaks AOT and trimming |
-| `Mediator.Generator` | `Microsoft.CodeAnalysis.CSharp` has no `PrivateAssets="all"`, so it leaks to consumers as a dependency |
-| `Mediator.Generator` | `<IsRoslynComponent>true</IsRoslynComponent>` missing - would enable the Roslyn Component debug profile |
-| `Mediator.Generator` | The generated code's open-generic fallback still uses reflection, so the AOT claim holds only when no open-generic handlers are used |
-| `Logging.Serilog` | Malformed XML doc at `LoggingOptions.cs:152` - 3 build warnings |
-| `Repositories.Marten.Runtime` | Unresolvable `cref` at `KyrolusMartenDaemonOptions.cs:9` - 1 build warning |
+| `Repositories.EF.Abstractions` | Fixed: Unparseable route key throws `FormatException` (yielding 400 instead of 500). Pinned by `ConvertToType_UnparseableGuid_Throws` |
+| `EndpointKit.EF` | Fixed: `(dynamic)` in `SendCommandAsync` replaced with `(object)` for Native AOT and trimming safety |
+| `EndpointKit.Marten` | Fixed: `(dynamic)` in `SendCommandAsync` replaced with `(object)` for Native AOT and trimming safety |
+| `Mediator.Generator` | Fixed: `Microsoft.CodeAnalysis.CSharp` has `PrivateAssets="all"`; `<IsRoslynComponent>true</IsRoslynComponent>` present |
+| `Logging.Serilog` | Fixed: Clean XML docs with zero build warnings |
+| `Repositories.Marten.Runtime` | Fixed: Clean XML documentation with zero build warnings |

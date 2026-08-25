@@ -283,6 +283,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Logging.Integra
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Repositories.Marten.Runtime.UnitTests", "Tests\UnitTests\Repositories\KyrolusSous.Repositories.Marten.Runtime.UnitTests\KyrolusSous.Repositories.Marten.Runtime.UnitTests.csproj", "{BDDD5D4C-14D6-417E-ACAB-4BCC679E78A2}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "CQRS", "CQRS", "{E67B044A-382E-A120-2372-57AF1E16E6F3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.CQRS.UnitTests", "Tests\UnitTests\CQRS\KyrolusSous.CQRS.UnitTests\KyrolusSous.CQRS.UnitTests.csproj", "{1DCC9A47-D1B6-4C09-A385-49E0CEFC9398}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1589,6 +1593,18 @@ Global
 		{BDDD5D4C-14D6-417E-ACAB-4BCC679E78A2}.Release|x64.Build.0 = Release|Any CPU
 		{BDDD5D4C-14D6-417E-ACAB-4BCC679E78A2}.Release|x86.ActiveCfg = Release|Any CPU
 		{BDDD5D4C-14D6-417E-ACAB-4BCC679E78A2}.Release|x86.Build.0 = Release|Any CPU
+		{1DCC9A47-D1B6-4C09-A385-49E0CEFC9398}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1DCC9A47-D1B6-4C09-A385-49E0CEFC9398}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1DCC9A47-D1B6-4C09-A385-49E0CEFC9398}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1DCC9A47-D1B6-4C09-A385-49E0CEFC9398}.Debug|x64.Build.0 = Debug|Any CPU
+		{1DCC9A47-D1B6-4C09-A385-49E0CEFC9398}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1DCC9A47-D1B6-4C09-A385-49E0CEFC9398}.Debug|x86.Build.0 = Debug|Any CPU
+		{1DCC9A47-D1B6-4C09-A385-49E0CEFC9398}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1DCC9A47-D1B6-4C09-A385-49E0CEFC9398}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1DCC9A47-D1B6-4C09-A385-49E0CEFC9398}.Release|x64.ActiveCfg = Release|Any CPU
+		{1DCC9A47-D1B6-4C09-A385-49E0CEFC9398}.Release|x64.Build.0 = Release|Any CPU
+		{1DCC9A47-D1B6-4C09-A385-49E0CEFC9398}.Release|x86.ActiveCfg = Release|Any CPU
+		{1DCC9A47-D1B6-4C09-A385-49E0CEFC9398}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1732,5 +1748,7 @@ Global
 		{53539189-B1D6-4D27-A767-04FABEFFB733} = {E1F3067D-3CB5-4626-A721-3C90446FABE8}
 		{B0B16F83-7CE2-4653-9315-B11F90029029} = {D37363A3-FFCE-FDD9-FC42-0CEA20DAC207}
 		{BDDD5D4C-14D6-417E-ACAB-4BCC679E78A2} = {D3B75068-3F13-4057-B0CB-FF65388E694C}
+		{E67B044A-382E-A120-2372-57AF1E16E6F3} = {30785934-E017-5D9F-2777-3D61460A5281}
+		{1DCC9A47-D1B6-4C09-A385-49E0CEFC9398} = {E67B044A-382E-A120-2372-57AF1E16E6F3}
 	EndGlobalSection
 EndGlobal
