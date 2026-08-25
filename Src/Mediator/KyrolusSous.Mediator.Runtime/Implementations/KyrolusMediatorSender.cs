@@ -21,13 +21,13 @@ namespace KyrolusSous.Mediator.Runtime.Implementations;
 /// <param name="serviceProvider">The service provider instance.</param>
 /// <param name="dispatcher">The dispatcher implementation (generated or reflection-based).</param>
 /// <exception cref="ArgumentNullException">Thrown if serviceProvider or dispatcher is null.</exception>
-public sealed class KyrolusMediatorSender(IServiceProvider serviceProvider, IMediatorDispatcher dispatcher) : IKyrolusMediatorSender
+public sealed class KyrolusMediatorSender(IServiceProvider serviceProvider, IKyrolusMediatorDispatcher dispatcher) : IKyrolusMediatorSender
 {
     private static readonly ConcurrentDictionary<(Type RequestType, Type ResponseType), RequestPipelineWrapper> s_requestWrappers = new();
     private static readonly ConcurrentDictionary<(Type RequestType, Type ResponseType), StreamPipelineWrapper> s_streamWrappers = new();
 
     private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
-    private readonly IMediatorDispatcher _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+    private readonly IKyrolusMediatorDispatcher _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
     private readonly IKyrolusPipelineWrapperSource? _wrapperSource = serviceProvider.GetService<IKyrolusPipelineWrapperSource>();
 
     // --- Typed overloads ---

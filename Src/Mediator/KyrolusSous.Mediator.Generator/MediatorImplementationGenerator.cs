@@ -34,7 +34,7 @@ namespace KyrolusSous.Mediator.Generator
         private const string RequestHandlerWithoutResponseInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusRequestHandler`1";
         private const string StreamRequestHandlerInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusStreamRequestHandler`2";
         private const string UnitTypeFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.Unit";
-        private const string DispatcherInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IMediatorDispatcher";
+        private const string DispatcherInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusMediatorDispatcher";
 
         // Lives in the runtime package, not the abstractions, because closing the wrapper types
         // needs the wrapper types - and those stay internal to the runtime. Its presence is what

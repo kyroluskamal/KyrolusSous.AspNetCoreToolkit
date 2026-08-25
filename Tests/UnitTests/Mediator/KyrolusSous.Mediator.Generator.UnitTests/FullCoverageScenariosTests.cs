@@ -57,9 +57,9 @@ public sealed class FullCoverageScenariosTests
                 => Task.FromResult(request.Id * 2);
         }
 
-        public record GlobalEvent(string Message) : INotification;
+        public record GlobalEvent(string Message) : IKyrolusNotification;
 
-        public class GlobalEventHandler : INotificationHandler<GlobalEvent>
+        public class GlobalEventHandler : IKyrolusNotificationHandler<GlobalEvent>
         {
             public Task Handle(GlobalEvent notification, CancellationToken cancellationToken)
                 => Task.CompletedTask;
@@ -90,10 +90,10 @@ public sealed class FullCoverageScenariosTests
 
         namespace MyApp.MultiEvents;
 
-        public record EventA(int Id) : INotification;
-        public record EventB(string Name) : INotification;
+        public record EventA(int Id) : IKyrolusNotification;
+        public record EventB(string Name) : IKyrolusNotification;
 
-        public class MultiEventHandler : INotificationHandler<EventA>, INotificationHandler<EventB>
+        public class MultiEventHandler : IKyrolusNotificationHandler<EventA>, IKyrolusNotificationHandler<EventB>
         {
             public Task Handle(EventA notification, CancellationToken cancellationToken) => Task.CompletedTask;
             public Task Handle(EventB notification, CancellationToken cancellationToken) => Task.CompletedTask;

@@ -125,14 +125,14 @@ public sealed class TicksHandler : IKyrolusStreamRequestHandler<Ticks, int>
 
 // --- Notification with more than one handler ---
 
-public sealed record Pinged(int Value) : INotification;
+public sealed record Pinged(int Value) : IKyrolusNotification;
 
 public static class PingedHandlers
 {
     public static int Calls;
 }
 
-public sealed class FirstPingedHandler : INotificationHandler<Pinged>
+public sealed class FirstPingedHandler : IKyrolusNotificationHandler<Pinged>
 {
     public Task Handle(Pinged notification, CancellationToken cancellationToken)
     {
@@ -141,7 +141,7 @@ public sealed class FirstPingedHandler : INotificationHandler<Pinged>
     }
 }
 
-public sealed class SecondPingedHandler : INotificationHandler<Pinged>
+public sealed class SecondPingedHandler : IKyrolusNotificationHandler<Pinged>
 {
     public Task Handle(Pinged notification, CancellationToken cancellationToken)
     {

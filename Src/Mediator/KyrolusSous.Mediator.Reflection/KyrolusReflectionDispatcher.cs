@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using KyrolusSous.Mediator.Abstractions.Compatibility;
 
 namespace KyrolusSous.Mediator.Reflection;
 
@@ -18,7 +19,7 @@ namespace KyrolusSous.Mediator.Reflection;
 [RequiresUnreferencedCode(
     "Finds each handler's Handle method by name, which trimming cannot see. Reference " +
     "KyrolusSous.Mediator.Generator, which emits direct calls instead.")]
-public sealed class KyrolusReflectionDispatcher : IMediatorDispatcher
+public sealed class KyrolusReflectionDispatcher : IKyrolusMediatorDispatcher, IMediatorDispatcher
 {
     // Key: (concrete handler type, request type). The request type is part of the key because one
     // handler class may implement IKyrolusRequestHandler<> for several requests - keying on the

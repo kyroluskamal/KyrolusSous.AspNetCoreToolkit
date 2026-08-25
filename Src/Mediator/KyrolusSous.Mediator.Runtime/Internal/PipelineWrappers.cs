@@ -1,4 +1,4 @@
-﻿namespace KyrolusSous.Mediator.Runtime.Internal;
+namespace KyrolusSous.Mediator.Runtime.Internal;
 
 /// <summary>
 /// Caches the <see cref="PipelineOrderAttribute"/> lookup per behavior type. Behaviors are
@@ -20,7 +20,7 @@ internal abstract class RequestPipelineWrapper
     public abstract Task<object?> HandleUntyped(
         object request,
         IServiceProvider serviceProvider,
-        IMediatorDispatcher dispatcher,
+        IKyrolusMediatorDispatcher dispatcher,
         CancellationToken cancellationToken);
 }
 /// <summary>
@@ -32,13 +32,13 @@ internal abstract class RequestPipelineWrapper<TResponse> : RequestPipelineWrapp
     public abstract Task<TResponse> Handle(
         object request,
         IServiceProvider serviceProvider,
-        IMediatorDispatcher dispatcher,
+        IKyrolusMediatorDispatcher dispatcher,
         CancellationToken cancellationToken);
 
     public override async Task<object?> HandleUntyped(
         object request,
         IServiceProvider serviceProvider,
-        IMediatorDispatcher dispatcher,
+        IKyrolusMediatorDispatcher dispatcher,
         CancellationToken cancellationToken)
         => await Handle(request, serviceProvider, dispatcher, cancellationToken).ConfigureAwait(false);
 }
@@ -52,7 +52,7 @@ internal sealed class RequestPipelineWrapperImpl<TRequest, TResponse> : RequestP
     public override Task<TResponse> Handle(
         object request,
         IServiceProvider serviceProvider,
-        IMediatorDispatcher dispatcher,
+        IKyrolusMediatorDispatcher dispatcher,
         CancellationToken cancellationToken)
     {
         var typedRequest = (TRequest)request;
@@ -94,7 +94,7 @@ internal sealed class RequestPipelineWrapperImpl<TRequest, TResponse> : RequestP
     }
 
     private static async Task<TResponse> DispatchCommandAsUnitAsync(
-        IMediatorDispatcher dispatcher,
+        IKyrolusMediatorDispatcher dispatcher,
         object request,
         IServiceProvider serviceProvider,
         CancellationToken cancellationToken)
@@ -112,7 +112,7 @@ internal abstract class StreamPipelineWrapper
     public abstract IAsyncEnumerable<object?> HandleUntyped(
         object request,
         IServiceProvider serviceProvider,
-        IMediatorDispatcher dispatcher,
+        IKyrolusMediatorDispatcher dispatcher,
         CancellationToken cancellationToken);
 }
 
@@ -121,13 +121,13 @@ internal abstract class StreamPipelineWrapper<TResponse> : StreamPipelineWrapper
     public abstract IAsyncEnumerable<TResponse> Handle(
         object request,
         IServiceProvider serviceProvider,
-        IMediatorDispatcher dispatcher,
+        IKyrolusMediatorDispatcher dispatcher,
         CancellationToken cancellationToken);
 
     public override async IAsyncEnumerable<object?> HandleUntyped(
         object request,
         IServiceProvider serviceProvider,
-        IMediatorDispatcher dispatcher,
+        IKyrolusMediatorDispatcher dispatcher,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         await foreach (var item in Handle(request, serviceProvider, dispatcher, cancellationToken)
@@ -144,7 +144,7 @@ internal sealed class StreamPipelineWrapperImpl<TRequest, TResponse> : StreamPip
     public override IAsyncEnumerable<TResponse> Handle(
         object request,
         IServiceProvider serviceProvider,
-        IMediatorDispatcher dispatcher,
+        IKyrolusMediatorDispatcher dispatcher,
         CancellationToken cancellationToken)
     {
         var typedRequest = (TRequest)request;

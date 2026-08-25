@@ -1,6 +1,6 @@
-﻿namespace KyrolusSous.Mediator.Reflection.UnitTests;
+namespace KyrolusSous.Mediator.Reflection.UnitTests;
 
-public class MediatorDispacherMock : IMediatorDispatcher
+public class MediatorDispacherMock : IKyrolusMediatorDispatcher
 {
     public Task<TResponse> DispatchRequestAsync<TResponse>(object request, IServiceProvider serviceProvider, CancellationToken ct)
     {

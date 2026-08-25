@@ -8,19 +8,19 @@ namespace KyrolusSous.CQRS.UnitTests;
 
 public class KyrolusOutboxTests
 {
-    public sealed record OrderPlacedIntegrationEvent(string OrderId, decimal Amount) : INotification;
+    public sealed record OrderPlacedIntegrationEvent(string OrderId, decimal Amount) : IKyrolusNotification;
 
     private sealed class FakePublisher : IKyrolusMediatorPublisher
     {
         public List<object> PublishedEvents { get; } = [];
 
-        public Task PublishAsync(INotification notification, CancellationToken cancellationToken = default)
+        public Task PublishAsync(IKyrolusNotification notification, CancellationToken cancellationToken = default)
         {
             PublishedEvents.Add(notification);
             return Task.CompletedTask;
         }
 
-        public Task PublishAsync(INotification notification, IKyrolusNotificationPublishStrategy? strategy, CancellationToken cancellationToken = default)
+        public Task PublishAsync(IKyrolusNotification notification, IKyrolusNotificationPublishStrategy? strategy, CancellationToken cancellationToken = default)
         {
             PublishedEvents.Add(notification);
             return Task.CompletedTask;

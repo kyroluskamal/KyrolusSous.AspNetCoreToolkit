@@ -31,7 +31,7 @@ public static partial class RepositoryRuntimeDiagnostics
         var mediator = provider.GetRequiredService<IKyrolusMediator>();
         var sender = provider.GetRequiredService<IKyrolusMediatorSender>();
         var publisher = provider.GetRequiredService<IKyrolusMediatorPublisher>();
-        var dispatcher = provider.GetRequiredService<IMediatorDispatcher>();
+        var dispatcher = provider.GetRequiredService<IKyrolusMediatorDispatcher>();
         var state = provider.GetRequiredService<MediatorRuntimeState>();
 
         Require(
@@ -161,7 +161,7 @@ public static partial class RepositoryRuntimeDiagnostics
             "Sender should reject null requests.").ConfigureAwait(false);
         checks++;
         await ExpectThrowsAsync<ArgumentNullException>(
-            () => publisher.PublishAsync((INotification)null!, cancellationToken),
+            () => publisher.PublishAsync((IKyrolusNotification)null!, cancellationToken),
             "Publisher should reject null notifications.").ConfigureAwait(false);
         checks++;
 
@@ -419,8 +419,8 @@ internal sealed class MediatorThrowingStreamBehavior : IKyrolusStreamPipelineBeh
         => throw new InvalidOperationException($"stream:{request.Count}");
 }
 
-internal sealed record MediatorSuccessNotification(string Value) : INotification;
-internal sealed class MediatorSuccessNotificationHandlerA(MediatorRuntimeState state) : INotificationHandler<MediatorSuccessNotification>
+internal sealed record MediatorSuccessNotification(string Value) : IKyrolusNotification;
+internal sealed class MediatorSuccessNotificationHandlerA(MediatorRuntimeState state) : IKyrolusNotificationHandler<MediatorSuccessNotification>
 {
     public Task Handle(MediatorSuccessNotification notification, CancellationToken cancellationToken)
     {
@@ -429,7 +429,7 @@ internal sealed class MediatorSuccessNotificationHandlerA(MediatorRuntimeState s
     }
 }
 
-internal sealed class MediatorSuccessNotificationHandlerB(MediatorRuntimeState state) : INotificationHandler<MediatorSuccessNotification>
+internal sealed class MediatorSuccessNotificationHandlerB(MediatorRuntimeState state) : IKyrolusNotificationHandler<MediatorSuccessNotification>
 {
     public Task Handle(MediatorSuccessNotification notification, CancellationToken cancellationToken)
     {
@@ -487,9 +487,9 @@ internal sealed class MediatorUnhandledFailureAction(MediatorRuntimeState state)
     }
 }
 
-internal sealed record MediatorNoHandlersNotification : INotification;
-internal sealed record MediatorFailureNotification(string Value) : INotification;
-internal sealed class MediatorFailureSuccessHandler(MediatorRuntimeState state) : INotificationHandler<MediatorFailureNotification>
+internal sealed record MediatorNoHandlersNotification : IKyrolusNotification;
+internal sealed record MediatorFailureNotification(string Value) : IKyrolusNotification;
+internal sealed class MediatorFailureSuccessHandler(MediatorRuntimeState state) : IKyrolusNotificationHandler<MediatorFailureNotification>
 {
     public Task Handle(MediatorFailureNotification notification, CancellationToken cancellationToken)
     {
@@ -498,12 +498,12 @@ internal sealed class MediatorFailureSuccessHandler(MediatorRuntimeState state) 
     }
 }
 
-internal sealed class MediatorFailureThrowingHandler : INotificationHandler<MediatorFailureNotification>
+internal sealed class MediatorFailureThrowingHandler : IKyrolusNotificationHandler<MediatorFailureNotification>
 {
     public Task Handle(MediatorFailureNotification notification, CancellationToken cancellationToken) => throw new InvalidOperationException("Notification handler failed.");
 }
 
-internal sealed class MediatorFailureNullTaskHandler : INotificationHandler<MediatorFailureNotification>
+internal sealed class MediatorFailureNullTaskHandler : IKyrolusNotificationHandler<MediatorFailureNotification>
 {
     public Task Handle(MediatorFailureNotification notification, CancellationToken cancellationToken) => null!;
 }

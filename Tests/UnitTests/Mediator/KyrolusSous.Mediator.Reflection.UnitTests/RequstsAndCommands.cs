@@ -101,14 +101,14 @@ internal class DuplicateTestQueryHandler2 : IKyrolusQueryHandler<DuplicateTestQu
 }
 #endregion
 #region Notification messages
-internal record TestNotification(string Message) : INotification;
+internal record TestNotification(string Message) : IKyrolusNotification;
 
-internal class TestNotificationHandler1 : INotificationHandler<TestNotification>
+internal class TestNotificationHandler1 : IKyrolusNotificationHandler<TestNotification>
 {
     public Task Handle(TestNotification notification, CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
-internal class TestNotificationHandler2 : INotificationHandler<TestNotification>
+internal class TestNotificationHandler2 : IKyrolusNotificationHandler<TestNotification>
 {
     public Task Handle(TestNotification notification, CancellationToken cancellationToken) => Task.CompletedTask;
 }
@@ -161,8 +161,8 @@ internal class OpenGenericRequestHandler<TRequest, TResponse> : IKyrolusRequestH
     public Task<TResponse> Handle(TRequest request, CancellationToken cancellationToken) => Task.FromResult(default(TResponse)!);
 }
 
-internal class OpenGenericNotificationHandler<TNotification> : INotificationHandler<TNotification>
-    where TNotification : INotification
+internal class OpenGenericNotificationHandler<TNotification> : IKyrolusNotificationHandler<TNotification>
+    where TNotification : IKyrolusNotification
 {
     public Task Handle(TNotification notification, CancellationToken cancellationToken) => Task.CompletedTask;
 }
@@ -178,13 +178,13 @@ internal class MultipleResponseRequest : IKyrolusRequest<string>, IKyrolusReques
 
 internal class NoResponseRequest { }
 
-internal class ExplicitNotificationHandler : INotificationHandler<TestNotification>
+internal class ExplicitNotificationHandler : IKyrolusNotificationHandler<TestNotification>
 {
-    Task INotificationHandler<TestNotification>.Handle(TestNotification notification, CancellationToken cancellationToken)
+    Task IKyrolusNotificationHandler<TestNotification>.Handle(TestNotification notification, CancellationToken cancellationToken)
         => Task.CompletedTask;
 }
 
-internal class ThrowingNotificationHandler : INotificationHandler<TestNotification>
+internal class ThrowingNotificationHandler : IKyrolusNotificationHandler<TestNotification>
 {
     public Task Handle(TestNotification notification, CancellationToken cancellationToken)
         => throw new InvalidOperationException("Notification Handler Error");

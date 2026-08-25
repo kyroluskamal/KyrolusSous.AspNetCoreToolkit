@@ -13,32 +13,32 @@ public sealed class NotificationGenerationTests
 
         namespace MyApp.Notifications;
 
-        public record OrderPlacedEvent(int OrderId) : INotification;
+        public record OrderPlacedEvent(int OrderId) : IKyrolusNotification;
 
         // Handler 1: Send Email
-        public class SendEmailOnOrderPlacedHandler : INotificationHandler<OrderPlacedEvent>
+        public class SendEmailOnOrderPlacedHandler : IKyrolusNotificationHandler<OrderPlacedEvent>
         {
             public Task Handle(OrderPlacedEvent notification, CancellationToken cancellationToken)
                 => Task.CompletedTask;
         }
 
         // Handler 2: Audit Log
-        public class AuditLogOnOrderPlacedHandler : INotificationHandler<OrderPlacedEvent>
+        public class AuditLogOnOrderPlacedHandler : IKyrolusNotificationHandler<OrderPlacedEvent>
         {
             public Task Handle(OrderPlacedEvent notification, CancellationToken cancellationToken)
                 => Task.CompletedTask;
         }
 
         // Abstract Handler (Should be ignored by Publisher Generator)
-        public abstract class AbstractNotificationHandler<TNotification> : INotificationHandler<TNotification>
-            where TNotification : INotification
+        public abstract class AbstractNotificationHandler<TNotification> : IKyrolusNotificationHandler<TNotification>
+            where TNotification : IKyrolusNotification
         {
             public abstract Task Handle(TNotification notification, CancellationToken cancellationToken);
         }
 
         // Open Generic Handler (Should be registered in DI as open generic)
-        public class GenericNotificationLogger<TNotification> : INotificationHandler<TNotification>
-            where TNotification : INotification
+        public class GenericNotificationLogger<TNotification> : IKyrolusNotificationHandler<TNotification>
+            where TNotification : IKyrolusNotification
         {
             public Task Handle(TNotification notification, CancellationToken cancellationToken)
                 => Task.CompletedTask;
@@ -81,9 +81,9 @@ public sealed class NotificationGenerationTests
 
         public class EnclosingClass
         {
-            public record NestedEvent(int[] Items) : INotification;
+            public record NestedEvent(int[] Items) : IKyrolusNotification;
 
-            public class NestedEventHandler : INotificationHandler<NestedEvent>
+            public class NestedEventHandler : IKyrolusNotificationHandler<NestedEvent>
             {
                 public Task Handle(NestedEvent notification, CancellationToken cancellationToken)
                     => Task.CompletedTask;

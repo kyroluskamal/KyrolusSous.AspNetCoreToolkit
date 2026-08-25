@@ -22,15 +22,15 @@ public class DataAnnotationsRequestValidatorTests
 
         var nameFailure = result.FirstOrDefault(f => f.PropertyName == nameof(TestUserRequest.Name));
         nameFailure.ShouldNotBeNull();
-        nameFailure!.ErrorMessage.ShouldBe("Name is required.");
+        nameFailure.ErrorMessage.ShouldBe("Name is required.");
 
         var ageFailure = result.FirstOrDefault(f => f.PropertyName == nameof(TestUserRequest.Age));
         ageFailure.ShouldNotBeNull();
-        ageFailure!.ErrorMessage.ShouldBe("Age must be between 18 and 120.");
+        ageFailure.ErrorMessage.ShouldBe("Age must be between 18 and 120.");
 
         var emailFailure = result.FirstOrDefault(f => f.PropertyName == nameof(TestUserRequest.Email));
         emailFailure.ShouldNotBeNull();
-        emailFailure!.ErrorMessage.ShouldBe("Invalid email format.");
+        emailFailure.ErrorMessage.ShouldBe("Invalid email format.");
 
         var addressFailure = result.FirstOrDefault(f => f.PropertyName == nameof(TestUserRequest.Address));
         addressFailure.ShouldBeNull();

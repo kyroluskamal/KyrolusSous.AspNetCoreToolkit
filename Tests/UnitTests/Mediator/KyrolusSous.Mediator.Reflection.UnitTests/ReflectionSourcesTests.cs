@@ -68,8 +68,8 @@ public class ReflectionSourcesTests
     {
         // Arrange
         var services = new ServiceCollection();
-        services.AddTransient<INotificationHandler<TestNotification>, TestNotificationHandler1>();
-        services.AddTransient<INotificationHandler<TestNotification>, TestNotificationHandler2>();
+        services.AddTransient<IKyrolusNotificationHandler<TestNotification>, TestNotificationHandler1>();
+        services.AddTransient<IKyrolusNotificationHandler<TestNotification>, TestNotificationHandler2>();
         var serviceProvider = services.BuildServiceProvider();
 
         var notification = new TestNotification("Hello World");
@@ -91,7 +91,7 @@ public class ReflectionSourcesTests
     {
         // Arrange
         var services = new ServiceCollection();
-        services.AddTransient<INotificationHandler<TestNotification>, ThrowingNotificationHandler>();
+        services.AddTransient<IKyrolusNotificationHandler<TestNotification>, ThrowingNotificationHandler>();
         var serviceProvider = services.BuildServiceProvider();
 
         var notification = new TestNotification("Test Throw");
@@ -115,7 +115,7 @@ public class ReflectionSourcesTests
     {
         // Arrange
         var services = new ServiceCollection();
-        services.AddTransient<INotificationHandler<TestNotification>, ExplicitNotificationHandler>();
+        services.AddTransient<IKyrolusNotificationHandler<TestNotification>, ExplicitNotificationHandler>();
         var serviceProvider = services.BuildServiceProvider();
 
         var notification = new TestNotification("Explicit");

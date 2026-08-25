@@ -1,4 +1,9 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using KyrolusSous.Mediator.Abstractions.Compatibility;
+using KyrolusSous.Mediator.Abstractions.Interfaces;
 using KyrolusSous.Mediator.Runtime.Config;
 
 namespace KyrolusSous.Mediator.Reflection;
@@ -28,6 +33,7 @@ public static class MediatorReflectionExtensions
     /// <summary>Interfaces where any number of implementations may be registered together.</summary>
     private static readonly HashSet<Type> s_multiHandlerInterfaces =
     [
+        typeof(IKyrolusNotificationHandler<>),
         typeof(INotificationHandler<>),
         typeof(IKyrolusPipelineBehavior<,>),
         typeof(IKyrolusStreamPipelineBehavior<,>),
@@ -50,7 +56,8 @@ public static class MediatorReflectionExtensions
 
         // Replace, not TryAdd: the runtime registers a placeholder that throws, precisely so that
         // reaching it means neither half was set up.
-        services.Replace(ServiceDescriptor.Singleton<IMediatorDispatcher, KyrolusReflectionDispatcher>());
+        services.Replace(ServiceDescriptor.Singleton<IKyrolusMediatorDispatcher, KyrolusReflectionDispatcher>());
+        services.Replace(ServiceDescriptor.Singleton<IMediatorDispatcher>(static sp => (IMediatorDispatcher)sp.GetRequiredService<IKyrolusMediatorDispatcher>()));
 
         services.TryAddSingleton<IKyrolusPipelineWrapperSource, ReflectionPipelineWrapperSource>();
         services.TryAddSingleton<IKyrolusNotificationDispatchSource, ReflectionNotificationDispatchSource>();

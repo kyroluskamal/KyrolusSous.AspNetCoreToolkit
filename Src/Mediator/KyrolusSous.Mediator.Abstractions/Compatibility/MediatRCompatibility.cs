@@ -150,6 +150,18 @@ public interface IRequestExceptionAction<in TRequest, in TException>
 public interface INotificationPublisher : IKyrolusNotificationPublishStrategy { }
 
 /// <summary>
+/// MediatR's <c>INotification</c>. Equivalent to <see cref="IKyrolusNotification"/>.
+/// </summary>
+public interface INotification : IKyrolusNotification { }
+
+/// <summary>
+/// MediatR's <c>INotificationHandler&lt;TNotification&gt;</c>.
+/// Equivalent to <see cref="IKyrolusNotificationHandler{TNotification}"/>.
+/// </summary>
+public interface INotificationHandler<in TNotification> : IKyrolusNotificationHandler<TNotification>
+    where TNotification : IKyrolusNotification { }
+
+/// <summary>
 /// MediatR's <c>ISender</c>: the send half of the mediator.
 /// Equivalent to <see cref="IKyrolusMediatorSender"/>.
 /// </summary>
@@ -166,3 +178,8 @@ public interface IPublisher : IKyrolusMediatorPublisher { }
 /// against the same implementation - resolving either gives the same mediator.
 /// </summary>
 public interface IMediator : IKyrolusMediator { }
+
+/// <summary>
+/// Compatibility alias for <see cref="IKyrolusMediatorDispatcher"/>.
+/// </summary>
+public interface IMediatorDispatcher : IKyrolusMediatorDispatcher { }

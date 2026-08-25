@@ -143,7 +143,7 @@ public sealed class KyrolusMediatorSenderTests
     public async Task Constructor_throws_ArgumentNullException_when_serviceProvider_or_dispatcher_is_null()
     {
         await using var provider = Build(new Recorder());
-        var dispatcher = provider.GetRequiredService<IMediatorDispatcher>();
+        var dispatcher = provider.GetRequiredService<IKyrolusMediatorDispatcher>();
 
         Should.Throw<ArgumentNullException>(() => new KyrolusMediatorSender(null!, dispatcher)).ParamName.ShouldBe("serviceProvider");
         Should.Throw<ArgumentNullException>(() => new KyrolusMediatorSender(provider, null!)).ParamName.ShouldBe("dispatcher");
@@ -154,7 +154,7 @@ public sealed class KyrolusMediatorSenderTests
     {
         var services = new ServiceCollection();
         var dispatcher = new DummyDispatcher();
-        services.AddSingleton<IMediatorDispatcher>(dispatcher);
+        services.AddSingleton<IKyrolusMediatorDispatcher>(dispatcher);
         await using var provider = services.BuildServiceProvider();
 
         var sender = new KyrolusMediatorSender(provider, dispatcher);
@@ -169,7 +169,7 @@ public sealed class KyrolusMediatorSenderTests
         var services = new ServiceCollection();
         services.AddSingleton<GeneratorIntegration.IKyrolusPipelineWrapperSource>(new NullWrapperSource());
         var dispatcher = new DummyDispatcher();
-        services.AddSingleton<IMediatorDispatcher>(dispatcher);
+        services.AddSingleton<IKyrolusMediatorDispatcher>(dispatcher);
         await using var provider = services.BuildServiceProvider();
 
         var sender = new KyrolusMediatorSender(provider, dispatcher);
@@ -184,7 +184,7 @@ public sealed class KyrolusMediatorSenderTests
         var services = new ServiceCollection();
         services.AddSingleton<GeneratorIntegration.IKyrolusPipelineWrapperSource>(new NullWrapperSource());
         var dispatcher = new DummyDispatcher();
-        services.AddSingleton<IMediatorDispatcher>(dispatcher);
+        services.AddSingleton<IKyrolusMediatorDispatcher>(dispatcher);
         await using var provider = services.BuildServiceProvider();
 
         var sender = new KyrolusMediatorSender(provider, dispatcher);
@@ -198,7 +198,7 @@ public sealed class KyrolusMediatorSenderTests
         ex.Message.ShouldContain("No pipeline wrapper for");
     }
 
-    private sealed class DummyDispatcher : IMediatorDispatcher
+    private sealed class DummyDispatcher : IKyrolusMediatorDispatcher
     {
         public Task<TResponse> DispatchRequestAsync<TResponse>(object request, IServiceProvider sp, CancellationToken ct) => throw new NotImplementedException();
         public Task DispatchCommandAsync(object command, IServiceProvider sp, CancellationToken ct) => throw new NotImplementedException();

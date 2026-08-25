@@ -27,12 +27,12 @@ namespace KyrolusSous.Mediator.Abstractions.Interfaces;
 /// </remarks>
 /// <example>
 /// <code>
-/// public record UserCreated(Guid Id, string Email) : INotification;
+/// public record UserCreated(Guid Id, string Email) : IKyrolusNotification;
 ///
 /// // In the command handler, after the user is safely saved:
 /// await mediator.PublishAsync(new UserCreated(user.Id, user.Email), cancellationToken);
 /// </code>
 /// </example>
-public interface INotification
+public interface IKyrolusNotification
 {
 }

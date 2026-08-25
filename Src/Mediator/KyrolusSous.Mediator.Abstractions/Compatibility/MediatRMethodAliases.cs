@@ -71,12 +71,12 @@ public static class MediatRMethodAliases
         return sender.StreamAsync(request, cancellationToken);
     }
 
-    /// <summary>MediatR's name for <see cref="IKyrolusMediatorPublisher.PublishAsync(INotification, CancellationToken)"/>.</summary>
+    /// <summary>MediatR's name for <see cref="IKyrolusMediatorPublisher.PublishAsync(IKyrolusNotification, CancellationToken)"/>.</summary>
     public static Task Publish<TNotification>(
         this IKyrolusMediatorPublisher publisher,
         TNotification notification,
         CancellationToken cancellationToken = default)
-        where TNotification : INotification
+        where TNotification : IKyrolusNotification
     {
         ArgumentNullException.ThrowIfNull(publisher);
         return publisher.PublishAsync(notification, cancellationToken);

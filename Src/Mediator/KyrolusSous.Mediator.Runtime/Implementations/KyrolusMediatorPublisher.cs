@@ -33,7 +33,7 @@ public sealed class KyrolusMediatorPublisher : IKyrolusMediatorPublisher
     }
 
     /// <inheritdoc />
-    public async Task PublishAsync(INotification notification, CancellationToken cancellationToken = default)
+    public async Task PublishAsync(IKyrolusNotification notification, CancellationToken cancellationToken = default)
     => await PublishAsync(notification, null, cancellationToken).ConfigureAwait(false);
 
     /// <inheritdoc />
@@ -41,16 +41,16 @@ public sealed class KyrolusMediatorPublisher : IKyrolusMediatorPublisher
     {
         ArgumentNullException.ThrowIfNull(notification);
 
-        if (notification is not INotification typed)
+        if (notification is not IKyrolusNotification typed)
             throw new ArgumentException(
-                $"[KyrolusMediator] {notification.GetType().FullName} does not implement {nameof(INotification)}.",
+                $"[KyrolusMediator] {notification.GetType().FullName} does not implement {nameof(IKyrolusNotification)}.",
                 nameof(notification));
 
         await PublishAsync(typed, null, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public async Task PublishAsync(INotification notification, IKyrolusNotificationPublishStrategy? strategy, CancellationToken cancellationToken = default)
+    public async Task PublishAsync(IKyrolusNotification notification, IKyrolusNotificationPublishStrategy? strategy, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(notification);
         cancellationToken.ThrowIfCancellationRequested();

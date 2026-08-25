@@ -22,10 +22,10 @@ public sealed class KyrolusMediator(
     public Task<TResponse> SendAsync<TResponse>(IKyrolusCommand<TResponse> command, CancellationToken cancellationToken = default)
         => _sender.SendAsync(command, cancellationToken);
 
-    public Task PublishAsync(INotification notification, CancellationToken cancellationToken = default)
+    public Task PublishAsync(IKyrolusNotification notification, CancellationToken cancellationToken = default)
         => _publisher.PublishAsync(notification, cancellationToken);
 
-    public Task PublishAsync(INotification notification, IKyrolusNotificationPublishStrategy? strategy, CancellationToken cancellationToken = default)
+    public Task PublishAsync(IKyrolusNotification notification, IKyrolusNotificationPublishStrategy? strategy, CancellationToken cancellationToken = default)
         => _publisher.PublishAsync(notification, strategy, cancellationToken);
 
     public IAsyncEnumerable<TResponse> StreamAsync<TResponse>(IKyrolusStreamRequest<TResponse> request, CancellationToken cancellationToken = default)

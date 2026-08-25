@@ -13,18 +13,18 @@ public sealed class KyrolusMediatorExtensionsTests
         senderDescriptor.ShouldNotBeNull();
         senderDescriptor!.Lifetime.ShouldBe(ServiceLifetime.Scoped);
 
-        var dispatcherDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IMediatorDispatcher));
+        var dispatcherDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IKyrolusMediatorDispatcher));
         dispatcherDescriptor.ShouldNotBeNull();
         dispatcherDescriptor!.Lifetime.ShouldBe(ServiceLifetime.Singleton);
     }
 
-    [Fact(DisplayName = "AddKyrolusMediatorSender should throw InvalidOperationException when resolving IMediatorDispatcher without a registered dispatcher")]
+    [Fact(DisplayName = "AddKyrolusMediatorSender should throw InvalidOperationException when resolving IKyrolusMediatorDispatcher without a registered dispatcher")]
     public void AddKyrolusMediatorSender_should_throw_when_resolving_dispatcher_without_registered_dispatcher()
     {
         var services = new ServiceCollection();
         services.AddKyrolusMediatorSender();
         var serviceProvider = services.BuildServiceProvider();
-        var exception = Should.Throw<InvalidOperationException>(() => serviceProvider.GetRequiredService<IMediatorDispatcher>());
+        var exception = Should.Throw<InvalidOperationException>(() => serviceProvider.GetRequiredService<IKyrolusMediatorDispatcher>());
         exception.Message.ShouldContain("[KyrolusMediator] No dispatcher is registered. Reference KyrolusSous.Mediator.Generator " +
             "and call AddKyrolusMediatorGeneratedDispatcher(), or reference " +
             "KyrolusSous.Mediator.Reflection and call AddKyrolusMediatorReflection().");

@@ -20,15 +20,15 @@ namespace KyrolusSous.Mediator.Generator
     public class MediatorPublisherGenerator : IIncrementalGenerator
     {
         // --- Constants ---
-        private const string NotificationHandlerInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.INotificationHandler`1";
+        private const string NotificationHandlerInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusNotificationHandler`1";
 
         // Lives in the runtime package. Its presence decides whether the dispatch table can be
         // emitted at all: a project referencing only the abstractions has nothing to hand it to.
         private const string DispatchSourceInterfaceFullName = "KyrolusSous.Mediator.Runtime.GeneratorIntegration.IKyrolusNotificationDispatchSource";
         private const string DispatchSourceInterfaceQualifiedName = "global::" + DispatchSourceInterfaceFullName;
         private const string DispatchSourceImplQualifiedName = "global::KyrolusSous.Mediator.Generated.GeneratedNotificationDispatchSource";
-        private const string NotificationInterfaceQualifiedName = "global::KyrolusSous.Mediator.Abstractions.Interfaces.INotification";
-        private const string NotificationHandlerQualifiedName = "global::KyrolusSous.Mediator.Abstractions.Interfaces.INotificationHandler";
+        private const string NotificationInterfaceQualifiedName = "global::KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusNotification";
+        private const string NotificationHandlerQualifiedName = "global::KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusNotificationHandler";
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
@@ -73,9 +73,9 @@ namespace KyrolusSous.Mediator.Generator
 
             if (notificationHandlerDef == null)
             {
-                // Report diagnostic if INotificationHandler<> definition not found
+                // Report diagnostic if IKyrolusNotificationHandler<> definition not found
                 context.ReportDiagnostic(Diagnostic.Create(
-                    new DiagnosticDescriptor("SMG002", "INotificationHandler<> not found", "Could not find required KyrolusMediator interface INotificationHandler<>. Ensure KyrolusSous.Mediator.Abstractions.Interfaces assembly is referenced.", "KyrolusSous.Mediator.Generator", DiagnosticSeverity.Warning, true), // Changed to Warning as maybe no notifications are used
+                    new DiagnosticDescriptor("SMG002", "IKyrolusNotificationHandler<> not found", "Could not find required KyrolusMediator interface IKyrolusNotificationHandler<>. Ensure KyrolusSous.Mediator.Abstractions.Interfaces assembly is referenced.", "KyrolusSous.Mediator.Generator", DiagnosticSeverity.Warning, true), // Changed to Warning as maybe no notifications are used
                     Location.None));
                 return; // Don't generate if the base interface isn't found
             }

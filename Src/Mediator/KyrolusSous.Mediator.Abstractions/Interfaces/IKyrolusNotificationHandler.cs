@@ -6,7 +6,7 @@ namespace KyrolusSous.Mediator.Abstractions.Interfaces;
 /// </summary>
 /// <typeparam name="TNotification">The type of notification being handled.</typeparam>
 // TNotification is contravariant (in) as it's consumed by the handler.
-public interface INotificationHandler<in TNotification> where TNotification : INotification
+public interface IKyrolusNotificationHandler<in TNotification> where TNotification : IKyrolusNotification
 {
     /// <summary>
     /// Handles the notification.

@@ -19,8 +19,8 @@ public static class MediatorExtensions
         // A placeholder rather than a default implementation. Something has to supply the dispatch,
         // and both things that can - the generator and the reflection package - replace this
         // descriptor. Resolving it means neither was set up, and the message says so instead of
-        // letting the container report a missing IMediatorDispatcher.
-        services.TryAddSingleton<IMediatorDispatcher>(static _ => throw new InvalidOperationException(
+        // letting the container report a missing IKyrolusMediatorDispatcher.
+        services.TryAddSingleton<IKyrolusMediatorDispatcher>(static _ => throw new InvalidOperationException(
             "[KyrolusMediator] No dispatcher is registered. Reference KyrolusSous.Mediator.Generator " +
             "and call AddKyrolusMediatorGeneratedDispatcher(), or reference " +
             "KyrolusSous.Mediator.Reflection and call AddKyrolusMediatorReflection()."));

@@ -26,7 +26,7 @@ namespace KyrolusSous.Mediator.Abstractions.Interfaces;
 /// assembly and has to be able to name it.
 /// </para>
 /// </remarks>
-public interface IMediatorDispatcher
+public interface IKyrolusMediatorDispatcher
 {
     /// <summary>
     /// Dispatches a request that expects a response (queries, and commands returning a value).

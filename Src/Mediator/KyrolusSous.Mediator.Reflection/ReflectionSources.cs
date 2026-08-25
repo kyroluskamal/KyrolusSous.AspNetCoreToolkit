@@ -67,12 +67,17 @@ internal sealed class ReflectionNotificationDispatchSource : IKyrolusNotificatio
         IServiceProvider serviceProvider)
     {
         var notificationType = notification.GetType();
-        var handlerInterfaceType = typeof(INotificationHandler<>).MakeGenericType(notificationType);
+        var handlerInterfaceType = typeof(IKyrolusNotificationHandler<>).MakeGenericType(notificationType);
+        var compatHandlerInterfaceType = typeof(KyrolusSous.Mediator.Abstractions.Compatibility.INotificationHandler<>).MakeGenericType(notificationType);
+
+        var handlers = serviceProvider.GetServices(handlerInterfaceType)
+            .Concat(serviceProvider.GetServices(compatHandlerInterfaceType))
+            .Where(handler => handler is not null)
+            .Distinct();
 
         return
         [
-            .. serviceProvider.GetServices(handlerInterfaceType)
-                .Where(handler => handler is not null)
+            .. handlers
                 .Select(handler => (Func<CancellationToken, Task>)(async ct =>
                 {
                     var handle = s_handleMethods.GetOrAdd((handler!.GetType(), notificationType), static key =>

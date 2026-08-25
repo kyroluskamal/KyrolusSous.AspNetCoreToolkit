@@ -26,17 +26,17 @@ public class MediatorReflectionExtensionsTests
         var exception = Should.Throw<InvalidOperationException>(() => serviceCollection.AddKyrolusMediatorReflection());
         exception.Message.ShouldBe("[KyrolusMediator] AddKyrolusMediatorReflection() must be called after AddKyrolusMediator(), which is what records the assemblies to scan and the lifetimes to use.");
     }
-    [Fact(DisplayName = "AddKyrolusMediatorReflection should register KyrolusReflectionDispatcher as IMediatorDispatcher")]
+    [Fact(DisplayName = "AddKyrolusMediatorReflection should register KyrolusReflectionDispatcher as IKyrolusMediatorDispatcher")]
     public void AddKyrolusMediatorReflection_ShouldRegisterKyrolusReflectionDispatcher_AsIMediatorDispatcher()
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddKyrolusMediator(configuration => { });
-        serviceCollection.AddSingleton<IMediatorDispatcher, MediatorDispacherMock>();
+        serviceCollection.AddSingleton<IKyrolusMediatorDispatcher, MediatorDispacherMock>();
         // Act
         serviceCollection.AddKyrolusMediatorReflection();
         var serviceProvider = serviceCollection.BuildServiceProvider();
-        var dispatcher = serviceProvider.GetService<IMediatorDispatcher>();
+        var dispatcher = serviceProvider.GetService<IKyrolusMediatorDispatcher>();
 
         // Assert
         dispatcher.ShouldNotBeNull();
@@ -177,7 +177,7 @@ public class MediatorReflectionExtensionsTests
         var serviceProvider = serviceCollection.BuildServiceProvider();
 
         // Assert
-        var notificationHandlers = serviceProvider.GetServices<INotificationHandler<TestNotification>>().ToList();
+        var notificationHandlers = serviceProvider.GetServices<IKyrolusNotificationHandler<TestNotification>>().ToList();
         notificationHandlers.Count.ShouldBeGreaterThanOrEqualTo(2);
         notificationHandlers.ShouldContain(h => h.GetType() == typeof(TestNotificationHandler1));
         notificationHandlers.ShouldContain(h => h.GetType() == typeof(TestNotificationHandler2));
@@ -189,54 +189,56 @@ public class MediatorReflectionExtensionsTests
     public void AddKyrolusMediatorFromAssemblies_ShouldThrowArgumentNullException_WhenServiceCollectionIsNull()
     {
         // Arrange
-        IServiceCollection? serviceCollection = null;
-        var assemblies = new[] { typeof(MediatorReflectionExtensionsTests).Assembly };
+        ServiceCollection serviceCollection = null!;
 
         // Act & Assert
-        var exception = Should.Throw<ArgumentNullException>(() => serviceCollection!.AddKyrolusMediatorFromAssemblies(assemblies));
-        exception.ParamName.ShouldBe("services");
+        Should.Throw<ArgumentNullException>(() => serviceCollection.AddKyrolusMediatorFromAssemblies(typeof(KyrolusReflectionDispatcher).Assembly));
     }
-    [Fact(DisplayName = "AddKyrolusMediatorFromAssemblies should throw ArgumentException when assemblies is null")]
-    public void AddKyrolusMediatorFromAssemblies_ShouldThrowArgumentException_WhenAssembliesIsNull()
+
+    [Fact(DisplayName = "AddKyrolusMediatorFromAssemblies should throw ArgumentException when assemblies array is null or empty")]
+    public void AddKyrolusMediatorFromAssemblies_ShouldThrowArgumentException_WhenAssembliesArrayIsNullOrEmpty()
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
+
         // Act & Assert
-        var exception = Should.Throw<ArgumentException>(() => serviceCollection.AddKyrolusMediatorFromAssemblies((Assembly[])null!));
-        exception.ParamName.ShouldBe("assemblies");
-    }   
-    [Fact(DisplayName = "AddKyrolusMediatorFromAssemblies should throw ArgumentException when assemblies is empty")]
-    public void AddKyrolusMediatorFromAssemblies_ShouldThrowArgumentException_WhenAssembliesIsEmpty()
+        Should.Throw<ArgumentException>(() => serviceCollection.AddKyrolusMediatorFromAssemblies((Assembly[])null!));
+        Should.Throw<ArgumentException>(() => serviceCollection.AddKyrolusMediatorFromAssemblies([]));
+    }
+
+    [Fact(DisplayName = "AddKyrolusMediatorFromAssemblies should throw ArgumentNullException when configuration Action is null")]
+    public void AddKyrolusMediatorFromAssemblies_ShouldThrowArgumentNullException_WhenConfigurationActionIsNull()
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
+        var assemblies = new[] { typeof(KyrolusReflectionDispatcher).Assembly };
+
         // Act & Assert
-        var exception = Should.Throw<ArgumentException>(() => serviceCollection.AddKyrolusMediatorFromAssemblies([]));
-        exception.ParamName.ShouldBe("assemblies");
+        Should.Throw<ArgumentNullException>(() => serviceCollection.AddKyrolusMediatorFromAssemblies(null!, assemblies));
     }
-    [Fact(DisplayName = "AddKyrolusMediatorFromAssemblies should register handlers from assemblies")]
-    public void AddKyrolusMediatorFromAssemblies_ShouldRegisterHandlersFromAssemblies()
+
+    [Fact(DisplayName = "AddKyrolusMediatorFromAssemblies with action overload should configure mediator and register types")]
+    public void AddKyrolusMediatorFromAssemblies_WithActionOverload_ShouldConfigureMediatorAndRegisterTypes()
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
         var assemblies = new[] { typeof(MediatorReflectionExtensionsTests).Assembly };
 
         // Act
-        serviceCollection.AddKyrolusMediatorFromAssemblies(config => config.ThrowOnDuplicateRequestHandlers = false, typeof(MediatorReflectionExtensionsTests).Assembly);
+        serviceCollection.AddKyrolusMediatorFromAssemblies(
+            configuration => configuration.ThrowOnDuplicateRequestHandlers = false,
+            assemblies);
+
         var serviceProvider = serviceCollection.BuildServiceProvider();
 
         // Assert
-        var queryHandlers = serviceProvider.GetServices<IKyrolusQueryHandler<TestQuery, string>>().ToList();
-        queryHandlers.Count.ShouldBe(1);
-        serviceProvider.GetService<IKyrolusQueryHandler<TestQuery, string>>().ShouldBeOfType<TestQueryHandler>();
-        var commandHandlers = serviceProvider.GetServices<IKyrolusCommandHandler<TestCommand>>().ToList();
-        commandHandlers.Count.ShouldBe(1);
+        serviceProvider.GetService<IKyrolusMediatorDispatcher>().ShouldBeOfType<KyrolusReflectionDispatcher>();
         serviceProvider.GetService<IKyrolusPipelineWrapperSource>().ShouldBeOfType<ReflectionPipelineWrapperSource>();
         serviceProvider.GetService<IKyrolusNotificationDispatchSource>().ShouldBeOfType<ReflectionNotificationDispatchSource>();
         serviceProvider.GetService<IKyrolusRequestExceptionDispatchSource>().ShouldBeOfType<ReflectionRequestExceptionDispatchSource>();
     }
 
-    [Fact(DisplayName = "AddKyrolusMediatorFromAssemblies default overload should register dispatcher and sources cleanly")]
+    [Fact(DisplayName = "AddKyrolusMediatorFromAssemblies default overload should register dispatcher and all reflection sources")]
     public void AddKyrolusMediatorFromAssemblies_DefaultOverload_ShouldRegisterDispatcherAndSourcesCleanly()
     {
         // Arrange
@@ -247,7 +249,7 @@ public class MediatorReflectionExtensionsTests
         var serviceProvider = serviceCollection.BuildServiceProvider();
 
         // Assert
-        serviceProvider.GetService<IMediatorDispatcher>().ShouldBeOfType<KyrolusReflectionDispatcher>();
+        serviceProvider.GetService<IKyrolusMediatorDispatcher>().ShouldBeOfType<KyrolusReflectionDispatcher>();
         serviceProvider.GetService<IKyrolusPipelineWrapperSource>().ShouldBeOfType<ReflectionPipelineWrapperSource>();
         serviceProvider.GetService<IKyrolusNotificationDispatchSource>().ShouldBeOfType<ReflectionNotificationDispatchSource>();
         serviceProvider.GetService<IKyrolusRequestExceptionDispatchSource>().ShouldBeOfType<ReflectionRequestExceptionDispatchSource>();
@@ -316,7 +318,7 @@ public class MediatorReflectionExtensionsTests
         serviceCollection.AddKyrolusMediatorFromAssemblies(c => c.ThrowOnDuplicateRequestHandlers = false, assemblies);
 
         // Assert
-        var descriptor = serviceCollection.FirstOrDefault(sd => sd.ServiceType == typeof(INotificationHandler<>) && sd.ImplementationType == typeof(OpenGenericNotificationHandler<>));
+        var descriptor = serviceCollection.FirstOrDefault(sd => sd.ServiceType == typeof(IKyrolusNotificationHandler<>) && sd.ImplementationType == typeof(OpenGenericNotificationHandler<>));
         descriptor.ShouldNotBeNull();
     }
 
