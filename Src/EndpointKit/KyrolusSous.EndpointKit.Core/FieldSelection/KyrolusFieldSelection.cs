@@ -22,7 +22,25 @@ public class KyrolusFieldSelection
     public void AddField(string name, KyrolusFieldSelection? nested = null)
     {
         SelectAll = false;
-        _fields[name] = nested;
+        if (_fields.TryGetValue(name, out var existing) && existing is not null && nested is not null)
+        {
+            existing.Merge(nested);
+        }
+        else if (!_fields.ContainsKey(name) || nested is not null)
+        {
+            _fields[name] = nested;
+        }
+    }
+
+    /// <summary>Merges another field selection into this one.</summary>
+    public void Merge(KyrolusFieldSelection other)
+    {
+        if (other is null || other.SelectAll) return;
+        SelectAll = false;
+        foreach (var (k, v) in other._fields)
+        {
+            AddField(k, v);
+        }
     }
 
     /// <summary>Checks if a field is selected.</summary>
@@ -252,6 +270,21 @@ public static class KyrolusFieldProjector
     public static Dictionary<string, object?> ProjectSingle(object data, KyrolusFieldSelection selection)
     {
         var result = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+
+        if (data is IDictionary<string, object?> dict)
+        {
+            foreach (var (fieldName, nestedSelection) in selection.Fields)
+            {
+                if (!dict.TryGetValue(fieldName, out var value)) continue;
+                if (nestedSelection is not null && value is not null)
+                {
+                    value = Project(value, nestedSelection);
+                }
+                result[fieldName] = value;
+            }
+            return result;
+        }
+
         var type = data.GetType();
 
         foreach (var (fieldName, nestedSelection) in selection.Fields)

@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="10.0.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.10" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="NSubstitute" Version="5.3.0" />
+    <PackageReference Include="Shouldly" Version="4.3.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Src\EndpointKit\KyrolusSous.EndpointKit.Core\KyrolusSous.EndpointKit.Core.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\EndpointKit\KyrolusSous.EndpointKit.EF\KyrolusSous.EndpointKit.EF.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\EndpointKit\KyrolusSous.EndpointKit.Marten\KyrolusSous.EndpointKit.Marten.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\CQRS\KyrolusSous.CQRS.Abstractions\KyrolusSous.CQRS.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\CQRS\KyrolusSous.CQRS.EF\KyrolusSous.CQRS.EF.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\CQRS\KyrolusSous.CQRS.Marten\KyrolusSous.CQRS.Marten.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\ExceptionHandling\KyrolusSous.ExceptionHandling.Runtime\KyrolusSous.ExceptionHandling.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\ExceptionHandling\KyrolusSous.ExceptionHandling.ProblemDetails\KyrolusSous.ExceptionHandling.ProblemDetails.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverageAttribute" />
+  </ItemGroup>
+</Project>

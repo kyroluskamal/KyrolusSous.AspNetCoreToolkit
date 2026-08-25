@@ -40,21 +40,33 @@ public static class OrderBuilder
         }
 
         var allowedSet = NormalizeAllowlist(allowedProperties);
+        var effectiveClauses = new List<OrderClause>();
+
         foreach (var clause in clauses)
         {
             if (!IsAllowed(allowedSet, clause.Property))
             {
-                error = $"Ordering by '{clause.Property}' is not allowed.";
-                return null;
+                if (strict)
+                {
+                    error = $"Ordering by '{clause.Property}' is not allowed.";
+                    return null;
+                }
+                continue;
             }
+            effectiveClauses.Add(clause);
+        }
+
+        if (effectiveClauses.Count == 0)
+        {
+            return null;
         }
 
         return query =>
         {
             IOrderedQueryable<TEntity>? ordered = null;
-            for (var i = 0; i < clauses.Count; i++)
+            for (var i = 0; i < effectiveClauses.Count; i++)
             {
-                var clause = clauses[i];
+                var clause = effectiveClauses[i];
                 var (segments, memberType) = ResolveMember<TEntity>(clause.Property);
                 var parameter = Expression.Parameter(typeof(TEntity), "x");
                 var access = BuildMemberAccess(parameter, segments);

@@ -218,6 +218,13 @@
       "kind": "unit",
       "services": [],
       "ci": true
+    },
+    {
+      "name": "EndpointKit - Unit",
+      "project": "Tests/UnitTests/EndpointKit/KyrolusSous.EndpointKit.UnitTests/KyrolusSous.EndpointKit.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
     }
   ],
 

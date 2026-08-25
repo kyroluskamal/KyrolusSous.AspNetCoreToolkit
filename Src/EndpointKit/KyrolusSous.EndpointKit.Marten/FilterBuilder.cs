@@ -987,6 +987,14 @@ public static class FilterBuilder
             return true;
         }
 
+        if (nonNullableType == typeof(bool))
+        {
+            if (bool.TryParse(raw, out var b)) { result = b; return true; }
+            if (raw == "1" || raw.Equals("yes", StringComparison.OrdinalIgnoreCase)) { result = true; return true; }
+            if (raw == "0" || raw.Equals("no", StringComparison.OrdinalIgnoreCase)) { result = false; return true; }
+            return false;
+        }
+
         if (nonNullableType == typeof(Guid))
         {
             if (Guid.TryParse(raw, out var guid))
@@ -999,7 +1007,8 @@ public static class FilterBuilder
 
         if (nonNullableType == typeof(DateTimeOffset))
         {
-            if (DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces, out var dto))
+            if (DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces, out var dto) ||
+                DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out dto))
             {
                 result = NormalizeDateTimeOffsetPrecision(dto);
                 return true;
@@ -1009,7 +1018,8 @@ public static class FilterBuilder
 
         if (nonNullableType == typeof(DateTime))
         {
-            if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces, out var dt))
+            if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces, out var dt) ||
+                DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out dt))
             {
                 result = NormalizeDateTimePrecision(dt);
                 return true;
@@ -1032,6 +1042,16 @@ public static class FilterBuilder
             if (TimeOnly.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var timeOnly))
             {
                 result = timeOnly;
+                return true;
+            }
+            return false;
+        }
+
+        if (nonNullableType == typeof(TimeSpan))
+        {
+            if (TimeSpan.TryParse(raw, CultureInfo.InvariantCulture, out var timeSpan))
+            {
+                result = timeSpan;
                 return true;
             }
             return false;

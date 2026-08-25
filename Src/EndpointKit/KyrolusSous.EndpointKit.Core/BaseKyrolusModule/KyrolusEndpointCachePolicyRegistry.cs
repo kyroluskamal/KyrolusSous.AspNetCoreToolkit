@@ -121,8 +121,8 @@ public sealed class KyrolusEndpointCachePolicyRegistry : IKyrolusEndpointCachePo
     }
 
     private static string BuildRouteKey(string httpMethod, string path)
-        => $"{httpMethod}:{path}";
+        => $"{httpMethod.Trim().ToUpperInvariant()}:{path.Trim().Trim('/')}";
 
     private static string BuildTenantRouteKey(string tenantId, string httpMethod, string path)
-        => $"{tenantId}:{httpMethod}:{path}";
+        => $"{tenantId.Trim()}:{httpMethod.Trim().ToUpperInvariant()}:{path.Trim().Trim('/')}";
 }

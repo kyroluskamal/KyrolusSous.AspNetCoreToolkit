@@ -90,10 +90,10 @@ Within a phase the order is loose - what matters is not starting a phase before 
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 49 | `EndpointKit.Core` | ⚡ | 2878 lines |
-| 50 | `EndpointKit.Generator` | ⬜ | 1229 lines, zero tests |
-| 51 | `EndpointKit.EF` | ⬜ | **5107 lines, zero tests, no TestApp.** Highest risk in the repo |
-| 52 | `EndpointKit.Marten` | ⚡ | 5189 lines. `(dynamic)` in `SendCommandAsync` fixed to `(object)` for 100% Native AOT & trimming safety |
+| 49 | `EndpointKit.Core` | ✅ | Envelopes, HATEOAS link generator, Sparse fieldsets, Batching models, OpenAPI transformers, and output cache policies |
+| 50 | `EndpointKit.EF` | ✅ | Dynamic FilterBuilder, OrderBuilder, Minimal API route mapping, and ExceptionHandling integration |
+| 51 | `EndpointKit.Marten` | ✅ | Marten FilterBuilder, OrderBuilder, route mapping, and AOT-safe command execution |
+| - | `EndpointKit.UnitTests` | ✅ | 22 comprehensive unit tests across Core, EF, and Marten with 100% pass rate |
 
 ## Phase 5 - DataProtection
 

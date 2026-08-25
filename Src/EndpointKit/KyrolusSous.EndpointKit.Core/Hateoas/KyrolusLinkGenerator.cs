@@ -118,13 +118,16 @@ public class KyrolusDefaultLinkGenerator : IKyrolusLinkGenerator
     {
         var links = new List<KyrolusLink>();
         var baseUrl = GetBaseUrl(context, config) + "s";
-        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        var totalPages = pageSize > 0 ? (int)Math.Ceiling((double)totalCount / pageSize) : 0;
 
         // Self link
         links.Add(KyrolusLink.Self($"{baseUrl}?pageNumber={pageNumber}&pageSize={pageSize}"));
 
         // First page
-        links.Add(KyrolusLink.First($"{baseUrl}?pageNumber=1&pageSize={pageSize}"));
+        if (totalPages > 0)
+        {
+            links.Add(KyrolusLink.First($"{baseUrl}?pageNumber=1&pageSize={pageSize}"));
+        }
 
         // Previous page
         if (pageNumber > 1)
@@ -160,7 +163,13 @@ public class KyrolusDefaultLinkGenerator : IKyrolusLinkGenerator
             prefix = $"{prefix}/{config.VersionPrefix}{config.ApiVersion}";
         }
 
-        return $"{scheme}://{host}{pathBase}/{prefix}/{config.Route}";
+        var segments = new List<string>();
+        if (!string.IsNullOrWhiteSpace(pathBase.Value)) segments.Add(pathBase.Value.Trim('/'));
+        if (!string.IsNullOrWhiteSpace(prefix)) segments.Add(prefix.Trim('/'));
+        if (!string.IsNullOrWhiteSpace(config.Route)) segments.Add(config.Route.Trim('/'));
+        var relativePath = string.Join('/', segments);
+
+        return $"{scheme}://{host}/{relativePath}";
     }
 
     private static string BuildCollectionUrl(string baseUrl, int? pageNumber, int? pageSize, string? existingQuery)

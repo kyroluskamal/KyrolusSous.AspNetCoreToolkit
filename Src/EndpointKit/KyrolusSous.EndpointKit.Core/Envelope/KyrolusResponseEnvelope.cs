@@ -329,7 +329,12 @@ public class KyrolusEnvelopeBuilder
             if (_pageSize.HasValue && _pageSize.Value > 0)
             {
                 meta.TotalPages = (int)Math.Ceiling((double)_totalCount.Value / _pageSize.Value);
-                meta.HasMore = _page < meta.TotalPages;
+                meta.HasMore = _totalCount.Value > 0 && _page.HasValue && _page.Value < meta.TotalPages;
+            }
+            else
+            {
+                meta.TotalPages = 0;
+                meta.HasMore = false;
             }
         }
 

@@ -1143,7 +1143,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
 
         // Check atomic mode
         var useAtomic = request.Atomic;
-        if (useAtomic && !batchOptions.AllowNonAtomic && !request.Atomic)
+        if (!batchOptions.AllowNonAtomic && !request.Atomic)
         {
             useAtomic = true; // Force atomic if non-atomic not allowed
         }
@@ -2750,8 +2750,9 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         TrySetProperty(query, UseSplitQueryPropertyName, useSplitQuery);
     }
 
-    private static void TrySetProperty(object target, string propertyName, object? value)
+    private static void TrySetProperty(object? target, string propertyName, object? value)
     {
+        if (target is null) return;
         var property = target.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
         if (property is null || !property.CanWrite) return;
 

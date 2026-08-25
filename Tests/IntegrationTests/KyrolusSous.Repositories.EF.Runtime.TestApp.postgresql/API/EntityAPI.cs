@@ -141,6 +141,16 @@ public static class EntityApi
                 return Results.NoContent();
             });
 
+            group.MapPut("/update-range", async (
+                IEnumerable<TEntity> entities,
+                IKyrolusUnitOfWork uow,
+                CancellationToken ct) =>
+            {
+                await Repo(uow).UpdateRangeAsync(entities, ct);
+                await uow.SaveChangesAsync(ct);
+                return Results.NoContent();
+            });
+
             group.MapPut("/{id?}", async (
                 string? id,
                 [FromQuery] string[]? keys,
@@ -149,16 +159,6 @@ public static class EntityApi
                 CancellationToken ct) =>
             {
                 await Repo(uow).UpdateAsync(entity, ct);
-                await uow.SaveChangesAsync(ct);
-                return Results.NoContent();
-            });
-
-            group.MapPut("/update-range", async (
-                IEnumerable<TEntity> entities,
-                IKyrolusUnitOfWork uow,
-                CancellationToken ct) =>
-            {
-                await Repo(uow).UpdateRangeAsync(entities, ct);
                 await uow.SaveChangesAsync(ct);
                 return Results.NoContent();
             });

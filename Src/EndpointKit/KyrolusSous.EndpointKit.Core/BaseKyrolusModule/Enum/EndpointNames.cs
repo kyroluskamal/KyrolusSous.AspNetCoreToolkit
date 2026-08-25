@@ -26,5 +26,7 @@ public enum EndpointNames
     GetDeleted,
     Restore,
     Batch,
+    SpecificationQuery,
+    Export,
     Custom
 }

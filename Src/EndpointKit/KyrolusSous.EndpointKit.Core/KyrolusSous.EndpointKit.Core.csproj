@@ -3,6 +3,7 @@
     <ProjectReference Include="..\..\Caching\KyrolusSous.Caching.Abstractions\KyrolusSous.Caching.Abstractions.csproj" />
     <ProjectReference Include="..\..\CQRS\KyrolusSous.CQRS.Abstractions\KyrolusSous.CQRS.Abstractions.csproj" />
     <ProjectReference Include="..\..\Mediator\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Validation\KyrolusSous.Validation.Abstractions\KyrolusSous.Validation.Abstractions.csproj" />
   </ItemGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />

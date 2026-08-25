@@ -160,6 +160,20 @@ public class DefaultRouteMapper<TResponse, TModel, TKey> : IRouteMapper<TRespons
                 .ApplyEndpointPolicies(config, EndpointNames.DeleteRange);
         }
 
+        if (ShouldMap(EndpointNames.Export))
+        {
+            group.MapGet($"{resource}/export",
+                ([FromServices] ICommandQueryHandler<TResponse, TModel, TKey> handler,
+                    [FromQuery] string? filter,
+                    [FromQuery] string? includedProps,
+                    [FromQuery] string? includeGraph,
+                    [FromQuery] string? fields) =>
+                    handler.HandleGetAllAsync(filter, includedProps, includeGraph, fields, cacheable: false, includeDeleted: false))
+                .Authorize(Authorize(config, EndpointNames.Export))
+                .ApplyOpenApi(config, EndpointNames.Export)
+                .ApplyEndpointPolicies(config, EndpointNames.Export);
+        }
+
         return group;
     }
 

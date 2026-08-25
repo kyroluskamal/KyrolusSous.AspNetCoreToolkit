@@ -899,22 +899,37 @@ public static class FilterBuilder
             return true;
         }
 
+        if (targetType == typeof(bool))
+        {
+            if (bool.TryParse(raw, out var b)) { result = b; return true; }
+            if (raw == "1" || raw.Equals("yes", StringComparison.OrdinalIgnoreCase)) { result = true; return true; }
+            if (raw == "0" || raw.Equals("no", StringComparison.OrdinalIgnoreCase)) { result = false; return true; }
+        }
+
         if (targetType == typeof(Guid) && Guid.TryParse(raw, out var guid))
         {
             result = guid;
             return true;
         }
 
-        if (targetType == typeof(DateTimeOffset) && DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dto))
+        if (targetType == typeof(DateTimeOffset))
         {
-            result = dto;
-            return true;
+            if (DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dto) ||
+                DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out dto))
+            {
+                result = dto;
+                return true;
+            }
         }
 
-        if (targetType == typeof(DateTime) && DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt))
+        if (targetType == typeof(DateTime))
         {
-            result = dt;
-            return true;
+            if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt) ||
+                DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out dt))
+            {
+                result = dt;
+                return true;
+            }
         }
 
         if (targetType == typeof(DateOnly) && DateOnly.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateOnly))
@@ -926,6 +941,12 @@ public static class FilterBuilder
         if (targetType == typeof(TimeOnly) && TimeOnly.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var timeOnly))
         {
             result = timeOnly;
+            return true;
+        }
+
+        if (targetType == typeof(TimeSpan) && TimeSpan.TryParse(raw, CultureInfo.InvariantCulture, out var timeSpan))
+        {
+            result = timeSpan;
             return true;
         }
 

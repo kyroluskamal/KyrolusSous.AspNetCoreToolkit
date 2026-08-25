@@ -1170,6 +1170,13 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
             cancellationToken).ConfigureAwait(false);
         if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
 
+        // Check atomic mode
+        var useAtomic = request.Atomic;
+        if (!batchOptions.AllowNonAtomic && !request.Atomic)
+        {
+            useAtomic = true; // Force atomic if non-atomic not allowed
+        }
+
         var results = new List<KyrolusBatchOperationResult<TResponse, TKey>>();
         var shouldContinue = true;
 

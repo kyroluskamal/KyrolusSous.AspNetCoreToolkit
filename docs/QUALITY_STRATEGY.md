@@ -85,7 +85,8 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Resilience - Unit | unit | 9 | none | yes |
 | Mapping - Unit | unit | 54 | none | yes |
 | CQRS - Unit | unit | 52 | none | yes |
-| **Total** | | **1838** | | |
+| EndpointKit - Unit | unit | 63 | none | yes |
+| **Total** | | **1901** | | |
 
 <!-- END:GENERATED:test-suites -->
 
