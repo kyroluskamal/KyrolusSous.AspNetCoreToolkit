@@ -73,6 +73,18 @@ public static class RuleBuilderFluentExtensions
     public static IRuleBuilder<T, string?> NationalId<T>(this IRuleBuilder<T, string?> builder, string countryCode = "EG")
         => builder.Must(val => AdvancedRuleBuilderExtensions.IsNationalIdValid(val, countryCode), "Invalid National ID.");
 
+    public static IRuleBuilder<T, string?> SpanishDni<T>(this IRuleBuilder<T, string?> builder)
+        => builder.Must(val => AdvancedRuleBuilderExtensions.IsSpanishDniValid(val), "Invalid Spanish DNI.");
+
+    public static IRuleBuilder<T, string?> SpanishNie<T>(this IRuleBuilder<T, string?> builder)
+        => builder.Must(val => AdvancedRuleBuilderExtensions.IsSpanishNieValid(val), "Invalid Spanish NIE.");
+
+    public static IRuleBuilder<T, string?> SpanishCif<T>(this IRuleBuilder<T, string?> builder)
+        => builder.Must(val => AdvancedRuleBuilderExtensions.IsSpanishCifValid(val), "Invalid Spanish CIF.");
+
+    public static IRuleBuilder<T, string?> SpanishNif<T>(this IRuleBuilder<T, string?> builder)
+        => builder.Must(val => AdvancedRuleBuilderExtensions.IsSpanishNifValid(val), "Invalid Spanish NIF.");
+
     public static IRuleBuilder<T, string?> IbanValid<T>(this IRuleBuilder<T, string?> builder)
         => builder.Must(val => AdvancedRuleBuilderExtensions.IsIbanValid(val), "Invalid IBAN number.");
 

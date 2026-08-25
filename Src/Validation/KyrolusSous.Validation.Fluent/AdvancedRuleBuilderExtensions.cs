@@ -18,9 +18,13 @@ public static class AdvancedRuleBuilderExtensions
         @"^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$|^([0-9A-Fa-f]{12})$",
         RegexOptions.Compiled);
 
+    private const string SpanishDniControlLetters = "TRWAGMYFPDXBNJZSQVHLCKE";
+    private const string SpanishCifControlLetters = "JABCDEFGHI";
+
     /// <summary>
     /// Validates National ID numbers. Default country "EG" performs full 14-digit Egyptian National ID algorithm
     /// including century, valid birth date YYMMDD, governorate code, and checksum.
+    /// Supports "ES", "ES-DNI", "ES-NIE", "ES-CIF" for Spanish identification numbers.
     /// </summary>
     public static bool IsNationalIdValid(string? nationalId, string countryCode = "EG")
     {
@@ -61,7 +65,146 @@ public static class AdvancedRuleBuilderExtensions
             return checkDigit == lastDigit;
         }
 
+        if (string.Equals(countryCode, "ES", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(countryCode, "ES-NIF", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(countryCode, "SPAIN", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsSpanishNifValid(sanitized);
+        }
+
+        if (string.Equals(countryCode, "ES-DNI", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsSpanishDniValid(sanitized);
+        }
+
+        if (string.Equals(countryCode, "ES-NIE", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsSpanishNieValid(sanitized);
+        }
+
+        if (string.Equals(countryCode, "ES-CIF", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsSpanishCifValid(sanitized);
+        }
+
         return sanitized.Length >= 6 && sanitized.All(char.IsLetterOrDigit);
+    }
+
+    /// <summary>
+    /// Validates Spanish DNI (Documento Nacional de Identidad) for Spanish individuals (8 digits + 1 control letter).
+    /// </summary>
+    public static bool IsSpanishDniValid(string? dni)
+    {
+        if (string.IsNullOrWhiteSpace(dni)) return false;
+        var sanitized = dni.Replace(" ", "").Replace("-", "").ToUpperInvariant();
+
+        if (sanitized.Length != 9) return false;
+
+        var numberPart = sanitized.Substring(0, 8);
+        if (!numberPart.All(char.IsDigit)) return false;
+
+        int number = int.Parse(numberPart);
+        char expectedLetter = SpanishDniControlLetters[number % 23];
+
+        return sanitized[8] == expectedLetter;
+    }
+
+    /// <summary>
+    /// Validates Spanish NIE (Número de Identidad de Extranjero) for resident foreigners (X, Y, or Z + 7 digits + 1 control letter).
+    /// </summary>
+    public static bool IsSpanishNieValid(string? nie)
+    {
+        if (string.IsNullOrWhiteSpace(nie)) return false;
+        var sanitized = nie.Replace(" ", "").Replace("-", "").ToUpperInvariant();
+
+        if (sanitized.Length != 9) return false;
+
+        char firstChar = sanitized[0];
+        char prefixDigit = firstChar switch
+        {
+            'X' => '0',
+            'Y' => '1',
+            'Z' => '2',
+            _ => '\0'
+        };
+
+        if (prefixDigit == '\0') return false;
+
+        var middleDigits = sanitized.Substring(1, 7);
+        if (!middleDigits.All(char.IsDigit)) return false;
+
+        int number = int.Parse($"{prefixDigit}{middleDigits}");
+        char expectedLetter = SpanishDniControlLetters[number % 23];
+
+        return sanitized[8] == expectedLetter;
+    }
+
+    /// <summary>
+    /// Validates Spanish CIF (Código de Identificación Fiscal) for legal entities and corporations (1 letter + 7 digits + 1 control digit/letter).
+    /// </summary>
+    public static bool IsSpanishCifValid(string? cif)
+    {
+        if (string.IsNullOrWhiteSpace(cif)) return false;
+        var sanitized = cif.Replace(" ", "").Replace("-", "").ToUpperInvariant();
+
+        if (sanitized.Length != 9) return false;
+
+        char prefix = sanitized[0];
+        const string validPrefixes = "ABCDEFGHJKLMNPQRSUVW";
+        if (!validPrefixes.Contains(prefix)) return false;
+
+        var digitsPart = sanitized.Substring(1, 7);
+        if (!digitsPart.All(char.IsDigit)) return false;
+
+        int sumEven = 0;
+        int sumOdd = 0;
+
+        for (int i = 0; i < 7; i++)
+        {
+            int digit = digitsPart[i] - '0';
+            if ((i + 1) % 2 == 0) // 2nd, 4th, 6th digit (1-based)
+            {
+                sumEven += digit;
+            }
+            else // 1st, 3rd, 5th, 7th digit (1-based)
+            {
+                int multiplied = digit * 2;
+                sumOdd += (multiplied / 10) + (multiplied % 10);
+            }
+        }
+
+        int totalSum = sumEven + sumOdd;
+        int controlDigit = (10 - (totalSum % 10)) % 10;
+        char controlLetter = SpanishCifControlLetters[controlDigit];
+
+        char lastChar = sanitized[8];
+
+        // Organizations requiring letter control
+        const string letterOnlyPrefixes = "PQSKWNRV";
+        // Organizations requiring number control
+        const string numberOnlyPrefixes = "ABEH";
+
+        if (letterOnlyPrefixes.Contains(prefix))
+        {
+            return lastChar == controlLetter;
+        }
+
+        if (numberOnlyPrefixes.Contains(prefix))
+        {
+            return lastChar == (char)('0' + controlDigit);
+        }
+
+        // Remaining prefixes (C, D, F, G, J, L, M, U) accept either digit or letter
+        return lastChar == (char)('0' + controlDigit) || lastChar == controlLetter;
+    }
+
+    /// <summary>
+    /// Validates Spanish NIF (Número de Identificación Fiscal) which encompasses DNI (individuals), NIE (foreigners), and CIF (companies).
+    /// </summary>
+    public static bool IsSpanishNifValid(string? nif)
+    {
+        if (string.IsNullOrWhiteSpace(nif)) return false;
+        return IsSpanishDniValid(nif) || IsSpanishNieValid(nif) || IsSpanishCifValid(nif);
     }
 
     /// <summary>

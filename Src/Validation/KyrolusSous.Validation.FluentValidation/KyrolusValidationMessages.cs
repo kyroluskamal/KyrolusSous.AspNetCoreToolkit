@@ -15,6 +15,10 @@ public static class KyrolusValidationMessages
     public const string InvalidUrl = "is not a valid URL.";
     public const string InvalidHexColor = "Color must be a valid hexadecimal code in the form '#RRGGBB'.";
     public const string InvalidEgyptianNationalId = "is not a valid Egyptian National ID.";
+    public const string InvalidSpanishDni = "is not a valid Spanish DNI.";
+    public const string InvalidSpanishNie = "is not a valid Spanish NIE.";
+    public const string InvalidSpanishCif = "is not a valid Spanish CIF.";
+    public const string InvalidSpanishNif = "is not a valid Spanish NIF.";
     public static readonly Func<int, string> ExceedsMaxLength = length => $"can not have more than {length} characters.";
     public static readonly Func<string, string, string> DuplicateEntityWithProperty =
         (entityName, propertyName) => $"There is a {entityName} with the same <<< {propertyName} >>> in the database. You can not duplicate it.";

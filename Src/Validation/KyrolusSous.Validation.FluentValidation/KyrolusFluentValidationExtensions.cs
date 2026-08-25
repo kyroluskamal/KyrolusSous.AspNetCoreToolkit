@@ -93,6 +93,118 @@ public static class KyrolusFluentValidationExtensions
             .WithMessage(InvalidEgyptianNationalId);
     }
 
+    public static IRuleBuilderOptions<T, string> IsSpanishDni<T>(
+        this IRuleBuilder<T, string> ruleBuilder,
+        Expression<Func<T, object>>? expr = null,
+        string propertyName = "",
+        bool isNullOrEmpty = false)
+    {
+        var builder = ruleBuilder.Must(dni =>
+            {
+                if (string.IsNullOrEmpty(dni) && isNullOrEmpty)
+                {
+                    return true;
+                }
+
+                return KyrolusSous.Validation.Fluent.AdvancedRuleBuilderExtensions.IsSpanishDniValid(dni);
+            });
+
+        var prop = !string.IsNullOrEmpty(propertyName)
+            ? propertyName
+            : (expr != null ? ReturnMemberExpression(expr) : string.Empty);
+
+        if (!string.IsNullOrEmpty(prop))
+        {
+            builder = builder.OverridePropertyName(prop);
+        }
+
+        return builder.WithMessage(InvalidSpanishDni);
+    }
+
+    public static IRuleBuilderOptions<T, string> IsSpanishNie<T>(
+        this IRuleBuilder<T, string> ruleBuilder,
+        Expression<Func<T, object>>? expr = null,
+        string propertyName = "",
+        bool isNullOrEmpty = false)
+    {
+        var builder = ruleBuilder.Must(nie =>
+            {
+                if (string.IsNullOrEmpty(nie) && isNullOrEmpty)
+                {
+                    return true;
+                }
+
+                return KyrolusSous.Validation.Fluent.AdvancedRuleBuilderExtensions.IsSpanishNieValid(nie);
+            });
+
+        var prop = !string.IsNullOrEmpty(propertyName)
+            ? propertyName
+            : (expr != null ? ReturnMemberExpression(expr) : string.Empty);
+
+        if (!string.IsNullOrEmpty(prop))
+        {
+            builder = builder.OverridePropertyName(prop);
+        }
+
+        return builder.WithMessage(InvalidSpanishNie);
+    }
+
+    public static IRuleBuilderOptions<T, string> IsSpanishCif<T>(
+        this IRuleBuilder<T, string> ruleBuilder,
+        Expression<Func<T, object>>? expr = null,
+        string propertyName = "",
+        bool isNullOrEmpty = false)
+    {
+        var builder = ruleBuilder.Must(cif =>
+            {
+                if (string.IsNullOrEmpty(cif) && isNullOrEmpty)
+                {
+                    return true;
+                }
+
+                return KyrolusSous.Validation.Fluent.AdvancedRuleBuilderExtensions.IsSpanishCifValid(cif);
+            });
+
+        var prop = !string.IsNullOrEmpty(propertyName)
+            ? propertyName
+            : (expr != null ? ReturnMemberExpression(expr) : string.Empty);
+
+        if (!string.IsNullOrEmpty(prop))
+        {
+            builder = builder.OverridePropertyName(prop);
+        }
+
+        return builder.WithMessage(InvalidSpanishCif);
+    }
+
+    public static IRuleBuilderOptions<T, string> IsSpanishNif<T>(
+        this IRuleBuilder<T, string> ruleBuilder,
+        Expression<Func<T, object>>? expr = null,
+        string propertyName = "",
+        bool isNullOrEmpty = false)
+    {
+        var builder = ruleBuilder.Must(nif =>
+            {
+                if (string.IsNullOrEmpty(nif) && isNullOrEmpty)
+                {
+                    return true;
+                }
+
+                return KyrolusSous.Validation.Fluent.AdvancedRuleBuilderExtensions.IsSpanishNifValid(nif);
+            });
+
+        var prop = !string.IsNullOrEmpty(propertyName)
+            ? propertyName
+            : (expr != null ? ReturnMemberExpression(expr) : string.Empty);
+
+        if (!string.IsNullOrEmpty(prop))
+        {
+            builder = builder.OverridePropertyName(prop);
+        }
+
+        return builder.WithMessage(InvalidSpanishNif);
+    }
+
     public static IRuleBuilderOptions<T, TProperty> WithGroup<T, TProperty>(
         this IRuleBuilderOptions<T, TProperty> ruleBuilder, string groupName)
     {

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\KyrolusSous.Validation.Abstractions\KyrolusSous.Validation.Abstractions.csproj" />
+    <ProjectReference Include="..\KyrolusSous.Validation.Fluent\KyrolusSous.Validation.Fluent.csproj" />
   </ItemGroup>
 
   <ItemGroup>

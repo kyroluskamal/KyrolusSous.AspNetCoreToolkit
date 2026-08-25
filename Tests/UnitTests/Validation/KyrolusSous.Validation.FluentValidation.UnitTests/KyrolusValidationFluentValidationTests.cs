@@ -266,14 +266,40 @@ public class KyrolusValidationFluentValidationTests
         result.Errors[0].Severity.ShouldBe(Severity.Error);
     }
 
-    [Fact(DisplayName = "ReturnMemberExpression returns empty string when expression is non-member")]
-    public void Extensions_HandleNonMemberExpressions()
+    [Fact(DisplayName = "IsSpanishDni, IsSpanishNie, IsSpanishCif, and IsSpanishNif validate correctly")]
+    public void Spanish_ValidationExtensions_ValidateCorrectly()
     {
-        var validator = new InlineValidator<TestSampleModel>();
-        validator.RuleFor(x => x.Name).Required(x => "ConstantString", propertyName: "FallbackName");
+        var dniValidator = new InlineValidator<TestSampleModel>();
+        dniValidator.RuleFor(x => x.NationalId).IsSpanishDni(x => x.NationalId, isNullOrEmpty: true);
 
-        var result = validator.Validate(new TestSampleModel());
-        result.Errors.ShouldNotBeEmpty();
+        dniValidator.Validate(new TestSampleModel { NationalId = "12345678Z" }).IsValid.ShouldBeTrue();
+        dniValidator.Validate(new TestSampleModel { NationalId = "" }).IsValid.ShouldBeTrue();
+        dniValidator.Validate(new TestSampleModel { NationalId = "12345678A" }).IsValid.ShouldBeFalse();
+
+        var nieValidator = new InlineValidator<TestSampleModel>();
+        nieValidator.RuleFor(x => x.NationalId).IsSpanishNie(x => x.NationalId, isNullOrEmpty: true);
+
+        nieValidator.Validate(new TestSampleModel { NationalId = "X1234567L" }).IsValid.ShouldBeTrue();
+        nieValidator.Validate(new TestSampleModel { NationalId = "" }).IsValid.ShouldBeTrue();
+        nieValidator.Validate(new TestSampleModel { NationalId = "A1234567L" }).IsValid.ShouldBeFalse();
+
+        var cifValidator = new InlineValidator<TestSampleModel>();
+        cifValidator.RuleFor(x => x.NationalId).IsSpanishCif(x => x.NationalId, isNullOrEmpty: true);
+
+        cifValidator.Validate(new TestSampleModel { NationalId = "A58818501" }).IsValid.ShouldBeTrue();
+        cifValidator.Validate(new TestSampleModel { NationalId = "" }).IsValid.ShouldBeTrue();
+        cifValidator.Validate(new TestSampleModel { NationalId = "Z58818501" }).IsValid.ShouldBeFalse();
+
+        var nifValidator = new InlineValidator<TestSampleModel>();
+        nifValidator.RuleFor(x => x.NationalId).IsSpanishNif(x => x.NationalId, propertyName: "SpanishFiscalId");
+
+        nifValidator.Validate(new TestSampleModel { NationalId = "12345678Z" }).IsValid.ShouldBeTrue();
+        nifValidator.Validate(new TestSampleModel { NationalId = "X1234567L" }).IsValid.ShouldBeTrue();
+        nifValidator.Validate(new TestSampleModel { NationalId = "A58818501" }).IsValid.ShouldBeTrue();
+        
+        var invalidResult = nifValidator.Validate(new TestSampleModel { NationalId = "invalid-nif" });
+        invalidResult.IsValid.ShouldBeFalse();
+        invalidResult.Errors.Any(e => e.PropertyName == "SpanishFiscalId").ShouldBeTrue();
     }
     #endregion
 

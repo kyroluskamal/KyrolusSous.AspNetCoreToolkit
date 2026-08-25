@@ -67,7 +67,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Mediator.Generator - Unit | unit | 14 | none | yes |
 | Mediator.Reflection - Unit | unit | 52 | none | yes |
 | Validation.Runtime - Unit | unit | 87 | none | yes |
-| Validation.Fluent - Unit | unit | 15 | none | yes |
+| Validation.Fluent - Unit | unit | 23 | none | yes |
 | Validation.FluentValidation - Unit | unit | 16 | none | yes |
 | Validation.FluentValidation.Scanning - Unit | unit | 2 | none | yes |
 | Validation.Generator - Unit | unit | 6 | none | yes |
@@ -86,7 +86,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Mapping - Unit | unit | 54 | none | yes |
 | CQRS - Unit | unit | 52 | none | yes |
 | EndpointKit - Unit | unit | 63 | none | yes |
-| **Total** | | **1901** | | |
+| **Total** | | **1909** | | |
 
 <!-- END:GENERATED:test-suites -->
 

@@ -271,4 +271,113 @@ public sealed class FluentValidationTests
         var invalidFailures = await validator.ValidateAsync(invalid);
         invalidFailures.Count.ShouldBeGreaterThan(0);
     }
+
+    #region Spanish DNI, NIE, CIF, and NIF Tests
+    [Theory(DisplayName = "Valid Spanish DNI numbers should pass validation")]
+    [InlineData("12345678Z")]
+    [InlineData("12345678-Z")]
+    [InlineData("12345678 z")]
+    [InlineData("00000000T")]
+    [InlineData("11111111H")]
+    [InlineData("53026359C")]
+    public void Valid_Spanish_Dni_succeeds(string dni)
+    {
+        AdvancedRuleBuilderExtensions.IsSpanishDniValid(dni).ShouldBeTrue();
+        AdvancedRuleBuilderExtensions.IsNationalIdValid(dni, "ES-DNI").ShouldBeTrue();
+        AdvancedRuleBuilderExtensions.IsNationalIdValid(dni, "ES").ShouldBeTrue();
+    }
+
+    [Theory(DisplayName = "Invalid Spanish DNI numbers should fail validation")]
+    [InlineData("12345678A")] // Wrong letter
+    [InlineData("1234567")]   // Too short
+    [InlineData("123456789")] // No letter
+    [InlineData("")]
+    [InlineData(null)]
+    public void Invalid_Spanish_Dni_fails(string? dni)
+    {
+        AdvancedRuleBuilderExtensions.IsSpanishDniValid(dni).ShouldBeFalse();
+    }
+
+    [Theory(DisplayName = "Valid Spanish NIE numbers should pass validation")]
+    [InlineData("X1234567L")]
+    [InlineData("X-1234567-L")]
+    [InlineData("x 1234567 l")]
+    [InlineData("Y1234567X")]
+    [InlineData("Z1234567R")]
+    public void Valid_Spanish_Nie_succeeds(string nie)
+    {
+        AdvancedRuleBuilderExtensions.IsSpanishNieValid(nie).ShouldBeTrue();
+        AdvancedRuleBuilderExtensions.IsNationalIdValid(nie, "ES-NIE").ShouldBeTrue();
+        AdvancedRuleBuilderExtensions.IsNationalIdValid(nie, "ES").ShouldBeTrue();
+    }
+
+    [Theory(DisplayName = "Invalid Spanish NIE numbers should fail validation")]
+    [InlineData("A1234567L")] // Invalid prefix
+    [InlineData("X1234567A")] // Wrong control letter
+    [InlineData("X123456")]   // Too short
+    [InlineData("")]
+    [InlineData(null)]
+    public void Invalid_Spanish_Nie_fails(string? nie)
+    {
+        AdvancedRuleBuilderExtensions.IsSpanishNieValid(nie).ShouldBeFalse();
+    }
+
+    [Theory(DisplayName = "Valid Spanish CIF numbers should pass validation")]
+    [InlineData("A58818501")]
+    [InlineData("A-5881850-1")]
+    [InlineData("P5881850A")]
+    public void Valid_Spanish_Cif_succeeds(string cif)
+    {
+        AdvancedRuleBuilderExtensions.IsSpanishCifValid(cif).ShouldBeTrue();
+        AdvancedRuleBuilderExtensions.IsNationalIdValid(cif, "ES-CIF").ShouldBeTrue();
+        AdvancedRuleBuilderExtensions.IsNationalIdValid(cif, "ES").ShouldBeTrue();
+    }
+
+    [Theory(DisplayName = "Invalid Spanish CIF numbers should fail validation")]
+    [InlineData("Z58818501")] // Invalid prefix for CIF
+    [InlineData("A58818502")] // Wrong control digit
+    [InlineData("P58818501")] // 'P' requires letter control
+    [InlineData("")]
+    [InlineData(null)]
+    public void Invalid_Spanish_Cif_fails(string? cif)
+    {
+        AdvancedRuleBuilderExtensions.IsSpanishCifValid(cif).ShouldBeFalse();
+    }
+
+    [Fact(DisplayName = "Spanish NIF validator accepts valid DNI, NIE, and CIF")]
+    public void Spanish_Nif_accepts_valid_Dni_Nie_and_Cif()
+    {
+        AdvancedRuleBuilderExtensions.IsSpanishNifValid("12345678Z").ShouldBeTrue();
+        AdvancedRuleBuilderExtensions.IsSpanishNifValid("X1234567L").ShouldBeTrue();
+        AdvancedRuleBuilderExtensions.IsSpanishNifValid("A58818501").ShouldBeTrue();
+        AdvancedRuleBuilderExtensions.IsSpanishNifValid("invalid-nif").ShouldBeFalse();
+    }
+
+    private sealed record SpanishDocumentHolder(string? Dni, string? Nie, string? Cif, string? Nif);
+
+    private sealed class SpanishDocumentHolderValidator : KyrolusAbstractValidator<SpanishDocumentHolder>
+    {
+        public SpanishDocumentHolderValidator()
+        {
+            RuleFor(x => x.Dni).SpanishDni();
+            RuleFor(x => x.Nie).SpanishNie();
+            RuleFor(x => x.Cif).SpanishCif();
+            RuleFor(x => x.Nif).SpanishNif();
+        }
+    }
+
+    [Fact(DisplayName = "Spanish fluent validator extensions execute correctly in abstract validator")]
+    public async Task Spanish_fluent_validator_extensions_execute_correctly()
+    {
+        var validator = new SpanishDocumentHolderValidator();
+
+        var valid = new SpanishDocumentHolder("12345678Z", "X1234567L", "A58818501", "Y1234567X");
+        var validResult = await validator.ValidateAsync(valid);
+        validResult.ShouldBeEmpty();
+
+        var invalid = new SpanishDocumentHolder("invalid-dni", "invalid-nie", "invalid-cif", "invalid-nif");
+        var invalidResult = await validator.ValidateAsync(invalid);
+        invalidResult.Count.ShouldBe(4);
+    }
+    #endregion
 }
