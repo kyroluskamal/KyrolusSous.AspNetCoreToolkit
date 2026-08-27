@@ -54,6 +54,15 @@ builder.Services.AddKyrolusOpenApi(options =>
     options.IncludeNotFoundResponse = true;
     options.IncludeProblemDetailsSchema = true;
     options.SortTagsAlphabetically = true;
+    options.ConfigureOpenApiOptions = openApiOptions =>
+    {
+        openApiOptions.AddOperationTransformer((op, _, _) =>
+        {
+            op.Responses ??= new();
+            op.Responses["418"] = new Microsoft.OpenApi.OpenApiResponse { Description = "I'm a teapot (Custom Hook Applied)" };
+            return Task.CompletedTask;
+        });
+    };
 });
 
 builder.Services.AddAuthentication(options =>
@@ -107,8 +116,19 @@ app.MapGet("/secure/admin", () => Results.Ok("admin-secret"))
     .RequireAuthorization(new AuthorizeAttribute { Roles = "Admin,Manager" })
     .WithTags("Admin");
 
+app.MapGet("/legacy/products", () => Results.Ok(new[] { "p1", "p2" }))
+    .WithMetadata(new ObsoleteAttribute("Use /weatherforecast instead"))
+    .WithTags("Legacy");
+
+app.MapGet("/rate-limited/items", () => Results.Ok("rate-limited-ok"))
+    .WithMetadata(new CustomRateLimitAttribute())
+    .WithTags("RateLimiting");
+
 await app.RunAsync();
 
 public partial class Program;
 
 public record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary);
+
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
+public class CustomRateLimitAttribute : Attribute;

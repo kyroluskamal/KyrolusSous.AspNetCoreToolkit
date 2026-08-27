@@ -297,6 +297,21 @@ public static class OpenApiServiceExtensions
             openApiOptions.AddDocumentTransformer(new KyrolusTagOrderDocumentTransformer(options));
         }
 
+        if (options.EnableDeprecationTransformer)
+        {
+            openApiOptions.AddOperationTransformer<KyrolusDeprecationOperationTransformer>();
+        }
+
+        if (options.EnableRateLimitingTransformer)
+        {
+            openApiOptions.AddOperationTransformer(new KyrolusRateLimitingResponseTransformer(options));
+        }
+
+        if (options.EnableXmlComments)
+        {
+            openApiOptions.AddOperationTransformer(new KyrolusXmlDocumentationTransformer(options));
+        }
+
         openApiOptions.AddDocumentTransformer((document, context, cancellationToken) =>
         {
             document.Info = CreateOpenApiInfo(versionInfo);
@@ -312,6 +327,8 @@ public static class OpenApiServiceExtensions
 
             return Task.CompletedTask;
         });
+
+        options.ConfigureOpenApiOptions?.Invoke(openApiOptions);
     }
 
     private static ApiVersionInfo ResolveDefaultVersion(KyrolusOpenApiOptions options)
@@ -578,6 +595,51 @@ public static class OpenApiServiceExtensions
         catch
         {
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Exports the generated OpenAPI JSON specification to a destination file.
+    /// </summary>
+    /// <param name="app">The WebApplication instance.</param>
+    /// <param name="outputPath">The file destination path to write the JSON specification.</param>
+    /// <param name="documentName">The OpenAPI document version or name (default is "v1").</param>
+    /// <param name="httpClient">Optional HttpClient to use for fetching the specification.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public static async Task SaveOpenApiDocumentAsync(
+        this WebApplication app,
+        string outputPath,
+        string documentName = "v1",
+        HttpClient? httpClient = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
+
+        var dir = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
+        var client = httpClient ?? new HttpClient
+        {
+            BaseAddress = new Uri(app.Urls.FirstOrDefault() ?? "http://localhost:5000")
+        };
+
+        try
+        {
+            var response = await client.GetAsync($"/openapi/{documentName}.json", cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            await File.WriteAllTextAsync(outputPath, content, cancellationToken);
+        }
+        finally
+        {
+            if (httpClient is null)
+            {
+                client.Dispose();
+            }
         }
     }
 }

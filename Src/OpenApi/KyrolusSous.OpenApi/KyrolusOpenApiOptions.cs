@@ -150,6 +150,23 @@ public class KyrolusOpenApiOptions
     public bool SortTagsAlphabetically { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether endpoints decorated with [Obsolete] are automatically marked as deprecated.
+    /// Default is true.
+    /// </summary>
+    public bool EnableDeprecationTransformer { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether endpoints with rate limiting metadata automatically document HTTP 429 response.
+    /// Default is true.
+    /// </summary>
+    public bool EnableRateLimitingTransformer { get; set; } = true;
+
+    /// <summary>
+    /// Optional delegate to configure the underlying Microsoft.AspNetCore.OpenApi.OpenApiOptions directly.
+    /// </summary>
+    public Action<OpenApiOptions>? ConfigureOpenApiOptions { get; set; }
+
+    /// <summary>
     /// Configures OAuth2 security scheme for integration with KyrolusSous.Auth.OpenIddict.
     /// </summary>
     public KyrolusOpenApiOptions ConfigureForOpenIddict(

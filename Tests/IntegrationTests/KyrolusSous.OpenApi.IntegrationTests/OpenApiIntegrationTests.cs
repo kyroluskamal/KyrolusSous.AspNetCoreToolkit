@@ -327,4 +327,88 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         provider.ShouldNotBeNull();
         provider.ProviderName.ShouldBe("SwaggerUI");
     }
+
+    [Fact]
+    public async Task ObsoleteEndpoint_IsMarkedAsDeprecated_AndContainsWarning()
+    {
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync("/openapi/v1.json");
+        response.EnsureSuccessStatusCode();
+
+        var jsonString = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(jsonString);
+
+        var paths = doc.RootElement.GetProperty("paths");
+        var legacyGet = paths.GetProperty("/legacy/products").GetProperty("get");
+
+        legacyGet.TryGetProperty("deprecated", out var dep).ShouldBeTrue();
+        dep.GetBoolean().ShouldBeTrue();
+
+        var desc = legacyGet.GetProperty("description").GetString();
+        desc.ShouldNotBeNull();
+        desc.ShouldContain("Deprecated");
+        desc.ShouldContain("Use /weatherforecast instead");
+    }
+
+    [Fact]
+    public async Task RateLimitedEndpoint_Documents429Response()
+    {
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync("/openapi/v1.json");
+        response.EnsureSuccessStatusCode();
+
+        var jsonString = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(jsonString);
+
+        var paths = doc.RootElement.GetProperty("paths");
+        var rateLimitedGet = paths.GetProperty("/rate-limited/items").GetProperty("get");
+
+        var responses = rateLimitedGet.GetProperty("responses");
+        responses.TryGetProperty("429", out var r429).ShouldBeTrue();
+        r429.GetProperty("description").GetString()!.ShouldContain("Too Many Requests");
+    }
+
+    [Fact]
+    public async Task ConfigureOpenApiOptions_AppliesCustomDocumentModification()
+    {
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync("/openapi/v1.json");
+        response.EnsureSuccessStatusCode();
+
+        var jsonString = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(jsonString);
+
+        var paths = doc.RootElement.GetProperty("paths");
+        var weatherGet = paths.GetProperty("/weatherforecast").GetProperty("get");
+        var responses = weatherGet.GetProperty("responses");
+
+        responses.TryGetProperty("418", out var r418).ShouldBeTrue();
+        r418.GetProperty("description").GetString()!.ShouldContain("I'm a teapot (Custom Hook Applied)");
+    }
+
+    [Fact]
+    public async Task SaveOpenApiDocumentAsync_WritesValidFileToDisk()
+    {
+        var client = _factory.CreateClient();
+        var tempFile = Path.Combine(Path.GetTempPath(), $"openapi_test_{Guid.NewGuid():N}.json");
+
+        try
+        {
+            // Use WebApplication helper
+            WebApplication? dummyApp = null;
+            await dummyApp!.SaveOpenApiDocumentAsync(tempFile, "v1", client);
+
+            File.Exists(tempFile).ShouldBeTrue();
+            var json = await File.ReadAllTextAsync(tempFile);
+            using var doc = JsonDocument.Parse(json);
+            doc.RootElement.TryGetProperty("openapi", out _).ShouldBeTrue();
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
 }
