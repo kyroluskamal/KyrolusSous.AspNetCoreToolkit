@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <Description>Instant JWT token revocation and distributed blacklist engine by JTI or user issuance timestamp for KyrolusSous toolkit. 100% AOT-friendly and storage-agnostic.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KyrolusSous.Auth.Abstractions\KyrolusSous.Auth.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

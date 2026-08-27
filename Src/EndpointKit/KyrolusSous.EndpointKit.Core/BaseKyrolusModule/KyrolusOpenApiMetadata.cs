@@ -20,6 +20,16 @@ public static class KyrolusOpenApiMetadata
         }
 
         builder.WithMetadata(new KyrolusOpenApiOperationMetadata(BuildOperationId(config, endpoint), endpoint));
+
+        var endpointConfig = config.EndpointConfig.FirstOrDefault(e => e.Name == endpoint);
+        var summary = endpointConfig?.Summary ?? $"{endpoint} {config.ApiName}";
+        builder.WithSummary(summary);
+
+        if (!string.IsNullOrWhiteSpace(endpointConfig?.Description))
+        {
+            builder.WithDescription(endpointConfig.Description);
+        }
+
         return builder;
     }
 

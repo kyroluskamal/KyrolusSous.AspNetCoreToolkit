@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <Description>LinkedIn OpenID Connect sign-in for the KyrolusSous toolkit. Storage-agnostic: no ORM and no database dependency.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="AspNet.Security.OAuth.LinkedIn" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KyrolusSous.Auth.Abstractions\KyrolusSous.Auth.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

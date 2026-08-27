@@ -6,6 +6,7 @@ using KyrolusSous.EndpointKit.Core.FieldSelection;
 using KyrolusSous.EndpointKit.Core.Hateoas;
 using Shouldly;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace KyrolusSous.EndpointKit.UnitTests;
@@ -230,5 +231,34 @@ public sealed class KyrolusEndpointKitCoreTests
         deserialized.Success.ShouldBeTrue();
         deserialized.Meta.ShouldNotBeNull();
         deserialized.Meta.Status.ShouldBe(200);
+    }
+
+    [Fact(DisplayName = "EndpointKit: IKyrolusModuleRegistration and MapKyrolus work with custom modules")]
+    public void EndpointKit_Should_Map_Custom_Endpoint_Module()
+    {
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        var executed = false;
+
+        services.AddKyrolus(builder =>
+        {
+            builder.AddEndpointModule(app =>
+            {
+                executed = true;
+            });
+        });
+
+        var provider = services.BuildServiceProvider();
+        var mockApp = new TestEndpointRouteBuilder(provider);
+
+        mockApp.MapKyrolus();
+
+        executed.ShouldBeTrue();
+    }
+
+    private sealed class TestEndpointRouteBuilder(IServiceProvider sp) : Microsoft.AspNetCore.Routing.IEndpointRouteBuilder
+    {
+        public IServiceProvider ServiceProvider => sp;
+        public ICollection<Microsoft.AspNetCore.Routing.EndpointDataSource> DataSources { get; } = [];
+        public Microsoft.AspNetCore.Builder.IApplicationBuilder CreateApplicationBuilder() => throw new NotImplementedException();
     }
 }

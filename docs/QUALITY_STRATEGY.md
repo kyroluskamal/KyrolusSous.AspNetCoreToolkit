@@ -85,8 +85,9 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Resilience - Unit | unit | 9 | none | yes |
 | Mapping - Unit | unit | 54 | none | yes |
 | CQRS - Unit | unit | 52 | none | yes |
-| EndpointKit - Unit | unit | 63 | none | yes |
-| **Total** | | **1909** | | |
+| Auth - Unit<br><sub>Also drives the mapped OpenIddict endpoints end to end over an in-process TestServer.</sub> | unit | 128 | none | yes |
+| EndpointKit - Unit | unit | 64 | none | yes |
+| **Total** | | **2038** | | |
 
 <!-- END:GENERATED:test-suites -->
 

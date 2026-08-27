@@ -220,6 +220,14 @@
       "ci": true
     },
     {
+      "name": "Auth - Unit",
+      "project": "Tests/UnitTests/Auth/KyrolusSous.Auth.UnitTests/KyrolusSous.Auth.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true,
+      "notes": "Also drives the mapped OpenIddict endpoints end to end over an in-process TestServer."
+    },
+    {
       "name": "EndpointKit - Unit",
       "project": "Tests/UnitTests/EndpointKit/KyrolusSous.EndpointKit.UnitTests/KyrolusSous.EndpointKit.UnitTests.csproj",
       "kind": "unit",
@@ -242,7 +250,7 @@
       { "prefix": "Repositories.Marten", "title": "Repositories (Marten)" },
       { "prefix": "CQRS", "title": "CQRS pipeline" },
       { "prefix": "EndpointKit", "title": "EndpointKit" },
-      { "prefix": "OpenIddictAuth", "title": "Auth" },
+      { "prefix": "Auth", "title": "Auth" },
       { "prefix": "OpenApi", "title": "OpenAPI & Documentation" },
       { "prefix": "Elasticsearch", "title": "Search & Elasticsearch" },
       { "prefix": "Resilience", "title": "Resilience & Fault Tolerance" },

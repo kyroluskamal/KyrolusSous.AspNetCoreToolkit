@@ -3,7 +3,7 @@ using KyrolusSous.EndpointKit.Core.BaseKyrolusModule;
 
 namespace KyrolusSous.EndpointKit.Core.BaseKyrolusModule.Interfaces;
 
-public interface IEndpointConfig
+public interface IKyrolusEndpointConfig
 {
     public EndpointNames Name { get; set; }
     public string[] IncludeProps { get; set; }
@@ -11,11 +11,19 @@ public interface IEndpointConfig
     public bool Authorize { get; set; }
     public dynamic? AuthorizationPolicy { get; set; }
     public string? RateLimitPolicy { get; set; }
+    public string? Summary { get; set; }
+    public string? Description { get; set; }
     public bool? Idempotent { get; set; }
     public IReadOnlyCollection<KyrolusOpenApiResponse>? Responses { get; set; }
     public bool? OutputCacheEnabled { get; set; }
     public KyrolusCachePolicy? OutputCachePolicy { get; set; }
+}
 
+/// <summary>
+/// Backward-compatibility alias for <see cref="IKyrolusEndpointConfig"/>.
+/// </summary>
+public interface IEndpointConfig : IKyrolusEndpointConfig
+{
 }
 
 public interface IKyrolusApiConfig<TResponse>

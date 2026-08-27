@@ -11,6 +11,9 @@ public sealed class KyrolusEndpointConfig : IEndpointConfig
     public bool Authorize { get; set; }
     public dynamic? AuthorizationPolicy { get; set; }
     public string? RateLimitPolicy { get; set; }
+    public string? Summary { get; set; }
+    public string? Description { get; set; }
+    public string? ApiVersion { get; set; }
     public bool? Idempotent { get; set; }
     public IReadOnlyCollection<KyrolusOpenApiResponse>? Responses { get; set; }
     public bool? OutputCacheEnabled { get; set; }

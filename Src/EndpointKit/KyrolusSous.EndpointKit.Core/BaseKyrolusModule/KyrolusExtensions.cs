@@ -12,6 +12,7 @@ public static class KyrolusExtensions
 
         foreach (var registration in builder.Modules)
         {
+            services.AddSingleton(typeof(IKyrolusModuleRegistration), registration);
             services.AddSingleton(typeof(IModuleRegistration), registration);
             TryRegisterModuleConfig(services, registration);
         }
@@ -21,7 +22,7 @@ public static class KyrolusExtensions
 
     public static void MapKyrolus(this IEndpointRouteBuilder app)
     {
-        var modules = app.ServiceProvider.GetServices<IModuleRegistration>();
+        var modules = app.ServiceProvider.GetServices<IKyrolusModuleRegistration>();
 
         foreach (var registration in modules)
         {
@@ -29,7 +30,7 @@ public static class KyrolusExtensions
         }
     }
 
-    private static void TryRegisterModuleConfig(IServiceCollection services, IModuleRegistration registration)
+    private static void TryRegisterModuleConfig(IServiceCollection services, IKyrolusModuleRegistration registration)
     {
         var registrationType = registration.GetType();
         if (!registrationType.IsGenericType) return;

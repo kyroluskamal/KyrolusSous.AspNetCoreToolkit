@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <Description>Storage-agnostic authentication abstractions shared by the KyrolusSous auth packages: external-login contracts, a plain user model, password hashing and claims-principal factory interfaces. Depends on no ORM and no database.</Description>
+  </PropertyGroup>
+
+  <!--
+    The OAuth/authentication types used here (OAuthOptions, ClaimActions, AuthenticationBuilder)
+    all live in the ASP.NET Core shared framework, so a FrameworkReference is enough - no
+    provider-specific NuGet package leaks into the abstractions.
+  -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>

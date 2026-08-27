@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <Description>OpenIddict authorization server and resource server wiring for the KyrolusSous toolkit, plus ready-made token, authorize, userinfo and end-session endpoints. Storage-agnostic: the application picks its own OpenIddict Core store (EF Core, Marten, MongoDB, Dapper, ...) and implements one user-store interface.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="OpenIddict.AspNetCore" Version="7.6.0" />
+    <PackageReference Include="OpenIddict.Server" Version="7.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KyrolusSous.Auth.Runtime\KyrolusSous.Auth.Runtime.csproj" />
+    <ProjectReference Include="..\..\ExceptionHandling\KyrolusSous.ExceptionHandling.Abstractions\KyrolusSous.ExceptionHandling.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>
