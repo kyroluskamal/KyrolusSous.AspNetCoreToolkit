@@ -152,11 +152,12 @@ Zero ORM coupling in core. 105 iterative security and logic audit rounds complet
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 91 | `OpenApi` | ✅ | Migrated to official Microsoft.AspNetCore.OpenApi (.NET 10) + Scalar UI + Swagger UI, covered by integration suite |
-| 92 | `IRabbitMQUtilsInterfaces` | ✅ | Contract interfaces prefixed with `IKyrolus*`, models for envelope and options |
-| 93 | `RabbitMQUtils` | ✅ | Reviewed & tested via `RabbitMQ.UnitTests` (12 unit tests, channel pooling, DLQ, and consumers) |
-| 94 | `Elasticsearch` | ⚡ | Modern Elasticsearch client (v8.17) with repository, fluent search, auto-index lifecycle, and health checks |
-| 95 | `Resilience` | ⚡ | Enterprise Polly v8 & Microsoft.Extensions.Resilience with smart IsTransient evaluation, circuit breaker, and HttpClient extensions |
+| 91 | `OpenApi` | ✅ | Core OpenAPI (.NET 10) + Scalar UI + ReDoc + Smart [Authorize]/[AllowAnonymous] + RFC 7807 ProblemDetails + Multi-Tenancy headers |
+| 92 | `OpenApi.SwaggerUI` | ✅ | Companion package isolating Swashbuckle SwaggerUI with IHostingStartup and assembly auto-discovery |
+| 93 | `IRabbitMQUtilsInterfaces` | ✅ | Contract interfaces prefixed with `IKyrolus*`, models for envelope and options |
+| 94 | `RabbitMQUtils` | ✅ | Reviewed & tested via `RabbitMQ.UnitTests` (12 unit tests, channel pooling, DLQ, and consumers) |
+| 95 | `Elasticsearch` | ⚡ | Modern Elasticsearch client (v8.17) with repository, fluent search, auto-index lifecycle, and health checks |
+| 96 | `Resilience` | ⚡ | Enterprise Polly v8 & Microsoft.Extensions.Resilience with smart IsTransient evaluation, circuit breaker, and HttpClient extensions |
 
 ---
 

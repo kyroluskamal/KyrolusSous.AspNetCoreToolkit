@@ -60,9 +60,7 @@ public static class OpenApiServiceExtensions
         return services;
     }
 
-    public static WebApplication MapKyrolusOpenApi(
-        this WebApplication app,
-        Action<SwaggerUIOptions>? configureSwaggerUi = null)
+    public static WebApplication MapKyrolusOpenApi(this WebApplication app)
     {
         var options = app.Services.GetRequiredService<IOptions<KyrolusOpenApiOptions>>().Value;
 
@@ -82,7 +80,7 @@ public static class OpenApiServiceExtensions
 
         if (options.EnableSwaggerUi)
         {
-            MapSwaggerUiEndpoint(app, options, versions, configureSwaggerUi);
+            MapExtensibleUiProviders(app, options, versions);
         }
 
         if (options.EnableReDocUi)
@@ -148,24 +146,65 @@ public static class OpenApiServiceExtensions
         }
     }
 
-    private static void MapSwaggerUiEndpoint(
+    private static void MapExtensibleUiProviders(
         WebApplication app,
         KyrolusOpenApiOptions options,
-        List<ApiVersionInfo> versions,
-        Action<SwaggerUIOptions>? configureSwaggerUi)
+        List<ApiVersionInfo> versions)
     {
-        app.UseSwaggerUI(swaggerUiOptions =>
-        {
-            swaggerUiOptions.RoutePrefix = options.SwaggerUiRoutePrefix;
-            swaggerUiOptions.DocumentTitle = options.UiDocumentTitle ?? versions[0].Title;
+        var providers = app.Services.GetServices<IKyrolusOpenApiUiProvider>().ToList();
 
-            foreach (var version in versions)
+        if (providers.Count == 0)
+        {
+            providers.AddRange(DiscoverUiProviders());
+        }
+
+        foreach (var provider in providers)
+        {
+            provider.MapUi(app, options, versions);
+        }
+    }
+
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Discovery of optional UI provider")]
+    private static List<IKyrolusOpenApiUiProvider> DiscoverUiProviders()
+    {
+        var list = new List<IKyrolusOpenApiUiProvider>();
+        try
+        {
+            var assemblies = AppDomain.CurrentDomain.GetAssemblies().ToList();
+
+            if (!assemblies.Any(a => a.FullName?.StartsWith("KyrolusSous.OpenApi.SwaggerUI", StringComparison.OrdinalIgnoreCase) == true))
             {
-                swaggerUiOptions.SwaggerEndpoint($"/openapi/{version.Version}.json", $"{version.Title} {version.Version}");
+                try
+                {
+                    var loaded = Assembly.Load("KyrolusSous.OpenApi.SwaggerUI");
+                    assemblies.Add(loaded);
+                }
+                catch
+                {
+                    // Package not present
+                }
             }
 
-            configureSwaggerUi?.Invoke(swaggerUiOptions);
-        });
+            foreach (var asm in assemblies)
+            {
+                if (asm.FullName?.StartsWith("KyrolusSous.OpenApi.SwaggerUI", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    var type = asm.GetType("KyrolusSous.OpenApi.SwaggerUI.KyrolusSwaggerUiProvider");
+                    if (type is not null && typeof(IKyrolusOpenApiUiProvider).IsAssignableFrom(type))
+                    {
+                        if (Activator.CreateInstance(type) is IKyrolusOpenApiUiProvider instance)
+                        {
+                            list.Add(instance);
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Graceful best-effort discovery
+        }
+        return list;
     }
 
     private static void MapReDocEndpoint(WebApplication app, KyrolusOpenApiOptions options, List<ApiVersionInfo> versions)

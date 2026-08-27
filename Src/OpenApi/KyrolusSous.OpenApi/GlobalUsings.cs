@@ -13,4 +13,3 @@ global using Microsoft.Extensions.Options;
 global using Microsoft.OpenApi;
 global using Microsoft.AspNetCore.Authorization;
 global using Scalar.AspNetCore;
-global using Swashbuckle.AspNetCore.SwaggerUI;

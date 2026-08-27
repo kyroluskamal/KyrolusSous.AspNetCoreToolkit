@@ -23,6 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\Src\OpenApi\KyrolusSous.OpenApi.SwaggerUI\KyrolusSous.OpenApi.SwaggerUI.csproj" />
     <ProjectReference Include="..\KyrolusSous.OpenApi.TestApp\KyrolusSous.OpenApi.TestApp.csproj" />
   </ItemGroup>
 

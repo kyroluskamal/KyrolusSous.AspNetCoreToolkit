@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using KyrolusSous.OpenApi;
+using KyrolusSous.OpenApi.SwaggerUI;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -312,5 +313,18 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
             var sorted = tagNames.OrderBy(t => t, StringComparer.OrdinalIgnoreCase).ToList();
             tagNames.ShouldBe(sorted);
         }
+    }
+
+    [Fact]
+    public void AddKyrolusSwaggerUi_RegistersUiProviderInServices()
+    {
+        var services = new ServiceCollection();
+        services.AddKyrolusSwaggerUi();
+
+        var serviceProvider = services.BuildServiceProvider();
+        var provider = serviceProvider.GetService<IKyrolusOpenApiUiProvider>();
+
+        provider.ShouldNotBeNull();
+        provider.ProviderName.ShouldBe("SwaggerUI");
     }
 }
