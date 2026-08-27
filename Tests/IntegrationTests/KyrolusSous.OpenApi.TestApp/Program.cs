@@ -1,5 +1,6 @@
 using KyrolusSous.OpenApi;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,6 +50,10 @@ builder.Services.AddKyrolusOpenApi(options =>
     options.EnableSwaggerUi = true;
     options.SwaggerUiRoutePrefix = "my-docs";
     options.UiDocumentTitle = "Custom API Documentation";
+    options.EnableTenantIdHeader = true;
+    options.IncludeNotFoundResponse = true;
+    options.IncludeProblemDetailsSchema = true;
+    options.SortTagsAlphabetically = true;
 });
 
 builder.Services.AddAuthentication(options =>
@@ -93,6 +98,14 @@ app.MapGet("/weatherforecast", () =>
 })
 .WithName("GetWeatherForecast")
 .WithTags("Weather");
+
+app.MapGet("/public/ping", () => Results.Ok("pong"))
+    .AllowAnonymous()
+    .WithTags("Public");
+
+app.MapGet("/secure/admin", () => Results.Ok("admin-secret"))
+    .RequireAuthorization(new AuthorizeAttribute { Roles = "Admin,Manager" })
+    .WithTags("Admin");
 
 await app.RunAsync();
 

@@ -81,7 +81,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | ExceptionHandling.Marten - Unit | unit | 7 | none | yes |
 | Compression - Unit | unit | 58 | none | yes |
 | Caching - Unit | unit | 102 | none | yes |
-| OpenApi - Integration | integration | 7 | none | yes |
+| OpenApi - Integration | integration | 14 | none | yes |
 | Elasticsearch - Unit | unit | 7 | none | yes |
 | Resilience - Unit | unit | 9 | none | yes |
 | Mapping - Unit | unit | 54 | none | yes |
@@ -103,7 +103,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Auth.Tokens - Unit | unit | 12 | none | yes |
 | RabbitMQ - Unit | unit | 8 | none | yes |
 | EndpointKit - Unit | unit | 64 | none | yes |
-| **Total** | | **2218** | | |
+| **Total** | | **2225** | | |
 
 <!-- END:GENERATED:test-suites -->
 

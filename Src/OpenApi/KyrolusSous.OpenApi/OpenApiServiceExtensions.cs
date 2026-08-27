@@ -117,6 +117,35 @@ public static class OpenApiServiceExtensions
                 scalarOptions.WithFavicon(options.FaviconUrl);
             }
         });
+
+        if (versions.Count > 1)
+        {
+            foreach (var version in versions)
+            {
+                var v = version;
+                app.MapScalarApiReference($"{options.ScalarRoutePrefix}/{v.Version}", scalarOptions =>
+                {
+                    scalarOptions.WithOpenApiRoutePattern($"/openapi/{v.Version}.json");
+                    scalarOptions.WithTitle(options.UiDocumentTitle ?? v.Title);
+                    scalarOptions.WithTheme(options.ScalarTheme);
+
+                    if (!string.IsNullOrWhiteSpace(options.ScalarSearchHotKey))
+                    {
+                        scalarOptions.WithSearchHotKey(options.ScalarSearchHotKey);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(options.CustomCss))
+                    {
+                        scalarOptions.WithCustomCss(options.CustomCss);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(options.FaviconUrl))
+                    {
+                        scalarOptions.WithFavicon(options.FaviconUrl);
+                    }
+                });
+            }
+        }
     }
 
     private static void MapSwaggerUiEndpoint(
@@ -145,13 +174,21 @@ public static class OpenApiServiceExtensions
         var openApiUrl = $"/openapi/{firstVersion.Version}.json";
         var title = options.UiDocumentTitle ?? firstVersion.Title;
 
-        app.MapGet($"/{options.ReDocRoutePrefix}", () =>
+        string BuildReDocHtml(string specUrl, string docTitle)
         {
-            var html = $$"""
+            var versionLinks = versions.Count > 1
+                ? string.Join(" | ", versions.Select(v => $"<a href=\"/{options.ReDocRoutePrefix}/{v.Version}\" style=\"color: #007acc; text-decoration: none; font-weight: bold; margin: 0 5px;\">{v.Version}</a>"))
+                : "";
+
+            var navBar = versions.Count > 1
+                ? $"""<div style="background-color: #f8f9fa; padding: 8px 16px; border-bottom: 1px solid #e9ecef; font-family: sans-serif; font-size: 14px;"><strong>Versions:</strong> {versionLinks}</div>"""
+                : "";
+
+            return $$"""
             <!DOCTYPE html>
             <html>
               <head>
-                <title>{{title}}</title>
+                <title>{{docTitle}}</title>
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <link href="https://fonts.googleapis.com/css?family=Montserrat:300,400,700|Roboto:300,400,700" rel="stylesheet">
@@ -160,15 +197,30 @@ public static class OpenApiServiceExtensions
                 </style>
               </head>
               <body>
-                <redoc spec-url='{{openApiUrl}}'></redoc>
+                {{navBar}}
+                <redoc spec-url='{{specUrl}}'></redoc>
                 <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
               </body>
             </html>
             """;
+        }
 
-            return Results.Content(html, "text/html");
-        })
-        .ExcludeFromDescription();
+        app.MapGet($"/{options.ReDocRoutePrefix}", () => Results.Content(BuildReDocHtml(openApiUrl, title), "text/html"))
+            .ExcludeFromDescription();
+
+        if (versions.Count > 1)
+        {
+            foreach (var version in versions)
+            {
+                var v = version;
+                app.MapGet($"/{options.ReDocRoutePrefix}/{v.Version}", () =>
+                {
+                    var vUrl = $"/openapi/{v.Version}.json";
+                    var vTitle = options.UiDocumentTitle ?? v.Title;
+                    return Results.Content(BuildReDocHtml(vUrl, vTitle), "text/html");
+                }).ExcludeFromDescription();
+            }
+        }
     }
 
     private static void ConfigureOpenApiDocument(
@@ -183,12 +235,27 @@ public static class OpenApiServiceExtensions
 
         if (options.EnableStandardErrorResponses)
         {
-            openApiOptions.AddOperationTransformer<KyrolusStandardErrorResponsesTransformer>();
+            openApiOptions.AddOperationTransformer(new KyrolusStandardErrorResponsesTransformer(options));
         }
 
         if (options.EnableCorrelationIdHeader)
         {
             openApiOptions.AddOperationTransformer(new KyrolusCorrelationIdHeaderTransformer(options.CorrelationIdHeaderName));
+        }
+
+        if (options.EnableTenantIdHeader)
+        {
+            openApiOptions.AddOperationTransformer(new KyrolusTenantIdHeaderTransformer(options.TenantIdHeaderName, options.TenantIdDescription));
+        }
+
+        if (options.EnableSmartAuthorization)
+        {
+            openApiOptions.AddOperationTransformer(new KyrolusEndpointAuthorizationTransformer(options));
+        }
+
+        if (options.SortTagsAlphabetically)
+        {
+            openApiOptions.AddDocumentTransformer(new KyrolusTagOrderDocumentTransformer(options));
         }
 
         openApiOptions.AddDocumentTransformer((document, context, cancellationToken) =>
@@ -337,10 +404,13 @@ public static class OpenApiServiceExtensions
         };
 
         document.Components!.SecuritySchemes![options.JwtBearerScheme] = jwtScheme;
-        document.Security!.Add(new OpenApiSecurityRequirement
+        if (!options.EnableSmartAuthorization)
         {
-            { new OpenApiSecuritySchemeReference(options.JwtBearerScheme), [] }
-        });
+            document.Security!.Add(new OpenApiSecurityRequirement
+            {
+                { new OpenApiSecuritySchemeReference(options.JwtBearerScheme), [] }
+            });
+        }
     }
 
     private static void ApplyApiKeySecurity(OpenApiDocument document, KyrolusOpenApiOptions options)
@@ -359,10 +429,13 @@ public static class OpenApiServiceExtensions
         };
 
         document.Components!.SecuritySchemes![options.ApiKeySchemeName] = apiKeyScheme;
-        document.Security!.Add(new OpenApiSecurityRequirement
+        if (!options.EnableSmartAuthorization)
         {
-            { new OpenApiSecuritySchemeReference(options.ApiKeySchemeName), [] }
-        });
+            document.Security!.Add(new OpenApiSecurityRequirement
+            {
+                { new OpenApiSecuritySchemeReference(options.ApiKeySchemeName), [] }
+            });
+        }
     }
 
     private static void ApplyBasicSecurity(OpenApiDocument document, KyrolusOpenApiOptions options)
@@ -382,10 +455,13 @@ public static class OpenApiServiceExtensions
         };
 
         document.Components!.SecuritySchemes![options.BasicAuthSchemeName] = basicScheme;
-        document.Security!.Add(new OpenApiSecurityRequirement
+        if (!options.EnableSmartAuthorization)
         {
-            { new OpenApiSecuritySchemeReference(options.BasicAuthSchemeName), [] }
-        });
+            document.Security!.Add(new OpenApiSecurityRequirement
+            {
+                { new OpenApiSecuritySchemeReference(options.BasicAuthSchemeName), [] }
+            });
+        }
     }
 
     private static void ApplyOAuth2Security(OpenApiDocument document, KyrolusOpenApiOptions options)
@@ -409,10 +485,13 @@ public static class OpenApiServiceExtensions
         };
 
         document.Components!.SecuritySchemes![options.OAuth2SchemeName] = oauthScheme;
-        document.Security!.Add(new OpenApiSecurityRequirement
+        if (!options.EnableSmartAuthorization)
         {
-            { new OpenApiSecuritySchemeReference(options.OAuth2SchemeName), [.. options.OAuth2Scopes.Keys] }
-        });
+            document.Security!.Add(new OpenApiSecurityRequirement
+            {
+                { new OpenApiSecuritySchemeReference(options.OAuth2SchemeName), [.. options.OAuth2Scopes.Keys] }
+            });
+        }
     }
 
     private static OpenApiOAuthFlows? BuildOAuthFlows(KyrolusOpenApiOptions options)

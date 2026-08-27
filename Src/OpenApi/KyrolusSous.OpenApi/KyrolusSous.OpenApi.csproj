@@ -6,6 +6,9 @@
     <Nullable>enable</Nullable>
     <AssemblyName>KyrolusSous.OpenApi</AssemblyName>
     <RootNamespace>KyrolusSous.OpenApi</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591;IL2026;IL3050;IL2075</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

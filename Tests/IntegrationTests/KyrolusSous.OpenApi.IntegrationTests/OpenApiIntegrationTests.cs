@@ -161,4 +161,156 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         options.EnableBasicAuth.ShouldBeTrue();
         options.EnableReDocUi.ShouldBeTrue();
     }
+
+    [Fact]
+    public async Task AllowAnonymousEndpoint_HasNoSecurityRequirements()
+    {
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync("/openapi/v1.json");
+        response.EnsureSuccessStatusCode();
+
+        var jsonString = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(jsonString);
+
+        var paths = doc.RootElement.GetProperty("paths");
+        var pingGet = paths.GetProperty("/public/ping").GetProperty("get");
+
+        // Should not have security requirement attached
+        if (pingGet.TryGetProperty("security", out var sec))
+        {
+            sec.GetArrayLength().ShouldBe(0);
+        }
+    }
+
+    [Fact]
+    public async Task AuthorizedEndpoint_HasSecurityRequirements_AndDocumentsRoles()
+    {
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync("/openapi/v1.json");
+        response.EnsureSuccessStatusCode();
+
+        var jsonString = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(jsonString);
+
+        var paths = doc.RootElement.GetProperty("paths");
+        var adminGet = paths.GetProperty("/secure/admin").GetProperty("get");
+
+        adminGet.TryGetProperty("security", out var sec).ShouldBeTrue();
+        sec.GetArrayLength().ShouldBeGreaterThan(0);
+
+        var desc = adminGet.GetProperty("description").GetString();
+        desc.ShouldNotBeNull();
+        desc.ShouldContain("Required Roles");
+        desc.ShouldContain("Admin,Manager");
+    }
+
+    [Fact]
+    public async Task Operations_IncludeTenantIdHeader_WhenEnabled()
+    {
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync("/openapi/v1.json");
+        response.EnsureSuccessStatusCode();
+
+        var jsonString = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(jsonString);
+
+        var paths = doc.RootElement.GetProperty("paths");
+        var weatherGet = paths.GetProperty("/weatherforecast").GetProperty("get");
+
+        weatherGet.TryGetProperty("parameters", out var parameters).ShouldBeTrue();
+        var hasTenantHeader = false;
+        foreach (var param in parameters.EnumerateArray())
+        {
+            if (param.GetProperty("name").GetString() == "X-Tenant-Id" &&
+                param.GetProperty("in").GetString() == "header")
+            {
+                hasTenantHeader = true;
+                break;
+            }
+        }
+
+        hasTenantHeader.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task ErrorResponses_IncludeProblemDetails_And_NotFoundResponse()
+    {
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync("/openapi/v1.json");
+        response.EnsureSuccessStatusCode();
+
+        var jsonString = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(jsonString);
+
+        var paths = doc.RootElement.GetProperty("paths");
+        var weatherGet = paths.GetProperty("/weatherforecast").GetProperty("get");
+        var responses = weatherGet.GetProperty("responses");
+
+        // 400 Bad Request has ProblemDetails content
+        responses.TryGetProperty("400", out var resp400).ShouldBeTrue();
+        resp400.TryGetProperty("content", out var content400).ShouldBeTrue();
+        content400.TryGetProperty("application/problem+json", out _).ShouldBeTrue();
+
+        // 404 Not Found is included because IncludeNotFoundResponse = true
+        responses.TryGetProperty("404", out var resp404).ShouldBeTrue();
+        resp404.GetProperty("description").GetString().ShouldBe("Not Found");
+    }
+
+    [Fact]
+    public async Task MultiVersion_ScalarAndReDoc_EndpointsReturnSuccess()
+    {
+        var client = _factory.CreateClient();
+
+        // Scalar individual version routes
+        var scalarV1 = await client.GetAsync("/scalar/v1");
+        scalarV1.EnsureSuccessStatusCode();
+
+        var scalarV2 = await client.GetAsync("/scalar/v2");
+        scalarV2.EnsureSuccessStatusCode();
+
+        // ReDoc individual version routes
+        var redocV1 = await client.GetAsync("/redoc/v1");
+        redocV1.EnsureSuccessStatusCode();
+
+        var redocV2 = await client.GetAsync("/redoc/v2");
+        redocV2.EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public void ConfigureForOpenIddict_ConfiguresOAuth2Correctly()
+    {
+        var options = new KyrolusOpenApiOptions();
+        options.ConfigureForOpenIddict();
+
+        options.EnableOAuth2Auth.ShouldBeTrue();
+        options.OAuth2SchemeName.ShouldBe("OpenIddict");
+        options.OAuth2Flow.ShouldBe("authorizationcode");
+        options.OAuth2AuthorizationUrl.ShouldBe("/connect/authorize");
+        options.OAuth2TokenUrl.ShouldBe("/connect/token");
+        options.OAuth2Scopes.ContainsKey("openid").ShouldBeTrue();
+        options.OAuth2Scopes.ContainsKey("profile").ShouldBeTrue();
+        options.OAuth2Scopes.ContainsKey("email").ShouldBeTrue();
+        options.OAuth2Scopes.ContainsKey("offline_access").ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Tags_AreSortedAlphabetically()
+    {
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync("/openapi/v1.json");
+        response.EnsureSuccessStatusCode();
+
+        var jsonString = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(jsonString);
+
+        if (doc.RootElement.TryGetProperty("tags", out var tags))
+        {
+            var tagNames = tags.EnumerateArray()
+                .Select(t => t.GetProperty("name").GetString()!)
+                .ToList();
+
+            var sorted = tagNames.OrderBy(t => t, StringComparer.OrdinalIgnoreCase).ToList();
+            tagNames.ShouldBe(sorted);
+        }
+    }
 }

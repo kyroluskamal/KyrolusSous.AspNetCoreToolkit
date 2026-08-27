@@ -97,6 +97,84 @@ public class KyrolusOpenApiOptions
     public string? FaviconUrl { get; set; }
 
     public string? UiDocumentTitle { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether smart endpoint authorization detection is enabled.
+    /// When enabled, endpoints marked with [AllowAnonymous] do not require authorization,
+    /// while endpoints with [Authorize] have security requirements and documented roles/permissions.
+    /// Default is true.
+    /// </summary>
+    public bool EnableSmartAuthorization { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether endpoints require authorization by default unless marked with [AllowAnonymous].
+    /// Default is false.
+    /// </summary>
+    public bool RequireAuthorizationByDefault { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to add the multi-tenant header parameter to operations.
+    /// Default is false.
+    /// </summary>
+    public bool EnableTenantIdHeader { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the name of the multi-tenant header. Default is "X-Tenant-Id".
+    /// </summary>
+    public string TenantIdHeaderName { get; set; } = "X-Tenant-Id";
+
+    /// <summary>
+    /// Gets or sets the description for the multi-tenant header.
+    /// </summary>
+    public string TenantIdDescription { get; set; } = "Tenant identifier for multi-tenant requests.";
+
+    /// <summary>
+    /// Gets or sets whether standard error responses should include an RFC 7807 ProblemDetails schema reference.
+    /// Default is true.
+    /// </summary>
+    public bool IncludeProblemDetailsSchema { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether 404 Not Found standard response is included. Default is false.
+    /// </summary>
+    public bool IncludeNotFoundResponse { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether 422 Unprocessable Entity standard response is included. Default is false.
+    /// </summary>
+    public bool IncludeUnprocessableEntityResponse { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether tags in the OpenAPI document should be sorted alphabetically. Default is true.
+    /// </summary>
+    public bool SortTagsAlphabetically { get; set; } = true;
+
+    /// <summary>
+    /// Configures OAuth2 security scheme for integration with KyrolusSous.Auth.OpenIddict.
+    /// </summary>
+    public KyrolusOpenApiOptions ConfigureForOpenIddict(
+        string? authorizationUrl = "/connect/authorize",
+        string? tokenUrl = "/connect/token",
+        IDictionary<string, string>? scopes = null)
+    {
+        EnableOAuth2Auth = true;
+        OAuth2SchemeName = "OpenIddict";
+        OAuth2Flow = "authorizationcode";
+        OAuth2AuthorizationUrl = authorizationUrl ?? "/connect/authorize";
+        OAuth2TokenUrl = tokenUrl ?? "/connect/token";
+        OAuth2Description = "OpenIddict OAuth 2.0 / OpenID Connect authorization.";
+
+        scopes ??= new Dictionary<string, string>
+        {
+            ["openid"] = "Standard OpenID Connect scope",
+            ["profile"] = "User profile claims",
+            ["email"] = "User email address",
+            ["offline_access"] = "Refresh token access"
+        };
+
+        OAuth2Scopes = scopes;
+        return this;
+    }
 }
 
 public class ApiVersionInfo
