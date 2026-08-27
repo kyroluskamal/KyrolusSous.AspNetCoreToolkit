@@ -43,6 +43,7 @@ Within a phase the order is loose - what matters is not starting a phase before 
 | 16 | `ExceptionHandling.EntityFramework` | ✅ | 6 unit tests covering EF Core exception mapper and DI registration (100% coverage) |
 | 17 | `ExceptionHandling.FluentValidation` | ✅ | 4 unit tests covering FluentValidation mapper, metadata extraction, and DI registration (100% coverage) |
 | 18 | `ExceptionHandling.Redis` | ✅ | 6 unit tests covering Redis exception mapper and DI registration (100% coverage) |
+| 19 | `ExceptionHandling.Marten` | ✅ | 6 unit tests covering Marten exception mapper, concurrency, unique constraint, and Npgsql socket errors (100% coverage) |
 | 19 | `Compression.Abstractions` | ✅ | 100% coverage across ICompressor, ICompressionProvider, CompressionAlgorithm contracts |
 | 20 | `Compression.Core` | ✅ | 100% coverage across ResponseCompressionMiddleware, Options, CompressionExtensions, and KyrolusCompressionProvider |
 | 21 | `Compression.Brotli` | ✅ | 100% coverage across BrotliCompressor and DI extensions (Pure .NET) |
@@ -115,18 +116,47 @@ Independent of everything else. Can be done at any point.
 | 64 | `DataProtection.GoogleKms` | ⬜ | Cloud - wiring test only |
 | 65 | `DataProtection.Cli` | ⬜ | 629 lines |
 
-## Phase 6 - Standalone
+## Phase 6 - Authentication & Identity (Storage-Agnostic Suite)
 
-Nothing depends on these and they depend on nothing. Any time.
+Zero ORM coupling in core. 105 iterative security and logic audit rounds completed, 326 unit tests across 15 test suites with 100% pass rate. 100% Native AOT compatible.
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 66 | `OpenApi` | ⬜ | Migrated to official Microsoft.AspNetCore.OpenApi (.NET 10) + Scalar UI + Swagger UI, covered by integration suite |
-| 67 | `OpenIddictAuth` | ⬜ | 181 lines |
-| 68 | `IRabbitMQUtilsInterfaces` | 🚫 | 32 lines, contracts only |
-| 69 | `RabbitMQUtils` | ⬜ | 218 lines |
-| 70 | `Elasticsearch` | ⚡ | Modern Elasticsearch client (v8.17) with repository, fluent search, auto-index lifecycle, and health checks |
-| 71 | `Resilience` | ⚡ | Enterprise Polly v8 & Microsoft.Extensions.Resilience with smart IsTransient evaluation, circuit breaker, and HttpClient extensions |
+| 66 | `Auth.Abstractions` | ✅ | Storage-agnostic user, lockout, identity, and claim models. Zero ORM dependencies |
+| 67 | `Auth.Runtime` | ✅ | PBKDF2 password hasher (iterations capped), claim principal factory, authenticator, external login handler, in-memory user store |
+| 68 | `Auth.OpenIddict` | ✅ | OIDC / OAuth 2.0 protocol endpoints: password, refresh token, client credentials, userinfo, authorization code, logout, and claim destinations |
+| 69 | `Auth.Jwt` | ✅ | Lightweight JWT access & refresh token generator and non-blocking validator (8KB bounds, timing attack protection) |
+| 70 | `Auth.ApiKey` | ✅ | API key authentication handler, cryptographically secure generator, SHA-256 hash validator, and header pollution protection |
+| 71 | `Auth.Mfa` | ✅ | RFC 6238 TOTP engine, Base32 encoder/decoder, QR code URI generator, and secure recovery code service (80-bit entropy) |
+| 72 | `Auth.Security` | ✅ | Brute-force lockout guard with sliding window, memory eviction, and NIST SP 800-63B password policy checker |
+| 73 | `Auth.MagicLink` | ✅ | Passwordless authentication service, atomic token consumption, HMAC/SHA-256 store, and HTTP/HTTPS scheme validation |
+| 74 | `Auth.Sessions` | ✅ | Device session manager, heartbeat telemetry, remote revocation, user-agent sanitization, and concurrent eviction |
+| 75 | `Auth.TokenRevocation` | ✅ | Distributed token blacklist, JTI tracking, Unix epoch sub-second alignment, and cutoff revocation validator |
+| 76 | `Auth.Permissions` | ✅ | RBAC and fine-grained permission authorization handler, wildcard matching, hierarchical evaluation, and endpoint filter |
+| 77 | `Auth.MultiTenancy` | ✅ | Tenant resolution pipeline: HTTP headers, JWT claims, subdomains, and composite failover with ASCII/homoglyph validation |
+| 78 | `Auth.Events` | ✅ | Security audit event pipeline: user login, failed attempts, lockouts, token revocations, and fault-tolerant dispatcher |
+| 79 | `Auth.Impersonation` | ✅ | Administrator user impersonation service with actor claims, duration expiry, tenant preservation, and nested prevention |
+| 80 | `Auth.Tokens` | ✅ | HMAC-SHA256 user tokens for email confirmation and password reset with pipe-escaping and clock-skew tolerance |
+| 81 | `Auth.EntityFramework` | ✅ | Companion package: EF Core user store, external logins, lockout tracking, and idempotent operations |
+| 82 | `Auth.Marten` | ✅ | Companion package: Marten document user store, external logins, lockout tracking, and query normalization |
+| 83 | `Auth.Google` | ✅ | OAuth 2.0 social provider with automated pipeline registration |
+| 84 | `Auth.GitHub` | ✅ | OAuth 2.0 social provider with automated pipeline registration |
+| 85 | `Auth.Facebook` | ✅ | OAuth 2.0 social provider with automated pipeline registration |
+| 86 | `Auth.Apple` | ✅ | OAuth 2.0 / Sign in with Apple social provider with automated pipeline registration |
+| 87 | `Auth.Discord` | ✅ | OAuth 2.0 social provider with automated pipeline registration |
+| 88 | `Auth.LinkedIn` | ✅ | OAuth 2.0 social provider with automated pipeline registration |
+| 89 | `Auth.MicrosoftAccount` | ✅ | OAuth 2.0 Microsoft identity provider with automated pipeline registration |
+| 90 | `Auth.X` | ✅ | OAuth 2.0 X (Twitter) social provider with automated pipeline registration |
+
+## Phase 7 - Standalone & Messaging
+
+| # | Project | Status | Notes |
+|---|---|---|---|
+| 91 | `OpenApi` | ✅ | Migrated to official Microsoft.AspNetCore.OpenApi (.NET 10) + Scalar UI + Swagger UI, covered by integration suite |
+| 92 | `IRabbitMQUtilsInterfaces` | ✅ | Contract interfaces prefixed with `IKyrolus*`, models for envelope and options |
+| 93 | `RabbitMQUtils` | ✅ | Reviewed & tested via `RabbitMQ.UnitTests` (12 unit tests, channel pooling, DLQ, and consumers) |
+| 94 | `Elasticsearch` | ⚡ | Modern Elasticsearch client (v8.17) with repository, fluent search, auto-index lifecycle, and health checks |
+| 95 | `Resilience` | ⚡ | Enterprise Polly v8 & Microsoft.Extensions.Resilience with smart IsTransient evaluation, circuit breaker, and HttpClient extensions |
 
 ---
 

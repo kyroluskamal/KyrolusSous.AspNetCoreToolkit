@@ -171,6 +171,13 @@
       "ci": true
     },
     {
+      "name": "ExceptionHandling.Marten - Unit",
+      "project": "Tests/UnitTests/ExceptionHandling/KyrolusSous.ExceptionHandling.Marten.UnitTests/KyrolusSous.ExceptionHandling.Marten.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
       "name": "Compression - Unit",
       "project": "Tests/UnitTests/Compression/KyrolusSous.Compression.UnitTests/KyrolusSous.Compression.UnitTests.csproj",
       "kind": "unit",
@@ -225,7 +232,112 @@
       "kind": "unit",
       "services": [],
       "ci": true,
-      "notes": "Also drives the mapped OpenIddict endpoints end to end over an in-process TestServer."
+      "notes": "Core runtime, principal factory, pbkdf2 hasher, external logins, and OpenIddict endpoints integration."
+    },
+    {
+      "name": "Auth.ApiKey - Unit",
+      "project": "Tests/UnitTests/Auth/KyrolusSous.Auth.ApiKey.UnitTests/KyrolusSous.Auth.ApiKey.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "Auth.EntityFramework - Unit",
+      "project": "Tests/UnitTests/Auth/KyrolusSous.Auth.EntityFramework.UnitTests/KyrolusSous.Auth.EntityFramework.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "Auth.Events - Unit",
+      "project": "Tests/UnitTests/Auth/KyrolusSous.Auth.Events.UnitTests/KyrolusSous.Auth.Events.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "Auth.Impersonation - Unit",
+      "project": "Tests/UnitTests/Auth/KyrolusSous.Auth.Impersonation.UnitTests/KyrolusSous.Auth.Impersonation.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "Auth.Jwt - Unit",
+      "project": "Tests/UnitTests/Auth/KyrolusSous.Auth.Jwt.UnitTests/KyrolusSous.Auth.Jwt.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "Auth.MagicLink - Unit",
+      "project": "Tests/UnitTests/Auth/KyrolusSous.Auth.MagicLink.UnitTests/KyrolusSous.Auth.MagicLink.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "Auth.Marten - Unit",
+      "project": "Tests/UnitTests/Auth/KyrolusSous.Auth.Marten.UnitTests/KyrolusSous.Auth.Marten.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "Auth.Mfa - Unit",
+      "project": "Tests/UnitTests/Auth/KyrolusSous.Auth.Mfa.UnitTests/KyrolusSous.Auth.Mfa.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "Auth.MultiTenancy - Unit",
+      "project": "Tests/UnitTests/Auth/KyrolusSous.Auth.MultiTenancy.UnitTests/KyrolusSous.Auth.MultiTenancy.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "Auth.Permissions - Unit",
+      "project": "Tests/UnitTests/Auth/KyrolusSous.Auth.Permissions.UnitTests/KyrolusSous.Auth.Permissions.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "Auth.Security - Unit",
+      "project": "Tests/UnitTests/Auth/KyrolusSous.Auth.Security.UnitTests/KyrolusSous.Auth.Security.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "Auth.Sessions - Unit",
+      "project": "Tests/UnitTests/Auth/KyrolusSous.Auth.Sessions.UnitTests/KyrolusSous.Auth.Sessions.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "Auth.TokenRevocation - Unit",
+      "project": "Tests/UnitTests/Auth/KyrolusSous.Auth.TokenRevocation.UnitTests/KyrolusSous.Auth.TokenRevocation.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "Auth.Tokens - Unit",
+      "project": "Tests/UnitTests/Auth/KyrolusSous.Auth.Tokens.UnitTests/KyrolusSous.Auth.Tokens.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
+    },
+    {
+      "name": "RabbitMQ - Unit",
+      "project": "Tests/UnitTests/RabbitMQ/KyrolusSous.RabbitMQ.UnitTests/KyrolusSous.RabbitMQ.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
     },
     {
       "name": "EndpointKit - Unit",

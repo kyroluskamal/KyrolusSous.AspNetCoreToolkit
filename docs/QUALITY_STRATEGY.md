@@ -78,6 +78,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | ExceptionHandling.EntityFramework - Unit | unit | 6 | none | yes |
 | ExceptionHandling.FluentValidation - Unit | unit | 4 | none | yes |
 | ExceptionHandling.Redis - Unit | unit | 6 | none | yes |
+| ExceptionHandling.Marten - Unit | unit | 7 | none | yes |
 | Compression - Unit | unit | 58 | none | yes |
 | Caching - Unit | unit | 102 | none | yes |
 | OpenApi - Integration | integration | 7 | none | yes |
@@ -85,9 +86,24 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Resilience - Unit | unit | 9 | none | yes |
 | Mapping - Unit | unit | 54 | none | yes |
 | CQRS - Unit | unit | 52 | none | yes |
-| Auth - Unit<br><sub>Also drives the mapped OpenIddict endpoints end to end over an in-process TestServer.</sub> | unit | 128 | none | yes |
+| Auth - Unit<br><sub>Core runtime, principal factory, pbkdf2 hasher, external logins, and OpenIddict endpoints integration.</sub> | unit | 128 | none | yes |
+| Auth.ApiKey - Unit | unit | 11 | none | yes |
+| Auth.EntityFramework - Unit | unit | 8 | none | yes |
+| Auth.Events - Unit | unit | 9 | none | yes |
+| Auth.Impersonation - Unit | unit | 11 | none | yes |
+| Auth.Jwt - Unit | unit | 14 | none | yes |
+| Auth.MagicLink - Unit | unit | 13 | none | yes |
+| Auth.Marten - Unit | unit | 7 | none | yes |
+| Auth.Mfa - Unit | unit | 14 | none | yes |
+| Auth.MultiTenancy - Unit | unit | 13 | none | yes |
+| Auth.Permissions - Unit | unit | 11 | none | yes |
+| Auth.Security - Unit | unit | 15 | none | yes |
+| Auth.Sessions - Unit | unit | 13 | none | yes |
+| Auth.TokenRevocation - Unit | unit | 14 | none | yes |
+| Auth.Tokens - Unit | unit | 12 | none | yes |
+| RabbitMQ - Unit | unit | 8 | none | yes |
 | EndpointKit - Unit | unit | 64 | none | yes |
-| **Total** | | **2038** | | |
+| **Total** | | **2218** | | |
 
 <!-- END:GENERATED:test-suites -->
 

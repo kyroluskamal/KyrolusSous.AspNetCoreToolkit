@@ -2797,10 +2797,24 @@ no `DbContext`, no entity base class, no migration to run.
 
 | Package | What it gives you |
 | --- | --- |
-| `KyrolusSous.Auth.Abstractions` | Contracts only: the user model, the store, the password hasher, the claims-principal factory, the external-login hook. |
-| `KyrolusSous.Auth.Runtime` | Default implementations: PBKDF2 hashing, the sign-in policy, claim generation, external-login provisioning, an in-memory store for development. |
-| `KyrolusSous.Auth.OpenIddict` | Authorization server and resource server configuration, claim destinations, and ready-made `/connect/*` endpoints. |
-| `KyrolusSous.Auth.Google` `.MicrosoftAccount` `.Apple` `.Facebook` `.GitHub` `.X` `.LinkedIn` `.Discord` | One `AddKyrolus…Auth` call per provider, over the same options surface. |
+| `KyrolusSous.Auth.Abstractions` | Storage-agnostic contracts: the user model, store, password hasher, claims-principal factory, external-login hook, and lockout abstractions. |
+| `KyrolusSous.Auth.Runtime` | Default implementations: PBKDF2 hashing, claims factory, external-login provisioning, user authenticator, and an in-memory store. |
+| `KyrolusSous.Auth.OpenIddict` | OIDC authorization server and resource server configuration, claim destinations, and ready-made `/connect/*` endpoints. |
+| `KyrolusSous.Auth.Jwt` | Lightweight, high-performance JWT access & refresh token generator and non-blocking token validator with 8KB size bounds. |
+| `KyrolusSous.Auth.ApiKey` | API key authentication handler, cryptographically secure key generator, SHA-256 validator, and header pollution protection. |
+| `KyrolusSous.Auth.Mfa` | RFC 6238 TOTP engine, Base32 encoder/decoder, QR code URI generator, and secure recovery code service with 80-bit entropy. |
+| `KyrolusSous.Auth.Security` | Brute-force lockout guard with sliding window, automatic eviction, and NIST SP 800-63B password policy checker. |
+| `KyrolusSous.Auth.MagicLink` | Passwordless authentication service, atomic single-use token consumption, HMAC-SHA256 store, and HTTP/HTTPS redirect scheme validation. |
+| `KyrolusSous.Auth.Sessions` | Device session manager, heartbeat telemetry, remote revocation, user-agent sanitization, and concurrent session eviction. |
+| `KyrolusSous.Auth.TokenRevocation` | Distributed token blacklist, JTI tracking, Unix epoch sub-second alignment, and cutoff revocation validator. |
+| `KyrolusSous.Auth.Permissions` | RBAC and fine-grained permission authorization handler, wildcard matching, hierarchical evaluation, and endpoint filter. |
+| `KyrolusSous.Auth.MultiTenancy` | Multi-tenant resolution pipeline: HTTP headers, JWT claims, subdomains, and composite failover with ASCII homoglyph protection. |
+| `KyrolusSous.Auth.Events` | Security audit event pipeline: user login, failed attempts, lockouts, token revocations, and fault-tolerant dispatcher. |
+| `KyrolusSous.Auth.Impersonation` | Administrator user impersonation service with actor claims, duration expiry, tenant preservation, and nested impersonation blocking. |
+| `KyrolusSous.Auth.Tokens` | HMAC-SHA256 user tokens for email confirmation and password reset with delimiter escaping and clock-skew tolerance. |
+| `KyrolusSous.Auth.EntityFramework` | Optional companion storage adapter for EF Core with idempotent external login and lockout persistence. |
+| `KyrolusSous.Auth.Marten` | Optional companion storage adapter for Marten document store with query normalization and lockout persistence. |
+| `KyrolusSous.Auth.Google` `.MicrosoftAccount` `.Apple` `.Facebook` `.GitHub` `.X` `.LinkedIn` `.Discord` | External OAuth 2.0 social identity providers with unified options and startup validation. |
 
 ### External login
 
