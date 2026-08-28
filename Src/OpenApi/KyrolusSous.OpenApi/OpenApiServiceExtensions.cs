@@ -209,14 +209,23 @@ public static class OpenApiServiceExtensions
 
     private static void MapReDocEndpoint(WebApplication app, KyrolusOpenApiOptions options, List<ApiVersionInfo> versions)
     {
+        if (versions.Count == 0)
+        {
+            return;
+        }
+
+        var routePrefix = string.IsNullOrWhiteSpace(options.ReDocRoutePrefix) ? "redoc" : options.ReDocRoutePrefix.Trim('/');
         var firstVersion = versions[0];
         var openApiUrl = $"/openapi/{firstVersion.Version}.json";
         var title = options.UiDocumentTitle ?? firstVersion.Title;
 
         string BuildReDocHtml(string specUrl, string docTitle)
         {
+            var encodedDocTitle = System.Net.WebUtility.HtmlEncode(docTitle);
+            var encodedSpecUrl = System.Net.WebUtility.HtmlEncode(specUrl);
+
             var versionLinks = versions.Count > 1
-                ? string.Join(" | ", versions.Select(v => $"<a href=\"/{options.ReDocRoutePrefix}/{v.Version}\" style=\"color: #007acc; text-decoration: none; font-weight: bold; margin: 0 5px;\">{v.Version}</a>"))
+                ? string.Join(" | ", versions.Select(v => $"<a href=\"/{System.Net.WebUtility.HtmlEncode(routePrefix)}/{System.Net.WebUtility.HtmlEncode(v.Version)}\" style=\"color: #007acc; text-decoration: none; font-weight: bold; margin: 0 5px;\">{System.Net.WebUtility.HtmlEncode(v.Version)}</a>"))
                 : "";
 
             var navBar = versions.Count > 1
@@ -227,7 +236,7 @@ public static class OpenApiServiceExtensions
             <!DOCTYPE html>
             <html>
               <head>
-                <title>{{docTitle}}</title>
+                <title>{{encodedDocTitle}}</title>
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <link href="https://fonts.googleapis.com/css?family=Montserrat:300,400,700|Roboto:300,400,700" rel="stylesheet">
@@ -237,14 +246,14 @@ public static class OpenApiServiceExtensions
               </head>
               <body>
                 {{navBar}}
-                <redoc spec-url='{{specUrl}}'></redoc>
+                <redoc spec-url='{{encodedSpecUrl}}'></redoc>
                 <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
               </body>
             </html>
             """;
         }
 
-        app.MapGet($"/{options.ReDocRoutePrefix}", () => Results.Content(BuildReDocHtml(openApiUrl, title), "text/html"))
+        app.MapGet($"/{routePrefix}", () => Results.Content(BuildReDocHtml(openApiUrl, title), "text/html"))
             .ExcludeFromDescription();
 
         if (versions.Count > 1)
@@ -252,7 +261,7 @@ public static class OpenApiServiceExtensions
             foreach (var version in versions)
             {
                 var v = version;
-                app.MapGet($"/{options.ReDocRoutePrefix}/{v.Version}", () =>
+                app.MapGet($"/{routePrefix}/{v.Version}", () =>
                 {
                     var vUrl = $"/openapi/{v.Version}.json";
                     var vTitle = options.UiDocumentTitle ?? v.Title;
@@ -621,14 +630,15 @@ public static class OpenApiServiceExtensions
             Directory.CreateDirectory(dir);
         }
 
+        var docName = string.IsNullOrWhiteSpace(documentName) ? "v1" : documentName.TrimStart('/');
         var client = httpClient ?? new HttpClient
         {
-            BaseAddress = new Uri(app.Urls.FirstOrDefault() ?? "http://localhost:5000")
+            BaseAddress = ResolveBaseAddress(app)
         };
 
         try
         {
-            var response = await client.GetAsync($"/openapi/{documentName}.json", cancellationToken);
+            var response = await client.GetAsync($"/openapi/{docName}.json", cancellationToken);
             response.EnsureSuccessStatusCode();
 
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -641,5 +651,17 @@ public static class OpenApiServiceExtensions
                 client.Dispose();
             }
         }
+    }
+
+    private static Uri ResolveBaseAddress(WebApplication app)
+    {
+        var rawUrl = app.Urls.FirstOrDefault() ?? "http://localhost:5000";
+        rawUrl = rawUrl.Replace("0.0.0.0", "127.0.0.1", StringComparison.OrdinalIgnoreCase)
+                       .Replace("*", "127.0.0.1", StringComparison.OrdinalIgnoreCase)
+                       .Replace("+", "127.0.0.1", StringComparison.OrdinalIgnoreCase);
+
+        return Uri.TryCreate(rawUrl, UriKind.Absolute, out var uri)
+            ? uri
+            : new Uri("http://localhost:5000");
     }
 }

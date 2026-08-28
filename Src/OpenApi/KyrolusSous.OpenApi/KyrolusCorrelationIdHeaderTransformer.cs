@@ -19,7 +19,8 @@ public sealed class KyrolusCorrelationIdHeaderTransformer(string headerName = "X
                 Name = _headerName,
                 In = ParameterLocation.Header,
                 Required = false,
-                Description = "Optional correlation ID for end-to-end distributed tracing."
+                Description = "Optional correlation ID for end-to-end distributed tracing.",
+                Schema = new OpenApiSchema { Type = JsonSchemaType.String }
             });
         }
 

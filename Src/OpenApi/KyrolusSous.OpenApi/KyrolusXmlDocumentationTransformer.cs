@@ -10,7 +10,8 @@ public sealed class KyrolusXmlDocumentationTransformer : IOpenApiOperationTransf
 {
     private readonly KyrolusOpenApiOptions _options;
     private readonly ConcurrentDictionary<string, XmlMemberDoc> _members = new(StringComparer.Ordinal);
-    private bool _initialized;
+    private readonly object _initLock = new();
+    private volatile bool _initialized;
 
     public KyrolusXmlDocumentationTransformer(KyrolusOpenApiOptions options)
     {
@@ -51,6 +52,19 @@ public sealed class KyrolusXmlDocumentationTransformer : IOpenApiOperationTransf
                 }
             }
 
+            if (!string.IsNullOrWhiteSpace(doc.Remarks))
+            {
+                var remarksText = $"\n\n{doc.Remarks}";
+                if (string.IsNullOrWhiteSpace(operation.Description))
+                {
+                    operation.Description = doc.Remarks;
+                }
+                else if (!operation.Description.Contains(doc.Remarks, StringComparison.OrdinalIgnoreCase))
+                {
+                    operation.Description += remarksText;
+                }
+            }
+
             if (operation.Parameters is not null && doc.Params.Count > 0)
             {
                 foreach (var param in operation.Parameters)
@@ -61,6 +75,15 @@ public sealed class KyrolusXmlDocumentationTransformer : IOpenApiOperationTransf
                     {
                         param.Description = paramDesc;
                     }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(doc.Returns) && operation.Responses is not null)
+            {
+                if (operation.Responses.TryGetValue("200", out var res200) &&
+                    (string.IsNullOrWhiteSpace(res200.Description) || string.Equals(res200.Description, "OK", StringComparison.OrdinalIgnoreCase)))
+                {
+                    res200.Description = doc.Returns;
                 }
             }
         }
@@ -75,45 +98,53 @@ public sealed class KyrolusXmlDocumentationTransformer : IOpenApiOperationTransf
             return;
         }
 
-        _initialized = true;
-
-        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var p in _options.XmlDocAbsolutePaths)
+        lock (_initLock)
         {
-            if (File.Exists(p))
+            if (_initialized)
             {
-                paths.Add(p);
+                return;
             }
-        }
 
-        var baseDir = AppContext.BaseDirectory;
-        foreach (var asm in _options.XmlCommentAssemblies)
-        {
-            var asmName = asm.GetName().Name;
-            if (!string.IsNullOrWhiteSpace(asmName))
+            var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var p in _options.XmlDocAbsolutePaths)
             {
-                var candidate = Path.Combine(baseDir, $"{asmName}.xml");
-                if (File.Exists(candidate))
+                if (!string.IsNullOrWhiteSpace(p) && File.Exists(p))
                 {
-                    paths.Add(candidate);
+                    paths.Add(Path.GetFullPath(p));
                 }
             }
-        }
 
-        var entryAsm = Assembly.GetEntryAssembly();
-        if (entryAsm is not null)
-        {
-            var entryCandidate = Path.Combine(baseDir, $"{entryAsm.GetName().Name}.xml");
-            if (File.Exists(entryCandidate))
+            var baseDir = AppContext.BaseDirectory;
+            foreach (var asm in _options.XmlCommentAssemblies)
             {
-                paths.Add(entryCandidate);
+                var asmName = asm.GetName().Name;
+                if (!string.IsNullOrWhiteSpace(asmName))
+                {
+                    var candidate = Path.Combine(baseDir, $"{asmName}.xml");
+                    if (File.Exists(candidate))
+                    {
+                        paths.Add(candidate);
+                    }
+                }
             }
-        }
 
-        foreach (var path in paths)
-        {
-            LoadXmlFile(path);
+            var entryAsm = Assembly.GetEntryAssembly();
+            if (entryAsm is not null)
+            {
+                var entryCandidate = Path.Combine(baseDir, $"{entryAsm.GetName().Name}.xml");
+                if (File.Exists(entryCandidate))
+                {
+                    paths.Add(entryCandidate);
+                }
+            }
+
+            foreach (var path in paths)
+            {
+                LoadXmlFile(path);
+            }
+
+            _initialized = true;
         }
     }
 
@@ -137,6 +168,8 @@ public sealed class KyrolusXmlDocumentationTransformer : IOpenApiOperationTransf
                 }
 
                 var summary = member.Element("summary")?.Value?.Trim();
+                var remarks = member.Element("remarks")?.Value?.Trim();
+                var returns = member.Element("returns")?.Value?.Trim();
                 var paramDict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
                 foreach (var p in member.Elements("param"))
@@ -148,7 +181,7 @@ public sealed class KyrolusXmlDocumentationTransformer : IOpenApiOperationTransf
                     }
                 }
 
-                _members[name] = new XmlMemberDoc(summary, paramDict);
+                _members[name] = new XmlMemberDoc(summary, remarks, returns, paramDict);
             }
         }
         catch
@@ -191,5 +224,5 @@ public sealed class KyrolusXmlDocumentationTransformer : IOpenApiOperationTransf
         return false;
     }
 
-    private readonly record struct XmlMemberDoc(string? Summary, Dictionary<string, string> Params);
+    private readonly record struct XmlMemberDoc(string? Summary, string? Remarks, string? Returns, Dictionary<string, string> Params);
 }

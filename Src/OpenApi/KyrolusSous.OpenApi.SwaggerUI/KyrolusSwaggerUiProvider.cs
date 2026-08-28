@@ -27,14 +27,32 @@ public sealed class KyrolusSwaggerUiProvider : IKyrolusOpenApiUiProvider
             return;
         }
 
+        var routePrefix = string.IsNullOrWhiteSpace(options.SwaggerUiRoutePrefix)
+            ? "swagger"
+            : options.SwaggerUiRoutePrefix.Trim('/');
+
         app.UseSwaggerUI(swaggerUiOptions =>
         {
-            swaggerUiOptions.RoutePrefix = options.SwaggerUiRoutePrefix;
+            swaggerUiOptions.RoutePrefix = routePrefix;
             swaggerUiOptions.DocumentTitle = options.UiDocumentTitle ?? versions[0].Title;
 
             foreach (var version in versions)
             {
-                swaggerUiOptions.SwaggerEndpoint($"/openapi/{version.Version}.json", $"{version.Title} {version.Version}");
+                var endpointName = version.Title.Contains(version.Version, StringComparison.OrdinalIgnoreCase)
+                    ? version.Title
+                    : $"{version.Title} {version.Version}";
+
+                swaggerUiOptions.SwaggerEndpoint($"/openapi/{version.Version}.json", endpointName);
+            }
+
+            if (!string.IsNullOrWhiteSpace(options.CustomCss))
+            {
+                swaggerUiOptions.InjectStylesheet(options.CustomCss);
+            }
+
+            if (!string.IsNullOrWhiteSpace(options.FaviconUrl))
+            {
+                swaggerUiOptions.HeadContent += $"<link rel=\"icon\" href=\"{options.FaviconUrl}\" />";
             }
 
             _configureSwaggerUi?.Invoke(swaggerUiOptions);

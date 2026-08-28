@@ -32,7 +32,8 @@ public sealed partial class KyrolusSmartAutoTagTransformer : IOpenApiOperationTr
 
     private static string? ExtractTagName(string relativePath)
     {
-        var segments = relativePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var pathOnly = relativePath.Split('?')[0];
+        var segments = pathOnly.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
         foreach (var segment in segments)
         {
@@ -64,7 +65,13 @@ public sealed partial class KyrolusSmartAutoTagTransformer : IOpenApiOperationTr
             return input;
         }
 
-        return char.ToUpperInvariant(input[0]) + input[1..];
+        var parts = input.Split(['-', '_'], StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 1)
+        {
+            return char.ToUpperInvariant(parts[0][0]) + parts[0][1..];
+        }
+
+        return string.Concat(parts.Select(p => char.ToUpperInvariant(p[0]) + p[1..]));
     }
 
     [GeneratedRegex(@"^\{.*\}$", RegexOptions.Compiled | RegexOptions.CultureInvariant)]

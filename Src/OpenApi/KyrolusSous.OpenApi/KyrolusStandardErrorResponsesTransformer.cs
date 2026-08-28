@@ -9,11 +9,17 @@ public sealed class KyrolusStandardErrorResponsesTransformer(KyrolusOpenApiOptio
         OpenApiOperationTransformerContext context,
         CancellationToken cancellationToken)
     {
-        operation.Responses ??= new OpenApiResponses();
+        var metadata = context.Description.ActionDescriptor.EndpointMetadata;
+        var isAnonymous = metadata?.OfType<IAllowAnonymous>().Any() == true;
+        var isAuthorized = metadata?.OfType<IAuthorizeData>().Any() == true || _options.RequireAuthorizationByDefault;
 
         AddResponse(operation, "400", "Bad Request / Validation Error");
-        AddResponse(operation, "401", "Unauthorized");
-        AddResponse(operation, "403", "Forbidden");
+
+        if (!_options.EnableSmartAuthorization || (isAuthorized && !isAnonymous))
+        {
+            AddResponse(operation, "401", "Unauthorized");
+            AddResponse(operation, "403", "Forbidden");
+        }
 
         if (_options.IncludeNotFoundResponse)
         {

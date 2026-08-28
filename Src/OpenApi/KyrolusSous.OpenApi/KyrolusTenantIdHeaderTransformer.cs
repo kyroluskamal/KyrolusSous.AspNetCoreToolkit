@@ -25,7 +25,8 @@ public sealed class KyrolusTenantIdHeaderTransformer(
                 Name = _headerName,
                 In = ParameterLocation.Header,
                 Required = false,
-                Description = _description
+                Description = _description,
+                Schema = new OpenApiSchema { Type = JsonSchemaType.String }
             });
         }
 

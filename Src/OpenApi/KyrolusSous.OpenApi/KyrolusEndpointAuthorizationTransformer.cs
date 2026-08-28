@@ -44,7 +44,7 @@ public sealed class KyrolusEndpointAuthorizationTransformer(KyrolusOpenApiOption
                 .Select(a => a.Roles!)
                 .ToList();
 
-            if (roles.Count > 0)
+            if (roles.Count > 0 && (operation.Description is null || !operation.Description.Contains("**Required Roles:**", StringComparison.OrdinalIgnoreCase)))
             {
                 var rolesAnnotation = $"\n\n**Required Roles:** {string.Join(", ", roles)}";
                 operation.Description = string.IsNullOrWhiteSpace(operation.Description)
@@ -58,7 +58,7 @@ public sealed class KyrolusEndpointAuthorizationTransformer(KyrolusOpenApiOption
                 .Select(a => a.Policy!)
                 .ToList();
 
-            if (policies.Count > 0)
+            if (policies.Count > 0 && (operation.Description is null || !operation.Description.Contains("**Required Policy:**", StringComparison.OrdinalIgnoreCase)))
             {
                 var policiesAnnotation = $"\n\n**Required Policy:** {string.Join(", ", policies)}";
                 operation.Description = string.IsNullOrWhiteSpace(operation.Description)
@@ -113,11 +113,18 @@ public sealed class KyrolusEndpointAuthorizationTransformer(KyrolusOpenApiOption
     private static bool HasScheme(OpenApiOperation operation, string schemeName)
     {
         return operation.Security is not null && operation.Security.Any(req =>
-            req.Keys.Any(k => string.Equals(k.Reference?.Id, schemeName, StringComparison.OrdinalIgnoreCase)));
+            req.Keys.Any(k =>
+                string.Equals(k.Reference?.Id, schemeName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(k.Name, schemeName, StringComparison.OrdinalIgnoreCase)));
     }
 
     private static void AnnotatePermissions(OpenApiOperation operation, IList<object> metadata)
     {
+        if (operation.Description is not null && operation.Description.Contains("**Required Permissions:**", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         foreach (var item in metadata)
         {
             var type = item.GetType();
@@ -136,6 +143,7 @@ public sealed class KyrolusEndpointAuthorizationTransformer(KyrolusOpenApiOption
                             operation.Description = string.IsNullOrWhiteSpace(operation.Description)
                                 ? annotation.TrimStart()
                                 : operation.Description + annotation;
+                            break;
                         }
                     }
                     else if (val is string singlePerm && !string.IsNullOrWhiteSpace(singlePerm))
@@ -144,6 +152,7 @@ public sealed class KyrolusEndpointAuthorizationTransformer(KyrolusOpenApiOption
                         operation.Description = string.IsNullOrWhiteSpace(operation.Description)
                             ? annotation.TrimStart()
                             : operation.Description + annotation;
+                        break;
                     }
                 }
             }

@@ -411,4 +411,59 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
             }
         }
     }
+
+    [Fact]
+    public async Task AnonymousEndpoint_DoesNotContain401And403_WhenSmartAuthEnabled()
+    {
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync("/openapi/v1.json");
+        response.EnsureSuccessStatusCode();
+
+        var jsonString = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(jsonString);
+
+        var paths = doc.RootElement.GetProperty("paths");
+        var pingGet = paths.GetProperty("/public/ping").GetProperty("get");
+        var responses = pingGet.GetProperty("responses");
+
+        // 400 and 500 should be present, but 401 and 403 must NOT be present on anonymous routes
+        responses.TryGetProperty("400", out _).ShouldBeTrue();
+        responses.TryGetProperty("500", out _).ShouldBeTrue();
+        responses.TryGetProperty("401", out _).ShouldBeFalse();
+        responses.TryGetProperty("403", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task HeaderParameters_HaveExplicitStringSchemaDefinition()
+    {
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync("/openapi/v1.json");
+        response.EnsureSuccessStatusCode();
+
+        var jsonString = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(jsonString);
+
+        var paths = doc.RootElement.GetProperty("paths");
+        var weatherGet = paths.GetProperty("/weatherforecast").GetProperty("get");
+
+        var parameters = weatherGet.GetProperty("parameters");
+        var tenantParam = parameters.EnumerateArray().FirstOrDefault(p => p.GetProperty("name").GetString() == "X-Tenant-Id");
+
+        tenantParam.ValueKind.ShouldNotBe(JsonValueKind.Undefined);
+        tenantParam.TryGetProperty("schema", out var schema).ShouldBeTrue();
+        schema.GetProperty("type").GetString().ShouldBe("string");
+    }
+
+    [Fact]
+    public async Task ReDocEndpoint_ReturnsValidHtmlWithSanitizedContent()
+    {
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync("/redoc");
+        response.EnsureSuccessStatusCode();
+
+        var html = await response.Content.ReadAsStringAsync();
+        html.ShouldContain("<redoc spec-url=");
+        html.ShouldContain("Custom API Documentation");
+        html.ShouldNotContain("<script>alert(");
+    }
 }
