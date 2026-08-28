@@ -65,7 +65,7 @@ public sealed class KyrolusDataProtectionKeyManager(
             key.ActivationDate,
             key.ExpirationDate,
             key.CreationDate,
-            RevokedAt: null,
+            key.IsRevoked ? DateTimeOffset.UtcNow : null,
             key.IsRevoked);
     }
 

@@ -6,4 +6,5 @@ public sealed class KyrolusDataProtectionOptions
     public TimeSpan? DefaultKeyLifetime { get; set; }
     public bool? AutoGenerateKeys { get; set; }
     public KyrolusKeyProtectionOptions? KeyProtection { get; set; }
+    public KyrolusDataProtectionKeyRotationOptions KeyRotation { get; set; } = new();
 }

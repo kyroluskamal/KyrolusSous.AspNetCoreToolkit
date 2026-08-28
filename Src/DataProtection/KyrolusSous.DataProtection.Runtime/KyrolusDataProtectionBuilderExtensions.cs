@@ -126,4 +126,25 @@ public static class KyrolusDataProtectionBuilderExtensions
 
         return builder;
     }
+
+    /// <summary>
+    /// Enables automated background key rotation to provision a new key before the active key expires.
+    /// </summary>
+    public static KyrolusDataProtectionBuilder AddKyrolusDataProtectionAutoKeyRotation(
+        this KyrolusDataProtectionBuilder builder,
+        Action<KyrolusDataProtectionKeyRotationOptions>? configure = null)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.Services.Configure<KyrolusDataProtectionKeyRotationOptions>(options =>
+        {
+            options.EnableAutoRotation = true;
+            configure?.Invoke(options);
+        });
+
+        builder.Services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IHostedService, KyrolusKeyRotationWorker>());
+
+        return builder;
+    }
 }

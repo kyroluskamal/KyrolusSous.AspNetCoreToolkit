@@ -102,19 +102,19 @@ Independent of everything else. Can be done at any point.
 
 | # | Project | Status | Notes |
 |---|---|---|---|
-| 53 | `DataProtection.Abstractions` | ⚡ | |
-| 54 | `DataProtection.Runtime` | ⚡ | 1254 lines |
-| 55 | `DataProtection.Ephemeral` | ⬜ | 17 lines |
-| 56 | `DataProtection.FileSystem` | ⬜ | 28 lines |
-| 57 | `DataProtection.CustomXml` | ⬜ | 42 lines |
-| 58 | `DataProtection.EntityFramework` | ⬜ | 51 lines |
-| 59 | `DataProtection.Redis` | ⚡ | |
-| 60 | `DataProtection.Marten` | ⬜ | |
-| 61 | `DataProtection.AzureStorage` | ⬜ | Cloud - wiring test only, no integration |
-| 62 | `DataProtection.AzureKeyVault` | ⬜ | Cloud - wiring test only |
-| 63 | `DataProtection.AwsKms` | ⬜ | Cloud - wiring test only |
-| 64 | `DataProtection.GoogleKms` | ⬜ | Cloud - wiring test only |
-| 65 | `DataProtection.Cli` | ⬜ | 629 lines |
+| 53 | `DataProtection.Abstractions` | ✅ | Storage-agnostic abstractions, multi-tenancy, key info & document models |
+| 54 | `DataProtection.Runtime` | ✅ | Core runtime, TryUnprotect, ProtectWithExpiry, ReEncrypt, auto key rotation worker, metrics |
+| 55 | `DataProtection.Ephemeral` | ✅ | In-memory ephemeral key provider for stateless containers and tests |
+| 56 | `DataProtection.FileSystem` | ✅ | File system key persistence with directory isolation |
+| 57 | `DataProtection.CustomXml` | ✅ | Custom XML key repository |
+| 58 | `DataProtection.EntityFramework` | ✅ | EF Core key persistence integration |
+| 59 | `DataProtection.Redis` | ✅ | Redis key persistence & distributed key ring refresh via Pub/Sub |
+| 60 | `DataProtection.Marten` | ✅ | Marten PostgreSQL document key repository |
+| 61 | `DataProtection.AzureStorage` | ✅ | Azure Blob Storage key repository |
+| 62 | `DataProtection.AzureKeyVault` | ✅ | Azure Key Vault key encryption |
+| 63 | `DataProtection.AwsKms` | ✅ | AWS KMS key encryption |
+| 64 | `DataProtection.GoogleKms` | ✅ | Google Cloud KMS key encryption |
+| 65 | `DataProtection.Cli` | ✅ | Command-line tool for key inspection, revocation, and escrow |
 
 ## Phase 6 - Authentication & Identity (Storage-Agnostic Suite)
 

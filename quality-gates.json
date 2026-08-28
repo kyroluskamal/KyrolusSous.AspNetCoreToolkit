@@ -345,6 +345,13 @@
       "kind": "unit",
       "services": [],
       "ci": true
+    },
+    {
+      "name": "DataProtection - Unit",
+      "project": "Tests/UnitTests/DataProtection/KyrolusSous.DataProtection.UnitTests/KyrolusSous.DataProtection.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
     }
   ],
 
