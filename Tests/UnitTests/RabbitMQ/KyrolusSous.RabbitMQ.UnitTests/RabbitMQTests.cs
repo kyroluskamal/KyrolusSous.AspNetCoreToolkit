@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using KyrolusSous.RabbitMQ.Abstractions.Interfaces;
 using KyrolusSous.RabbitMQ.Abstractions.Models;
 using KyrolusSous.RabbitMQ.Runtime.Config;
@@ -738,6 +739,36 @@ public class RabbitMQTests
         nonExistentExtended.ShouldBeFalse();
     }
 
+    [Fact]
+    public void DataProtectionMessageEncryptor_ProtectsAndUnprotects_Successfully()
+    {
+        var mockProtector = new TestDataProtector();
+        var encryptor = new KyrolusSous.RabbitMQ.Runtime.Security.KyrolusDataProtectionMessageEncryptor(mockProtector);
+
+        var data = Encoding.UTF8.GetBytes("Secret Order #456");
+        var protectedData = encryptor.Encrypt(data);
+
+        protectedData.ShouldNotBeNull();
+        var decrypted = encryptor.Decrypt(protectedData);
+
+        Encoding.UTF8.GetString(decrypted).ShouldBe("Secret Order #456");
+    }
+
+    [Fact]
+    public void CompressionAdapter_WorksWithToolkitCompressors_Successfully()
+    {
+        var mockCompressor = new TestMockCompressor();
+        var adapter = new KyrolusSous.RabbitMQ.Runtime.Compression.KyrolusCompressionMessageCompressor(mockCompressor);
+
+        adapter.EncodingName.ShouldBe("gzip");
+
+        var payload = Encoding.UTF8.GetBytes("High Volume Payload");
+        var compressed = adapter.Compress(payload);
+        var decompressed = adapter.Decompress(compressed);
+
+        Encoding.UTF8.GetString(decompressed).ShouldBe("High Volume Payload");
+    }
+
     #endregion
 }
 
@@ -781,4 +812,43 @@ public sealed class CircularAtoBUpcaster : KyrolusSous.RabbitMQ.Abstractions.Evo
 public sealed class CircularBtoAUpcaster : KyrolusSous.RabbitMQ.Abstractions.Evolution.IKyrolusMessageUpcaster<CircularB, CircularA>
 {
     public CircularA Upcast(CircularB oldMessage) => new(oldMessage.Value);
+}
+
+public sealed class TestDataProtector : Microsoft.AspNetCore.DataProtection.IDataProtector
+{
+    public Microsoft.AspNetCore.DataProtection.IDataProtector CreateProtector(string purpose) => this;
+
+    public byte[] Protect(byte[] plaintext)
+    {
+        var result = new byte[plaintext.Length];
+        for (int i = 0; i < plaintext.Length; i++) result[i] = (byte)(plaintext[i] ^ 0x5A);
+        return result;
+    }
+
+    public byte[] Unprotect(byte[] protectedData)
+    {
+        var result = new byte[protectedData.Length];
+        for (int i = 0; i < protectedData.Length; i++) result[i] = (byte)(protectedData[i] ^ 0x5A);
+        return result;
+    }
+}
+
+public sealed class TestMockCompressor : KyrolusSous.Compression.ICompressor
+{
+    public KyrolusSous.Compression.CompressionAlgorithm Algorithm => KyrolusSous.Compression.CompressionAlgorithm.Gzip;
+
+    public byte[] Compress(ReadOnlySpan<byte> data) => data.ToArray();
+    public byte[] Decompress(ReadOnlySpan<byte> compressedData) => compressedData.ToArray();
+
+    public Task CompressAsync(Stream source, Stream destination, System.IO.Compression.CompressionLevel level = System.IO.Compression.CompressionLevel.Fastest, CancellationToken cancellationToken = default)
+        => source.CopyToAsync(destination, cancellationToken);
+
+    public Task DecompressAsync(Stream source, Stream destination, CancellationToken cancellationToken = default)
+        => source.CopyToAsync(destination, cancellationToken);
+
+    public Stream CreateCompressionStream(Stream outputStream, System.IO.Compression.CompressionLevel level = System.IO.Compression.CompressionLevel.Fastest, bool leaveOpen = false)
+        => outputStream;
+
+    public Stream CreateDecompressionStream(Stream inputStream, bool leaveOpen = false)
+        => inputStream;
 }

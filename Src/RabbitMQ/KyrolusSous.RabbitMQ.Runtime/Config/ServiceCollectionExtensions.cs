@@ -183,6 +183,45 @@ namespace KyrolusSous.RabbitMQ.Runtime.Config
         }
 
         /// <summary>
+        /// Adds message compression using the toolkit's unified <see cref="KyrolusSous.Compression.ICompressor"/> implementations (Gzip, Brotli, Zstd, Lz4, Snappy).
+        /// </summary>
+        public static IServiceCollection AddKyrolusRabbitMQCompression(
+            this IServiceCollection services,
+            KyrolusSous.Compression.ICompressor compressor)
+        {
+            ArgumentNullException.ThrowIfNull(compressor);
+            services.TryAddSingleton<Abstractions.Compression.IKyrolusMessageCompressor>(new Compression.KyrolusCompressionMessageCompressor(compressor));
+            return services;
+        }
+
+        /// <summary>
+        /// Adds message compression by resolving the toolkit's <see cref="KyrolusSous.Compression.ICompressor"/> from DI.
+        /// </summary>
+        public static IServiceCollection AddKyrolusRabbitMQCompression<TCompressor>(this IServiceCollection services)
+            where TCompressor : class, KyrolusSous.Compression.ICompressor
+        {
+            services.TryAddSingleton<TCompressor>();
+            services.TryAddSingleton<Abstractions.Compression.IKyrolusMessageCompressor>(sp =>
+                new Compression.KyrolusCompressionMessageCompressor(sp.GetRequiredService<TCompressor>()));
+            return services;
+        }
+
+        /// <summary>
+        /// Integrates RabbitMQ message payload encryption directly with the centralized <see cref="Microsoft.AspNetCore.DataProtection.IDataProtectionProvider"/> and Kyrolus DataProtection key ring.
+        /// </summary>
+        public static IServiceCollection AddKyrolusRabbitMQDataProtection(
+            this IServiceCollection services,
+            string purpose = "KyrolusSous.RabbitMQ.Payloads")
+        {
+            services.TryAddSingleton<Abstractions.Security.IKyrolusMessageEncryptor>(sp =>
+            {
+                var provider = sp.GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>();
+                return new Security.KyrolusDataProtectionMessageEncryptor(provider, purpose);
+            });
+            return services;
+        }
+
+        /// <summary>
         /// Registers a distributed Saga process manager and state store.
         /// </summary>
         public static IServiceCollection AddKyrolusRabbitMQSaga<TSaga, TState>(this IServiceCollection services)
