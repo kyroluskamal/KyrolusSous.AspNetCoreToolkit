@@ -98,10 +98,11 @@ public static class KyrolusDataProtectionStreamExtensions
         }
 
         // 2. Validate format version
-        var versionByte = inputStream.ReadByte();
-        if (versionByte != StreamVersion)
+        var versionBuffer = new byte[1];
+        await ReadExactAsync(inputStream, versionBuffer, cancellationToken).ConfigureAwait(false);
+        if (versionBuffer[0] != StreamVersion)
         {
-            throw new CryptographicException($"Unsupported Kyrolus DataProtection stream format version '{versionByte}'.");
+            throw new CryptographicException($"Unsupported Kyrolus DataProtection stream format version '{versionBuffer[0]}'.");
         }
 
         var lengthBuffer = new byte[4];

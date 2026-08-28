@@ -107,7 +107,8 @@ public static class KyrolusDataProtectionExtensions
     /// </summary>
     public static string UnprotectWithExpiry(
         this IDataProtector protector,
-        string protectedData)
+        string protectedData,
+        TimeSpan clockSkew = default)
     {
         ArgumentNullException.ThrowIfNull(protector);
         ArgumentException.ThrowIfNullOrWhiteSpace(protectedData);
@@ -126,7 +127,8 @@ public static class KyrolusDataProtectionExtensions
         }
 
         var currentUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        if (currentUnixMs > expiryUnixMs)
+        var allowedSkewMs = Math.Max(0, (long)clockSkew.TotalMilliseconds);
+        if (currentUnixMs - allowedSkewMs > expiryUnixMs)
         {
             throw new CryptographicException("The payload has expired.");
         }
@@ -142,6 +144,18 @@ public static class KyrolusDataProtectionExtensions
         string? protectedData,
         [NotNullWhen(true)] out string? unprotectedData)
     {
+        return protector.TryUnprotectWithExpiry(protectedData, TimeSpan.Zero, out unprotectedData);
+    }
+
+    /// <summary>
+    /// Safely unprotects a time-limited payload with optional clock skew, returning false if expired, corrupt, or invalid.
+    /// </summary>
+    public static bool TryUnprotectWithExpiry(
+        this IDataProtector protector,
+        string? protectedData,
+        TimeSpan clockSkew,
+        [NotNullWhen(true)] out string? unprotectedData)
+    {
         ArgumentNullException.ThrowIfNull(protector);
 
         if (string.IsNullOrWhiteSpace(protectedData))
@@ -152,7 +166,7 @@ public static class KyrolusDataProtectionExtensions
 
         try
         {
-            unprotectedData = protector.UnprotectWithExpiry(protectedData);
+            unprotectedData = protector.UnprotectWithExpiry(protectedData, clockSkew);
             return true;
         }
         catch
@@ -484,9 +498,14 @@ public static class KyrolusDataProtectionExtensions
     {
         ArgumentNullException.ThrowIfNull(factory);
         var basePurpose = typeof(T).FullName ?? typeof(T).Name;
+        if (string.IsNullOrWhiteSpace(basePurpose))
+        {
+            basePurpose = "AnonymousType";
+        }
+
         var fullPurpose = string.IsNullOrWhiteSpace(subPurpose)
             ? basePurpose
-            : $"{basePurpose}.{subPurpose}";
+            : $"{basePurpose}.{subPurpose.Trim()}";
 
         return factory.CreateProtector(fullPurpose);
     }
@@ -500,7 +519,10 @@ public static class KyrolusDataProtectionExtensions
         string purpose)
     {
         ArgumentNullException.ThrowIfNull(provider);
-        return provider.CreateProtector(tenantId, purpose);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(purpose);
+
+        return provider.CreateProtector(tenantId.Trim(), purpose.Trim());
     }
 
     #endregion
@@ -525,6 +547,7 @@ public static class KyrolusDataProtectionExtensions
         {
             2 => base64 + "==",
             3 => base64 + "=",
+            1 => throw new FormatException("Invalid Base64Url string length (modulo 4 cannot be 1)."),
             _ => base64
         };
     }

@@ -536,26 +536,94 @@ public class DataProtectionTests
 
     #endregion
 
-    #region Vault Options Tests
+    #region Audit Hardening Tests
 
     [Fact]
-    public void VaultOptions_DefaultsAndConfiguresCorrectly()
+    public void TryUnprotectWithExpiry_WithClockSkew_AllowsGracePeriod()
     {
-        var options = new KyrolusVaultOptions
-        {
-            VaultAddress = "https://vault.company.local:8200",
-            Token = "s.mockvaulttoken",
-            KeyName = "app-keys",
-            MountPath = "transit-v2"
-        };
+        var original = "SkewTestPayload";
+        var expiredToken = _protector.ProtectWithExpiry(original, TimeSpan.FromSeconds(-2));
 
-        options.VaultAddress.ShouldBe("https://vault.company.local:8200");
-        options.Token.ShouldBe("s.mockvaulttoken");
-        options.KeyName.ShouldBe("app-keys");
-        options.MountPath.ShouldBe("transit-v2");
+        // Strict unprotect without skew fails
+        _protector.TryUnprotectWithExpiry(expiredToken, out var _).ShouldBeFalse();
+
+        // Unprotect with 5s clock skew tolerance succeeds
+        var success = _protector.TryUnprotectWithExpiry(expiredToken, TimeSpan.FromSeconds(5), out var decrypted);
+        success.ShouldBeTrue();
+        decrypted.ShouldBe(original);
+    }
+
+    [Fact]
+    public void Base64Url_ModuloOne_ThrowsOrFailsSafely()
+    {
+        // 5 characters is mathematically invalid for Base64 (modulo 4 == 1)
+        var invalidModulo = "abcde";
+        var success = _protector.TryUnprotectFromBase64Url(invalidModulo, out var _);
+        success.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void TryExtractVaultError_ParsesErrorsArray()
+    {
+        var json = "{\"errors\": [\"permission denied\", \"token expired\"]}";
+        var error = KyrolusVaultXmlEncryptor.TryExtractVaultError(json);
+        error.ShouldBe("permission denied; token expired");
+    }
+
+    [Fact]
+    public async Task KeyBackupService_ExportAndImport_PreservesXmlContent()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"backup_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var mockDocs = new List<KyrolusDataProtectionKeyDocument>
+            {
+                new("key-1", "<key id=\"key-1\" />"),
+                new("key-2", "<key id=\"key-2\" />")
+            };
+
+            var memoryRepo = new KyrolusDataProtectionKeyRepository(Options.Create(new Microsoft.AspNetCore.DataProtection.KeyManagement.KeyManagementOptions
+            {
+                XmlRepository = new TestXmlRepository()
+            }));
+            await memoryRepo.ImportAsync(mockDocs);
+
+            var backupService = new KyrolusDataProtectionKeyBackupService(memoryRepo);
+            await backupService.ExportToDirectoryAsync(tempDir);
+
+            File.Exists(Path.Combine(tempDir, "key-1.xml")).ShouldBeTrue();
+            File.Exists(Path.Combine(tempDir, "key-2.xml")).ShouldBeTrue();
+
+            var newRepo = new KyrolusDataProtectionKeyRepository(Options.Create(new Microsoft.AspNetCore.DataProtection.KeyManagement.KeyManagementOptions
+            {
+                XmlRepository = new TestXmlRepository()
+            }));
+            var newBackupService = new KyrolusDataProtectionKeyBackupService(newRepo);
+            await newBackupService.ImportFromDirectoryAsync(tempDir);
+
+            var exported = await newRepo.ExportAsync();
+            exported.Count.ShouldBe(2);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
     }
 
     #endregion
+}
+
+public sealed class TestXmlRepository : Microsoft.AspNetCore.DataProtection.Repositories.IXmlRepository
+{
+    private readonly List<System.Xml.Linq.XElement> _elements = [];
+
+    public IReadOnlyCollection<System.Xml.Linq.XElement> GetAllElements() => _elements.AsReadOnly();
+
+    public void StoreElement(System.Xml.Linq.XElement element, string friendlyName) => _elements.Add(new System.Xml.Linq.XElement(element));
 }
 
 public sealed record TestUserPayload(int Id, string Email, string Role);

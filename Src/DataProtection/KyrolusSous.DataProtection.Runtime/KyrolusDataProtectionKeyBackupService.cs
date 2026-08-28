@@ -8,6 +8,8 @@ public sealed class KyrolusDataProtectionKeyBackupService(
     private readonly IKyrolusDataProtectionKeyRepository repository =
         repository ?? throw new ArgumentNullException(nameof(repository));
 
+    private static readonly char[] InvalidFileNameChars = Path.GetInvalidFileNameChars();
+
     public async Task ExportToDirectoryAsync(string directoryPath, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(directoryPath))
@@ -22,7 +24,20 @@ public sealed class KyrolusDataProtectionKeyBackupService(
         {
             var safeName = SanitizeFileName(document.FriendlyName);
             var filePath = Path.Combine(directoryPath, $"{safeName}.xml");
-            await File.WriteAllTextAsync(filePath, document.Xml, cancellationToken).ConfigureAwait(false);
+            var tempPath = Path.Combine(directoryPath, $"{safeName}.tmp.{Guid.NewGuid():N}");
+
+            try
+            {
+                await File.WriteAllTextAsync(tempPath, document.Xml, cancellationToken).ConfigureAwait(false);
+                File.Move(tempPath, filePath, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(tempPath))
+                {
+                    try { File.Delete(tempPath); } catch { }
+                }
+            }
         }
     }
 
@@ -54,7 +69,14 @@ public sealed class KyrolusDataProtectionKeyBackupService(
     {
         if (string.IsNullOrWhiteSpace(name)) return "key";
 
-        var invalid = Path.GetInvalidFileNameChars();
-        return new string(name.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray());
+        var chars = name.ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            if (Array.IndexOf(InvalidFileNameChars, chars[i]) >= 0)
+            {
+                chars[i] = '_';
+            }
+        }
+        return new string(chars);
     }
 }

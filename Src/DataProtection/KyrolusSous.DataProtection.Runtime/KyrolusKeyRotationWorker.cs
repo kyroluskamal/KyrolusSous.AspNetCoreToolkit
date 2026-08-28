@@ -96,6 +96,13 @@ public sealed class KyrolusKeyRotationWorker(
         var now = DateTimeOffset.UtcNow;
         var remainingTime = latestExpiringKey.ExpirationDate - now;
 
+        // If there is already a future scheduled key that has not expired, skip redundant generation
+        if (unrevokedKeys.Any(k => k.ActivationDate > now && k.ExpirationDate > now))
+        {
+            _logger.LogDebug("A future active DataProtection key is already scheduled. Skipping redundant rotation.");
+            return false;
+        }
+
         if (remainingTime <= _options.RotateBeforeExpiryThreshold)
         {
             _logger.LogInformation(

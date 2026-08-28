@@ -8,4 +8,10 @@
   <ItemGroup>
     <ProjectReference Include="..\KyrolusSous.DataProtection.Abstractions\KyrolusSous.DataProtection.Abstractions.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>KyrolusSous.DataProtection.UnitTests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
 </Project>

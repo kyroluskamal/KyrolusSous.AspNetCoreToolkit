@@ -14,6 +14,7 @@ using KyrolusSous.DataProtection.GoogleKms;
 using KyrolusSous.DataProtection.Marten;
 using KyrolusSous.DataProtection.Redis;
 using KyrolusSous.DataProtection.Runtime;
+using KyrolusSous.DataProtection.Vault;
 using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -55,6 +56,10 @@ internal static class Program
         var martenSession = GetOption(args, "--marten-session");
         var xmlRepoType = GetOption(args, "--xml-repo-type");
         var xmlRepoAssembly = GetOption(args, "--xml-repo-assembly");
+        var vaultAddress = GetOption(args, "--vault-address");
+        var vaultToken = GetOption(args, "--vault-token");
+        var vaultKey = GetOption(args, "--vault-key");
+        var vaultMount = GetOption(args, "--vault-mount");
         var lifetime = ParseLifetime(GetOption(args, "--lifetime") ?? GetOption(args, "--lifetime-days"));
 
         using var cts = new CancellationTokenSource();
@@ -88,6 +93,10 @@ internal static class Program
             awsKmsKey,
             awsKmsContext,
             gcpKmsKey,
+            vaultAddress,
+            vaultToken,
+            vaultKey,
+            vaultMount,
             efConnection,
             efProvider,
             efMySqlVersion,
@@ -212,9 +221,20 @@ internal static class Program
                             StringComparison.OrdinalIgnoreCase);
                     });
                 break;
+            case "vault":
+                if (string.IsNullOrWhiteSpace(args.VaultAddress))
+                    throw new ArgumentException("--vault-address is required for vault provider.");
+                builder.ProtectKeysWithVault(options =>
+                {
+                    options.VaultAddress = args.VaultAddress;
+                    if (!string.IsNullOrWhiteSpace(args.VaultToken)) options.Token = args.VaultToken;
+                    if (!string.IsNullOrWhiteSpace(args.VaultKey)) options.KeyName = args.VaultKey;
+                    if (!string.IsNullOrWhiteSpace(args.VaultMount)) options.MountPath = args.VaultMount;
+                });
+                break;
             default:
                 throw new ArgumentException(
-                    "Provider must be 'file', 'redis', 'azure-blob', 'azure-keyvault', 'aws-kms', 'gcp-kms', 'ef', 'ephemeral', 'custom-xml', or 'marten'.");
+                    "Provider must be 'file', 'redis', 'azure-blob', 'azure-keyvault', 'aws-kms', 'gcp-kms', 'vault', 'ef', 'ephemeral', 'custom-xml', or 'marten'.");
         }
     }
 
@@ -235,6 +255,10 @@ internal static class Program
         string? AwsKmsKey,
         string? AwsKmsContext,
         string? GcpKmsKey,
+        string? VaultAddress,
+        string? VaultToken,
+        string? VaultKey,
+        string? VaultMount,
         string? EfConnection,
         string? EfProvider,
         string? EfMySqlVersion,
@@ -615,6 +639,7 @@ internal static class Program
         Console.WriteLine("  dp rotate --provider azure-keyvault --keyvault <key-identifier>");
         Console.WriteLine("  dp list --provider aws-kms --aws-kms-key <key-id> [--aws-kms-context k=v;k2=v2]");
         Console.WriteLine("  dp list --provider gcp-kms --gcp-kms-key <crypto-key>");
+        Console.WriteLine("  dp rotate --provider vault --vault-address <url> --vault-token <token> [--vault-key <key>] [--vault-mount <mount>]");
         Console.WriteLine("  dp list --provider ef --ef-provider sqlite --ef-connection <conn>");
         Console.WriteLine("  dp list --provider ef --ef-provider sqlserver --ef-connection <conn>");
         Console.WriteLine("  dp list --provider ef --ef-provider postgres --ef-connection <conn>");

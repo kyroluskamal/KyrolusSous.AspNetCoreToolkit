@@ -103,8 +103,8 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Auth.Tokens - Unit | unit | 12 | none | yes |
 | RabbitMQ - Unit | unit | 8 | none | yes |
 | EndpointKit - Unit | unit | 64 | none | yes |
-| DataProtection - Unit | unit | 30 | none | yes |
-| **Total** | | **2263** | | |
+| DataProtection - Unit | unit | 33 | none | yes |
+| **Total** | | **2266** | | |
 
 <!-- END:GENERATED:test-suites -->
 

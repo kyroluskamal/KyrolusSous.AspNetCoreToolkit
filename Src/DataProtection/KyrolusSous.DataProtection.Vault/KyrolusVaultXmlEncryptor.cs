@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
@@ -57,7 +58,12 @@ internal sealed class KyrolusVaultXmlEncryptor : IXmlEncryptor
         }
 
         using var response = _httpClient.Send(request);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            var errorMessage = TryExtractVaultError(errorBody) ?? response.ReasonPhrase ?? "Unknown Vault Error";
+            throw new CryptographicException($"Vault transit encrypt failed ({(int)response.StatusCode} {response.StatusCode}): {errorMessage}");
+        }
 
         using var stream = response.Content.ReadAsStream();
         using var doc = JsonDocument.Parse(stream);
@@ -76,6 +82,27 @@ internal sealed class KyrolusVaultXmlEncryptor : IXmlEncryptor
             new XElement(CiphertextElement, ciphertext));
 
         return new EncryptedXmlInfo(encryptedElement, typeof(KyrolusVaultXmlDecryptor));
+    }
+
+    internal static string? TryExtractVaultError(string? responseBody)
+    {
+        if (string.IsNullOrWhiteSpace(responseBody)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(responseBody);
+            if (doc.RootElement.TryGetProperty("errors", out var errorsProp) && errorsProp.ValueKind == JsonValueKind.Array)
+            {
+                var list = new List<string>();
+                foreach (var err in errorsProp.EnumerateArray())
+                {
+                    var s = err.GetString();
+                    if (!string.IsNullOrWhiteSpace(s)) list.Add(s);
+                }
+                return string.Join("; ", list);
+            }
+        }
+        catch { }
+        return null;
     }
 }
 
@@ -107,8 +134,9 @@ internal sealed class KyrolusVaultXmlDecryptor : IXmlDecryptor
         var ciphertext = encryptedElement.Element(CiphertextElement)?.Value
             ?? throw new InvalidDataException("Missing ciphertext element in encrypted data protection key.");
 
-        var mount = string.IsNullOrWhiteSpace(mountPath) ? "transit" : mountPath.Trim('/');
-        var requestUrl = $"{_options.VaultAddress.TrimEnd('/')}/v1/{mount}/decrypt/{keyName}";
+        var mount = string.IsNullOrWhiteSpace(mountPath) ? "transit" : mountPath.Trim().Trim('/');
+        var key = string.IsNullOrWhiteSpace(keyName) ? _options.KeyName : keyName.Trim().Trim('/');
+        var requestUrl = $"{_options.VaultAddress.TrimEnd('/')}/v1/{mount}/decrypt/{key}";
 
         using var request = new HttpRequestMessage(HttpMethod.Post, requestUrl)
         {
@@ -124,7 +152,12 @@ internal sealed class KyrolusVaultXmlDecryptor : IXmlDecryptor
         }
 
         using var response = _httpClient.Send(request);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            var errorMessage = KyrolusVaultXmlEncryptor.TryExtractVaultError(errorBody) ?? response.ReasonPhrase ?? "Unknown Vault Error";
+            throw new CryptographicException($"Vault transit decrypt failed ({(int)response.StatusCode} {response.StatusCode}): {errorMessage}");
+        }
 
         using var stream = response.Content.ReadAsStream();
         using var doc = JsonDocument.Parse(stream);

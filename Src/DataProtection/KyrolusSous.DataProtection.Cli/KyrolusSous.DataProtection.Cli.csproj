@@ -19,6 +19,7 @@
     <ProjectReference Include="..\KyrolusSous.DataProtection.Ephemeral\KyrolusSous.DataProtection.Ephemeral.csproj" />
     <ProjectReference Include="..\KyrolusSous.DataProtection.CustomXml\KyrolusSous.DataProtection.CustomXml.csproj" />
     <ProjectReference Include="..\KyrolusSous.DataProtection.Marten\KyrolusSous.DataProtection.Marten.csproj" />
+    <ProjectReference Include="..\KyrolusSous.DataProtection.Vault\KyrolusSous.DataProtection.Vault.csproj" />
   </ItemGroup>
 
   <ItemGroup>
