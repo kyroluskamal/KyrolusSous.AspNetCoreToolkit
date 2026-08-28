@@ -4,13 +4,13 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 namespace KyrolusSous.Repositories.EF.Runtime.Interceptors;
 
 /// <summary>
-/// EF Core <see cref="SaveChangesInterceptor"/> that automatically assigns the ambient <see cref="ICurrentTenantContext.TenantId"/> to newly created entities.
+/// EF Core <see cref="SaveChangesInterceptor"/> that automatically assigns the ambient <see cref="IKyrolusCurrentTenantContext.TenantId"/> to newly created entities.
 /// </summary>
 public sealed class KyrolusTenantInterceptor : SaveChangesInterceptor
 {
-    private readonly ICurrentTenantContext tenantContext;
+    private readonly IKyrolusCurrentTenantContext tenantContext;
 
-    public KyrolusTenantInterceptor(ICurrentTenantContext tenantContext)
+    public KyrolusTenantInterceptor(IKyrolusCurrentTenantContext tenantContext)
     {
         this.tenantContext = tenantContext ?? throw new ArgumentNullException(nameof(tenantContext));
     }

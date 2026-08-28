@@ -101,7 +101,7 @@ public sealed class KyrolusRepositoryAsyncInternalsUnitTests
         public ProbeRepository(
             ProbeDbContext db,
             KyrolusRepositoryPolicy? policy = null,
-            ICacheKeyContext? cacheKeyContext = null)
+            IKyrolusCacheKeyContext? cacheKeyContext = null)
             : base(
                 db,
                 policy,
@@ -120,7 +120,7 @@ public sealed class KyrolusRepositoryAsyncInternalsUnitTests
         public string ExposeCacheKeyById(string operation, object?[]? keyValues, string? policySuffix) => CacheKeyById(operation, keyValues, policySuffix);
     }
 
-    private sealed class StaticCacheKeyContext(string? scopeKey, string? region, string? tenantId) : ICacheKeyContext
+    private sealed class StaticCacheKeyContext(string? scopeKey, string? region, string? tenantId) : IKyrolusCacheKeyContext
     {
         public string? ScopeKey => scopeKey;
         public string? Region => region;

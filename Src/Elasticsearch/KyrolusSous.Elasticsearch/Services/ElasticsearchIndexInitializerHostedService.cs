@@ -5,7 +5,7 @@ namespace KyrolusSous.Elasticsearch;
 /// <summary>
 /// Background hosted service that automatically scans loaded assemblies and initializes Elasticsearch indices and mappings on startup.
 /// </summary>
-public class KyrolusElasticsearchIndexInitializerHostedService(
+public sealed class KyrolusElasticsearchIndexInitializerHostedService(
     IServiceProvider serviceProvider,
     ILogger<KyrolusElasticsearchIndexInitializerHostedService>? logger = null) : IHostedService
 {
@@ -29,8 +29,7 @@ public class KyrolusElasticsearchIndexInitializerHostedService(
                     catch { return []; }
                 })
                 .Where(t => t.IsClass && !t.IsAbstract &&
-                            (t.GetCustomAttribute<KyrolusElasticIndexAttribute>() is not null ||
-                             t.GetCustomAttribute<ElasticIndexAttribute>() is not null))
+                            t.GetCustomAttribute<KyrolusElasticIndexAttribute>() is not null)
                 .ToList();
 
             foreach (var type in documentTypes)
@@ -55,14 +54,4 @@ public class KyrolusElasticsearchIndexInitializerHostedService(
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-}
-
-/// <summary>
-/// Backward-compatibility alias for <see cref="KyrolusElasticsearchIndexInitializerHostedService"/>.
-/// </summary>
-public class ElasticsearchIndexInitializerHostedService(
-    IServiceProvider serviceProvider,
-    ILogger<ElasticsearchIndexInitializerHostedService>? logger = null)
-    : KyrolusElasticsearchIndexInitializerHostedService(serviceProvider, logger is null ? null : null)
-{
 }

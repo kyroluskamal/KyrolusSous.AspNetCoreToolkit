@@ -18,8 +18,8 @@ public sealed class ServiceCollectionExtensionsTests
 
         var sp = services.BuildServiceProvider();
 
-        sp.GetService<ICacheProvider>().ShouldNotBeNull();
-        sp.GetService<IDistributedLockProvider>().ShouldNotBeNull();
+        sp.GetService<IKyrolusCacheProvider>().ShouldNotBeNull();
+        sp.GetService<IKyrolusDistributedLockProvider>().ShouldNotBeNull();
         sp.GetService<IKyrolusRedisPubSub>().ShouldNotBeNull();
         sp.GetService<IKyrolusCacheSerializer>().ShouldNotBeNull();
         sp.GetService<IKyrolusCacheKeyFactory>().ShouldNotBeNull();
@@ -107,8 +107,8 @@ public sealed class ServiceCollectionExtensionsTests
         var sp = services.BuildServiceProvider();
 
         sp.GetService<KyrolusRedisNearCacheProvider>().ShouldNotBeNull();
-        sp.GetService<ICacheProvider>().ShouldNotBeNull();
-        sp.GetService<ICacheProvider>().ShouldBeOfType<KyrolusRedisNearCacheProvider>();
+        sp.GetService<IKyrolusCacheProvider>().ShouldNotBeNull();
+        sp.GetService<IKyrolusCacheProvider>().ShouldBeOfType<KyrolusRedisNearCacheProvider>();
     }
 
     [Fact(DisplayName = "ServiceCollectionExtensions: AddKyrolusRedisInvalidationBus registers invalidation bus")]

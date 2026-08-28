@@ -1,6 +1,6 @@
 namespace KyrolusSous.Repositories.Marten.Abstractions.Interfaces;
 
-public interface ITenantResolver
+public interface IKyrolusTenantResolver
 {
     string? ResolveTenantId();
 }

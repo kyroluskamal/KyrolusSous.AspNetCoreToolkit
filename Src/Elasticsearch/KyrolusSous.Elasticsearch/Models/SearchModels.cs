@@ -3,7 +3,7 @@ namespace KyrolusSous.Elasticsearch;
 /// <summary>
 /// Represents the result of an Elasticsearch search query.
 /// </summary>
-public class KyrolusSearchResult<TDocument>
+public sealed class KyrolusSearchResult<TDocument>
 {
     public IReadOnlyList<KyrolusSearchHit<TDocument>> Hits { get; set; } = [];
 
@@ -23,16 +23,9 @@ public class KyrolusSearchResult<TDocument>
 }
 
 /// <summary>
-/// Backward-compatibility alias for <see cref="KyrolusSearchResult{TDocument}"/>.
-/// </summary>
-public class SearchResult<TDocument> : KyrolusSearchResult<TDocument>
-{
-}
-
-/// <summary>
 /// Represents a single hit in search results.
 /// </summary>
-public class KyrolusSearchHit<TDocument>(TDocument document, string id, double? score = null, IDictionary<string, IReadOnlyList<string>>? highlights = null)
+public sealed class KyrolusSearchHit<TDocument>(TDocument document, string id, double? score = null, IDictionary<string, IReadOnlyList<string>>? highlights = null)
 {
     public TDocument Document { get; set; } = document;
 
@@ -46,28 +39,13 @@ public class KyrolusSearchHit<TDocument>(TDocument document, string id, double? 
 }
 
 /// <summary>
-/// Backward-compatibility alias for <see cref="KyrolusSearchHit{TDocument}"/>.
-/// </summary>
-public class SearchHit<TDocument>(TDocument document, string id, double? score = null, IDictionary<string, IReadOnlyList<string>>? highlights = null)
-    : KyrolusSearchHit<TDocument>(document, id, score, highlights)
-{
-}
-
-/// <summary>
 /// Represents a facet bucket aggregation entry.
 /// </summary>
-public class KyrolusFacetBucket(string key, long docCount)
+public sealed class KyrolusFacetBucket(string key, long docCount)
 {
     public string Key { get; set; } = key;
 
     public long DocCount { get; set; } = docCount;
-}
-
-/// <summary>
-/// Backward-compatibility alias for <see cref="KyrolusFacetBucket"/>.
-/// </summary>
-public class FacetBucket(string key, long docCount) : KyrolusFacetBucket(key, docCount)
-{
 }
 
 /// <summary>

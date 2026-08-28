@@ -1,19 +1,19 @@
 namespace KyrolusSous.Resilience;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method | AttributeTargets.Interface, Inherited = true, AllowMultiple = false)]
-public sealed class ResilientAttribute : Attribute
+public sealed class KyrolusResilientAttribute : Attribute
 {
     public string PipelineName { get; set; } = "default";
 
-    public ResilientAttribute() { }
+    public KyrolusResilientAttribute() { }
 
-    public ResilientAttribute(string pipelineName)
+    public KyrolusResilientAttribute(string pipelineName)
     {
         PipelineName = pipelineName;
     }
 }
 
-public interface IResilientRequest
+public interface IKyrolusResilientRequest
 {
     string PipelineName => "default";
 }

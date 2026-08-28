@@ -9,10 +9,10 @@ public class KyrolusCompositeKeyRepositoryAsync<TDbContext, TEntity>(
     KyrolusRepositoryPolicy? policy = null,
     IKyrolusRepositoryObserver? observer = null,
     IKyrolusBulkExecutor<TEntity>? bulkExecutor = null,
-    ICacheProvider? cache = null,
+    IKyrolusCacheProvider? cache = null,
     bool enableCaching = false,
     int? cacheTtlSeconds = null,
-    ICacheKeyContext? cacheKeyContext = null,
+    IKyrolusCacheKeyContext? cacheKeyContext = null,
     IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider = null,
     IKyrolusRepositoryPolicyProvider? policyProvider = null) :
     KyrolusRepositoryAsync<TDbContext, TEntity, object?>(db, policy, observer, bulkExecutor, cache, enableCaching, cacheTtlSeconds, cacheKeyContext, cachePolicyProvider, policyProvider),

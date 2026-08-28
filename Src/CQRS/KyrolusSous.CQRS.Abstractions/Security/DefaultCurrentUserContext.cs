@@ -3,15 +3,15 @@ using System.Security.Claims;
 namespace KyrolusSous.CQRS.Abstractions.Security;
 
 /// <summary>
-/// Default implementation of <see cref="ICurrentUserContext"/> backed by a <see cref="ClaimsPrincipal"/> or ambient service provider.
+/// Default implementation of <see cref="IKyrolusCurrentUserContext"/> backed by a <see cref="ClaimsPrincipal"/> or ambient service provider.
 /// </summary>
-public class DefaultCurrentUserContext : ICurrentUserContext
+public class KyrolusDefaultCurrentUserContext : IKyrolusCurrentUserContext
 {
     private readonly ClaimsPrincipal? _user;
     private readonly Lazy<HashSet<string>> _roles;
     private readonly Lazy<HashSet<string>> _permissions;
 
-    public DefaultCurrentUserContext(ClaimsPrincipal? user = null, string? tenantId = null)
+    public KyrolusDefaultCurrentUserContext(ClaimsPrincipal? user = null, string? tenantId = null)
     {
         _user = user;
         TenantId = tenantId ?? user?.FindFirst("tenant_id")?.Value ?? user?.FindFirst("tenant")?.Value;
@@ -41,7 +41,7 @@ public class DefaultCurrentUserContext : ICurrentUserContext
         });
     }
 
-    public DefaultCurrentUserContext(IServiceProvider? serviceProvider)
+    public KyrolusDefaultCurrentUserContext(IServiceProvider? serviceProvider)
         : this(TryExtractUser(serviceProvider), TryExtractTenant(serviceProvider))
     {
     }

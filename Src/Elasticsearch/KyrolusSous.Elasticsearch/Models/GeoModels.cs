@@ -1,6 +1,6 @@
 namespace KyrolusSous.Elasticsearch;
 
-public record GeoCoordinate(double Latitude, double Longitude)
+public record KyrolusGeoCoordinate(double Latitude, double Longitude)
 {
     public string LatLonString => $"{Latitude},{Longitude}";
 }
@@ -11,12 +11,12 @@ public enum TenantIsolationMode
     DocumentFilter
 }
 
-public interface ITenantProvider
+public interface IKyrolusTenantProvider
 {
     string? CurrentTenantId { get; }
 }
 
-public class DefaultTenantProvider : ITenantProvider
+public class KyrolusDefaultTenantProvider : IKyrolusTenantProvider
 {
     public virtual string? CurrentTenantId => null;
 }

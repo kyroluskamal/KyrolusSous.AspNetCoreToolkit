@@ -17,8 +17,8 @@ public partial class GetAllAsyncTests
         {
             builder.ConfigureServices(services =>
             {
-                services.RemoveAll<ICacheKeyContext>();
-                services.AddScoped<ICacheKeyContext>(sp =>
+                services.RemoveAll<IKyrolusCacheKeyContext>();
+                services.AddScoped<IKyrolusCacheKeyContext>(sp =>
                 {
                     var http = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
                     var tenant = http?.Request?.Headers["X-Tenant-Id"].ToString();
@@ -51,7 +51,7 @@ public partial class GetAllAsyncTests
         cache.Count.ShouldBe(2);
     }
 
-    private sealed class TenantOnlyCacheKeyContext(string? tenantId) : ICacheKeyContext
+    private sealed class TenantOnlyCacheKeyContext(string? tenantId) : IKyrolusCacheKeyContext
     {
         public string? ScopeKey => null;
         public string? TenantId => tenantId;

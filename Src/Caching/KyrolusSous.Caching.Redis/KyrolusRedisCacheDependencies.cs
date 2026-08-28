@@ -1,7 +1,7 @@
 namespace KyrolusSous.Caching.Redis;
 
 /// <summary>
-/// Encapsulates the core service dependencies required by the <see cref="RedisCacheProvider"/>, 
+/// Encapsulates the core service dependencies required by the <see cref="KyrolusRedisCacheProvider"/>, 
 /// including serializer, key factory, options, diagnostic observer, and cache policies.
 /// </summary>
 /// <param name="serializer">The cache serialization engine.</param>

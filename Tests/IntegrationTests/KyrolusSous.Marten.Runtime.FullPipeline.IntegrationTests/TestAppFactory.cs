@@ -25,8 +25,8 @@ public sealed class TestAppFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
-            services.RemoveAll<ICacheProvider>();
-            services.AddSingleton<ICacheProvider, InMemoryIntegrationCacheProvider>();
+            services.RemoveAll<IKyrolusCacheProvider>();
+            services.AddSingleton<IKyrolusCacheProvider, InMemoryIntegrationCacheProvider>();
         });
     }
 }

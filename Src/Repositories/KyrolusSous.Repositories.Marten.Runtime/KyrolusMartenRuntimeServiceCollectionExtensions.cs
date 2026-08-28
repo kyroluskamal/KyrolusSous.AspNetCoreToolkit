@@ -32,13 +32,13 @@ public static class KyrolusMartenRuntimeServiceCollectionExtensions
         services.TryAddSingleton(KyrolusMartenAllowAllAuthorization.Instance);
         services.TryAddSingleton(KyrolusMartenNoopValidation.Instance);
         services.TryAddSingleton(KyrolusMartenNoSoftDeletePolicy.Instance);
-        services.TryAddSingleton<ICacheProvider>(NullCacheProvider.Instance);
+        services.TryAddSingleton<IKyrolusCacheProvider>(KyrolusNullCacheProvider.Instance);
         services.TryAddSingleton<KyrolusRepositoryCachePolicyRegistry>();
         services.TryAddSingleton<IKyrolusRepositoryCachePolicyProvider>(sp => sp.GetRequiredService<KyrolusRepositoryCachePolicyRegistry>());
         services.TryAddSingleton<IKyrolusMartenRepositoryPolicyProvider>(KyrolusNoopMartenRepositoryPolicyProvider.Instance);
         services.TryAddSingleton(KyrolusMartenNoopResiliencePolicy.Instance);
         services.TryAddSingleton(KyrolusMartenNoopTracing.Instance);
-        services.TryAddScoped(typeof(IQueryHelper<>), typeof(MartenRuntimeQueryHelper<>));
+        services.TryAddScoped(typeof(IKyrolusQueryHelper<>), typeof(MartenRuntimeQueryHelper<>));
 
         services.AddScoped(typeof(IKyrolusMartenRepositoryAsync<,,>), typeof(KyrolusMartenRepositoryAsync<,,>));
         services.AddScoped(typeof(IKyrolusMartenSoftDeleteRepositoryAsync<,,>), typeof(KyrolusMartenSoftDeleteRepositoryAsync<,,>));
@@ -66,8 +66,8 @@ public static class KyrolusMartenRuntimeServiceCollectionExtensions
             Authorization: services.GetService<IKyrolusMartenAuthorization>(),
             Validation: services.GetService<IKyrolusMartenValidation>(),
             SoftDeletePolicy: services.GetService<IKyrolusMartenSoftDeletePolicy>(),
-            CacheProvider: services.GetService<ICacheProvider>(),
-            CacheKeyContext: services.GetService<ICacheKeyContext>(),
+            CacheProvider: services.GetService<IKyrolusCacheProvider>(),
+            CacheKeyContext: services.GetService<IKyrolusCacheKeyContext>(),
             CachePolicyProvider: services.GetService<IKyrolusRepositoryCachePolicyProvider>(),
             PolicyProvider: services.GetService<IKyrolusMartenRepositoryPolicyProvider>(),
             ResiliencePolicy: services.GetService<IKyrolusMartenResiliencePolicy>(),

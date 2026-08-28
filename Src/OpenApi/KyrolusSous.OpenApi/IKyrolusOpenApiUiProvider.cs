@@ -14,5 +14,5 @@ public interface IKyrolusOpenApiUiProvider
     /// <summary>
     /// Maps the documentation UI endpoints to the application.
     /// </summary>
-    void MapUi(WebApplication app, KyrolusOpenApiOptions options, IReadOnlyList<ApiVersionInfo> versions);
+    void MapUi(WebApplication app, KyrolusOpenApiOptions options, IReadOnlyList<KyrolusApiVersionInfo> versions);
 }

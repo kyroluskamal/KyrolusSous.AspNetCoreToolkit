@@ -191,12 +191,12 @@ public sealed class FluentValidationTests
         failures.ShouldContain(f => f.PropertyName == "NationalId");
     }
 
-    [Fact(DisplayName = "AbstractValidator with CascadeMode.Stop halts on first failure")]
+    [Fact(DisplayName = "AbstractValidator with KyrolusCascadeMode.Stop halts on first failure")]
     public async Task AbstractValidator_with_CascadeMode_Stop_halts_on_first_failure()
     {
         var validator = new UserRegistrationValidator
         {
-            CascadeMode = CascadeMode.Stop
+            KyrolusCascadeMode = KyrolusCascadeMode.Stop
         };
 
         var request = new UserRegistration(

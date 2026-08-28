@@ -23,8 +23,8 @@ public static class AddKyrolusDefaultsExtension
         services.AddScoped(typeof(ICommandQueryHandler<,,>), typeof(DefaultCommandQueryHandler<,,>));
         services.TryAddSingleton<IHttpContextAccessor, HttpContextAccessor>();
         services.TryAddScoped<IKyrolusEndpointContext, KyrolusHttpEndpointContext>();
-        services.TryAddScoped<ICacheKeyContext, KyrolusEndpointCacheKeyContext>();
-        services.TryAddSingleton<ICacheProvider>(NullCacheProvider.Instance);
+        services.TryAddScoped<IKyrolusCacheKeyContext, KyrolusEndpointCacheKeyContext>();
+        services.TryAddSingleton<IKyrolusCacheProvider>(KyrolusNullCacheProvider.Instance);
         services.TryAddScoped<IKyrolusIdempotencyStore, KyrolusCacheIdempotencyStore>();
         services.TryAddSingleton(typeof(IKyrolusMartenAuthorizationProvider<>), typeof(KyrolusNoopMartenAuthorizationProvider<>));
         services.TryAddSingleton<KyrolusEndpointCachePolicyRegistry>();

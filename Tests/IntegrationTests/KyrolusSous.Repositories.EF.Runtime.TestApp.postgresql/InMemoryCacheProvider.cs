@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace KyrolusSous.Repositories.EF.Runtime.TestApp;
 
-public sealed class InMemoryCacheProvider : ICacheProvider
+public sealed class InMemoryCacheProvider : IKyrolusCacheProvider
 {
     private sealed record Entry(object? Value, DateTimeOffset? ExpiresAt, TimeSpan? SlidingExpiration, IReadOnlyCollection<string>? Tags);
 

@@ -2196,7 +2196,7 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
 
     private sealed class FallbackMenuItemsQueryHandler(
         IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
-        ITenantResolver tenantResolver)
+        IKyrolusTenantResolver tenantResolver)
         : IKyrolusQueryHandler<FallbackMenuItemsQuery, IEnumerable<MenuItem>>
     {
         public async Task<IEnumerable<MenuItem>> Handle(FallbackMenuItemsQuery query, CancellationToken cancellationToken)
@@ -2243,7 +2243,7 @@ public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFact
 
     private sealed class ByKeysPatchBranchCommandHandler(
         IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
-        ITenantResolver tenantResolver)
+        IKyrolusTenantResolver tenantResolver)
         : IKyrolusCommandHandler<ByKeysPatchBranchCommand, MenuItem>
     {
         public async Task<MenuItem> Handle(ByKeysPatchBranchCommand command, CancellationToken cancellationToken)

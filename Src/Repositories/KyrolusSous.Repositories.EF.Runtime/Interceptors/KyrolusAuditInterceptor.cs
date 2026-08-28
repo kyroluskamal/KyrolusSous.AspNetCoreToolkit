@@ -7,7 +7,7 @@ namespace KyrolusSous.Repositories.EF.Runtime.Interceptors;
 /// EF Core <see cref="SaveChangesInterceptor"/> that automatically populates audit metadata and tracks property changes.
 /// </summary>
 public sealed class KyrolusAuditInterceptor(
-    ICurrentUserContext? userContext = null,
+    IKyrolusCurrentUserContext? userContext = null,
     Action<IReadOnlyList<KyrolusAuditEntry>>? onAuditEntriesCaptured = null)
     : SaveChangesInterceptor
 {

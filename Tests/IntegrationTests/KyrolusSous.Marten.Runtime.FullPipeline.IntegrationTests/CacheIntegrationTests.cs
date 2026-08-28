@@ -26,7 +26,7 @@ public sealed class CacheIntegrationTests(TestAppFactory factory) : IClassFixtur
         var response = await client.GetAsync("/api/menu-items");
         response.EnsureSuccessStatusCode();
 
-        var cache = factory.Services.GetRequiredService<ICacheProvider>();
+        var cache = factory.Services.GetRequiredService<IKyrolusCacheProvider>();
         var cached = await cache.ExistsAsync(CacheKeys.MenuItemsAll(tenant));
         cached.ShouldBeTrue();
     }
@@ -59,7 +59,7 @@ public sealed class CacheIntegrationTests(TestAppFactory factory) : IClassFixtur
         createResponse.EnsureSuccessStatusCode();
         var created = await createResponse.Content.ReadFromJsonAsync<MenuItem>();
         created.ShouldNotBeNull();
-        var cache = isolatedFactory.Services.GetRequiredService<ICacheProvider>();
+        var cache = isolatedFactory.Services.GetRequiredService<IKyrolusCacheProvider>();
         var cacheKey = CacheKeys.MenuItemById(tenant, created!.Id);
         var cached = false;
 
@@ -95,7 +95,7 @@ public sealed class CacheIntegrationTests(TestAppFactory factory) : IClassFixtur
         var response = await client.GetAsync("/api/menu-items?includeDeleted=true");
         response.EnsureSuccessStatusCode();
 
-        var cache = factory.Services.GetRequiredService<ICacheProvider>();
+        var cache = factory.Services.GetRequiredService<IKyrolusCacheProvider>();
         var cached = await cache.ExistsAsync(CacheKeys.MenuItemsAll(tenant));
         cached.ShouldBeFalse();
     }
@@ -120,7 +120,7 @@ public sealed class CacheIntegrationTests(TestAppFactory factory) : IClassFixtur
         var response = await clientA.GetAsync($"/api/menu-items/{created!.Id}");
         response.EnsureSuccessStatusCode();
 
-        var cache = factory.Services.GetRequiredService<ICacheProvider>();
+        var cache = factory.Services.GetRequiredService<IKyrolusCacheProvider>();
         var cachedA = await cache.ExistsAsync(CacheKeys.MenuItemById(tenantA, created.Id));
         var cachedB = await cache.ExistsAsync(CacheKeys.MenuItemById(tenantB, created.Id));
         cachedA.ShouldBeTrue();
@@ -143,7 +143,7 @@ public sealed class CacheIntegrationTests(TestAppFactory factory) : IClassFixtur
         var response = await client.GetAsync($"/api/menu-items?filter={filter}");
         response.EnsureSuccessStatusCode();
 
-        var cache = factory.Services.GetRequiredService<ICacheProvider>();
+        var cache = factory.Services.GetRequiredService<IKyrolusCacheProvider>();
         var cached = await cache.ExistsAsync(CacheKeys.MenuItemsAll(tenant));
         cached.ShouldBeFalse();
     }
@@ -165,7 +165,7 @@ public sealed class CacheIntegrationTests(TestAppFactory factory) : IClassFixtur
         var response = await clientA.GetAsync("/api/menu-items");
         response.EnsureSuccessStatusCode();
 
-        var cache = factory.Services.GetRequiredService<ICacheProvider>();
+        var cache = factory.Services.GetRequiredService<IKyrolusCacheProvider>();
         var cachedA = await cache.ExistsAsync(CacheKeys.MenuItemsAll(tenantA));
         var cachedB = await cache.ExistsAsync(CacheKeys.MenuItemsAll(tenantB));
         cachedA.ShouldBeTrue();
@@ -193,7 +193,7 @@ public sealed class CacheIntegrationTests(TestAppFactory factory) : IClassFixtur
         var response = await client.GetAsync($"/api/menu-items/{created.Id}?includeDeleted=true");
         response.EnsureSuccessStatusCode();
 
-        var cache = factory.Services.GetRequiredService<ICacheProvider>();
+        var cache = factory.Services.GetRequiredService<IKyrolusCacheProvider>();
         var cached = await cache.ExistsAsync(CacheKeys.MenuItemById(tenant, created.Id));
         cached.ShouldBeTrue();
     }

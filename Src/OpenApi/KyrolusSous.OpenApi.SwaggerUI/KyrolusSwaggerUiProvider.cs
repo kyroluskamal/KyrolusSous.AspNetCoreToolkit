@@ -20,7 +20,7 @@ public sealed class KyrolusSwaggerUiProvider : IKyrolusOpenApiUiProvider
     public string ProviderName => "SwaggerUI";
 
     /// <inheritdoc />
-    public void MapUi(WebApplication app, KyrolusOpenApiOptions options, IReadOnlyList<ApiVersionInfo> versions)
+    public void MapUi(WebApplication app, KyrolusOpenApiOptions options, IReadOnlyList<KyrolusApiVersionInfo> versions)
     {
         if (!options.EnableSwaggerUi || versions.Count == 0)
         {

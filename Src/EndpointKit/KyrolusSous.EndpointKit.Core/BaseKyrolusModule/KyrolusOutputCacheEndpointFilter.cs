@@ -22,9 +22,9 @@ internal sealed class KyrolusOutputCacheEndpointFilter<TResponse>(
             return await next(context).ConfigureAwait(false);
         }
 
-        var cache = context.HttpContext.RequestServices.GetService<ICacheProvider>();
+        var cache = context.HttpContext.RequestServices.GetService<IKyrolusCacheProvider>();
         var logger = context.HttpContext.RequestServices.GetService<ILogger<KyrolusOutputCacheEndpointFilter<TResponse>>>();
-        if (cache is null || cache is NullCacheProvider)
+        if (cache is null || cache is KyrolusNullCacheProvider)
         {
             return await next(context).ConfigureAwait(false);
         }
@@ -79,7 +79,7 @@ internal sealed class KyrolusOutputCacheEndpointFilter<TResponse>(
         var provider = context.HttpContext.RequestServices.GetService<IKyrolusEndpointCachePolicyProvider>();
         if (provider is not null)
         {
-            var keyContext = context.HttpContext.RequestServices.GetService<ICacheKeyContext>();
+            var keyContext = context.HttpContext.RequestServices.GetService<IKyrolusCacheKeyContext>();
             var policyContext = new KyrolusEndpointCachePolicyContext(
                 typeof(TResponse),
                 typeof(TResponse).Name,
@@ -121,7 +121,7 @@ internal sealed class KyrolusOutputCacheEndpointFilter<TResponse>(
 
     private static KyrolusCacheEntryOptions BuildEntryOptions(EndpointFilterInvocationContext context, KyrolusCachePolicy policy)
     {
-        var keyContext = context.HttpContext.RequestServices.GetService<ICacheKeyContext>();
+        var keyContext = context.HttpContext.RequestServices.GetService<IKyrolusCacheKeyContext>();
         return new KyrolusCacheEntryOptions
         {
             AbsoluteExpirationRelativeToNow = policy.AbsoluteExpirationRelativeToNow,
@@ -149,7 +149,7 @@ internal sealed class KyrolusOutputCacheEndpointFilter<TResponse>(
     private string BuildCacheKey(EndpointFilterInvocationContext context, string? suffix)
     {
         var request = context.HttpContext.Request;
-        var keyContext = context.HttpContext.RequestServices.GetService<ICacheKeyContext>();
+        var keyContext = context.HttpContext.RequestServices.GetService<IKyrolusCacheKeyContext>();
         var accept = request.Headers.Accept.ToString();
         var key = $"out:{request.Method}:{request.Path}{request.QueryString}";
         if (!string.IsNullOrWhiteSpace(accept)) key += $":accept={Uri.EscapeDataString(accept)}";

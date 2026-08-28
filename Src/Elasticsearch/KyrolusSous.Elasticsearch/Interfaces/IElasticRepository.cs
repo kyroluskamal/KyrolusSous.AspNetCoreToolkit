@@ -38,7 +38,7 @@ public interface IKyrolusElasticRepository<TDocument, TId> where TDocument : cla
         CancellationToken cancellationToken = default);
 
     Task<KyrolusSearchResult<TDocument>> SmartSearchAsync(
-        Action<SmartSearchBuilder<TDocument>> build,
+        Action<KyrolusSmartSearchBuilder<TDocument>> build,
         CancellationToken cancellationToken = default);
 
     Task<KyrolusSearchResult<TDocument>> VectorSearchAsync(
@@ -65,22 +65,15 @@ public interface IKyrolusElasticRepository<TDocument, TId> where TDocument : cla
     Task<bool> ClosePointInTimeAsync(string pitId, CancellationToken cancellationToken = default);
 
     Task<KyrolusSearchResult<TDocument>> SearchAfterAsync(
-        Action<SmartSearchBuilder<TDocument>> build,
+        Action<KyrolusSmartSearchBuilder<TDocument>> build,
         IReadOnlyList<object>? searchAfterValues,
         string? pitId = null,
         CancellationToken cancellationToken = default);
 
     IAsyncEnumerable<TDocument> StreamAllAsync(
-        Action<SmartSearchBuilder<TDocument>>? configure = null,
+        Action<KyrolusSmartSearchBuilder<TDocument>>? configure = null,
         int batchSize = 1000,
         CancellationToken cancellationToken = default);
-}
-
-/// <summary>
-/// Backward-compatibility alias for <see cref="IKyrolusElasticRepository{TDocument, TId}"/>.
-/// </summary>
-public interface IElasticRepository<TDocument, TId> : IKyrolusElasticRepository<TDocument, TId> where TDocument : class
-{
 }
 
 /// <summary>
@@ -113,11 +106,4 @@ public interface IKyrolusElasticIndexManager
     Task<bool> RolloverIndexAsync(string aliasName, CancellationToken cancellationToken = default);
 
     Task<bool> ShrinkIndexAsync(string sourceIndex, string targetIndex, int targetShards = 1, CancellationToken cancellationToken = default);
-}
-
-/// <summary>
-/// Backward-compatibility alias for <see cref="IKyrolusElasticIndexManager"/>.
-/// </summary>
-public interface IElasticIndexManager : IKyrolusElasticIndexManager
-{
 }

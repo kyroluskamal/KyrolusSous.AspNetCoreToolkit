@@ -3,7 +3,7 @@ using System.Security.Claims;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Services;
 
-public sealed class HttpTenantResolver(IHttpContextAccessor accessor) : ITenantResolver
+public sealed class HttpTenantResolver(IHttpContextAccessor accessor) : IKyrolusTenantResolver
 {
     private readonly IHttpContextAccessor accessor = accessor ?? throw new ArgumentNullException(nameof(accessor));
 

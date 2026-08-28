@@ -7,7 +7,7 @@ public interface IKyrolusCustomPipelineConfigurator
     void Configure(ResiliencePipelineBuilder builder);
 }
 
-public class DelegateCustomPipelineConfigurator(string name, Action<ResiliencePipelineBuilder> configure) : IKyrolusCustomPipelineConfigurator
+public class KyrolusDelegateCustomPipelineConfigurator(string name, Action<ResiliencePipelineBuilder> configure) : IKyrolusCustomPipelineConfigurator
 {
     public string Name { get; } = name;
 

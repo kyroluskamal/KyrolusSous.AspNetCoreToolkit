@@ -33,13 +33,13 @@ public class TestProductDocument
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     [KyrolusElasticGeoPoint]
-    public GeoCoordinate? Location { get; set; }
+    public KyrolusGeoCoordinate? Location { get; set; }
 
     [KyrolusElasticDenseVector(1536)]
     public float[]? Embedding { get; set; }
 }
 
-public class TestTenantProvider : ITenantProvider
+public class TestTenantProvider : IKyrolusTenantProvider
 {
     public string? CurrentTenantId => "tenant_alpha";
 }
@@ -161,14 +161,14 @@ public class ElasticsearchUnitTests
         var kyrolusIndexManager = provider.GetService<IKyrolusElasticIndexManager>();
         kyrolusIndexManager.ShouldNotBeNull();
 
-        var indexManager = provider.GetService<IElasticIndexManager>();
+        var indexManager = provider.GetService<IKyrolusElasticIndexManager>();
         indexManager.ShouldNotBeNull();
 
         var kyrolusRepo = provider.GetService<IKyrolusElasticRepository<TestProductDocument, string>>();
         kyrolusRepo.ShouldNotBeNull();
         kyrolusRepo.IndexName.ShouldBe("dev_products-live");
 
-        var repo = provider.GetService<IElasticRepository<TestProductDocument, string>>();
+        var repo = provider.GetService<IKyrolusElasticRepository<TestProductDocument, string>>();
         repo.ShouldNotBeNull();
         repo.IndexName.ShouldBe("dev_products-live");
     }
@@ -289,7 +289,7 @@ public class ElasticsearchUnitTests
     }
 }
 
-public sealed class TestMockCacheProvider : ICacheProvider
+public sealed class TestMockCacheProvider : IKyrolusCacheProvider
 {
     public Dictionary<string, object> Store { get; } = [];
 
@@ -360,15 +360,15 @@ public sealed class TestMockElasticRepository<TDocument, TId>(string indexName) 
     public Task<long> CountAsync(CancellationToken cancellationToken = default) => Task.FromResult(1L);
     public Task<bool> ExistsAsync(TId id, CancellationToken cancellationToken = default) => Task.FromResult(true);
     public Task<KyrolusSearchResult<TDocument>> SearchAsync(Action<SearchRequestDescriptor<TDocument>> configureSearch, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusSearchResult<TDocument>());
-    public Task<KyrolusSearchResult<TDocument>> SmartSearchAsync(Action<SmartSearchBuilder<TDocument>> build, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusSearchResult<TDocument>());
+    public Task<KyrolusSearchResult<TDocument>> SmartSearchAsync(Action<KyrolusSmartSearchBuilder<TDocument>> build, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusSearchResult<TDocument>());
     public Task<KyrolusSearchResult<TDocument>> VectorSearchAsync(float[] vector, string vectorField = "embedding", int topK = 10, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusSearchResult<TDocument>());
     public Task<KyrolusSearchResult<TDocument>> HybridSearchAsync(string queryText, float[] vector, string vectorField = "embedding", int topK = 10, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusSearchResult<TDocument>());
     public Task<IReadOnlyList<string>> AutocompleteAsync(string prefix, Expression<Func<TDocument, object>> field, int limit = 5, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<string>>([]);
     public Task<KyrolusPointInTime> OpenPointInTimeAsync(TimeSpan keepAlive, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusPointInTime("pit_1", keepAlive));
     public Task<bool> ClosePointInTimeAsync(string pitId, CancellationToken cancellationToken = default) => Task.FromResult(true);
-    public Task<KyrolusSearchResult<TDocument>> SearchAfterAsync(Action<SmartSearchBuilder<TDocument>> build, IReadOnlyList<object>? searchAfterValues, string? pitId = null, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusSearchResult<TDocument>());
+    public Task<KyrolusSearchResult<TDocument>> SearchAfterAsync(Action<KyrolusSmartSearchBuilder<TDocument>> build, IReadOnlyList<object>? searchAfterValues, string? pitId = null, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusSearchResult<TDocument>());
 
-    public async IAsyncEnumerable<TDocument> StreamAllAsync(Action<SmartSearchBuilder<TDocument>>? configure = null, int batchSize = 1000, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<TDocument> StreamAllAsync(Action<KyrolusSmartSearchBuilder<TDocument>>? configure = null, int batchSize = 1000, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         yield return new TDocument();
         await Task.CompletedTask;

@@ -17,8 +17,8 @@ builder.Services.AddSingleton<InMemoryCacheProvider>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<TestRepositoryObserver>();
 builder.Services.AddSingleton<IKyrolusRepositoryObserver>(sp => sp.GetRequiredService<TestRepositoryObserver>());
-builder.Services.AddSingleton<ICacheProvider>(sp => sp.GetRequiredService<InMemoryCacheProvider>());
-builder.Services.AddScoped<ICacheKeyContext>(sp =>
+builder.Services.AddSingleton<IKyrolusCacheProvider>(sp => sp.GetRequiredService<InMemoryCacheProvider>());
+builder.Services.AddScoped<IKyrolusCacheKeyContext>(sp =>
 {
     var http = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
     var tenant = http?.Request?.Headers["X-Tenant-Id"].ToString();

@@ -10,20 +10,20 @@ public class KyrolusMartenRepositoryDecorator<TSession, TEntity, TKey> : IKyrolu
     where TKey : IEquatable<TKey>
 {
     private readonly IKyrolusMartenRepositoryAsync<TSession, TEntity, TKey> inner;
-    private readonly ICacheProvider? cache;
+    private readonly IKyrolusCacheProvider? cache;
     private readonly IKyrolusMartenResiliencePolicy? resilience;
     private readonly IKyrolusMartenTracing? tracing;
     public IKyrolusMartenObserver? Observer => inner.Observer;
     public IKyrolusMartenAuthorization? Authorization => inner.Authorization;
     public IKyrolusMartenValidation? Validation => inner.Validation;
     public IKyrolusMartenSoftDeletePolicy? SoftDeletePolicy => inner.SoftDeletePolicy;
-    public ICacheProvider? CacheProvider => cache;
+    public IKyrolusCacheProvider? CacheProvider => cache;
     public IKyrolusMartenResiliencePolicy? ResiliencePolicy => resilience;
     public IKyrolusMartenTracing? Tracing => tracing;
 
     public KyrolusMartenRepositoryDecorator(
         IKyrolusMartenRepositoryAsync<TSession, TEntity, TKey> inner,
-        ICacheProvider? cache = null,
+        IKyrolusCacheProvider? cache = null,
         IKyrolusMartenResiliencePolicy? resilience = null,
         IKyrolusMartenTracing? tracing = null)
     {
@@ -34,7 +34,7 @@ public class KyrolusMartenRepositoryDecorator<TSession, TEntity, TKey> : IKyrolu
     }
 
     public void SetObserver(IKyrolusMartenObserver? observer) => inner.SetObserver(observer);
-    public string? ResolveTenantId(ITenantResolver? resolver) => inner.ResolveTenantId(resolver);
+    public string? ResolveTenantId(IKyrolusTenantResolver? resolver) => inner.ResolveTenantId(resolver);
 
     private Task<T> ExecAsync<T>(string op, Func<Task<T>> action, object? target = null, CancellationToken ct = default)
     {

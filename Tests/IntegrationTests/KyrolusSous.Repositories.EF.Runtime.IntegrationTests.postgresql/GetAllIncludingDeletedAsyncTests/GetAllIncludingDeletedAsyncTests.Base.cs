@@ -1,9 +1,9 @@
-﻿namespace KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.GetAllIncludingDeletedAsyncTests;
+namespace KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.GetAllIncludingDeletedAsyncTests;
 
 public partial class GetAllIncludingDeletedAsyncTests(WebApplicationFactory<Program> factory) : KyrolusRuntimePSFixture(factory)
 {
     private static readonly AsyncLocal<string?> TenantScope = new();
-    private sealed class TestCacheKeyContext : ICacheKeyContext
+    private sealed class TestCacheKeyContext : IKyrolusCacheKeyContext
     {
         public string? ScopeKey => TenantScope.Value;
         public string? TenantId => TenantScope.Value;

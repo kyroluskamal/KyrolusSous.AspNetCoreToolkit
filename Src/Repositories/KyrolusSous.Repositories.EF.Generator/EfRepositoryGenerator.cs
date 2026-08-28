@@ -68,7 +68,7 @@ namespace KyrolusSous.Repositories.EF.Generator
                     ? $"IKyrolusSingleKeyRepositoryAsync<{T(request.DbContextType)}, {T(request.EntityType)}, {T(request.KeyType)}>"
                     : $"IKyrolusCompositeKeyRepositoryAsync<{T(request.DbContextType)}, {T(request.EntityType)}, {T(request.KeyType)}>";
                 diRegistrations.Add($"""            services.AddScoped<{repoInterface}, {request.RepositoryName}>();""");
-                diRegistrations.Add($$"""            services.AddScoped<IQueryHelper<{{T(request.EntityType)}}>, {{request.EntityType.Name}}QueryHelper>();""");
+                diRegistrations.Add($$"""            services.AddScoped<IKyrolusQueryHelper<{{T(request.EntityType)}}>, {{request.EntityType.Name}}QueryHelper>();""");
 
                 if (!unitOfWorkMap.TryGetValue(request.DbContextType, out var list))
                 {
@@ -256,8 +256,8 @@ namespace KyrolusSous.Repositories.EF.Generator
             {
                 softDeleteInterface = string.Empty;
             }
-            var cacheField = "                    private readonly ICacheProvider? cache;\n                    private IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider;\n                    private readonly bool cachePolicyProviderOverride;\n                    private readonly IKyrolusRepositoryPolicyProvider? policyProvider;\n                    private Task? policyInitTask;\n";
-            var cacheParam = ", ICacheProvider? cache = null, IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider = null, IKyrolusRepositoryPolicyProvider? policyProvider = null";
+            var cacheField = "                    private readonly IKyrolusCacheProvider? cache;\n                    private IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider;\n                    private readonly bool cachePolicyProviderOverride;\n                    private readonly IKyrolusRepositoryPolicyProvider? policyProvider;\n                    private Task? policyInitTask;\n";
+            var cacheParam = ", IKyrolusCacheProvider? cache = null, IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider = null, IKyrolusRepositoryPolicyProvider? policyProvider = null";
             var cacheAssign = "                        this.cache = cache;\n                        this.cachePolicyProviderOverride = cachePolicyProvider is not null;\n                        this.cachePolicyProvider = cachePolicyProvider ?? this.policy?.CachePolicyProvider;\n                        this.policyProvider = this.policy?.PolicyProvider ?? policyProvider;\n";
             var prefix = $$$"""
                     public class {{{request.RepositoryName}}} : IKyrolusRepositoryAsync<{{{T(request.DbContextType)}}}, {{{T(request.EntityType)}}}, {{{T(request.KeyType)}}}>{{{keyInterface}}}{{{softDeleteInterface}}}{{{implementsBulk}}}
@@ -269,11 +269,11 @@ namespace KyrolusSous.Repositories.EF.Generator
                     private readonly IKyrolusBulkExecutor<{{{T(request.EntityType)}}}>? bulkExecutor;
                     {{{cacheField}}}
                     private readonly TimeSpan? cacheTtl;
-                    private readonly ICacheKeyContext? cacheKeyContext;
+                    private readonly IKyrolusCacheKeyContext? cacheKeyContext;
                     private readonly bool cachingEnabled;
                     private Func<IQueryable<{{{T(request.EntityType)}}}>, IQueryable<{{{T(request.EntityType)}}}>>? globalQueryFilter;
                     public {{{request.RepositoryName}}}({{{T(request.DbContextType)}}} db, KyrolusRepositoryPolicy? policy = null, IKyrolusRepositoryObserver? observer = null, IKyrolusBulkExecutor<{{{T(request.EntityType)}}}>? bulkExecutor = null{{{cacheParam}}},
-                                ICacheKeyContext? cacheKeyContext = null)
+                                IKyrolusCacheKeyContext? cacheKeyContext = null)
                     {
                         this.db = db ?? throw new ArgumentNullException(nameof(db));
                         set = this.db.Set<{{{T(request.EntityType)}}}>();
@@ -2347,7 +2347,7 @@ using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
 
 namespace KyrolusSous.Repositories.EF.Generated
 {
-    public sealed class {{request.EntityType.Name}}QueryHelper : IQueryHelper<{{T(request.EntityType)}}>
+    public sealed class {{request.EntityType.Name}}QueryHelper : IKyrolusQueryHelper<{{T(request.EntityType)}}>
     {
         private static readonly HashSet<string> StringProps = new({{stringPropsLiteral}}, StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<string> NavProps = new({{navPropsLiteral}}, StringComparer.OrdinalIgnoreCase);

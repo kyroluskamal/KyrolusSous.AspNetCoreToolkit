@@ -1,19 +1,14 @@
 namespace KyrolusSous.Caching.Abstractions;
 
 /// <summary>
-/// A no-op implementation of <see cref="ICacheProvider"/> that implements the Null Object Pattern.
+/// A no-op implementation of <see cref="IKyrolusCacheProvider"/> that implements the Null Object Pattern.
 /// </summary>
-/// <remarks>
-/// Used as a fallback when caching is disabled or unconfigured, ensuring that consumer code 
-/// can execute without checking for null references. All read operations return null/empty, 
-/// write operations complete immediately, and <see cref="GetOrCreateAsync{T}"/> executes the factory directly.
-/// </remarks>
-public sealed class NullCacheProvider : ICacheProvider
+public sealed class KyrolusNullCacheProvider : IKyrolusCacheProvider
 {
     /// <summary>
-    /// Gets the singleton instance of <see cref="NullCacheProvider"/>.
+    /// Gets the singleton instance of <see cref="KyrolusNullCacheProvider"/>.
     /// </summary>
-    public static NullCacheProvider Instance { get; } = new();
+    public static KyrolusNullCacheProvider Instance { get; } = new();
 
     /// <inheritdoc />
     public Task<T?> GetAsync<T>(string cacheKey, CancellationToken cancellationToken = default) => Task.FromResult<T?>(default);

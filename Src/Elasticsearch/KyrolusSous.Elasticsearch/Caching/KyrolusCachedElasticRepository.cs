@@ -5,17 +5,17 @@ namespace KyrolusSous.Elasticsearch;
 /// <summary>
 /// High-performance caching decorator for <see cref="IKyrolusElasticRepository{TDocument, TId}"/> with automatic cache invalidation on write mutations.
 /// </summary>
-public class KyrolusCachedElasticRepository<TDocument, TId> : IKyrolusElasticRepository<TDocument, TId>, IElasticRepository<TDocument, TId> where TDocument : class
+public class KyrolusCachedElasticRepository<TDocument, TId> : IKyrolusElasticRepository<TDocument, TId> where TDocument : class
 {
     private readonly IKyrolusElasticRepository<TDocument, TId> _inner;
-    private readonly ICacheProvider? _cacheProvider;
+    private readonly IKyrolusCacheProvider? _cacheProvider;
     private readonly TimeSpan _defaultTtl;
 
     public string IndexName => _inner.IndexName;
 
     public KyrolusCachedElasticRepository(
         IKyrolusElasticRepository<TDocument, TId> inner,
-        ICacheProvider? cacheProvider = null,
+        IKyrolusCacheProvider? cacheProvider = null,
         TimeSpan? defaultTtl = null)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
@@ -150,7 +150,7 @@ public class KyrolusCachedElasticRepository<TDocument, TId> : IKyrolusElasticRep
     public Task<KyrolusSearchResult<TDocument>> SearchAsync(Action<SearchRequestDescriptor<TDocument>> configureSearch, CancellationToken cancellationToken = default) =>
         _inner.SearchAsync(configureSearch, cancellationToken);
 
-    public Task<KyrolusSearchResult<TDocument>> SmartSearchAsync(Action<SmartSearchBuilder<TDocument>> build, CancellationToken cancellationToken = default) =>
+    public Task<KyrolusSearchResult<TDocument>> SmartSearchAsync(Action<KyrolusSmartSearchBuilder<TDocument>> build, CancellationToken cancellationToken = default) =>
         _inner.SmartSearchAsync(build, cancellationToken);
 
     public Task<KyrolusSearchResult<TDocument>> VectorSearchAsync(float[] vector, string vectorField = "embedding", int topK = 10, CancellationToken cancellationToken = default) =>
@@ -168,10 +168,10 @@ public class KyrolusCachedElasticRepository<TDocument, TId> : IKyrolusElasticRep
     public Task<bool> ClosePointInTimeAsync(string pitId, CancellationToken cancellationToken = default) =>
         _inner.ClosePointInTimeAsync(pitId, cancellationToken);
 
-    public Task<KyrolusSearchResult<TDocument>> SearchAfterAsync(Action<SmartSearchBuilder<TDocument>> build, IReadOnlyList<object>? searchAfterValues, string? pitId = null, CancellationToken cancellationToken = default) =>
+    public Task<KyrolusSearchResult<TDocument>> SearchAfterAsync(Action<KyrolusSmartSearchBuilder<TDocument>> build, IReadOnlyList<object>? searchAfterValues, string? pitId = null, CancellationToken cancellationToken = default) =>
         _inner.SearchAfterAsync(build, searchAfterValues, pitId, cancellationToken);
 
-    public IAsyncEnumerable<TDocument> StreamAllAsync(Action<SmartSearchBuilder<TDocument>>? configure = null, int batchSize = 1000, CancellationToken cancellationToken = default) =>
+    public IAsyncEnumerable<TDocument> StreamAllAsync(Action<KyrolusSmartSearchBuilder<TDocument>>? configure = null, int batchSize = 1000, CancellationToken cancellationToken = default) =>
         _inner.StreamAllAsync(configure, batchSize, cancellationToken);
 
     private async Task InvalidateDocCacheAsync(TId id, CancellationToken cancellationToken)

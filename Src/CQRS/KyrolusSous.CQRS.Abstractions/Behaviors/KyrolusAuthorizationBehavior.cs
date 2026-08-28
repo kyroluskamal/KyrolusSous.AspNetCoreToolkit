@@ -14,12 +14,12 @@ namespace KyrolusSous.CQRS.Abstractions.Behaviors;
 /// </summary>
 [PipelineOrder(-1000)]
 public sealed class KyrolusAuthorizationBehavior<TRequest, TResponse>(
-    ICurrentUserContext? userContext = null,
+    IKyrolusCurrentUserContext? userContext = null,
     ILogger<KyrolusAuthorizationBehavior<TRequest, TResponse>>? logger = null)
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
     private static readonly ConcurrentDictionary<Type, IReadOnlyList<KyrolusAuthorizeAttribute>> s_cachedAttributes = new();
-    private readonly ICurrentUserContext? _userContext = userContext;
+    private readonly IKyrolusCurrentUserContext? _userContext = userContext;
     private readonly ILogger? _logger = logger;
 
     public async Task<TResponse> Handle(
@@ -40,7 +40,7 @@ public sealed class KyrolusAuthorizationBehavior<TRequest, TResponse>(
             return await next(cancellationToken).ConfigureAwait(false);
         }
 
-        var context = _userContext ?? new DefaultCurrentUserContext();
+        var context = _userContext ?? new KyrolusDefaultCurrentUserContext();
         ValidateAuthentication(context);
         ValidateAttributeAuthorization(authorizeAttributes, context);
 
@@ -52,7 +52,7 @@ public sealed class KyrolusAuthorizationBehavior<TRequest, TResponse>(
         return await next(cancellationToken).ConfigureAwait(false);
     }
 
-    private void ValidateAuthentication(ICurrentUserContext context)
+    private void ValidateAuthentication(IKyrolusCurrentUserContext context)
     {
         if (!context.IsAuthenticated)
         {
@@ -63,7 +63,7 @@ public sealed class KyrolusAuthorizationBehavior<TRequest, TResponse>(
 
     private void ValidateAttributeAuthorization(
         IReadOnlyList<KyrolusAuthorizeAttribute> attributes,
-        ICurrentUserContext context)
+        IKyrolusCurrentUserContext context)
     {
         foreach (var attr in attributes)
         {
@@ -72,7 +72,7 @@ public sealed class KyrolusAuthorizationBehavior<TRequest, TResponse>(
         }
     }
 
-    private void ValidateRoles(string? rolesString, ICurrentUserContext context)
+    private void ValidateRoles(string? rolesString, IKyrolusCurrentUserContext context)
     {
         if (string.IsNullOrWhiteSpace(rolesString)) return;
 
@@ -90,7 +90,7 @@ public sealed class KyrolusAuthorizationBehavior<TRequest, TResponse>(
         }
     }
 
-    private void ValidatePermissions(string? permissionsString, ICurrentUserContext context)
+    private void ValidatePermissions(string? permissionsString, IKyrolusCurrentUserContext context)
     {
         if (string.IsNullOrWhiteSpace(permissionsString)) return;
 
@@ -111,7 +111,7 @@ public sealed class KyrolusAuthorizationBehavior<TRequest, TResponse>(
         }
     }
 
-    private static void ValidateProgrammaticAuthorization(IAuthorizedRequest request, ICurrentUserContext context)
+    private static void ValidateProgrammaticAuthorization(IAuthorizedRequest request, IKyrolusCurrentUserContext context)
     {
         if (request.RequiredRoles is { Count: > 0 } roles && !roles.Any(context.IsInRole))
         {

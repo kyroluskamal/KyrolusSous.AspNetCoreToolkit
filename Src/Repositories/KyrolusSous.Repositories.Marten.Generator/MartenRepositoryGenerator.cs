@@ -114,7 +114,7 @@ public sealed class MartenRepositoryGenerator : IIncrementalGenerator
 
         if (requests.Count > 0)
         {
-            diRegistrations.Add("            services.TryAddScoped(typeof(KyrolusSous.Repositories.Marten.Abstractions.Query.IQueryHelper<>), typeof(KyrolusSous.Repositories.Marten.Runtime.MartenRuntimeQueryHelper<>));");
+            diRegistrations.Add("            services.TryAddScoped(typeof(KyrolusSous.Repositories.Marten.Abstractions.Query.IKyrolusQueryHelper<>), typeof(KyrolusSous.Repositories.Marten.Runtime.MartenRuntimeQueryHelper<>));");
         }
 
         EmitDiExtension(context, diNamespaces, diRegistrations);
@@ -227,7 +227,7 @@ public sealed class MartenRepositoryGenerator : IIncrementalGenerator
         sb.AppendLine("            services.TryAddSingleton(KyrolusMartenAllowAllAuthorization.Instance);");
         sb.AppendLine("            services.TryAddSingleton(KyrolusMartenNoopValidation.Instance);");
         sb.AppendLine("            services.TryAddSingleton(KyrolusMartenNoSoftDeletePolicy.Instance);");
-        sb.AppendLine("            services.TryAddSingleton<ICacheProvider>(NullCacheProvider.Instance);");
+        sb.AppendLine("            services.TryAddSingleton<IKyrolusCacheProvider>(KyrolusNullCacheProvider.Instance);");
         sb.AppendLine("            services.TryAddSingleton<KyrolusRepositoryCachePolicyRegistry>();");
         sb.AppendLine("            services.TryAddSingleton<IKyrolusRepositoryCachePolicyProvider>(sp => sp.GetRequiredService<KyrolusRepositoryCachePolicyRegistry>());");
         sb.AppendLine("            services.TryAddSingleton<IKyrolusMartenRepositoryPolicyProvider>(KyrolusNoopMartenRepositoryPolicyProvider.Instance);");
@@ -838,18 +838,18 @@ public sealed class MartenRepositoryGenerator : IIncrementalGenerator
         sb.AppendLine("        where TKey : IEquatable<TKey>");
         AppendOpenBrace(sb, Indent4);
         sb.AppendLine("        private readonly IKyrolusMartenRepositoryAsync<TSession, TEntity, TKey> inner;");
-        sb.AppendLine("        private readonly ICacheProvider? cache;");
+        sb.AppendLine("        private readonly IKyrolusCacheProvider? cache;");
         sb.AppendLine("        private readonly IKyrolusMartenResiliencePolicy? resilience;");
         sb.AppendLine("        private readonly IKyrolusMartenTracing? tracing;");
         sb.AppendLine("        public IKyrolusMartenObserver? Observer => inner.Observer;");
         sb.AppendLine("        public IKyrolusMartenAuthorization? Authorization => inner.Authorization;");
         sb.AppendLine("        public IKyrolusMartenValidation? Validation => inner.Validation;");
         sb.AppendLine("        public IKyrolusMartenSoftDeletePolicy? SoftDeletePolicy => inner.SoftDeletePolicy;");
-        sb.AppendLine("        public ICacheProvider? CacheProvider => cache;");
+        sb.AppendLine("        public IKyrolusCacheProvider? CacheProvider => cache;");
         sb.AppendLine("        public IKyrolusMartenResiliencePolicy? ResiliencePolicy => resilience;");
         sb.AppendLine("        public IKyrolusMartenTracing? Tracing => tracing;");
         sb.AppendLine();
-        sb.AppendLine("        public KyrolusMartenRepositoryDecorator(IKyrolusMartenRepositoryAsync<TSession, TEntity, TKey> inner, ICacheProvider? cache = null, IKyrolusMartenResiliencePolicy? resilience = null, IKyrolusMartenTracing? tracing = null)");
+        sb.AppendLine("        public KyrolusMartenRepositoryDecorator(IKyrolusMartenRepositoryAsync<TSession, TEntity, TKey> inner, IKyrolusCacheProvider? cache = null, IKyrolusMartenResiliencePolicy? resilience = null, IKyrolusMartenTracing? tracing = null)");
         AppendOpenBrace(sb, Indent8);
         sb.AppendLine("            this.inner = inner ?? throw new ArgumentNullException(nameof(inner));");
         sb.AppendLine("            this.cache = cache;");
@@ -858,7 +858,7 @@ public sealed class MartenRepositoryGenerator : IIncrementalGenerator
         AppendCloseBrace(sb, Indent8);
         sb.AppendLine();
         sb.AppendLine("        public void SetObserver(IKyrolusMartenObserver? observer) => inner.SetObserver(observer);");
-        sb.AppendLine("        public string? ResolveTenantId(ITenantResolver? resolver) => inner.ResolveTenantId(resolver);");
+        sb.AppendLine("        public string? ResolveTenantId(IKyrolusTenantResolver? resolver) => inner.ResolveTenantId(resolver);");
         sb.AppendLine();
         sb.AppendLine("        private Task<T> ExecAsync<T>(string op, Func<Task<T>> action, object? target = null, CancellationToken ct = default)");
         AppendOpenBrace(sb, Indent8);
@@ -1004,8 +1004,8 @@ public sealed class MartenRepositoryGenerator : IIncrementalGenerator
         sb.AppendLine("                Authorization: services.GetService<IKyrolusMartenAuthorization>(),");
         sb.AppendLine("                Validation: services.GetService<IKyrolusMartenValidation>(),");
         sb.AppendLine("                SoftDeletePolicy: services.GetService<IKyrolusMartenSoftDeletePolicy>(),");
-        sb.AppendLine("                CacheProvider: services.GetService<ICacheProvider>(),");
-        sb.AppendLine("                CacheKeyContext: services.GetService<ICacheKeyContext>(),");
+        sb.AppendLine("                CacheProvider: services.GetService<IKyrolusCacheProvider>(),");
+        sb.AppendLine("                CacheKeyContext: services.GetService<IKyrolusCacheKeyContext>(),");
         sb.AppendLine("                CachePolicyProvider: services.GetService<IKyrolusRepositoryCachePolicyProvider>(),");
         sb.AppendLine("                PolicyProvider: services.GetService<IKyrolusMartenRepositoryPolicyProvider>(),");
         sb.AppendLine("                ResiliencePolicy: services.GetService<IKyrolusMartenResiliencePolicy>(),");
@@ -1116,10 +1116,10 @@ public sealed class MartenRepositoryGenerator : IIncrementalGenerator
         sb.AppendLine("    private IKyrolusMartenAuthorization? authorization;");
         sb.AppendLine("    private IKyrolusMartenValidation? validation;");
         sb.AppendLine("    private IKyrolusMartenSoftDeletePolicy? softDeletePolicy;");
-        sb.AppendLine("    private ICacheProvider? cacheProvider;");
+        sb.AppendLine("    private IKyrolusCacheProvider? cacheProvider;");
         sb.AppendLine("    private IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider;");
         sb.AppendLine("    private KyrolusCachePolicy? cachePolicy;");
-        sb.AppendLine("    private ICacheKeyContext? cacheKeyContext;");
+        sb.AppendLine("    private IKyrolusCacheKeyContext? cacheKeyContext;");
         sb.AppendLine("    private IKyrolusMartenResiliencePolicy? resilience;");
         sb.AppendLine("    private IKyrolusMartenTracing? tracing;");
         sb.AppendLine("    private readonly IKyrolusMartenRepositoryPolicyProvider? policyProvider;");
@@ -1145,13 +1145,13 @@ public sealed class MartenRepositoryGenerator : IIncrementalGenerator
         sb.AppendLine("    public IKyrolusMartenAuthorization? Authorization => authorization;");
         sb.AppendLine("    public IKyrolusMartenValidation? Validation => validation;");
         sb.AppendLine("    public IKyrolusMartenSoftDeletePolicy? SoftDeletePolicy => softDeletePolicy;");
-        sb.AppendLine("    public ICacheProvider? CacheProvider => cacheProvider;");
+        sb.AppendLine("    public IKyrolusCacheProvider? CacheProvider => cacheProvider;");
         sb.AppendLine("    public IKyrolusMartenResiliencePolicy? ResiliencePolicy => resilience;");
         sb.AppendLine("    public IKyrolusMartenTracing? Tracing => tracing;");
         sb.AppendLine();
         sb.AppendLine("    public void SetObserver(IKyrolusMartenObserver? observer) => this.observer = observer;");
         sb.AppendLine();
-        sb.AppendLine("    public string? ResolveTenantId(ITenantResolver? resolver) => resolver?.ResolveTenantId();");
+        sb.AppendLine("    public string? ResolveTenantId(IKyrolusTenantResolver? resolver) => resolver?.ResolveTenantId();");
         sb.AppendLine();
         sb.AppendLine("    private string? ResolveTenantId(string? tenantId)");
         AppendOpenBrace(sb, Indent4);

@@ -1,4 +1,4 @@
-﻿namespace KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.GetAllIncludingDeletedAsyncTests;
+namespace KyrolusSous.Repositories.EF.Runtime.IntegrationTests.postgressql.GetAllIncludingDeletedAsyncTests;
 
 public partial class GetAllIncludingDeletedAsyncTests
 {
@@ -40,7 +40,7 @@ public partial class GetAllIncludingDeletedAsyncTests
     public void GetAllIncludingDeletedAsync_InvalidFilters_Throw(string property, string op, string? value)
     {
         using var scope = Factory.Services.CreateScope();
-        var helper = scope.ServiceProvider.GetRequiredService<IQueryHelper<Product>>();
+        var helper = scope.ServiceProvider.GetRequiredService<IKyrolusQueryHelper<Product>>();
 
         Should.Throw<ArgumentException>(() =>
         {
@@ -53,7 +53,7 @@ public partial class GetAllIncludingDeletedAsyncTests
     public void GetAllIncludingDeletedAsync_InvalidOrderByProperty_Throws(string? property)
     {
         using var scope = Factory.Services.CreateScope();
-        var helper = scope.ServiceProvider.GetRequiredService<IQueryHelper<Product>>();
+        var helper = scope.ServiceProvider.GetRequiredService<IKyrolusQueryHelper<Product>>();
 
         Should.Throw<ArgumentException>(() =>
         {

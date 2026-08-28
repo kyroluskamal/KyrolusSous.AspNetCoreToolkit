@@ -18,13 +18,13 @@ public class KyrolusRepositoryAsync<
     protected KyrolusRepositoryPolicy policy = KyrolusRepositoryPolicy.Default;
     protected readonly IKyrolusRepositoryObserver? observer;
     protected readonly IKyrolusBulkExecutor<TEntity>? bulkExecutor;
-    protected readonly ICacheProvider? cache;
+    protected readonly IKyrolusCacheProvider? cache;
     protected IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider;
     protected readonly bool cachePolicyProviderOverride;
     protected readonly bool enableCaching;
     protected readonly TimeSpan? cacheTtl;
     protected readonly string cacheAllKey;
-    protected readonly ICacheKeyContext? cacheKeyContext;
+    protected readonly IKyrolusCacheKeyContext? cacheKeyContext;
     protected readonly string? cacheAllKeyBase;
     protected Func<IQueryable<TEntity>, IQueryable<TEntity>>? globalQueryFilter;
     protected bool softDeleteEnabled;
@@ -76,10 +76,10 @@ public class KyrolusRepositoryAsync<
         KyrolusRepositoryPolicy? policy = null,
         IKyrolusRepositoryObserver? observer = null,
         IKyrolusBulkExecutor<TEntity>? bulkExecutor = null,
-        ICacheProvider? cache = null,
+        IKyrolusCacheProvider? cache = null,
         bool enableCaching = false,
         int? cacheTtlSeconds = null,
-        ICacheKeyContext? cacheKeyContext = null,
+        IKyrolusCacheKeyContext? cacheKeyContext = null,
         IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider = null,
         IKyrolusRepositoryPolicyProvider? policyProvider = null
 )

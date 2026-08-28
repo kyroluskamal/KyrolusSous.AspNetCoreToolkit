@@ -36,9 +36,9 @@ public sealed class CachingAbstractionsIntegrationTests(WebApplicationFactory<Pr
         {
             builder.ConfigureServices(services =>
             {
-                services.RemoveAll<ICacheProvider>();
+                services.RemoveAll<IKyrolusCacheProvider>();
                 services.AddSingleton(new SerializedInMemoryCacheProvider(serializer));
-                services.AddSingleton<ICacheProvider>(sp => sp.GetRequiredService<SerializedInMemoryCacheProvider>());
+                services.AddSingleton<IKyrolusCacheProvider>(sp => sp.GetRequiredService<SerializedInMemoryCacheProvider>());
             });
         });
 
@@ -207,7 +207,7 @@ public sealed class CachingAbstractionsIntegrationTests(WebApplicationFactory<Pr
     [Fact(DisplayName = "Null cache provider returns defaults and invokes factory for GetOrCreate")]
     public async Task NullCacheProvider_ReturnsDefaults_AndInvokesFactory()
     {
-        var provider = NullCacheProvider.Instance;
+        var provider = KyrolusNullCacheProvider.Instance;
 
         await provider.SetAsync("k1", "v1");
         (await provider.GetAsync<string>("k1")).ShouldBeNull();
@@ -301,7 +301,7 @@ public sealed class CachingAbstractionsIntegrationTests(WebApplicationFactory<Pr
         true.ShouldBeTrue();
     }
 
-    private sealed class SerializedInMemoryCacheProvider(IKyrolusCacheSerializer serializer) : ICacheProvider
+    private sealed class SerializedInMemoryCacheProvider(IKyrolusCacheSerializer serializer) : IKyrolusCacheProvider
     {
         private sealed record CacheEntry(byte[] Payload, DateTimeOffset? ExpiresAt, TimeSpan? SlidingExpiration, IReadOnlyCollection<string>? Tags);
 

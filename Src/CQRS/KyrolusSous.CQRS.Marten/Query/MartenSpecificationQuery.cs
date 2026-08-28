@@ -7,12 +7,12 @@ namespace KyrolusSous.CQRS.Marten.Query;
 /// CQRS query that executes a Marten query specification.
 /// </summary>
 public class MartenSpecificationQuery<TEntity>(
-    IQuerySpecification<TEntity> specification,
+    IKyrolusQuerySpecification<TEntity> specification,
     string? tenantId = null,
     bool cacheable = false)
     : CacheableRequest(cacheable), ISpecificationQuery<TEntity, TEntity>
     where TEntity : class
 {
-    public IQuerySpecification<TEntity> Specification { get; } = specification ?? throw new ArgumentNullException(nameof(specification));
+    public IKyrolusQuerySpecification<TEntity> Specification { get; } = specification ?? throw new ArgumentNullException(nameof(specification));
     public string? TenantId { get; } = tenantId;
 }

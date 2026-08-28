@@ -46,13 +46,13 @@ public static class ResilienceServiceExtensions
         ArgumentNullException.ThrowIfNull(configure);
 
         services.AddSingleton<IKyrolusCustomPipelineConfigurator>(
-            new DelegateCustomPipelineConfigurator(name, configure));
+            new KyrolusDelegateCustomPipelineConfigurator(name, configure));
         return services;
     }
 
     public static IServiceCollection AddResilienceMediatorBehavior(this IServiceCollection services)
     {
-        services.AddTransient(typeof(IKyrolusPipelineBehavior<,>), typeof(ResiliencePipelineBehavior<,>));
+        services.AddTransient(typeof(IKyrolusPipelineBehavior<,>), typeof(KyrolusResiliencePipelineBehavior<,>));
         return services;
     }
 
@@ -62,7 +62,7 @@ public static class ResilienceServiceExtensions
         HealthStatus? failureStatus = null,
         IEnumerable<string>? tags = null)
     {
-        return builder.AddCheck<ResilienceCircuitBreakerHealthCheck>(
+        return builder.AddCheck<KyrolusResilienceCircuitBreakerHealthCheck>(
             name,
             failureStatus ?? HealthStatus.Degraded,
             tags ?? ["resilience", "circuit_breaker", "ready"]);

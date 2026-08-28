@@ -13,11 +13,11 @@ public interface IKyrolusMartenRepositoryAsync<TSession, TEntity, TKey>
 {
     IKyrolusMartenObserver? Observer { get; }
     void SetObserver(IKyrolusMartenObserver? observer);
-    string? ResolveTenantId(ITenantResolver? resolver);
+    string? ResolveTenantId(IKyrolusTenantResolver? resolver);
     IKyrolusMartenAuthorization? Authorization { get; }
     IKyrolusMartenValidation? Validation { get; }
     IKyrolusMartenSoftDeletePolicy? SoftDeletePolicy { get; }
-    ICacheProvider? CacheProvider { get; }
+    IKyrolusCacheProvider? CacheProvider { get; }
     IKyrolusMartenResiliencePolicy? ResiliencePolicy { get; }
     IKyrolusMartenTracing? Tracing { get; }
 

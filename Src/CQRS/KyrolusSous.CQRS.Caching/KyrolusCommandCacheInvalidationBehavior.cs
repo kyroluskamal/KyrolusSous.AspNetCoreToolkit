@@ -1,7 +1,7 @@
 namespace KyrolusSous.CQRS.Caching;
 
 public sealed class KyrolusCommandCacheInvalidationBehavior<TRequest, TResponse>(
-    ICacheProvider cacheProvider,
+    IKyrolusCacheProvider cacheProvider,
     IKyrolusCacheKeyProvider cacheKeyProvider)
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {

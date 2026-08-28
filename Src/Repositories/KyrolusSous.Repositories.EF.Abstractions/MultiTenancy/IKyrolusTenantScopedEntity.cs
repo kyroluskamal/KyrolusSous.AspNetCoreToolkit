@@ -14,7 +14,7 @@ public interface IKyrolusTenantScopedEntity
 /// <summary>
 /// Provides ambient context for resolving the current tenant identifier.
 /// </summary>
-public interface ICurrentTenantContext
+public interface IKyrolusCurrentTenantContext
 {
     /// <summary>
     /// Gets the current tenant identifier (or <c>null</c> if host/cross-tenant context).

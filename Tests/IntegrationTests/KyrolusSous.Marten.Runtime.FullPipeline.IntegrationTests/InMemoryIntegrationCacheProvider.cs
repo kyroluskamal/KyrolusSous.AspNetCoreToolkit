@@ -4,7 +4,7 @@ using KyrolusSous.Caching.Abstractions;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-internal sealed class InMemoryIntegrationCacheProvider : ICacheProvider
+internal sealed class InMemoryIntegrationCacheProvider : IKyrolusCacheProvider
 {
     private readonly ConcurrentDictionary<string, object?> store = new(StringComparer.Ordinal);
 

@@ -7,7 +7,7 @@ namespace KyrolusSous.Caching.Redis;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Adds Kyrolus Redis Cache Provider, Distributed Locking (<see cref="IDistributedLockProvider"/>), and Typed Pub/Sub (<see cref="IKyrolusRedisPubSub"/>).
+    /// Adds Kyrolus Redis Cache Provider, Distributed Locking (<see cref="IKyrolusDistributedLockProvider"/>), and Typed Pub/Sub (<see cref="IKyrolusRedisPubSub"/>).
     /// </summary>
     /// <remarks>
     /// <b>Real-World Use Case:</b>
@@ -67,11 +67,12 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IKyrolusCacheObserver>(),
                 sp.GetRequiredService<IKyrolusCachePolicyProvider>()));
 
-        services.TryAddSingleton<RedisCacheProvider>();
-        services.TryAddSingleton<ICacheProvider>(sp => sp.GetRequiredService<RedisCacheProvider>());
+        services.TryAddSingleton<KyrolusRedisCacheProvider>();
+        services.TryAddSingleton<IKyrolusCacheProvider>(sp => sp.GetRequiredService<KyrolusRedisCacheProvider>());
 
         // Standalone Distributed Lock & Typed Pub/Sub
-        services.TryAddSingleton<IDistributedLockProvider, RedisDistributedLockProvider>();
+        services.TryAddSingleton<KyrolusRedisDistributedLockProvider>();
+        services.TryAddSingleton<IKyrolusDistributedLockProvider>(sp => sp.GetRequiredService<KyrolusRedisDistributedLockProvider>());
         services.TryAddSingleton<IKyrolusRedisPubSub, KyrolusRedisPubSub>();
 
         return services;
@@ -310,7 +311,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<KyrolusRedisInvalidationOptions>()));
 
         services.TryAddSingleton<KyrolusRedisNearCacheProvider>();
-        services.Replace(ServiceDescriptor.Singleton<ICacheProvider>(sp => sp.GetRequiredService<KyrolusRedisNearCacheProvider>()));
+        services.Replace(ServiceDescriptor.Singleton<IKyrolusCacheProvider>(sp => sp.GetRequiredService<KyrolusRedisNearCacheProvider>()));
         return services;
     }
 

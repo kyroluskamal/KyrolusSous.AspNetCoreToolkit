@@ -28,7 +28,7 @@ public static class KyrolusRuntimeRepositoryServiceCollectionExtensions
         services.TryAddScoped(typeof(KyrolusCompositeKeyRepositoryAsync<,>));
         services.TryAddScoped(typeof(KyrolusSingleKeySoftDeleteRepositoryAsync<,,>));
         services.TryAddScoped(typeof(KyrolusCompositeKeySoftDeleteRepositoryAsync<,>));
-        services.TryAddScoped(typeof(IQueryHelper<>), typeof(RuntimeQueryHelper<>));
+        services.TryAddScoped(typeof(IKyrolusQueryHelper<>), typeof(RuntimeQueryHelper<>));
         services.TryAddScoped<IKyrolusUnitOfWork, KyrolusRuntimeUnitOfWork<TDbContext>>();
         return services;
     }

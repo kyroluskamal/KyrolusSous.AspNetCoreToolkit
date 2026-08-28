@@ -48,7 +48,7 @@ public class KyrolusSpecificationQueryTests
         var session = Substitute.For<IDocumentSession>();
         var unitOfWork = Substitute.For<IKyrolusMartenUnitOfWork<IDocumentSession>>();
         var repo = Substitute.For<IKyrolusMartenRepositoryAsync<IDocumentSession, TestProduct, int>>();
-        var spec = Substitute.For<IQuerySpecification<TestProduct>>();
+        var spec = Substitute.For<IKyrolusQuerySpecification<TestProduct>>();
 
         unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, TestProduct, int>>().Returns(repo);
         var expected = new List<TestProduct> { new() { Id = 2, Name = "Phone", Price = 800m } };

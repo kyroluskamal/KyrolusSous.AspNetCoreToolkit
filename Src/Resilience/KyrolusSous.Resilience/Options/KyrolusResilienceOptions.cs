@@ -2,20 +2,20 @@ namespace KyrolusSous.Resilience;
 
 public class KyrolusResilienceOptions
 {
-    public RetryOptionsConfig Retry { get; set; } = new();
+    public KyrolusRetryOptionsConfig Retry { get; set; } = new();
 
-    public CircuitBreakerOptionsConfig CircuitBreaker { get; set; } = new();
+    public KyrolusCircuitBreakerOptionsConfig CircuitBreaker { get; set; } = new();
 
-    public TimeoutOptionsConfig Timeout { get; set; } = new();
+    public KyrolusTimeoutOptionsConfig Timeout { get; set; } = new();
 
-    public RateLimiterOptionsConfig RateLimiter { get; set; } = new();
+    public KyrolusRateLimiterOptionsConfig RateLimiter { get; set; } = new();
 
-    public ChaosOptionsConfig Chaos { get; set; } = new();
+    public KyrolusChaosOptionsConfig Chaos { get; set; } = new();
 
-    public AdaptiveThrottlingOptionsConfig AdaptiveThrottling { get; set; } = new();
+    public KyrolusAdaptiveThrottlingOptionsConfig AdaptiveThrottling { get; set; } = new();
 }
 
-public class RetryOptionsConfig
+public class KyrolusRetryOptionsConfig
 {
     public int MaxRetryAttempts { get; set; } = 3;
 
@@ -26,7 +26,7 @@ public class RetryOptionsConfig
     public bool UseJitter { get; set; } = true;
 }
 
-public class CircuitBreakerOptionsConfig
+public class KyrolusCircuitBreakerOptionsConfig
 {
     public double FailureRatio { get; set; } = 0.5;
 
@@ -37,21 +37,21 @@ public class CircuitBreakerOptionsConfig
     public int BreakDurationSeconds { get; set; } = 30;
 }
 
-public class TimeoutOptionsConfig
+public class KyrolusTimeoutOptionsConfig
 {
     public int TotalTimeoutSeconds { get; set; } = 30;
 
     public int AttemptTimeoutSeconds { get; set; } = 10;
 }
 
-public class RateLimiterOptionsConfig
+public class KyrolusRateLimiterOptionsConfig
 {
     public int PermitLimit { get; set; } = 100;
 
     public int QueueLimit { get; set; } = 10;
 }
 
-public class ChaosOptionsConfig
+public class KyrolusChaosOptionsConfig
 {
     public bool Enabled { get; set; } = false;
 
@@ -62,7 +62,7 @@ public class ChaosOptionsConfig
     public bool InjectTransientErrors { get; set; } = false;
 }
 
-public class AdaptiveThrottlingOptionsConfig
+public class KyrolusAdaptiveThrottlingOptionsConfig
 {
     public bool Enabled { get; set; } = false;
 

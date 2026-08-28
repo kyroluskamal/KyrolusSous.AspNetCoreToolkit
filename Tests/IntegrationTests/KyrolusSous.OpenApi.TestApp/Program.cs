@@ -9,7 +9,7 @@ builder.Services.AddKyrolusOpenApi(options =>
     options.EnableApiVersioning = true;
     options.ApiVersions =
     [
-        new ApiVersionInfo
+        new KyrolusApiVersionInfo
         {
             Version = "v1",
             Title = "My API - V1 (Full Test)",
@@ -19,7 +19,7 @@ builder.Services.AddKyrolusOpenApi(options =>
             ContactEmail = "support@example.com",
             ContactUrl = "https://example.com/contact"
         },
-        new ApiVersionInfo
+        new KyrolusApiVersionInfo
         {
             Version = "v2",
             Title = "My API - V2 (Full Test)",

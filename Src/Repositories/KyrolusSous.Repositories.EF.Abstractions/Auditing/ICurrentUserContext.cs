@@ -3,7 +3,7 @@ namespace KyrolusSous.Repositories.EF.Abstractions.Auditing;
 /// <summary>
 /// Provides ambient context regarding the currently authenticated user / actor.
 /// </summary>
-public interface ICurrentUserContext
+public interface IKyrolusCurrentUserContext
 {
     /// <summary>
     /// Gets the unique identifier of the currently authenticated user (or <c>null</c> if unauthenticated/system).

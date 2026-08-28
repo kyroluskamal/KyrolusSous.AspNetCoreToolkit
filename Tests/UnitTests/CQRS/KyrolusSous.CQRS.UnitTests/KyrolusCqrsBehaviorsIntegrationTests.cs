@@ -88,7 +88,7 @@ public sealed class KyrolusCqrsBehaviorsIntegrationTests
     [Fact(DisplayName = "QueryCachingBehavior: Caches query response")]
     public async Task QueryCachingBehavior_CachesResult()
     {
-        var cache = Substitute.For<ICacheProvider>();
+        var cache = Substitute.For<IKyrolusCacheProvider>();
         cache.GetAsync<string>("query-cache-123", Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<string?>(null));
 

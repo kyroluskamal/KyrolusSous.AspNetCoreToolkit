@@ -4,7 +4,7 @@ namespace KyrolusSous.Repositories.Marten.Abstractions.Records;
 
 public sealed record MartenQueryOptions<TEntity>(
     Expression<Func<TEntity, bool>>? Filter = null,
-    IQuerySpecification<TEntity>? Specification = null,
+    IKyrolusQuerySpecification<TEntity>? Specification = null,
     Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? OrderBy = null,
     Action<IMartenQueryable<TEntity>>? ConfigureQuery = null,
     List<string>? IncludeProperties = null,

@@ -20,9 +20,9 @@ public class KyrolusOpenApiOptions
 
     public string? LicenseUrl { get; set; }
 
-    public List<ApiVersionInfo> ApiVersions { get; set; } = [];
+    public List<KyrolusApiVersionInfo> ApiVersions { get; set; } = [];
 
-    public List<OpenApiServerInfo> Servers { get; set; } = [];
+    public List<KyrolusOpenApiServerInfo> Servers { get; set; } = [];
 
     public bool EnableApiVersioning { get; set; } = false;
 
@@ -194,7 +194,7 @@ public class KyrolusOpenApiOptions
     }
 }
 
-public class ApiVersionInfo
+public class KyrolusApiVersionInfo
 {
     public string Version { get; set; } = "v1";
 
@@ -215,9 +215,11 @@ public class ApiVersionInfo
     public string? LicenseUrl { get; set; }
 }
 
-public class OpenApiServerInfo(string url, string? description = null)
+public class KyrolusOpenApiServerInfo(string url, string? description = null)
 {
     public string Url { get; set; } = url;
 
     public string? Description { get; set; } = description;
 }
+
+

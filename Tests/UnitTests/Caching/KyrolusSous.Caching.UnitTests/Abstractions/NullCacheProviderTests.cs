@@ -2,10 +2,10 @@ namespace KyrolusSous.Caching.UnitTests.Abstractions;
 
 public sealed class NullCacheProviderTests
 {
-    [Fact(DisplayName = "NullCacheProvider: All operations should execute as safe no-ops")]
+    [Fact(DisplayName = "KyrolusNullCacheProvider: All operations should execute as safe no-ops")]
     public async Task NullCacheProvider_AllMethods_ExecuteSafely()
     {
-        var provider = NullCacheProvider.Instance;
+        var provider = KyrolusNullCacheProvider.Instance;
 
         // Get
         var getResult = await provider.GetAsync<string>("key1");

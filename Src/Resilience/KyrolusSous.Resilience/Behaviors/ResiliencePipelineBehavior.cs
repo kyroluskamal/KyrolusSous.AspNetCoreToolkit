@@ -3,7 +3,7 @@ using KyrolusSous.Mediator.Abstractions.Interfaces;
 
 namespace KyrolusSous.Resilience;
 
-public class ResiliencePipelineBehavior<TRequest, TResponse>(
+public class KyrolusResiliencePipelineBehavior<TRequest, TResponse>(
     IKyrolusResiliencePipelineProvider pipelineProvider) : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
     public async Task<TResponse> Handle(
@@ -11,8 +11,8 @@ public class ResiliencePipelineBehavior<TRequest, TResponse>(
         RequestHandlerDelegate<TResponse> next,
         CancellationToken cancellationToken)
     {
-        var attr = typeof(TRequest).GetCustomAttribute<ResilientAttribute>(true);
-        var resilientReq = request as IResilientRequest;
+        var attr = typeof(TRequest).GetCustomAttribute<KyrolusResilientAttribute>(true);
+        var resilientReq = request as IKyrolusResilientRequest;
 
         if (attr is null && resilientReq is null)
         {

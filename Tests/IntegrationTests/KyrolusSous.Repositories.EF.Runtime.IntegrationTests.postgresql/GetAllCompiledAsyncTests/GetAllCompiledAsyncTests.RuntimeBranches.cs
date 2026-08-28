@@ -27,12 +27,12 @@ public partial class GetAllCompiledAsyncTests
         {
             builder.ConfigureServices(services =>
             {
-                services.RemoveAll<ICacheProvider>();
+                services.RemoveAll<IKyrolusCacheProvider>();
             });
         });
 
         using var scope = customFactory.Services.CreateScope();
-        scope.ServiceProvider.GetService<ICacheProvider>().ShouldBeNull();
+        scope.ServiceProvider.GetService<IKyrolusCacheProvider>().ShouldBeNull();
 
         var repo = scope.ServiceProvider.GetRequiredService<KyrolusSingleKeySoftDeleteRepositoryAsync<ApplicationDbContext, Product, Guid>>();
         var counter = scope.ServiceProvider.GetRequiredService<CommandCounterInterceptor>();
@@ -64,9 +64,9 @@ public partial class GetAllCompiledAsyncTests
         {
             builder.ConfigureServices(services =>
             {
-                services.RemoveAll<ICacheProvider>();
+                services.RemoveAll<IKyrolusCacheProvider>();
                 services.AddSingleton<NullReturningGetOrCreateCacheProvider>();
-                services.AddSingleton<ICacheProvider>(sp => sp.GetRequiredService<NullReturningGetOrCreateCacheProvider>());
+                services.AddSingleton<IKyrolusCacheProvider>(sp => sp.GetRequiredService<NullReturningGetOrCreateCacheProvider>());
             });
         });
 
@@ -85,7 +85,7 @@ public partial class GetAllCompiledAsyncTests
         counter.Count.ShouldBeGreaterThan(0);
     }
 
-    private sealed class NullReturningGetOrCreateCacheProvider : ICacheProvider
+    private sealed class NullReturningGetOrCreateCacheProvider : IKyrolusCacheProvider
     {
         public int GetOrCreateCalls { get; private set; }
         public int FactoryCalls { get; private set; }

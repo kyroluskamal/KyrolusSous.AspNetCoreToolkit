@@ -127,7 +127,7 @@ public sealed class MenuItemCountCompiledQuery : ICompiledQuery<MenuItem, int>
         => query => query.Count(x => x.Category == Category && x.Price >= MinPrice);
 }
 
-internal sealed class RuntimeRepositoryPolicyProvider(ICacheProvider cacheProvider, string tenantId) : IKyrolusMartenRepositoryPolicyProvider
+internal sealed class RuntimeRepositoryPolicyProvider(IKyrolusCacheProvider cacheProvider, string tenantId) : IKyrolusMartenRepositoryPolicyProvider
 {
     public ValueTask<KyrolusMartenRepositoryDependencies?> GetPolicyAsync(
         KyrolusMartenRepositoryPolicyContext context,
@@ -169,7 +169,7 @@ internal sealed class RuntimeRepositoryCachePolicyProvider : IKyrolusRepositoryC
     }
 }
 
-internal sealed class RuntimeCacheKeyContext(string? scopeKey, string? region, string? tenantId) : ICacheKeyContext
+internal sealed class RuntimeCacheKeyContext(string? scopeKey, string? region, string? tenantId) : IKyrolusCacheKeyContext
 {
     public string? ScopeKey { get; } = scopeKey;
     public string? Region { get; } = region;
@@ -216,7 +216,7 @@ internal sealed class RuntimeTracing : IKyrolusMartenTracing
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
-internal sealed class RuntimeInMemoryCacheProvider : ICacheProvider
+internal sealed class RuntimeInMemoryCacheProvider : IKyrolusCacheProvider
 {
     private readonly ConcurrentDictionary<string, object?> store = new(StringComparer.Ordinal);
     public ConcurrentQueue<string> RemovedKeys { get; } = new();
@@ -849,7 +849,7 @@ internal sealed class RuntimeSeekRepositoryStub<TEntity>(
     public IKyrolusMartenAuthorization? Authorization => null;
     public IKyrolusMartenValidation? Validation => null;
     public IKyrolusMartenSoftDeletePolicy? SoftDeletePolicy => null;
-    public ICacheProvider? CacheProvider => null;
+    public IKyrolusCacheProvider? CacheProvider => null;
     public IKyrolusMartenResiliencePolicy? ResiliencePolicy => null;
     public IKyrolusMartenTracing? Tracing => null;
 
@@ -857,7 +857,7 @@ internal sealed class RuntimeSeekRepositoryStub<TEntity>(
     {
     }
 
-    public string? ResolveTenantId(ITenantResolver? resolver) => resolver?.ResolveTenantId();
+    public string? ResolveTenantId(IKyrolusTenantResolver? resolver) => resolver?.ResolveTenantId();
 
     public Task<IEnumerable<TProjection>> QueryAsync<TProjection>(
         MartenQueryOptions<TEntity>? options,
@@ -1684,7 +1684,7 @@ internal sealed class RuntimeFactoryRepository;
 
 internal sealed class RuntimeMissingRepository;
 
-internal sealed class StaticTenantResolver(string tenantId) : ITenantResolver
+internal sealed class StaticTenantResolver(string tenantId) : IKyrolusTenantResolver
 {
     public string? ResolveTenantId() => tenantId;
 }

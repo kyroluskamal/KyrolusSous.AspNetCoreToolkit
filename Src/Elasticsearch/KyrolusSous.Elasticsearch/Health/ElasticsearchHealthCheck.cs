@@ -3,7 +3,7 @@ namespace KyrolusSous.Elasticsearch;
 /// <summary>
 /// Health check implementation probing Elasticsearch cluster connectivity and cluster health status.
 /// </summary>
-public class KyrolusElasticsearchHealthCheck(
+public sealed class KyrolusElasticsearchHealthCheck(
     ElasticsearchClient client,
     ILogger<KyrolusElasticsearchHealthCheck>? logger = null) : IHealthCheck
 {
@@ -31,14 +31,4 @@ public class KyrolusElasticsearchHealthCheck(
             return HealthCheckResult.Unhealthy("Elasticsearch health check failed.", ex);
         }
     }
-}
-
-/// <summary>
-/// Backward-compatibility alias for <see cref="KyrolusElasticsearchHealthCheck"/>.
-/// </summary>
-public class ElasticsearchHealthCheck(
-    ElasticsearchClient client,
-    ILogger<ElasticsearchHealthCheck>? logger = null)
-    : KyrolusElasticsearchHealthCheck(client, logger is null ? null : null)
-{
 }

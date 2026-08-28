@@ -2,7 +2,7 @@ namespace KyrolusSous.Caching.UnitTests.Redis;
 
 public sealed class RedisDistributedLockProviderTests
 {
-    [Fact(DisplayName = "RedisDistributedLockProvider: Successfully acquires lock and releases via Lua script upon DisposeAsync")]
+    [Fact(DisplayName = "KyrolusRedisDistributedLockProvider: Successfully acquires lock and releases via Lua script upon DisposeAsync")]
     public async Task AcquireLock_And_DisposeAsync_Releases()
     {
         var muxer = Substitute.For<IConnectionMultiplexer>();
@@ -16,7 +16,7 @@ public sealed class RedisDistributedLockProviderTests
             Arg.Any<RedisValue[]>(),
             Arg.Any<CommandFlags>()).Returns(Task.FromResult(RedisResult.Create((RedisValue)1)));
 
-        var provider = new RedisDistributedLockProvider(muxer);
+        var provider = new KyrolusRedisDistributedLockProvider(muxer);
 
         await using (var handle = await provider.AcquireLockAsync("wallet:101", TimeSpan.FromSeconds(2)))
         {
@@ -34,7 +34,7 @@ public sealed class RedisDistributedLockProviderTests
             Arg.Any<CommandFlags>());
     }
 
-    [Fact(DisplayName = "RedisDistributedLockProvider: Failed acquisition throws TimeoutException in AcquireLockAsync")]
+    [Fact(DisplayName = "KyrolusRedisDistributedLockProvider: Failed acquisition throws TimeoutException in AcquireLockAsync")]
     public async Task AcquireLock_Timeout_ThrowsTimeoutException()
     {
         var muxer = Substitute.For<IConnectionMultiplexer>();
@@ -48,7 +48,7 @@ public sealed class RedisDistributedLockProviderTests
             Arg.Any<RedisValue[]>(),
             Arg.Any<CommandFlags>()).Returns(Task.FromResult(RedisResult.Create((RedisValue)0)));
 
-        var provider = new RedisDistributedLockProvider(muxer);
+        var provider = new KyrolusRedisDistributedLockProvider(muxer);
 
         await Should.ThrowAsync<TimeoutException>(async () =>
         {

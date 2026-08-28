@@ -82,12 +82,12 @@ public static partial class RepositoryRuntimeDiagnostics
             name: "diag-redis-cache");
 
         using var provider = services.BuildServiceProvider();
-        var cache = provider.GetRequiredService<ICacheProvider>();
+        var cache = provider.GetRequiredService<IKyrolusCacheProvider>();
         var options = provider.GetRequiredService<KyrolusRedisCacheOptions>();
         var keyFactory = provider.GetRequiredService<IKyrolusCacheKeyFactory>();
         var healthChecks = provider.GetRequiredService<HealthCheckService>();
 
-        Require(cache is RedisCacheProvider, "Redis cache runtime should resolve the Redis cache provider.", ref checks);
+        Require(cache is KyrolusRedisCacheProvider, "Redis cache runtime should resolve the Redis cache provider.", ref checks);
         Require(options.RequireRegion && options.RequireTenantId, "Redis cache runtime should preserve required namespace options.", ref checks);
 
         var entryOptions = new KyrolusCacheEntryOptions
@@ -124,10 +124,10 @@ public static partial class RepositoryRuntimeDiagnostics
             invalidationOptions.Channel = $"{channel}:services";
         });
         using var extensionProvider = extensionServices.BuildServiceProvider();
-        var extensionCache = extensionProvider.GetRequiredService<ICacheProvider>();
+        var extensionCache = extensionProvider.GetRequiredService<IKyrolusCacheProvider>();
         var extensionSerializer = extensionProvider.GetRequiredService<IKyrolusCacheSerializer>();
         Require(
-            extensionCache is RedisCacheProvider &&
+            extensionCache is KyrolusRedisCacheProvider &&
             extensionSerializer is not KyrolusJsonCacheSerializer &&
             extensionProvider.GetRequiredService<IKyrolusCacheInvalidationBus>() is KyrolusRedisInvalidationBus,
             "Redis cache runtime should support connection-string registrations, serializer transformers, and invalidation-bus services.",
@@ -246,7 +246,7 @@ public static partial class RepositoryRuntimeDiagnostics
             PatternRemovalStrategy = KyrolusRedisPatternRemovalStrategy.ServerScan,
             CircuitBreaker = new KyrolusRedisCircuitBreakerOptions { Enabled = false }
         };
-        var scanCache = new RedisCacheProvider(
+        var scanCache = new KyrolusRedisCacheProvider(
             primaryConnection,
             new KyrolusRedisCacheDependencies(
                 provider.GetRequiredService<IKyrolusCacheSerializer>(),
@@ -524,7 +524,7 @@ public static partial class RepositoryRuntimeDiagnostics
             CircuitBreaker = new KyrolusRedisCircuitBreakerOptions { Enabled = false }
         });
         Require(
-            base64SignatureProvider is RedisCacheProvider,
+            base64SignatureProvider is KyrolusRedisCacheProvider,
             "Redis cache runtime should build payload signatures from valid base64 encryption settings.",
             ref checks);
 
@@ -551,7 +551,7 @@ public static partial class RepositoryRuntimeDiagnostics
             CircuitBreaker = new KyrolusRedisCircuitBreakerOptions { Enabled = false }
         });
         Require(
-            warningCatchProvider is RedisCacheProvider,
+            warningCatchProvider is KyrolusRedisCacheProvider,
             "Redis cache runtime should swallow configuration-signature failures because warnings are best-effort only.",
             ref checks);
 
@@ -765,8 +765,8 @@ public static partial class RepositoryRuntimeDiagnostics
 
         using var nearProviderA = BuildNearCacheServiceProvider(primaryConnection, nearPrefix, tenantId, nearChannel);
         using var nearProviderB = BuildNearCacheServiceProvider(secondaryConnection, nearPrefix, tenantId, nearChannel);
-        var nearCacheA = nearProviderA.GetRequiredService<ICacheProvider>();
-        var nearCacheB = nearProviderB.GetRequiredService<ICacheProvider>();
+        var nearCacheA = nearProviderA.GetRequiredService<IKyrolusCacheProvider>();
+        var nearCacheB = nearProviderB.GetRequiredService<IKyrolusCacheProvider>();
         Require(
             nearCacheA is KyrolusRedisNearCacheProvider &&
             nearCacheB is KyrolusRedisNearCacheProvider,
@@ -925,7 +925,7 @@ public static partial class RepositoryRuntimeDiagnostics
                 nearOptions.PublishInvalidations = false;
                 nearOptions.SubscribeInvalidations = false;
             });
-        var noPublishNearCache = noPublishNearProvider.GetRequiredService<ICacheProvider>();
+        var noPublishNearCache = noPublishNearProvider.GetRequiredService<IKyrolusCacheProvider>();
         await noPublishNearCache.SetAsync("nopublish", "value", TimeSpan.FromMinutes(1), cancellationToken).ConfigureAwait(false);
         await noPublishNearCache.SetManyAsync(
             [new KeyValuePair<string, string>("nopublish-bulk", "value")],
@@ -956,7 +956,7 @@ public static partial class RepositoryRuntimeDiagnostics
             });
         using var nearConnectionStringProvider = nearConnectionStringServices.BuildServiceProvider();
         Require(
-            nearConnectionStringProvider.GetRequiredService<ICacheProvider>() is KyrolusRedisNearCacheProvider,
+            nearConnectionStringProvider.GetRequiredService<IKyrolusCacheProvider>() is KyrolusRedisNearCacheProvider,
             "Redis near cache runtime should support the connection-string registration overload.",
             ref checks);
 

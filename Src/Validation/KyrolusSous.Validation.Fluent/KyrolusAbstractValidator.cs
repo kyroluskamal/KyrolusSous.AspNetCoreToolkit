@@ -5,30 +5,30 @@ namespace KyrolusSous.Validation.Fluent;
 
 public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidator<T>
 {
-    private readonly List<IValidationRule<T>> _rules = [];
+    private readonly List<IKyrolusValidationRule<T>> _rules = [];
 
-    public CascadeMode CascadeMode { get; set; } = CascadeMode.Continue;
+    public KyrolusCascadeMode KyrolusCascadeMode { get; set; } = KyrolusCascadeMode.Continue;
 
-    protected IRuleBuilder<T, TProperty> RuleFor<TProperty>(Expression<Func<T, TProperty>> expression)
+    protected IKyrolusRuleBuilder<T, TProperty> RuleFor<TProperty>(Expression<Func<T, TProperty>> expression)
     {
         ArgumentNullException.ThrowIfNull(expression);
 
         var name = GetPropertyName(expression);
-        var rule = new PropertyRule<T, TProperty>(name, expression.Compile());
+        var rule = new KyrolusPropertyRule<T, TProperty>(name, expression.Compile());
         _rules.Add(rule);
         return rule;
     }
 
-    protected IRuleBuilder<T, TProperty> RuleFor<TProperty>(Func<T, TProperty> selector, string propertyName)
+    protected IKyrolusRuleBuilder<T, TProperty> RuleFor<TProperty>(Func<T, TProperty> selector, string propertyName)
     {
         ArgumentNullException.ThrowIfNull(selector);
 
-        var rule = new PropertyRule<T, TProperty>(propertyName, selector);
+        var rule = new KyrolusPropertyRule<T, TProperty>(propertyName, selector);
         _rules.Add(rule);
         return rule;
     }
 
-    protected IRuleBuilder<T, TProperty> RuleFor<TProperty>(
+    protected IKyrolusRuleBuilder<T, TProperty> RuleFor<TProperty>(
         Expression<Func<T, TProperty>> expression,
         Func<TProperty, bool> predicate,
         string defaultMessage = "Validation failed.")
@@ -38,7 +38,7 @@ public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidator<T>
         return ruleBuilder;
     }
 
-    protected IRuleBuilder<T, TProperty> RuleFor<TProperty>(
+    protected IKyrolusRuleBuilder<T, TProperty> RuleFor<TProperty>(
         Func<T, TProperty> selector,
         string propertyName,
         Func<TProperty, bool> predicate,
@@ -49,7 +49,7 @@ public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidator<T>
         return ruleBuilder;
     }
 
-    protected void AddCustomRule(IValidationRule<T> rule)
+    protected void AddCustomRule(IKyrolusValidationRule<T> rule)
     {
         ArgumentNullException.ThrowIfNull(rule);
         _rules.Add(rule);
@@ -74,7 +74,7 @@ public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidator<T>
             if (ruleFailures.Count > 0)
             {
                 failures.AddRange(ruleFailures);
-                if (CascadeMode == CascadeMode.Stop)
+                if (KyrolusCascadeMode == KyrolusCascadeMode.Stop)
                 {
                     break;
                 }

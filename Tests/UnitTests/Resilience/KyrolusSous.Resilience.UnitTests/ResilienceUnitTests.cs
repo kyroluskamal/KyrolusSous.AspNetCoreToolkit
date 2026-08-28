@@ -30,7 +30,7 @@ public class CustomPermanentDomainException : KyrolusException
     }
 }
 
-[Resilient(PipelineName = "default")]
+[KyrolusResilient(PipelineName = "default")]
 public record TestResilientCommand(string Name) : IKyrolusRequest<string>;
 
 public class ResilienceUnitTests
@@ -198,7 +198,7 @@ public class ResilienceUnitTests
 
         var provider = services.BuildServiceProvider();
         var pipelineProvider = provider.GetRequiredService<IKyrolusResiliencePipelineProvider>();
-        var behavior = new ResiliencePipelineBehavior<TestResilientCommand, string>(pipelineProvider);
+        var behavior = new KyrolusResiliencePipelineBehavior<TestResilientCommand, string>(pipelineProvider);
 
         var attempts = 0;
         var command = new TestResilientCommand("CreateOrder");
@@ -226,7 +226,7 @@ public class ResilienceUnitTests
 
         var provider = services.BuildServiceProvider();
         var pipelineProvider = provider.GetRequiredService<IKyrolusResiliencePipelineProvider>();
-        var healthCheck = new ResilienceCircuitBreakerHealthCheck(pipelineProvider);
+        var healthCheck = new KyrolusResilienceCircuitBreakerHealthCheck(pipelineProvider);
 
         var result = await healthCheck.CheckHealthAsync(new HealthCheckContext());
         result.Status.ShouldBe(HealthStatus.Healthy);

@@ -4,7 +4,7 @@ using Microsoft.Extensions.Caching.Distributed;
 
 namespace KyrolusSous.Repositories.EF.Cache.Distributed;
 
-public sealed class KyrolusEfDistributedCacheProvider : ICacheProvider
+public sealed class KyrolusEfDistributedCacheProvider : IKyrolusCacheProvider
 {
     private static readonly byte[] NullPayload = [0];
     private readonly IDistributedCache cache;

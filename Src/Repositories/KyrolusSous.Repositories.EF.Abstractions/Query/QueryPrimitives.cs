@@ -9,7 +9,7 @@ using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
 
 namespace KyrolusSous.Repositories.EF.Abstractions.Query
 {
-    public interface IQueryHelper<TEntity>
+    public interface IKyrolusQueryHelper<TEntity>
     {
         QueryParts<TEntity> Build(QueryRequest? request);
         Expression<Func<TEntity, bool>>? BuildFilter(QueryRequest? request);

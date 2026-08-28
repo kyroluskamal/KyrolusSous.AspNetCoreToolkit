@@ -17,7 +17,7 @@ public static class EntityApi
 
             group.MapGet("/", async (
                 KyrolusUnitOfWork uow,
-                IQueryHelper<TEntity> helper,
+                IKyrolusQueryHelper<TEntity> helper,
                 [FromQuery] QueryRequest? request,
                 CancellationToken ct) =>
             {
@@ -39,7 +39,7 @@ public static class EntityApi
             group.MapGet("/{id}", async (
                 TKey id,
                 KyrolusUnitOfWork uow,
-                IQueryHelper<TEntity> helper,
+                IKyrolusQueryHelper<TEntity> helper,
                 [FromQuery] QueryRequest? request,
                 CancellationToken ct) =>
             {
@@ -65,7 +65,7 @@ public static class EntityApi
             group.MapGet("by-id", async (
                 [FromQuery] string[] keys,
                 KyrolusUnitOfWork uow,
-                IQueryHelper<TEntity> helper,
+                IKyrolusQueryHelper<TEntity> helper,
                 [FromQuery] QueryRequest? request,
                 CancellationToken ct) =>
             {
@@ -467,7 +467,7 @@ public static class EntityApi
             // Existence check
             group.MapGet("/exists", async (
                 KyrolusUnitOfWork uow,
-                IQueryHelper<TEntity> helper,
+                IKyrolusQueryHelper<TEntity> helper,
                 [FromQuery] QueryRequest? request,
                 CancellationToken ct) =>
             {
@@ -480,7 +480,7 @@ public static class EntityApi
             // Stream (AsAsyncEnumerable)
             group.MapGet("/stream", async (
                 KyrolusUnitOfWork uow,
-                IQueryHelper<TEntity> helper,
+                IKyrolusQueryHelper<TEntity> helper,
                 [FromQuery] QueryRequest? request,
                 CancellationToken ct) =>
             {
@@ -501,7 +501,7 @@ public static class EntityApi
             // ExecuteUpdate using UpdateSettersBuilder (uses EF API with pragma to silence EF1001) / ExecuteDelete
             group.MapPost("/execute-update", async (
                 KyrolusUnitOfWork uow,
-                IQueryHelper<TEntity> helper,
+                IKyrolusQueryHelper<TEntity> helper,
                 [FromBody] ExecuteUpdateDto dto,
                 CancellationToken ct) =>
             {
@@ -546,7 +546,7 @@ public static class EntityApi
 
             group.MapPost("/execute-delete", async (
                 KyrolusUnitOfWork uow,
-                IQueryHelper<TEntity> helper,
+                IKyrolusQueryHelper<TEntity> helper,
                 [FromBody] QueryRequest request,
                 CancellationToken ct) =>
             {

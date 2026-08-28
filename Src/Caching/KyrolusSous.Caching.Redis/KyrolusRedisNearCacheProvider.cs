@@ -14,10 +14,10 @@ namespace KyrolusSous.Caching.Redis;
 /// Redis Pub/Sub so that all other server nodes evict their stale L1 memory immediately.
 /// </para>
 /// </remarks>
-public sealed class KyrolusRedisNearCacheProvider : ICacheProvider, IDisposable
+public sealed class KyrolusRedisNearCacheProvider : IKyrolusCacheProvider, IDisposable
 {
     private const string L1ProviderName = "redis-near-l1";
-    private readonly RedisCacheProvider l2;
+    private readonly KyrolusRedisCacheProvider l2;
     private readonly L1CacheStore l1;
     private readonly KyrolusRedisNearCacheOptions options;
     private readonly IKyrolusCacheKeyFactory keyFactory;
@@ -41,7 +41,7 @@ public sealed class KyrolusRedisNearCacheProvider : ICacheProvider, IDisposable
         keyFactory = cacheDependencies.KeyFactory;
         cacheOptions = cacheDependencies.Options;
         observer = cacheDependencies.Observer;
-        l2 = new RedisCacheProvider(multiplexer, cacheDependencies);
+        l2 = new KyrolusRedisCacheProvider(multiplexer, cacheDependencies);
         l1 = new L1CacheStore(memoryCache, options);
 
         this.invalidationBus = invalidationBus ?? new KyrolusRedisInvalidationBus(

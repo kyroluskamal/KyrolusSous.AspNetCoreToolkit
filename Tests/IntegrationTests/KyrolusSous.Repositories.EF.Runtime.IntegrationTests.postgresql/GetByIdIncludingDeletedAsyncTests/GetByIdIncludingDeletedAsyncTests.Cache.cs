@@ -261,8 +261,8 @@ public partial class GetByIdIncludingDeletedAsyncTests
         {
             builder.ConfigureServices(services =>
             {
-                services.RemoveAll<ICacheKeyContext>();
-                services.AddScoped<ICacheKeyContext>(_ => new TestCacheKeyContext());
+                services.RemoveAll<IKyrolusCacheKeyContext>();
+                services.AddScoped<IKyrolusCacheKeyContext>(_ => new TestCacheKeyContext());
             });
         });
 

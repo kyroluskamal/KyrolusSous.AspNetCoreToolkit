@@ -1,7 +1,7 @@
 namespace KyrolusSous.Caching.Redis;
 
 /// <summary>
-/// Production-grade implementation of <see cref="IDistributedLockProvider"/> using Redis Lua scripts (Redlock mutual exclusion).
+/// Production-grade implementation of <see cref="IKyrolusDistributedLockProvider"/> using Redis Lua scripts (Redlock mutual exclusion).
 /// </summary>
 /// <remarks>
 /// <b>Real-World Concurrency Protection:</b>
@@ -9,7 +9,7 @@ namespace KyrolusSous.Caching.Redis;
 /// Lock release is performed atomically via a Lua script that verifies the cryptographic owner token 
 /// to ensure a slow instance never accidentally releases a lock that has expired and been acquired by another instance.
 /// </remarks>
-public sealed class RedisDistributedLockProvider : IDistributedLockProvider
+public sealed class KyrolusRedisDistributedLockProvider : IKyrolusDistributedLockProvider
 {
     private const string AcquireLockScript =
         "if redis.call('exists', KEYS[1]) == 0 then redis.call('psetex', KEYS[1], ARGV[2], ARGV[1]); return 1 else return 0 end";
@@ -23,12 +23,12 @@ public sealed class RedisDistributedLockProvider : IDistributedLockProvider
     private readonly KyrolusRedisCacheOptions options;
 
     /// <summary>
-    /// Initializes a new instance of <see cref="RedisDistributedLockProvider"/>.
+    /// Initializes a new instance of <see cref="KyrolusRedisDistributedLockProvider"/>.
     /// </summary>
     /// <param name="multiplexer">The active Redis connection multiplexer.</param>
     /// <param name="keyFactory">Optional key factory.</param>
     /// <param name="options">Optional Redis options.</param>
-    public RedisDistributedLockProvider(
+    public KyrolusRedisDistributedLockProvider(
         IConnectionMultiplexer multiplexer,
         IKyrolusCacheKeyFactory? keyFactory = null,
         KyrolusRedisCacheOptions? options = null)
@@ -40,7 +40,7 @@ public sealed class RedisDistributedLockProvider : IDistributedLockProvider
     }
 
     /// <inheritdoc />
-    public async Task<IDistributedLockHandle?> TryAcquireLockAsync(
+    public async Task<IKyrolusDistributedLockHandle?> TryAcquireLockAsync(
         string key,
         TimeSpan timeout,
         TimeSpan? lockExpiry = null,
@@ -71,7 +71,7 @@ public sealed class RedisDistributedLockProvider : IDistributedLockProvider
 
             if ((int)result == 1)
             {
-                return new RedisDistributedLockHandle(database, resolvedKey, token, key, options.WriteCommandFlags);
+                return new KyrolusRedisDistributedLockHandle(database, resolvedKey, token, key, options.WriteCommandFlags);
             }
 
             var delay = GetRetryDelay(attempt, waitUntil);
@@ -89,7 +89,7 @@ public sealed class RedisDistributedLockProvider : IDistributedLockProvider
     }
 
     /// <inheritdoc />
-    public async Task<IDistributedLockHandle> AcquireLockAsync(
+    public async Task<IKyrolusDistributedLockHandle> AcquireLockAsync(
         string key,
         TimeSpan timeout,
         TimeSpan? lockExpiry = null,
@@ -128,7 +128,7 @@ public sealed class RedisDistributedLockProvider : IDistributedLockProvider
         return delay < remaining ? delay : remaining;
     }
 
-    private sealed class RedisDistributedLockHandle : IDistributedLockHandle
+    private sealed class KyrolusRedisDistributedLockHandle : IKyrolusDistributedLockHandle
     {
         private readonly IDatabase database;
         private readonly RedisKey resolvedKey;
@@ -139,7 +139,7 @@ public sealed class RedisDistributedLockProvider : IDistributedLockProvider
         public string LockToken { get; }
         public bool IsAcquired => released == 0;
 
-        public RedisDistributedLockHandle(
+        public KyrolusRedisDistributedLockHandle(
             IDatabase database,
             RedisKey resolvedKey,
             string token,

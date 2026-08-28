@@ -4,7 +4,7 @@ namespace KyrolusSous.Elasticsearch;
 /// Configures Elasticsearch index properties for a document model.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
-public class KyrolusElasticIndexAttribute(string indexName) : Attribute
+public sealed class KyrolusElasticIndexAttribute(string indexName) : Attribute
 {
     public string IndexName { get; } = indexName;
 
@@ -17,12 +17,4 @@ public class KyrolusElasticIndexAttribute(string indexName) : Attribute
     public bool UseAlias { get; set; } = false;
 
     public string? IlmPolicyName { get; set; }
-}
-
-/// <summary>
-/// Backward-compatibility alias for <see cref="KyrolusElasticIndexAttribute"/>.
-/// </summary>
-[AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
-public sealed class ElasticIndexAttribute(string indexName) : KyrolusElasticIndexAttribute(indexName)
-{
 }

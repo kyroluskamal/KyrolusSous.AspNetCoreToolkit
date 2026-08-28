@@ -3,7 +3,7 @@ namespace KyrolusSous.Elasticsearch;
 /// <summary>
 /// Fluent query builder for building complex, optimized Elasticsearch queries.
 /// </summary>
-public class KyrolusSmartSearchBuilder<TDocument> where TDocument : class
+public sealed class KyrolusSmartSearchBuilder<TDocument> where TDocument : class
 {
     private string? _queryText;
     private readonly List<string> _searchFields = [];
@@ -271,11 +271,4 @@ public class KyrolusSmartSearchBuilder<TDocument> where TDocument : class
             }
         }));
     }
-}
-
-/// <summary>
-/// Backward-compatibility alias for <see cref="KyrolusSmartSearchBuilder{TDocument}"/>.
-/// </summary>
-public sealed class SmartSearchBuilder<TDocument> : KyrolusSmartSearchBuilder<TDocument> where TDocument : class
-{
 }

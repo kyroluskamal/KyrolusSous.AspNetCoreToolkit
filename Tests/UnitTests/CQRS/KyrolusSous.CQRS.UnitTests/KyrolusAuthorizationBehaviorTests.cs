@@ -25,7 +25,7 @@ public class KyrolusAuthorizationBehaviorTests
     [Fact]
     public async Task Public_request_should_proceed_without_authentication()
     {
-        var behavior = new KyrolusAuthorizationBehavior<PublicQuery, string>(new DefaultCurrentUserContext());
+        var behavior = new KyrolusAuthorizationBehavior<PublicQuery, string>(new KyrolusDefaultCurrentUserContext());
         var response = await behavior.Handle(
             new PublicQuery("search"),
             ct => Task.FromResult("results"),
@@ -37,7 +37,7 @@ public class KyrolusAuthorizationBehaviorTests
     [Fact]
     public async Task Unauthenticated_user_on_protected_command_should_throw_security_exception()
     {
-        var unauthenticatedContext = new DefaultCurrentUserContext(new ClaimsPrincipal(new ClaimsIdentity())); // not authenticated
+        var unauthenticatedContext = new KyrolusDefaultCurrentUserContext(new ClaimsPrincipal(new ClaimsIdentity())); // not authenticated
         var behavior = new KyrolusAuthorizationBehavior<AdminCommand, string>(unauthenticatedContext);
 
         var ex = await Should.ThrowAsync<KyrolusSecurityException>(() =>
@@ -56,7 +56,7 @@ public class KyrolusAuthorizationBehaviorTests
             new Claim(ClaimTypes.Role, "Admin")
         ], "TestAuth");
 
-        var context = new DefaultCurrentUserContext(new ClaimsPrincipal(identity));
+        var context = new KyrolusDefaultCurrentUserContext(new ClaimsPrincipal(identity));
         var behavior = new KyrolusAuthorizationBehavior<AdminCommand, string>(context);
 
         var response = await behavior.Handle(
@@ -76,7 +76,7 @@ public class KyrolusAuthorizationBehaviorTests
             new Claim(ClaimTypes.Role, "Guest")
         ], "TestAuth");
 
-        var context = new DefaultCurrentUserContext(new ClaimsPrincipal(identity));
+        var context = new KyrolusDefaultCurrentUserContext(new ClaimsPrincipal(identity));
         var behavior = new KyrolusAuthorizationBehavior<AdminCommand, string>(context);
 
         var ex = await Should.ThrowAsync<KyrolusSecurityException>(() =>
@@ -94,7 +94,7 @@ public class KyrolusAuthorizationBehaviorTests
             new Claim("permission", "orders.create")
         ], "TestAuth");
 
-        var context = new DefaultCurrentUserContext(new ClaimsPrincipal(identity));
+        var context = new KyrolusDefaultCurrentUserContext(new ClaimsPrincipal(identity));
         var behavior = new KyrolusAuthorizationBehavior<CreateOrderCommand, int>(context);
 
         var response = await behavior.Handle(
@@ -114,7 +114,7 @@ public class KyrolusAuthorizationBehaviorTests
             new Claim(ClaimTypes.Role, "Supervisor")
         ], "TestAuth");
 
-        var context = new DefaultCurrentUserContext(new ClaimsPrincipal(identity));
+        var context = new KyrolusDefaultCurrentUserContext(new ClaimsPrincipal(identity));
         var behavior = new KyrolusAuthorizationBehavior<CustomAuthorizedRequest, string>(context);
 
         // Success when role matches

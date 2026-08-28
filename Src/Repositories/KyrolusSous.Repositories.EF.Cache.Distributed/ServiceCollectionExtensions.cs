@@ -12,7 +12,7 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         Action<JsonSerializerOptions>? configureJson = null)
     {
-        services.TryAddSingleton<ICacheProvider>(sp =>
+        services.TryAddSingleton<IKyrolusCacheProvider>(sp =>
         {
             var json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
             configureJson?.Invoke(json);

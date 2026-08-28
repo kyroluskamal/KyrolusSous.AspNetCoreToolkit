@@ -20,14 +20,14 @@ public sealed class AuditingAndMultiTenancyTests
         public string TenantId { get; set; } = string.Empty;
     }
 
-    private sealed class MockUserContext(string userId, string userName) : ICurrentUserContext
+    private sealed class MockUserContext(string userId, string userName) : IKyrolusCurrentUserContext
     {
         public string? UserId => userId;
         public string? UserName => userName;
         public bool IsAuthenticated => true;
     }
 
-    private sealed class MockTenantContext(string tenantId) : ICurrentTenantContext
+    private sealed class MockTenantContext(string tenantId) : IKyrolusCurrentTenantContext
     {
         public string? TenantId => tenantId;
     }

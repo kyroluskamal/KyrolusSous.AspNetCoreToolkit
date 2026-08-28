@@ -28,17 +28,13 @@ public class KyrolusElasticSyncInterceptor(
         try
         {
             var entries = eventData.Context.ChangeTracker.Entries()
-                .Where(e => e.Entity.GetType().GetCustomAttribute<KyrolusSyncToElasticsearchAttribute>() is not null
-                         || e.Entity.GetType().GetCustomAttribute<SyncToElasticsearchAttribute>() is not null)
+                .Where(e => e.Entity.GetType().GetCustomAttribute<KyrolusSyncToElasticsearchAttribute>() is not null)
                 .ToList();
 
             foreach (var entry in entries)
             {
-                var attr = entry.Entity.GetType().GetCustomAttribute<KyrolusSyncToElasticsearchAttribute>()
-                           ?? (KyrolusSyncToElasticsearchAttribute?)entry.Entity.GetType().GetCustomAttribute<SyncToElasticsearchAttribute>();
-
-                var indexAttr = entry.Entity.GetType().GetCustomAttribute<KyrolusElasticIndexAttribute>()
-                                ?? (KyrolusElasticIndexAttribute?)entry.Entity.GetType().GetCustomAttribute<ElasticIndexAttribute>();
+                var attr = entry.Entity.GetType().GetCustomAttribute<KyrolusSyncToElasticsearchAttribute>();
+                var indexAttr = entry.Entity.GetType().GetCustomAttribute<KyrolusElasticIndexAttribute>();
 
                 if (attr is null) continue;
 
@@ -72,15 +68,4 @@ public class KyrolusElasticSyncInterceptor(
 
         return await base.SavedChangesAsync(eventData, result, cancellationToken);
     }
-}
-
-/// <summary>
-/// Backward-compatibility alias for <see cref="KyrolusElasticSyncInterceptor"/>.
-/// </summary>
-public class ElasticSyncInterceptor(
-    ElasticsearchClient client,
-    IOptions<KyrolusElasticsearchOptions> options,
-    ILogger<ElasticSyncInterceptor>? logger = null)
-    : KyrolusElasticSyncInterceptor(client, options, logger is null ? null : null)
-{
 }

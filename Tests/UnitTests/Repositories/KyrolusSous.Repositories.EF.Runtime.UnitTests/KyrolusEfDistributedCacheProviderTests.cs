@@ -73,7 +73,7 @@ public sealed class KyrolusEfDistributedCacheProviderTests
         factoryCallCount.ShouldBe(1); // Factory not called again
     }
 
-    [Fact(DisplayName = "EfDistributedCacheProvider: DI registration AddKyrolusEfDistributedCacheProvider registers ICacheProvider")]
+    [Fact(DisplayName = "EfDistributedCacheProvider: DI registration AddKyrolusEfDistributedCacheProvider registers IKyrolusCacheProvider")]
     public void ServiceCollectionExtensions_RegistersProvider()
     {
         var services = new ServiceCollection();
@@ -81,7 +81,7 @@ public sealed class KyrolusEfDistributedCacheProviderTests
         services.AddKyrolusEfDistributedCacheProvider();
 
         using var provider = services.BuildServiceProvider();
-        var cacheProvider = provider.GetService<ICacheProvider>();
+        var cacheProvider = provider.GetService<IKyrolusCacheProvider>();
 
         cacheProvider.ShouldNotBeNull();
         cacheProvider.ShouldBeOfType<KyrolusEfDistributedCacheProvider>();

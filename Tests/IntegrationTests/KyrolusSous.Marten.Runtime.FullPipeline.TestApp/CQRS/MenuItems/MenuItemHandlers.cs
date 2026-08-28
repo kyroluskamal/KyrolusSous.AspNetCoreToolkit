@@ -21,7 +21,7 @@ namespace KyrolusSous.Marten.Runtime.FullPipeline.TestApp.CQRS.MenuItems;
 
 public sealed class AddMenuItemHandler(
     IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
-    ITenantResolver tenantResolver)
+    IKyrolusTenantResolver tenantResolver)
     : IKyrolusCommandHandler<AddCommand<MenuItem>, MenuItem>
 {
     public async Task<MenuItem> Handle(AddCommand<MenuItem> command, CancellationToken cancellationToken)
@@ -40,7 +40,7 @@ public sealed class AddMenuItemHandler(
 
 public sealed class AddMenuItemRangeHandler(
     IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
-    ITenantResolver tenantResolver)
+    IKyrolusTenantResolver tenantResolver)
     : IKyrolusCommandHandler<AddRangeCommand<MenuItem>, IEnumerable<MenuItem>>
 {
     public async Task<IEnumerable<MenuItem>> Handle(AddRangeCommand<MenuItem> command, CancellationToken cancellationToken)
@@ -63,7 +63,7 @@ public sealed class AddMenuItemRangeHandler(
 
 public sealed class UpdateMenuItemHandler(
     IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
-    ITenantResolver tenantResolver)
+    IKyrolusTenantResolver tenantResolver)
     : IKyrolusCommandHandler<UpdateCommand<MenuItem>, MenuItem>
 {
     public async Task<MenuItem> Handle(UpdateCommand<MenuItem> command, CancellationToken cancellationToken)
@@ -83,7 +83,7 @@ public sealed class UpdateMenuItemHandler(
 
 public sealed class UpdateMenuItemRangeHandler(
     IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
-    ITenantResolver tenantResolver)
+    IKyrolusTenantResolver tenantResolver)
     : IKyrolusCommandHandler<UpdateRangeCommand<MenuItem>, IEnumerable<MenuItem>>
 {
     public async Task<IEnumerable<MenuItem>> Handle(UpdateRangeCommand<MenuItem> command, CancellationToken cancellationToken)
@@ -181,8 +181,8 @@ public sealed class RestoreMenuItemByIdHandler(
 
 public sealed class GetMenuItemsHandler(
     IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
-    ITenantResolver tenantResolver,
-    ICacheProvider cacheProvider)
+    IKyrolusTenantResolver tenantResolver,
+    IKyrolusCacheProvider cacheProvider)
     : IKyrolusQueryHandler<GetAllQuery<MenuItem>, IEnumerable<MenuItem>>
 {
     public async Task<IEnumerable<MenuItem>> Handle(GetAllQuery<MenuItem> query, CancellationToken cancellationToken)
@@ -263,8 +263,8 @@ public sealed class GetMenuItemsHandler(
 
 public sealed class GetMenuItemByIdHandler(
     IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
-    ITenantResolver tenantResolver,
-    ICacheProvider cacheProvider)
+    IKyrolusTenantResolver tenantResolver,
+    IKyrolusCacheProvider cacheProvider)
     : IKyrolusQueryHandler<GetByIdQuery<MenuItem, Guid>, MenuItem?>
 {
     public async Task<MenuItem?> Handle(GetByIdQuery<MenuItem, Guid> query, CancellationToken cancellationToken)

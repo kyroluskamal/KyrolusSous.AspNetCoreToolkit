@@ -58,7 +58,7 @@ public class Kyrolus20RoundsReviewTests
     [Fact]
     public async Task Round2_Idempotency_should_cache_and_return_response()
     {
-        var cache = Substitute.For<ICacheProvider>();
+        var cache = Substitute.For<IKyrolusCacheProvider>();
         string? cachedEnvelope = null;
 
         cache.GetAsync<string>(Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -116,7 +116,7 @@ public class Kyrolus20RoundsReviewTests
         ], "TestAuth");
 
         var principal = new ClaimsPrincipal(identity);
-        var context = new DefaultCurrentUserContext(principal);
+        var context = new KyrolusDefaultCurrentUserContext(principal);
 
         context.IsAuthenticated.ShouldBeTrue();
         context.TenantId.ShouldBe("tenant-42");
@@ -371,7 +371,7 @@ public class Kyrolus20RoundsReviewTests
     public async Task Round20_Audit_should_redact_passwords_and_tokens()
     {
         var sink = new InMemoryAuditSink();
-        var context = new DefaultCurrentUserContext(user: null);
+        var context = new KyrolusDefaultCurrentUserContext(user: null);
         var behavior = new KyrolusAuditBehavior<LoginCommand, string>(sink, context);
 
         var cmd = new LoginCommand("admin", "P@ssw0rd123", "secret-token-xyz");

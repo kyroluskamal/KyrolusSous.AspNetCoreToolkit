@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace KyrolusSous.Validation.Fluent;
 
-public sealed record PasswordOptions(
+public sealed record KyrolusPasswordOptions(
     int MinLength = 8,
     int MaxLength = 128,
     bool RequireUppercase = true,
@@ -246,10 +246,10 @@ public static class AdvancedRuleBuilderExtensions
     /// <summary>
     /// Validates Password Strength (Min/Max length, Uppercase, Lowercase, Digit, Special Characters).
     /// </summary>
-    public static bool IsStrongPasswordValid(string? password, PasswordOptions? options = null)
+    public static bool IsStrongPasswordValid(string? password, KyrolusPasswordOptions? options = null)
     {
         if (string.IsNullOrEmpty(password)) return false;
-        options ??= new PasswordOptions();
+        options ??= new KyrolusPasswordOptions();
 
         if (password.Length < options.MinLength || password.Length > options.MaxLength) return false;
         if (options.RequireUppercase && !password.Any(char.IsUpper)) return false;

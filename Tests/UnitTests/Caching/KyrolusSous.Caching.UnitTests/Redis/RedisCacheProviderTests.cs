@@ -6,7 +6,7 @@ public sealed class RedisCacheProviderTests
 {
     private sealed record ProductDto(int Id, string Name, decimal Price);
 
-    [Fact(DisplayName = "RedisCacheProvider: GetAsync returns deserialized object on cache hit")]
+    [Fact(DisplayName = "KyrolusRedisCacheProvider: GetAsync returns deserialized object on cache hit")]
     public async Task GetAsync_Hit_ReturnsObject()
     {
         var muxer = Substitute.For<IConnectionMultiplexer>();
@@ -27,7 +27,7 @@ public sealed class RedisCacheProviderTests
             new KyrolusCacheKeyFactory("test"),
             new KyrolusRedisCacheOptions());
 
-        var provider = new RedisCacheProvider(muxer, deps);
+        var provider = new KyrolusRedisCacheProvider(muxer, deps);
 
         var result = await provider.GetAsync<ProductDto>("product:1");
         result.ShouldNotBeNull();
@@ -36,7 +36,7 @@ public sealed class RedisCacheProviderTests
         result.Price.ShouldBe(1200m);
     }
 
-    [Fact(DisplayName = "RedisCacheProvider: GetAsync returns null on cache miss")]
+    [Fact(DisplayName = "KyrolusRedisCacheProvider: GetAsync returns null on cache miss")]
     public async Task GetAsync_Miss_ReturnsNull()
     {
         var muxer = Substitute.For<IConnectionMultiplexer>();
@@ -53,13 +53,13 @@ public sealed class RedisCacheProviderTests
             new KyrolusCacheKeyFactory("test"),
             new KyrolusRedisCacheOptions());
 
-        var provider = new RedisCacheProvider(muxer, deps);
+        var provider = new KyrolusRedisCacheProvider(muxer, deps);
 
         var result = await provider.GetAsync<ProductDto>("nonexistent");
         result.ShouldBeNull();
     }
 
-    [Fact(DisplayName = "RedisCacheProvider: SetAsync saves serialized value to database")]
+    [Fact(DisplayName = "KyrolusRedisCacheProvider: SetAsync saves serialized value to database")]
     public async Task SetAsync_SavesValue()
     {
         var muxer = Substitute.For<IConnectionMultiplexer>();
@@ -73,7 +73,7 @@ public sealed class RedisCacheProviderTests
             new KyrolusCacheKeyFactory("test"),
             new KyrolusRedisCacheOptions());
 
-        var provider = new RedisCacheProvider(muxer, deps);
+        var provider = new KyrolusRedisCacheProvider(muxer, deps);
         var product = new ProductDto(2, "Phone", 800m);
 
         await provider.SetAsync("product:2", product, TimeSpan.FromMinutes(15));
@@ -86,7 +86,7 @@ public sealed class RedisCacheProviderTests
             Arg.Any<CommandFlags>());
     }
 
-    [Fact(DisplayName = "RedisCacheProvider: SetAsync with KyrolusCacheEntryOptions saves sliding and tags")]
+    [Fact(DisplayName = "KyrolusRedisCacheProvider: SetAsync with KyrolusCacheEntryOptions saves sliding and tags")]
     public async Task SetAsync_WithOptions_SavesSlidingAndTags()
     {
         var muxer = Substitute.For<IConnectionMultiplexer>();
@@ -100,7 +100,7 @@ public sealed class RedisCacheProviderTests
             new KyrolusCacheKeyFactory("test"),
             new KyrolusRedisCacheOptions());
 
-        var provider = new RedisCacheProvider(muxer, deps);
+        var provider = new KyrolusRedisCacheProvider(muxer, deps);
 
         var options = new KyrolusCacheEntryOptions
         {
@@ -120,7 +120,7 @@ public sealed class RedisCacheProviderTests
             Arg.Any<CommandFlags>());
     }
 
-    [Fact(DisplayName = "RedisCacheProvider: RemoveAsync and ExistsAsync execute database calls")]
+    [Fact(DisplayName = "KyrolusRedisCacheProvider: RemoveAsync and ExistsAsync execute database calls")]
     public async Task RemoveAndExists_Execute()
     {
         var muxer = Substitute.For<IConnectionMultiplexer>();
@@ -135,7 +135,7 @@ public sealed class RedisCacheProviderTests
             new KyrolusCacheKeyFactory("test"),
             new KyrolusRedisCacheOptions());
 
-        var provider = new RedisCacheProvider(muxer, deps);
+        var provider = new KyrolusRedisCacheProvider(muxer, deps);
 
         var exists = await provider.ExistsAsync("product:1");
         exists.ShouldBeTrue();
@@ -144,7 +144,7 @@ public sealed class RedisCacheProviderTests
         await db.Received().KeyDeleteAsync(Arg.Any<RedisKey>(), Arg.Any<CommandFlags>());
     }
 
-    [Fact(DisplayName = "RedisCacheProvider: GetOrCreateAsync returns existing cached item on hit without invoking factory")]
+    [Fact(DisplayName = "KyrolusRedisCacheProvider: GetOrCreateAsync returns existing cached item on hit without invoking factory")]
     public async Task GetOrCreateAsync_Hit_DoesNotInvokeFactory()
     {
         var muxer = Substitute.For<IConnectionMultiplexer>();
@@ -162,7 +162,7 @@ public sealed class RedisCacheProviderTests
             new KyrolusCacheKeyFactory("test"),
             new KyrolusRedisCacheOptions());
 
-        var provider = new RedisCacheProvider(muxer, deps);
+        var provider = new KyrolusRedisCacheProvider(muxer, deps);
 
         var factoryCalled = false;
         var result = await provider.GetOrCreateAsync("key1", _ =>
@@ -175,7 +175,7 @@ public sealed class RedisCacheProviderTests
         factoryCalled.ShouldBeFalse();
     }
 
-    [Fact(DisplayName = "RedisCacheProvider: GetOrCreateAsync executes factory and caches result on miss")]
+    [Fact(DisplayName = "KyrolusRedisCacheProvider: GetOrCreateAsync executes factory and caches result on miss")]
     public async Task GetOrCreateAsync_Miss_ExecutesFactoryAndCaches()
     {
         var muxer = Substitute.For<IConnectionMultiplexer>();
@@ -191,7 +191,7 @@ public sealed class RedisCacheProviderTests
             new KyrolusCacheKeyFactory("test"),
             new KyrolusRedisCacheOptions { LockStrategy = KyrolusRedisLockStrategy.Disabled });
 
-        var provider = new RedisCacheProvider(muxer, deps);
+        var provider = new KyrolusRedisCacheProvider(muxer, deps);
 
         var factoryCalled = false;
         var result = await provider.GetOrCreateAsync("key:fresh", _ =>
@@ -204,7 +204,7 @@ public sealed class RedisCacheProviderTests
         factoryCalled.ShouldBeTrue();
     }
 
-    [Fact(DisplayName = "RedisCacheProvider: GetOrCreateAsync with Lua lock acquires lock, executes factory, and releases")]
+    [Fact(DisplayName = "KyrolusRedisCacheProvider: GetOrCreateAsync with Lua lock acquires lock, executes factory, and releases")]
     public async Task GetOrCreateAsync_WithLock_AcquiresAndReleases()
     {
         var muxer = Substitute.For<IConnectionMultiplexer>();
@@ -222,13 +222,13 @@ public sealed class RedisCacheProviderTests
             new KyrolusCacheKeyFactory("test"),
             new KyrolusRedisCacheOptions { LockStrategy = KyrolusRedisLockStrategy.Lua });
 
-        var provider = new RedisCacheProvider(muxer, deps);
+        var provider = new KyrolusRedisCacheProvider(muxer, deps);
 
         var result = await provider.GetOrCreateAsync("key:locked", _ => Task.FromResult("LockedData"));
         result.ShouldBe("LockedData");
     }
 
-    [Fact(DisplayName = "RedisCacheProvider: IncrementAsync and DecrementAsync invoke database StringIncrement and StringDecrement")]
+    [Fact(DisplayName = "KyrolusRedisCacheProvider: IncrementAsync and DecrementAsync invoke database StringIncrement and StringDecrement")]
     public async Task IncrementAndDecrement_InvokeDatabase()
     {
         var muxer = Substitute.For<IConnectionMultiplexer>();
@@ -245,7 +245,7 @@ public sealed class RedisCacheProviderTests
             new KyrolusCacheKeyFactory("test"),
             new KyrolusRedisCacheOptions());
 
-        var provider = new RedisCacheProvider(muxer, deps);
+        var provider = new KyrolusRedisCacheProvider(muxer, deps);
 
         var inc = await provider.IncrementAsync("hits", 5);
         inc.ShouldBe(10L);
@@ -254,7 +254,7 @@ public sealed class RedisCacheProviderTests
         dec.ShouldBe(9L);
     }
 
-    [Fact(DisplayName = "RedisCacheProvider: Batch operations (GetManyAsync, SetManyAsync, RemoveManyAsync) work")]
+    [Fact(DisplayName = "KyrolusRedisCacheProvider: Batch operations (GetManyAsync, SetManyAsync, RemoveManyAsync) work")]
     public async Task BatchOperations_Work()
     {
         var muxer = Substitute.For<IConnectionMultiplexer>();
@@ -275,7 +275,7 @@ public sealed class RedisCacheProviderTests
             new KyrolusCacheKeyFactory("test"),
             new KyrolusRedisCacheOptions());
 
-        var provider = new RedisCacheProvider(muxer, deps);
+        var provider = new KyrolusRedisCacheProvider(muxer, deps);
 
         // GetMany
         var items = await provider.GetManyAsync<ProductDto>(["item:1", "item:2"]);
@@ -293,7 +293,7 @@ public sealed class RedisCacheProviderTests
         await provider.RemoveManyAsync(["item:1", "item:2"]);
     }
 
-    [Fact(DisplayName = "RedisCacheProvider: Hashes (HashSetAsync, HashGetAsync, HashGetAllAsync, HashDeleteAsync) work")]
+    [Fact(DisplayName = "KyrolusRedisCacheProvider: Hashes (HashSetAsync, HashGetAsync, HashGetAllAsync, HashDeleteAsync) work")]
     public async Task HashOperations_Work()
     {
         var muxer = Substitute.For<IConnectionMultiplexer>();
@@ -319,7 +319,7 @@ public sealed class RedisCacheProviderTests
             new KyrolusCacheKeyFactory("test"),
             new KyrolusRedisCacheOptions());
 
-        var provider = new RedisCacheProvider(muxer, deps);
+        var provider = new KyrolusRedisCacheProvider(muxer, deps);
 
         var set = await provider.HashSetAsync("h:user:1", "name", "FieldValue");
         set.ShouldBeTrue();
@@ -335,7 +335,7 @@ public sealed class RedisCacheProviderTests
         del.ShouldBeTrue();
     }
 
-    [Fact(DisplayName = "RedisCacheProvider: RemoveByTagAsync and RemoveKeysByPatternAsync work")]
+    [Fact(DisplayName = "KyrolusRedisCacheProvider: RemoveByTagAsync and RemoveKeysByPatternAsync work")]
     public async Task TagAndPatternRemovals_Work()
     {
         var muxer = Substitute.For<IConnectionMultiplexer>();
@@ -352,13 +352,13 @@ public sealed class RedisCacheProviderTests
             new KyrolusCacheKeyFactory("test"),
             new KyrolusRedisCacheOptions { PatternRemovalStrategy = KyrolusRedisPatternRemovalStrategy.KeyIndex });
 
-        var provider = new RedisCacheProvider(muxer, deps);
+        var provider = new KyrolusRedisCacheProvider(muxer, deps);
 
         await provider.RemoveByTagAsync("catalog");
         await provider.RemoveKeysByPatternAsync("item:*");
     }
 
-    [Fact(DisplayName = "RedisCacheProvider: RemoveKeysByPatternAsync with ServerScan iterates server keys")]
+    [Fact(DisplayName = "KyrolusRedisCacheProvider: RemoveKeysByPatternAsync with ServerScan iterates server keys")]
     public async Task RemoveKeysByPatternAsync_ServerScan_Works()
     {
         var muxer = Substitute.For<IConnectionMultiplexer>();
@@ -382,12 +382,12 @@ public sealed class RedisCacheProviderTests
             new KyrolusCacheKeyFactory("test"),
             new KyrolusRedisCacheOptions { PatternRemovalStrategy = KyrolusRedisPatternRemovalStrategy.ServerScan });
 
-        var provider = new RedisCacheProvider(muxer, deps);
+        var provider = new KyrolusRedisCacheProvider(muxer, deps);
 
         await provider.RemoveKeysByPatternAsync("pattern:*");
     }
 
-    [Fact(DisplayName = "RedisCacheProvider: Graceful fallback handles Redis exceptions and returns default")]
+    [Fact(DisplayName = "KyrolusRedisCacheProvider: Graceful fallback handles Redis exceptions and returns default")]
     public async Task GracefulFallback_HandlesException_ReturnsDefault()
     {
         var muxer = Substitute.For<IConnectionMultiplexer>();
@@ -404,7 +404,7 @@ public sealed class RedisCacheProviderTests
             new KyrolusCacheKeyFactory("test"),
             new KyrolusRedisCacheOptions { EnableGracefulFallback = true });
 
-        var provider = new RedisCacheProvider(muxer, deps);
+        var provider = new KyrolusRedisCacheProvider(muxer, deps);
 
         var result = await provider.GetAsync<ProductDto>("product:1");
         result.ShouldBeNull();

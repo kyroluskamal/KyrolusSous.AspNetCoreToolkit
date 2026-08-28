@@ -6,7 +6,7 @@ namespace KyrolusSous.Elasticsearch;
 public class KyrolusElasticIndexManager(
     ElasticsearchClient client,
     IOptions<KyrolusElasticsearchOptions> options,
-    ILogger<KyrolusElasticIndexManager>? logger = null) : IKyrolusElasticIndexManager, IElasticIndexManager
+    ILogger<KyrolusElasticIndexManager>? logger = null) : IKyrolusElasticIndexManager
 {
     private readonly ElasticsearchClient _client = client ?? throw new ArgumentNullException(nameof(client));
     private readonly KyrolusElasticsearchOptions _options = options?.Value ?? new KyrolusElasticsearchOptions();
@@ -21,8 +21,7 @@ public class KyrolusElasticIndexManager(
 
     public async Task<bool> CreateIndexAsync<TDocument>(CancellationToken cancellationToken = default) where TDocument : class
     {
-        var attr = typeof(TDocument).GetCustomAttribute<KyrolusElasticIndexAttribute>()
-                   ?? typeof(TDocument).GetCustomAttribute<ElasticIndexAttribute>();
+        var attr = typeof(TDocument).GetCustomAttribute<KyrolusElasticIndexAttribute>();
 
         var indexName = attr?.IndexName ?? typeof(TDocument).Name.ToLowerInvariant();
         var shards = attr?.NumberOfShards ?? 1;
@@ -139,7 +138,7 @@ public class KyrolusElasticIndexManager(
     public async Task<bool> CreateMonthlyIndexAsync<TDocument>(DateTime date, CancellationToken cancellationToken = default) where TDocument : class
     {
         var attr = typeof(TDocument).GetCustomAttribute<KyrolusElasticIndexAttribute>()
-                   ?? typeof(TDocument).GetCustomAttribute<ElasticIndexAttribute>();
+                   ?? typeof(TDocument).GetCustomAttribute<KyrolusElasticIndexAttribute>();
 
         var baseName = attr?.IndexName ?? typeof(TDocument).Name.ToLowerInvariant();
         var monthlyIndexName = $"{baseName}-{date:yyyy-MM}";
@@ -251,14 +250,10 @@ public class KyrolusElasticIndexManager(
         foreach (var prop in properties)
         {
             var propName = prop.Name;
-            var textAttr = prop.GetCustomAttribute<KyrolusElasticTextAttribute>()
-                           ?? prop.GetCustomAttribute<ElasticTextAttribute>();
-            var keywordAttr = prop.GetCustomAttribute<KyrolusElasticKeywordAttribute>()
-                              ?? prop.GetCustomAttribute<ElasticKeywordAttribute>();
-            var geoAttr = prop.GetCustomAttribute<KyrolusElasticGeoPointAttribute>()
-                          ?? prop.GetCustomAttribute<ElasticGeoPointAttribute>();
-            var vectorAttr = prop.GetCustomAttribute<KyrolusElasticDenseVectorAttribute>()
-                             ?? prop.GetCustomAttribute<ElasticDenseVectorAttribute>();
+            var textAttr = prop.GetCustomAttribute<KyrolusElasticTextAttribute>();
+            var keywordAttr = prop.GetCustomAttribute<KyrolusElasticKeywordAttribute>();
+            var geoAttr = prop.GetCustomAttribute<KyrolusElasticGeoPointAttribute>();
+            var vectorAttr = prop.GetCustomAttribute<KyrolusElasticDenseVectorAttribute>();
 
             if (textAttr is not null)
             {
@@ -307,15 +302,4 @@ public class KyrolusElasticIndexManager(
         var suffix = _options.IndexSuffix ?? string.Empty;
         return $"{prefix}{rawName}{suffix}".ToLowerInvariant();
     }
-}
-
-/// <summary>
-/// Backward-compatibility alias for <see cref="KyrolusElasticIndexManager"/>.
-/// </summary>
-public class ElasticIndexManager(
-    ElasticsearchClient client,
-    IOptions<KyrolusElasticsearchOptions> options,
-    ILogger<ElasticIndexManager>? logger = null)
-    : KyrolusElasticIndexManager(client, options, logger)
-{
 }

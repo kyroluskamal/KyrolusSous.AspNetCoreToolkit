@@ -31,7 +31,7 @@ public class KyrolusAuditBehaviorTests
             new Claim("tenant_id", "tenant-alpha")
         ], "TestAuth");
 
-        var userContext = new DefaultCurrentUserContext(new ClaimsPrincipal(identity));
+        var userContext = new KyrolusDefaultCurrentUserContext(new ClaimsPrincipal(identity));
         var behavior = new KyrolusAuditBehavior<AuditedTransferCommand, string>(sink, userContext);
 
         var response = await behavior.Handle(
@@ -57,7 +57,7 @@ public class KyrolusAuditBehaviorTests
     public async Task Audited_command_failure_should_emit_failed_entry_and_rethrow()
     {
         var sink = new InMemoryAuditSink();
-        var userContext = new DefaultCurrentUserContext();
+        var userContext = new KyrolusDefaultCurrentUserContext();
         var behavior = new KyrolusAuditBehavior<AuditedTransferCommand, string>(sink, userContext);
 
         await Should.ThrowAsync<InvalidOperationException>(() =>

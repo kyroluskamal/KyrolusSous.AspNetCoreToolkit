@@ -96,14 +96,14 @@ builder.Services.AddKyrolusRedisCacheProvider(redisConnString, options =>
 builder.Services.AddScoped<IDocumentSession>(sp =>
 {
     var store = sp.GetRequiredService<IDocumentStore>();
-    var tenantResolver = sp.GetRequiredService<ITenantResolver>();
+    var tenantResolver = sp.GetRequiredService<IKyrolusTenantResolver>();
     var tenantId = tenantResolver.ResolveTenantId() ?? "default";
     return store.LightweightSession(tenantId);
 });
 
 builder.Services.AddKyrolusMartenRuntime();
 builder.Services.AddSingleton<IKyrolusMartenSoftDeletePolicy>(KyrolusMartenSoftDeletePolicy.IsDeleted());
-builder.Services.AddScoped<ITenantResolver, HttpTenantResolver>();
+builder.Services.AddScoped<IKyrolusTenantResolver, HttpTenantResolver>();
 
 builder.Services.AddKyrolusDefaults();
 builder.Services.Configure<KyrolusEndpointKitOptions>(options =>
@@ -430,7 +430,7 @@ martenMenuItemsRoutes.MapPost("/$batch",
 
 martenMenuItemsRoutes.MapPost("/diagnostics/query-helper",
     async ([FromBody] KyrolusSous.Repositories.Marten.Abstractions.Query.QueryRequest? request,
-        [FromServices] KyrolusSous.Repositories.Marten.Abstractions.Query.IQueryHelper<MenuItem> helper,
+        [FromServices] KyrolusSous.Repositories.Marten.Abstractions.Query.IKyrolusQueryHelper<MenuItem> helper,
         [FromServices] IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
         CancellationToken cancellationToken) =>
     {
@@ -580,7 +580,7 @@ martenMenuItemsRoutes.MapPost("/diagnostics/repository-runtime",
         [FromServices] IDocumentStore store,
         [FromServices] IDocumentSession session,
         [FromServices] IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
-        [FromServices] ITenantResolver tenantResolver,
+        [FromServices] IKyrolusTenantResolver tenantResolver,
         [FromServices] IServiceProvider rootServiceProvider,
         CancellationToken cancellationToken) =>
     {
@@ -678,7 +678,7 @@ app.MapGet("/api/orders/{id:guid}", async (Guid id, IKyrolusMediatorSender media
 
 app.MapPost("/api/orders/diagnostics/query-helper", async (
     [FromBody] KyrolusSous.Repositories.Marten.Abstractions.Query.QueryRequest? request,
-    [FromServices] KyrolusSous.Repositories.Marten.Abstractions.Query.IQueryHelper<Order> helper,
+    [FromServices] KyrolusSous.Repositories.Marten.Abstractions.Query.IKyrolusQueryHelper<Order> helper,
     [FromServices] IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
     CancellationToken ct) =>
 {
@@ -788,7 +788,7 @@ app.MapPost("/api/orders/diagnostics/runtime-filter-expression-builder", async (
     }
 }).RequireAuthorization();
 
-app.MapPost("/api/diagnostics/protect", (ProtectRequest request, IKyrolusTenantDataProtectionProvider provider, ITenantResolver resolver) =>
+app.MapPost("/api/diagnostics/protect", (ProtectRequest request, IKyrolusTenantDataProtectionProvider provider, IKyrolusTenantResolver resolver) =>
 {
     var tenantId = resolver.ResolveTenantId() ?? "default";
     var protector = provider.CreateProtector(tenantId, "fullpipeline");

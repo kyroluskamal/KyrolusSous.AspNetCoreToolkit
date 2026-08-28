@@ -47,7 +47,7 @@ public static partial class RepositoryRuntimeDiagnostics
             }
         };
 
-        var gracefulCache = new RedisCacheProvider(
+        var gracefulCache = new KyrolusRedisCacheProvider(
             disconnectedConnection,
             new KyrolusRedisCacheDependencies(
                 new KyrolusJsonCacheSerializer(),
@@ -123,7 +123,7 @@ public static partial class RepositoryRuntimeDiagnostics
                 ThrowOnOpen = true
             }
         };
-        var throwingCache = new RedisCacheProvider(
+        var throwingCache = new KyrolusRedisCacheProvider(
             disconnectedConnection,
             new KyrolusRedisCacheDependencies(
                 new KyrolusJsonCacheSerializer(),

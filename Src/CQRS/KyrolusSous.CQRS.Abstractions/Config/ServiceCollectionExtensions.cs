@@ -38,7 +38,7 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddKyrolusCqrsAuthorization(this IServiceCollection services)
     {
-        services.TryAddScoped<Security.ICurrentUserContext, Security.DefaultCurrentUserContext>();
+        services.TryAddScoped<Security.IKyrolusCurrentUserContext, Security.KyrolusDefaultCurrentUserContext>();
         services.AddTransient(typeof(IKyrolusPipelineBehavior<,>), typeof(KyrolusAuthorizationBehavior<,>));
         return services;
     }

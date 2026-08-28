@@ -1,11 +1,11 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Reflection;
 using System.Text;
 using KyrolusSous.Repositories.Marten.Abstractions.Query;
 
 namespace KyrolusSous.Repositories.Marten.Runtime;
 
-public sealed class MartenRuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
+public sealed class MartenRuntimeQueryHelper<TEntity> : IKyrolusQueryHelper<TEntity>
 {
     // Keep parsed timestamp values aligned with PostgreSQL microsecond precision.
     private const long TimestampPrecisionTicks = 10L;

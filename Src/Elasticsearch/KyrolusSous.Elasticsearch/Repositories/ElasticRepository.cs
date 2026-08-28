@@ -3,13 +3,13 @@ namespace KyrolusSous.Elasticsearch;
 /// <summary>
 /// Enterprise Elasticsearch repository providing resilient CRUD, high-throughput bulk pipelines, vector kNN search, and PIT deep scrolling.
 /// </summary>
-public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepository<TDocument, TId>, IElasticRepository<TDocument, TId> where TDocument : class
+public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepository<TDocument, TId> where TDocument : class
 {
     private static readonly ActivitySource ActivitySource = new("KyrolusSous.Elasticsearch", "1.0.0");
 
     private readonly ElasticsearchClient _client;
     private readonly KyrolusElasticsearchOptions _options;
-    private readonly ITenantProvider? _tenantProvider;
+    private readonly IKyrolusTenantProvider? _tenantProvider;
     private readonly ILogger<KyrolusElasticRepository<TDocument, TId>>? _logger;
     private readonly string _indexName;
 
@@ -18,7 +18,7 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
     public KyrolusElasticRepository(
         ElasticsearchClient client,
         IOptions<KyrolusElasticsearchOptions> options,
-        ITenantProvider? tenantProvider = null,
+        IKyrolusTenantProvider? tenantProvider = null,
         ILogger<KyrolusElasticRepository<TDocument, TId>>? logger = null)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
@@ -46,7 +46,7 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
 
         if (!response.IsValidResponse)
         {
-            _logger?.LogError("Failed to index document '{Id}' in '{Index}': {Error}", idString, _indexName, response.DebugInformation);
+            _logger?.LogError("Elasticsearch failed to index document with ID '{Id}' in index '{Index}': {Error}", idString, _indexName, response.DebugInformation);
         }
 
         return response.IsValidResponse;
@@ -77,54 +77,37 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
             return new KyrolusBulkResult();
         }
 
-        var batchSize = _options.BulkBatchSize > 0 ? _options.BulkBatchSize : 1000;
-        var indexedCount = 0;
-        var failedCount = 0;
+        var stopwatch = Stopwatch.StartNew();
+        var response = await _client.BulkAsync(descriptor => descriptor
+            .Index(_indexName)
+            .IndexMany(itemList.Select(i => i.Document), (d, doc) =>
+            {
+                var match = itemList.First(x => ReferenceEquals(x.Document, doc));
+                d.Id(match.Id?.ToString()!);
+            }),
+            cancellationToken);
+
+        stopwatch.Stop();
+
         var errors = new List<KyrolusBulkItemError>();
-        var sw = Stopwatch.StartNew();
-
-        for (var i = 0; i < itemList.Count; i += batchSize)
+        if (response.Errors)
         {
-            var batch = itemList.Skip(i).Take(batchSize).ToList();
-
-            var response = await _client.BulkAsync(b => b
-                .Index(_indexName)
-                .IndexMany(batch.Select(x => x.Document), (descriptor, doc) =>
-                {
-                    var match = batch.First(bItem => ReferenceEquals(bItem.Document, doc));
-                    descriptor.Id(match.Id?.ToString() ?? string.Empty);
-                }),
-                cancellationToken);
-
-            if (response.IsValidResponse && !response.Errors)
+            foreach (var item in response.ItemsWithErrors)
             {
-                indexedCount += batch.Count;
+                errors.Add(new KyrolusBulkItemError(
+                    Id: item.Id ?? string.Empty,
+                    Status: item.Status,
+                    ErrorReason: item.Error?.Reason));
             }
-            else
-            {
-                _logger?.LogError("Bulk indexing partially failed in '{Index}': {Error}", _indexName, response.DebugInformation);
-                foreach (var item in response.Items)
-                {
-                    if (item.Status is >= 200 and < 300)
-                    {
-                        indexedCount++;
-                    }
-                    else
-                    {
-                        failedCount++;
-                        errors.Add(new KyrolusBulkItemError(item.Id ?? string.Empty, item.Status, item.Error?.Reason));
-                    }
-                }
-            }
+            _logger?.LogError("Bulk indexing completed with errors in index '{Index}'. Total errors: {Count}", _indexName, errors.Count);
         }
 
-        sw.Stop();
         return new KyrolusBulkResult
         {
             TotalCount = itemList.Count,
-            IndexedCount = indexedCount,
-            FailedCount = failedCount,
-            TookMs = sw.ElapsedMilliseconds,
+            IndexedCount = itemList.Count - errors.Count,
+            FailedCount = errors.Count,
+            TookMs = stopwatch.ElapsedMilliseconds,
             Errors = errors
         };
     }
@@ -138,12 +121,15 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
         activity?.SetTag("db.operation", "get");
         activity?.SetTag("elasticsearch.index", _indexName);
 
-        var response = await _client.GetAsync<TDocument>(
-            id.ToString()!,
-            descriptor => descriptor.Index(_indexName),
-            cancellationToken);
+        var idString = id.ToString()!;
+        var response = await _client.GetAsync<TDocument>(_indexName, idString, cancellationToken);
 
-        return response.IsValidResponse && response.Found ? response.Source : null;
+        if (!response.IsValidResponse)
+        {
+            return null;
+        }
+
+        return response.Source;
     }
 
     public async Task<IReadOnlyList<TDocument>> GetManyAsync(
@@ -154,26 +140,21 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
 
         using var activity = ActivitySource.StartActivity("Elasticsearch.GetMany");
         activity?.SetTag("db.system", "elasticsearch");
-        activity?.SetTag("db.operation", "multi_get");
+        activity?.SetTag("db.operation", "mget");
         activity?.SetTag("elasticsearch.index", _indexName);
 
-        var idStrings = ids.Select(i => i?.ToString()).Where(i => !string.IsNullOrWhiteSpace(i)).Select(i => i!).ToList();
-        if (idStrings.Count == 0)
+        var idList = ids.Select(i => i?.ToString()).Where(i => !string.IsNullOrWhiteSpace(i)).Select(i => i!).ToList();
+        if (idList.Count == 0)
         {
             return [];
         }
 
-        var response = await _client.SearchAsync<TDocument>(s => s
-            .Index(_indexName)
-            .Query(q => q.Ids(i => i.Values(new Elastic.Clients.Elasticsearch.Ids(idStrings.Select(id => (Id)id).ToList())))),
+        var result = await SearchAsync(s => s
+            .Size(idList.Count)
+            .Query(q => q.Ids(i => i.Values(new Elastic.Clients.Elasticsearch.Ids(idList.Select(id => new Elastic.Clients.Elasticsearch.Id(id)).ToList())))),
             cancellationToken);
 
-        if (!response.IsValidResponse)
-        {
-            return [];
-        }
-
-        return [.. response.Documents];
+        return result.Documents;
     }
 
     public async Task<bool> UpdateAsync(TDocument document, TId id, CancellationToken cancellationToken = default)
@@ -186,10 +167,10 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
         activity?.SetTag("db.operation", "update");
         activity?.SetTag("elasticsearch.index", _indexName);
 
-        var response = await _client.UpdateAsync<TDocument, TDocument>(
-            _indexName,
-            id.ToString()!,
-            u => u.Doc(document).DocAsUpsert(true),
+        var idString = id.ToString()!;
+        var response = await _client.UpdateAsync<TDocument, TDocument>(_indexName, idString, descriptor => descriptor
+            .Doc(document)
+            .DocAsUpsert(false),
             cancellationToken);
 
         return response.IsValidResponse;
@@ -205,16 +186,20 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
         activity?.SetTag("db.operation", "update_partial");
         activity?.SetTag("elasticsearch.index", _indexName);
 
-        var response = await _client.UpdateAsync<TDocument, object>(
-            _indexName,
-            id.ToString()!,
-            u => u.Doc(partialDocument).DocAsUpsert(true),
+        var idString = id.ToString()!;
+        var response = await _client.UpdateAsync<TDocument, object>(_indexName, idString, descriptor => descriptor
+            .Doc(partialDocument)
+            .DocAsUpsert(true),
             cancellationToken);
 
         return response.IsValidResponse;
     }
 
-    public async Task<bool> UpdateByScriptAsync(TId id, string script, Dictionary<string, object>? parameters = null, CancellationToken cancellationToken = default)
+    public async Task<bool> UpdateByScriptAsync(
+        TId id,
+        string script,
+        Dictionary<string, object>? parameters = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(id);
         ArgumentException.ThrowIfNullOrWhiteSpace(script);
@@ -224,9 +209,8 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
         activity?.SetTag("db.operation", "update_script");
         activity?.SetTag("elasticsearch.index", _indexName);
 
-        var response = await _client.UpdateAsync<TDocument, object>(
-            _indexName,
-            id.ToString()!,
+        var idString = id.ToString()!;
+        var response = await _client.UpdateAsync<TDocument, object>(_indexName, idString,
             u => u.Script(s =>
             {
                 s.Source(script);
@@ -289,22 +273,33 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
             return new KyrolusBulkResult();
         }
 
-        var sw = Stopwatch.StartNew();
-        var response = await _client.BulkAsync(b => b
+        var stopwatch = Stopwatch.StartNew();
+        var response = await _client.BulkAsync(descriptor => descriptor
             .Index(_indexName)
-            .DeleteMany(idList),
+            .DeleteMany(idList.Select(id => new Id(id))),
             cancellationToken);
 
-        sw.Stop();
-        var deletedCount = response.IsValidResponse ? response.Items.Count(item => item.Status is >= 200 and < 300) : 0;
-        var failedCount = response.Items.Count(item => item.Status is < 200 or >= 300);
+        stopwatch.Stop();
+
+        var errors = new List<KyrolusBulkItemError>();
+        if (response.Errors)
+        {
+            foreach (var item in response.ItemsWithErrors)
+            {
+                errors.Add(new KyrolusBulkItemError(
+                    Id: item.Id ?? string.Empty,
+                    Status: item.Status,
+                    ErrorReason: item.Error?.Reason));
+            }
+        }
 
         return new KyrolusBulkResult
         {
             TotalCount = idList.Count,
-            IndexedCount = deletedCount,
-            FailedCount = failedCount,
-            TookMs = sw.ElapsedMilliseconds
+            IndexedCount = idList.Count - errors.Count,
+            FailedCount = errors.Count,
+            TookMs = stopwatch.ElapsedMilliseconds,
+            Errors = errors
         };
     }
 
@@ -315,8 +310,8 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
         activity?.SetTag("db.operation", "count");
         activity?.SetTag("elasticsearch.index", _indexName);
 
-        var response = await _client.CountAsync(c => c.Indices(_indexName), cancellationToken);
-        return response.IsValidResponse ? response.Count : 0;
+        var response = await _client.CountAsync<TDocument>(descriptor => descriptor.Indices(_indexName), cancellationToken);
+        return response.Count;
     }
 
     public async Task<bool> ExistsAsync(TId id, CancellationToken cancellationToken = default)
@@ -380,13 +375,9 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
             hit.Id ?? string.Empty,
             hit.Score,
             hit.Highlight?.ToDictionary(
-                kvp => kvp.Key.ToString(),
-                kvp => (IReadOnlyList<string>)[.. kvp.Value]
-            )
-        )
-        {
-            SortValues = hit.Sort?.Select(s => (object)s.ToString()!).ToList()
-        }).ToList();
+                kvp => kvp.Key,
+                kvp => (IReadOnlyList<string>)kvp.Value.ToList()))
+        ).ToList();
 
         var facets = new Dictionary<string, IReadOnlyList<KyrolusFacetBucket>>();
         if (response.Aggregations is not null)
@@ -413,12 +404,12 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
     }
 
     public Task<KyrolusSearchResult<TDocument>> SmartSearchAsync(
-        Action<SmartSearchBuilder<TDocument>> build,
+        Action<KyrolusSmartSearchBuilder<TDocument>> build,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(build);
 
-        var builder = new SmartSearchBuilder<TDocument>();
+        var builder = new KyrolusSmartSearchBuilder<TDocument>();
         build(builder);
 
         return SearchAsync(descriptor => builder.Apply(descriptor), cancellationToken);
@@ -450,16 +441,13 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
         int topK = 10,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(queryText);
         ArgumentNullException.ThrowIfNull(vector);
 
         return SearchAsync(descriptor =>
         {
             descriptor.Size(topK);
-            if (!string.IsNullOrWhiteSpace(queryText))
-            {
-                descriptor.Query(q => q.QueryString(qs => qs.Query(queryText)));
-            }
-
+            descriptor.Query(q => q.MultiMatch(m => m.Query(queryText)));
             descriptor.Knn(k => k
                 .Field(new Field(vectorField))
                 .QueryVector(vector)
@@ -474,7 +462,10 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
         int limit = 5,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(prefix))
+        ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
+        ArgumentNullException.ThrowIfNull(field);
+
+        if (limit <= 0)
         {
             return [];
         }
@@ -519,14 +510,14 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
     }
 
     public async Task<KyrolusSearchResult<TDocument>> SearchAfterAsync(
-        Action<SmartSearchBuilder<TDocument>> build,
+        Action<KyrolusSmartSearchBuilder<TDocument>> build,
         IReadOnlyList<object>? searchAfterValues,
         string? pitId = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(build);
 
-        var builder = new SmartSearchBuilder<TDocument>();
+        var builder = new KyrolusSmartSearchBuilder<TDocument>();
         build(builder);
 
         var response = await _client.SearchAsync<TDocument>(s =>
@@ -558,15 +549,11 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
             hit.Id ?? string.Empty,
             hit.Score,
             hit.Highlight?.ToDictionary(
-                kvp => kvp.Key.ToString(),
-                kvp => (IReadOnlyList<string>)[.. kvp.Value]
-            )
-        )
-        {
-            SortValues = hit.Sort?.Select(s => (object)s.ToString()!).ToList()
-        }).ToList();
+                kvp => kvp.Key,
+                kvp => (IReadOnlyList<string>)kvp.Value.ToList()))
+        ).ToList();
 
-        var lastSort = hits.LastOrDefault()?.SortValues;
+        var lastSort = response.Hits.LastOrDefault()?.Sort?.Select(s => (object)s).ToList();
 
         return new KyrolusSearchResult<TDocument>
         {
@@ -580,7 +567,7 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
     }
 
     public async IAsyncEnumerable<TDocument> StreamAllAsync(
-        Action<SmartSearchBuilder<TDocument>>? configure = null,
+        Action<KyrolusSmartSearchBuilder<TDocument>>? configure = null,
         int batchSize = 1000,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -614,8 +601,7 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
 
     private string ResolveIndexName()
     {
-        var attr = typeof(TDocument).GetCustomAttribute<KyrolusElasticIndexAttribute>()
-                   ?? typeof(TDocument).GetCustomAttribute<ElasticIndexAttribute>();
+        var attr = typeof(TDocument).GetCustomAttribute<KyrolusElasticIndexAttribute>();
 
         var baseName = (attr is { UseAlias: true } && !string.IsNullOrWhiteSpace(attr.Alias))
             ? attr.Alias
@@ -637,16 +623,4 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
         var suffix = _options.IndexSuffix ?? string.Empty;
         return $"{prefix}{rawName}{suffix}".ToLowerInvariant();
     }
-}
-
-/// <summary>
-/// Backward-compatibility alias for <see cref="KyrolusElasticRepository{TDocument, TId}"/>.
-/// </summary>
-public class ElasticRepository<TDocument, TId>(
-    ElasticsearchClient client,
-    IOptions<KyrolusElasticsearchOptions> options,
-    ITenantProvider? tenantProvider = null,
-    ILogger<ElasticRepository<TDocument, TId>>? logger = null)
-    : KyrolusElasticRepository<TDocument, TId>(client, options, tenantProvider, logger) where TDocument : class
-{
 }

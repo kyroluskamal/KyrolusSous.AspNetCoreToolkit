@@ -2,7 +2,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace KyrolusSous.Resilience;
 
-public class ResilienceCircuitBreakerHealthCheck(
+public class KyrolusResilienceCircuitBreakerHealthCheck(
     IKyrolusResiliencePipelineProvider pipelineProvider) : IHealthCheck
 {
     public Task<HealthCheckResult> CheckHealthAsync(

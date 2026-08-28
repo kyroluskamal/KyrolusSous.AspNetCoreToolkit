@@ -156,12 +156,12 @@ public sealed class KyrolusMartenTargetTypeAuthorization(
 }
 
 public sealed class KyrolusMartenTenantMatchAuthorization(
-    ITenantResolver tenantResolver,
+    IKyrolusTenantResolver tenantResolver,
     Func<object?, string?> targetTenantResolver,
     bool allowWhenUnknown = true,
     StringComparison comparison = StringComparison.OrdinalIgnoreCase) : IKyrolusMartenAuthorization
 {
-    private readonly ITenantResolver tenantResolver = tenantResolver ?? throw new ArgumentNullException(nameof(tenantResolver));
+    private readonly IKyrolusTenantResolver tenantResolver = tenantResolver ?? throw new ArgumentNullException(nameof(tenantResolver));
     private readonly Func<object?, string?> targetTenantResolver = targetTenantResolver ?? throw new ArgumentNullException(nameof(targetTenantResolver));
     private readonly bool allowWhenUnknown = allowWhenUnknown;
     private readonly StringComparison comparison = comparison;

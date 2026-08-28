@@ -1101,7 +1101,7 @@ public sealed class DefaultCommandQueryHandlerCoverageGapIntegrationTests(TestAp
 
     private sealed class FallbackMenuItemByIdQueryHandler(
         IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
-        ITenantResolver tenantResolver)
+        IKyrolusTenantResolver tenantResolver)
         : IKyrolusQueryHandler<FallbackMenuItemByIdQuery, MenuItem?>
     {
         public async Task<MenuItem?> Handle(FallbackMenuItemByIdQuery query, CancellationToken cancellationToken)
@@ -1129,7 +1129,7 @@ public sealed class DefaultCommandQueryHandlerCoverageGapIntegrationTests(TestAp
 
     private sealed class FallbackMenuItemByKeysQueryHandler(
         IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
-        ITenantResolver tenantResolver)
+        IKyrolusTenantResolver tenantResolver)
         : IKyrolusQueryHandler<FallbackMenuItemByKeysQuery, MenuItem?>
     {
         public async Task<MenuItem?> Handle(FallbackMenuItemByKeysQuery query, CancellationToken cancellationToken)

@@ -42,11 +42,11 @@ public sealed class KyrolusInMemoryIdempotencyStore : IKyrolusIdempotencyStore
 public sealed class KyrolusCacheIdempotencyStore : IKyrolusIdempotencyStore
 {
     private const string KeyPrefix = "idempotency";
-    private readonly ICacheProvider cache;
-    private readonly ICacheKeyContext? cacheKeyContext;
+    private readonly IKyrolusCacheProvider cache;
+    private readonly IKyrolusCacheKeyContext? cacheKeyContext;
     private readonly KyrolusInMemoryIdempotencyStore fallback = new();
 
-    public KyrolusCacheIdempotencyStore(ICacheProvider cache, ICacheKeyContext? cacheKeyContext = null)
+    public KyrolusCacheIdempotencyStore(IKyrolusCacheProvider cache, IKyrolusCacheKeyContext? cacheKeyContext = null)
     {
         this.cache = cache ?? throw new ArgumentNullException(nameof(cache));
         this.cacheKeyContext = cacheKeyContext;
@@ -54,7 +54,7 @@ public sealed class KyrolusCacheIdempotencyStore : IKyrolusIdempotencyStore
 
     public Task<KyrolusIdempotencyEntry?> GetAsync(string key, CancellationToken cancellationToken = default)
     {
-        if (cache is NullCacheProvider)
+        if (cache is KyrolusNullCacheProvider)
         {
             return fallback.GetAsync(key, cancellationToken);
         }
@@ -65,7 +65,7 @@ public sealed class KyrolusCacheIdempotencyStore : IKyrolusIdempotencyStore
 
     public Task SetAsync(string key, KyrolusIdempotencyEntry entry, TimeSpan ttl, CancellationToken cancellationToken = default)
     {
-        if (cache is NullCacheProvider)
+        if (cache is KyrolusNullCacheProvider)
         {
             return fallback.SetAsync(key, entry, ttl, cancellationToken);
         }

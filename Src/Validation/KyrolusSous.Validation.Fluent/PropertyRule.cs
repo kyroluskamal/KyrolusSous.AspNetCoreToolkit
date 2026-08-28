@@ -2,7 +2,7 @@ using KyrolusSous.Validation.Abstractions;
 
 namespace KyrolusSous.Validation.Fluent;
 
-public sealed class PropertyRule<T, TProperty> : IRuleBuilder<T, TProperty>, IValidationRule<T>
+public class KyrolusPropertyRule<T, TProperty> : IKyrolusRuleBuilder<T, TProperty>, IKyrolusValidationRule<T>
 {
     private sealed class RuleStep
     {
@@ -26,41 +26,41 @@ public sealed class PropertyRule<T, TProperty> : IRuleBuilder<T, TProperty>, IVa
     public Func<T, bool>? WhenPredicate { get; private set; }
     public Func<T, bool>? UnlessPredicate { get; private set; }
 
-    public PropertyRule(string propertyName, Func<T, TProperty> propertySelector)
+    public KyrolusPropertyRule(string propertyName, Func<T, TProperty> propertySelector)
     {
         PropertyName = propertyName ?? string.Empty;
         _propertySelector = propertySelector ?? throw new ArgumentNullException(nameof(propertySelector));
     }
 
-    public IRuleBuilder<T, TProperty> Must(Func<TProperty, bool> predicate, string defaultMessage = "Validation failed.")
+    public IKyrolusRuleBuilder<T, TProperty> Must(Func<TProperty, bool> predicate, string defaultMessage = "Validation failed.")
     {
         ArgumentNullException.ThrowIfNull(predicate);
         _steps.Add(new RuleStep((val, _, _) => ValueTask.FromResult(predicate(val)), defaultMessage));
         return this;
     }
 
-    public IRuleBuilder<T, TProperty> Must(Func<TProperty, T, bool> predicate, string defaultMessage = "Validation failed.")
+    public IKyrolusRuleBuilder<T, TProperty> Must(Func<TProperty, T, bool> predicate, string defaultMessage = "Validation failed.")
     {
         ArgumentNullException.ThrowIfNull(predicate);
         _steps.Add(new RuleStep((val, req, _) => ValueTask.FromResult(predicate(val, req)), defaultMessage));
         return this;
     }
 
-    public IRuleBuilder<T, TProperty> MustAsync(Func<TProperty, CancellationToken, ValueTask<bool>> predicate, string defaultMessage = "Validation failed.")
+    public IKyrolusRuleBuilder<T, TProperty> MustAsync(Func<TProperty, CancellationToken, ValueTask<bool>> predicate, string defaultMessage = "Validation failed.")
     {
         ArgumentNullException.ThrowIfNull(predicate);
         _steps.Add(new RuleStep((val, _, ct) => predicate(val, ct), defaultMessage));
         return this;
     }
 
-    public IRuleBuilder<T, TProperty> MustAsync(Func<TProperty, T, CancellationToken, ValueTask<bool>> predicate, string defaultMessage = "Validation failed.")
+    public IKyrolusRuleBuilder<T, TProperty> MustAsync(Func<TProperty, T, CancellationToken, ValueTask<bool>> predicate, string defaultMessage = "Validation failed.")
     {
         ArgumentNullException.ThrowIfNull(predicate);
         _steps.Add(new RuleStep((val, req, ct) => predicate(val, req, ct), defaultMessage));
         return this;
     }
 
-    public IRuleBuilder<T, TProperty> WithMessage(string message)
+    public IKyrolusRuleBuilder<T, TProperty> WithMessage(string message)
     {
         if (_steps.Count > 0)
         {
@@ -69,7 +69,7 @@ public sealed class PropertyRule<T, TProperty> : IRuleBuilder<T, TProperty>, IVa
         return this;
     }
 
-    public IRuleBuilder<T, TProperty> WithErrorCode(string errorCode)
+    public IKyrolusRuleBuilder<T, TProperty> WithErrorCode(string errorCode)
     {
         foreach (var step in _steps)
         {
@@ -78,7 +78,7 @@ public sealed class PropertyRule<T, TProperty> : IRuleBuilder<T, TProperty>, IVa
         return this;
     }
 
-    public IRuleBuilder<T, TProperty> WithSeverity(KyrolusValidationSeverity severity)
+    public IKyrolusRuleBuilder<T, TProperty> WithSeverity(KyrolusValidationSeverity severity)
     {
         foreach (var step in _steps)
         {
@@ -87,7 +87,7 @@ public sealed class PropertyRule<T, TProperty> : IRuleBuilder<T, TProperty>, IVa
         return this;
     }
 
-    public IRuleBuilder<T, TProperty> WithSeverity(string severity)
+    public IKyrolusRuleBuilder<T, TProperty> WithSeverity(string severity)
     {
         if (Enum.TryParse<KyrolusValidationSeverity>(severity, true, out var result))
         {
@@ -99,13 +99,13 @@ public sealed class PropertyRule<T, TProperty> : IRuleBuilder<T, TProperty>, IVa
         return this;
     }
 
-    public IRuleBuilder<T, TProperty> When(Func<T, bool> predicate)
+    public IKyrolusRuleBuilder<T, TProperty> When(Func<T, bool> predicate)
     {
         WhenPredicate = predicate;
         return this;
     }
 
-    public IRuleBuilder<T, TProperty> Unless(Func<T, bool> predicate)
+    public IKyrolusRuleBuilder<T, TProperty> Unless(Func<T, bool> predicate)
     {
         UnlessPredicate = predicate;
         return this;

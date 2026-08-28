@@ -5,7 +5,7 @@ using KyrolusSous.Repositories.EF.Abstractions.Query;
 
 namespace KyrolusSous.Repositories.EF.Runtime;
 
-public sealed class RuntimeQueryHelper<TEntity> : IQueryHelper<TEntity>
+public sealed class RuntimeQueryHelper<TEntity> : IKyrolusQueryHelper<TEntity>
 {
     public QueryParts<TEntity> Build(QueryRequest? request)
     {

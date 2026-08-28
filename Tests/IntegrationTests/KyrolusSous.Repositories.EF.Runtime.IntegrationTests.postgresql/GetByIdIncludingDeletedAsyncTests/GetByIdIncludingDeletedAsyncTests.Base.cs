@@ -4,7 +4,7 @@ public partial class GetByIdIncludingDeletedAsyncTests(WebApplicationFactory<Pro
 {
     private static readonly AsyncLocal<string?> TenantScope = new();
 
-    private sealed class TestCacheKeyContext : ICacheKeyContext
+    private sealed class TestCacheKeyContext : IKyrolusCacheKeyContext
     {
         public string? ScopeKey => TenantScope.Value;
         public string? TenantId => TenantScope.Value;

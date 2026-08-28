@@ -5,7 +5,7 @@ namespace KyrolusSous.Caching.Redis;
 /// Supports batch operations, Tag Sets, sliding expiration, Jitter, negative caching, 
 /// distributed locking, Lua atomic invalidations, OpenTelemetry metrics, and Circuit Breaker resilience.
 /// </summary>
-public sealed class RedisCacheProvider : ICacheProvider
+public sealed class KyrolusRedisCacheProvider : IKyrolusCacheProvider
 {
     private const string ReleaseLockScript =
         "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
@@ -58,7 +58,7 @@ public sealed class RedisCacheProvider : ICacheProvider
     private readonly CommandFlags readFlags;
     private readonly CommandFlags writeFlags;
 
-    public RedisCacheProvider(IConnectionMultiplexer multiplexer, KyrolusRedisCacheDependencies? dependencies = null)
+    public KyrolusRedisCacheProvider(IConnectionMultiplexer multiplexer, KyrolusRedisCacheDependencies? dependencies = null)
     {
         this.multiplexer = multiplexer ?? throw new ArgumentNullException(nameof(multiplexer));
         database = this.multiplexer.GetDatabase();
@@ -1489,4 +1489,5 @@ public sealed class RedisCacheProvider : ICacheProvider
         }
     }
 }
+
 

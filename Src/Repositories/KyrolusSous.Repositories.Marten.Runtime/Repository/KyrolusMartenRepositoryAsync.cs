@@ -11,8 +11,8 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
     public IKyrolusMartenAuthorization? Authorization { get; private set; } = services?.Authorization;
     public IKyrolusMartenValidation? Validation { get; private set; } = services?.Validation;
     public IKyrolusMartenSoftDeletePolicy? SoftDeletePolicy { get; private set; } = services?.SoftDeletePolicy;
-    public ICacheProvider? CacheProvider { get; private set; } = services?.CacheProvider;
-    private ICacheKeyContext? cacheKeyContext = services?.CacheKeyContext;
+    public IKyrolusCacheProvider? CacheProvider { get; private set; } = services?.CacheProvider;
+    private IKyrolusCacheKeyContext? cacheKeyContext = services?.CacheKeyContext;
     private IKyrolusRepositoryCachePolicyProvider? cachePolicyProvider = services?.CachePolicyProvider;
     private KyrolusCachePolicy? cachePolicy = services?.CachePolicy;
     public IKyrolusMartenResiliencePolicy? ResiliencePolicy { get; private set; } = services?.ResiliencePolicy;
@@ -22,7 +22,7 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
     private static readonly TimeSpan DefaultCacheTtl = TimeSpan.FromMinutes(5);
     private static readonly ConcurrentDictionary<Type, PropertyInfo?> IdPropertyCache = new();
     public void SetObserver(IKyrolusMartenObserver? observer) => Observer = observer;
-    public string? ResolveTenantId(ITenantResolver? resolver) => resolver?.ResolveTenantId();
+    public string? ResolveTenantId(IKyrolusTenantResolver? resolver) => resolver?.ResolveTenantId();
     private string? ResolveTenantId(string? tenantId)
     {
         if (!string.IsNullOrWhiteSpace(tenantId)) return tenantId;

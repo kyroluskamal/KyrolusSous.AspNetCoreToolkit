@@ -91,7 +91,7 @@ public static class OpenApiServiceExtensions
         return app;
     }
 
-    private static void MapScalarEndpoint(WebApplication app, KyrolusOpenApiOptions options, List<ApiVersionInfo> versions)
+    private static void MapScalarEndpoint(WebApplication app, KyrolusOpenApiOptions options, List<KyrolusApiVersionInfo> versions)
     {
         var firstVersion = versions[0];
         app.MapScalarApiReference(options.ScalarRoutePrefix, scalarOptions =>
@@ -149,7 +149,7 @@ public static class OpenApiServiceExtensions
     private static void MapExtensibleUiProviders(
         WebApplication app,
         KyrolusOpenApiOptions options,
-        List<ApiVersionInfo> versions)
+        List<KyrolusApiVersionInfo> versions)
     {
         var providers = app.Services.GetServices<IKyrolusOpenApiUiProvider>().ToList();
 
@@ -207,7 +207,7 @@ public static class OpenApiServiceExtensions
         return list;
     }
 
-    private static void MapReDocEndpoint(WebApplication app, KyrolusOpenApiOptions options, List<ApiVersionInfo> versions)
+    private static void MapReDocEndpoint(WebApplication app, KyrolusOpenApiOptions options, List<KyrolusApiVersionInfo> versions)
     {
         if (versions.Count == 0)
         {
@@ -273,7 +273,7 @@ public static class OpenApiServiceExtensions
 
     private static void ConfigureOpenApiDocument(
         OpenApiOptions openApiOptions,
-        ApiVersionInfo versionInfo,
+        KyrolusApiVersionInfo versionInfo,
         KyrolusOpenApiOptions options)
     {
         if (options.EnableSmartAutoTagging)
@@ -340,7 +340,7 @@ public static class OpenApiServiceExtensions
         options.ConfigureOpenApiOptions?.Invoke(openApiOptions);
     }
 
-    private static ApiVersionInfo ResolveDefaultVersion(KyrolusOpenApiOptions options)
+    private static KyrolusApiVersionInfo ResolveDefaultVersion(KyrolusOpenApiOptions options)
     {
         var existing = options.ApiVersions.FirstOrDefault();
         if (existing is not null)
@@ -352,7 +352,7 @@ public static class OpenApiServiceExtensions
         var assemblyName = entryAssembly?.GetName().Name ?? "API Documentation";
         var description = entryAssembly?.GetCustomAttribute<AssemblyDescriptionAttribute>()?.Description;
 
-        return new ApiVersionInfo
+        return new KyrolusApiVersionInfo
         {
             Version = options.Version ?? "v1",
             Title = options.Title ?? FormatTitle(assemblyName),
@@ -366,7 +366,7 @@ public static class OpenApiServiceExtensions
         };
     }
 
-    private static List<ApiVersionInfo> ResolveUiVersions(KyrolusOpenApiOptions options)
+    private static List<KyrolusApiVersionInfo> ResolveUiVersions(KyrolusOpenApiOptions options)
     {
         if (options.EnableApiVersioning && options.ApiVersions.Count > 0)
         {
@@ -386,7 +386,7 @@ public static class OpenApiServiceExtensions
         return name;
     }
 
-    private static OpenApiInfo CreateOpenApiInfo(ApiVersionInfo versionInfo)
+    private static OpenApiInfo CreateOpenApiInfo(KyrolusApiVersionInfo versionInfo)
     {
         return new OpenApiInfo
         {
@@ -399,7 +399,7 @@ public static class OpenApiServiceExtensions
         };
     }
 
-    private static OpenApiContact? CreateContact(ApiVersionInfo versionInfo)
+    private static OpenApiContact? CreateContact(KyrolusApiVersionInfo versionInfo)
     {
         if (string.IsNullOrWhiteSpace(versionInfo.ContactName) && string.IsNullOrWhiteSpace(versionInfo.ContactEmail))
         {
@@ -414,7 +414,7 @@ public static class OpenApiServiceExtensions
         };
     }
 
-    private static OpenApiLicense? CreateLicense(ApiVersionInfo versionInfo)
+    private static OpenApiLicense? CreateLicense(KyrolusApiVersionInfo versionInfo)
     {
         if (string.IsNullOrWhiteSpace(versionInfo.LicenseName))
         {

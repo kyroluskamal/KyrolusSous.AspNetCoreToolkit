@@ -18,7 +18,7 @@ public sealed class KyrolusIdempotencyBehaviorTests
     [Fact(DisplayName = "Idempotency: First execution executes handler and caches result")]
     public async Task Idempotency_FirstCall_ExecutesAndCachesResult()
     {
-        var cache = Substitute.For<ICacheProvider>();
+        var cache = Substitute.For<IKyrolusCacheProvider>();
         cache.GetAsync<string>(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<string?>(null));
 
@@ -46,7 +46,7 @@ public sealed class KyrolusIdempotencyBehaviorTests
     [Fact(DisplayName = "Idempotency: Second execution with same key returns cached result without running handler")]
     public async Task Idempotency_SecondCall_ReturnsCachedWithoutHandler()
     {
-        var cache = Substitute.For<ICacheProvider>();
+        var cache = Substitute.For<IKyrolusCacheProvider>();
         cache.GetAsync<string>(Arg.Is<string>(k => k.Contains("key-123")), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<string?>("OrderCreated:ord-1"));
 

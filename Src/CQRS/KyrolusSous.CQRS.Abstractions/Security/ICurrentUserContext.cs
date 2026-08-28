@@ -5,7 +5,7 @@ namespace KyrolusSous.CQRS.Abstractions.Security;
 /// <summary>
 /// Provides access to the current authenticated user identity and security claims.
 /// </summary>
-public interface ICurrentUserContext
+public interface IKyrolusCurrentUserContext
 {
     /// <summary>
     /// Gets the unique identifier of the current user, or <c>null</c> if unauthenticated.

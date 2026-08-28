@@ -793,7 +793,7 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
-        if (ReferenceEquals(scopedProvider.GetRequiredService<ICacheProvider>(), NullCacheProvider.Instance) &&
+        if (ReferenceEquals(scopedProvider.GetRequiredService<IKyrolusCacheProvider>(), KyrolusNullCacheProvider.Instance) &&
             scopedProvider.GetRequiredService<IKyrolusRepositoryCachePolicyProvider>() is KyrolusRepositoryCachePolicyRegistry &&
             ReferenceEquals(scopedProvider.GetRequiredService<IKyrolusMartenRepositoryPolicyProvider>(), KyrolusNoopMartenRepositoryPolicyProvider.Instance) &&
             ReferenceEquals(scopedProvider.GetRequiredService<IKyrolusMartenResiliencePolicy>(), KyrolusMartenNoopResiliencePolicy.Instance) &&
@@ -805,7 +805,7 @@ public static partial class RepositoryRuntimeDiagnostics
         if (scopedProvider.GetRequiredService<IKyrolusMartenEventStore>() is KyrolusMartenEventStore &&
             scopedProvider.GetRequiredService<IKyrolusMartenProjectionOrchestrator>() is KyrolusMartenProjectionOrchestrator &&
             scopedProvider.GetRequiredService<IKyrolusMartenProjectionManager>() is KyrolusMartenProjectionManager &&
-            scopedProvider.GetRequiredService<IQueryHelper<MenuItem>>() is MartenRuntimeQueryHelper<MenuItem>)
+            scopedProvider.GetRequiredService<IKyrolusQueryHelper<MenuItem>>() is MartenRuntimeQueryHelper<MenuItem>)
         {
             checks++;
         }
@@ -813,7 +813,7 @@ public static partial class RepositoryRuntimeDiagnostics
         var scopedSession = scopedProvider.GetRequiredService<IDocumentSession>();
         var decoratedRepository = scopedProvider.CreateDecoratedRepository<IDocumentSession, MenuItem, Guid>(scopedSession);
         if (decoratedRepository is KyrolusMartenRepositoryDecorator<IDocumentSession, MenuItem, Guid> &&
-            ReferenceEquals(decoratedRepository.CacheProvider, NullCacheProvider.Instance) &&
+            ReferenceEquals(decoratedRepository.CacheProvider, KyrolusNullCacheProvider.Instance) &&
             ReferenceEquals(decoratedRepository.ResiliencePolicy, KyrolusMartenNoopResiliencePolicy.Instance) &&
             ReferenceEquals(decoratedRepository.Tracing, KyrolusMartenNoopTracing.Instance))
         {

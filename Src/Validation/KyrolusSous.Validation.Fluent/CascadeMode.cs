@@ -1,6 +1,6 @@
 namespace KyrolusSous.Validation.Fluent;
 
-public enum CascadeMode
+public enum KyrolusCascadeMode
 {
     Continue,
     Stop

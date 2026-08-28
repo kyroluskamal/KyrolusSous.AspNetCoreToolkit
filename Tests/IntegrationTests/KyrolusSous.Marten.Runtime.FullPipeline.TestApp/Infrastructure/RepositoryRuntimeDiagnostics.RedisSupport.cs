@@ -55,14 +55,14 @@ public static partial class RepositoryRuntimeDiagnostics
         throw new InvalidOperationException("Unable to create a disconnected Redis connection for fallback diagnostics.");
     }
 
-    private static RedisCacheProvider BuildRedisCacheProvider(
+    private static KyrolusRedisCacheProvider BuildRedisCacheProvider(
         IConnectionMultiplexer connection,
         KyrolusRedisCacheOptions options,
         IKyrolusCacheObserver? observer = null,
         IKyrolusCachePolicyProvider? policyProvider = null,
         IKyrolusCacheSerializer? serializer = null)
     {
-        return new RedisCacheProvider(
+        return new KyrolusRedisCacheProvider(
             connection,
             new KyrolusRedisCacheDependencies(
                 serializer ?? new KyrolusJsonCacheSerializer(),

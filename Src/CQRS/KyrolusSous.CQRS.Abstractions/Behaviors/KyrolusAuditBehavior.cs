@@ -14,12 +14,12 @@ namespace KyrolusSous.CQRS.Abstractions.Behaviors;
 [PipelineOrder(-850)]
 public sealed class KyrolusAuditBehavior<TRequest, TResponse>(
     IAuditSink? auditSink = null,
-    ICurrentUserContext? userContext = null,
+    IKyrolusCurrentUserContext? userContext = null,
     ILogger<KyrolusAuditBehavior<TRequest, TResponse>>? logger = null)
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
     private readonly IAuditSink? _auditSink = auditSink;
-    private readonly ICurrentUserContext? _userContext = userContext;
+    private readonly IKyrolusCurrentUserContext? _userContext = userContext;
     private readonly ILogger? _logger = logger;
 
     public async Task<TResponse> Handle(
@@ -37,7 +37,7 @@ public sealed class KyrolusAuditBehavior<TRequest, TResponse>(
         var sw = Stopwatch.StartNew();
         var requestType = typeof(TRequest);
         var actionName = !string.IsNullOrWhiteSpace(auditable.AuditAction) ? auditable.AuditAction : requestType.Name;
-        var context = _userContext ?? new DefaultCurrentUserContext();
+        var context = _userContext ?? new KyrolusDefaultCurrentUserContext();
 
         try
         {

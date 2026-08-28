@@ -87,7 +87,7 @@ public static partial class RepositoryRuntimeDiagnostics
 {
     public static async Task<RepositoryRuntimeDiagnosticsResponse> RunMenuRuntimeAsync(
         IDocumentSession session,
-        ICacheProvider cacheProvider,
+        IKyrolusCacheProvider cacheProvider,
         string tenantId,
         CancellationToken cancellationToken)
     {
@@ -103,7 +103,7 @@ public static partial class RepositoryRuntimeDiagnostics
 
     public static async Task<RepositoryRuntimeDiagnosticsResponse> RunMenuRuntimeCacheDisabledAsync(
         IDocumentSession session,
-        ICacheProvider cacheProvider,
+        IKyrolusCacheProvider cacheProvider,
         string tenantId,
         CancellationToken cancellationToken)
     {
@@ -134,7 +134,7 @@ public static partial class RepositoryRuntimeDiagnostics
 
     public static async Task<RepositoryRuntimeDiagnosticsResponse> RunMenuSoftDeleteRuntimeAsync(
         IDocumentSession session,
-        ICacheProvider cacheProvider,
+        IKyrolusCacheProvider cacheProvider,
         string tenantId,
         CancellationToken cancellationToken)
     {
@@ -756,7 +756,7 @@ public static partial class RepositoryRuntimeDiagnostics
 
     public static async Task<RepositoryRuntimeDiagnosticsResponse> RunOrderIncludesRuntimeAsync(
         IDocumentSession session,
-        ICacheProvider cacheProvider,
+        IKyrolusCacheProvider cacheProvider,
         string tenantId,
         CancellationToken cancellationToken)
     {

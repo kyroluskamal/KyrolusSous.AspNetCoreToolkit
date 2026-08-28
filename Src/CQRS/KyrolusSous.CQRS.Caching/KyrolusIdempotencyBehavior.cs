@@ -11,11 +11,11 @@ namespace KyrolusSous.CQRS.Caching;
 /// </summary>
 [PipelineOrder(-800)]
 public sealed class KyrolusIdempotencyBehavior<TRequest, TResponse>(
-    ICacheProvider? cacheProvider = null,
+    IKyrolusCacheProvider? cacheProvider = null,
     ILogger<KyrolusIdempotencyBehavior<TRequest, TResponse>>? logger = null)
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
-    private readonly ICacheProvider? _cacheProvider = cacheProvider;
+    private readonly IKyrolusCacheProvider? _cacheProvider = cacheProvider;
     private readonly ILogger? _logger = logger;
 
     public async Task<TResponse> Handle(

@@ -10,7 +10,7 @@ namespace KyrolusSous.Marten.Runtime.FullPipeline.TestApp.CQRS.Orders;
 
 public sealed class PlaceOrderHandler(
     IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
-    ITenantResolver tenantResolver,
+    IKyrolusTenantResolver tenantResolver,
     IPaymentGateway paymentGateway,
     IEmailSender emailSender)
     : IKyrolusCommandHandler<PlaceOrderCommand, Order>
@@ -76,7 +76,7 @@ public sealed class PlaceOrderHandler(
 
 public sealed class GetOrderByIdHandler(
     IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
-    ITenantResolver tenantResolver)
+    IKyrolusTenantResolver tenantResolver)
     : IKyrolusQueryHandler<GetOrderByIdQuery, Order?>
 {
     public async Task<Order?> Handle(GetOrderByIdQuery query, CancellationToken cancellationToken)

@@ -158,7 +158,7 @@ public static partial class RepositoryRuntimeDiagnostics
             () => _ = new KyrolusRepositoryCachePolicyRegistry().GetPolicyAsync(null!, cancellationToken).GetAwaiter().GetResult());
         checks++;
 
-        var nullCacheProvider = NullCacheProvider.Instance;
+        var nullCacheProvider = KyrolusNullCacheProvider.Instance;
         await nullCacheProvider.SetAsync("set", new RuntimeCachePayload { Name = "value", Count = 1 }, TimeSpan.FromMinutes(1), cancellationToken).ConfigureAwait(false);
         await nullCacheProvider.SetAsync("set-options", new RuntimeCachePayload { Name = "value", Count = 1 }, new KyrolusCacheEntryOptions(), cancellationToken).ConfigureAwait(false);
         await nullCacheProvider.RemoveAsync("set", cancellationToken).ConfigureAwait(false);
@@ -370,8 +370,8 @@ public static partial class RepositoryRuntimeDiagnostics
 
         var cacheServices = new ServiceCollection();
         cacheServices.AddLogging();
-        cacheServices.AddSingleton<ICacheProvider, RuntimeInMemoryCacheProvider>();
-        cacheServices.AddSingleton<ICacheKeyContext>(new RuntimeCacheKeyContext("scope-output", "region-output", tenantId));
+        cacheServices.AddSingleton<IKyrolusCacheProvider, RuntimeInMemoryCacheProvider>();
+        cacheServices.AddSingleton<IKyrolusCacheKeyContext>(new RuntimeCacheKeyContext("scope-output", "region-output", tenantId));
         cacheServices.AddSingleton<IKyrolusEndpointCachePolicyProvider>(outputCacheRegistry);
         var cacheProvider = cacheServices.BuildServiceProvider();
 
@@ -445,14 +445,14 @@ public static partial class RepositoryRuntimeDiagnostics
         }
 
         var nullCacheServices = new ServiceCollection();
-        nullCacheServices.AddSingleton<ICacheProvider>(new NullCacheProvider());
-        nullCacheServices.AddSingleton<ICacheKeyContext>(new RuntimeCacheKeyContext(null, null, tenantId));
+        nullCacheServices.AddSingleton<IKyrolusCacheProvider>(new KyrolusNullCacheProvider());
+        nullCacheServices.AddSingleton<IKyrolusCacheKeyContext>(new RuntimeCacheKeyContext(null, null, tenantId));
         nullCacheServices.AddSingleton<IKyrolusEndpointCachePolicyProvider>(KyrolusNoopEndpointCachePolicyProvider.Instance);
-        var nullCacheProvider = nullCacheServices.BuildServiceProvider();
+        var KyrolusNullCacheProvider = nullCacheServices.BuildServiceProvider();
 
         var nullCacheContext = new DefaultHttpContext
         {
-            RequestServices = nullCacheProvider
+            RequestServices = KyrolusNullCacheProvider
         };
         nullCacheContext.Request.Method = HttpMethods.Get;
         nullCacheContext.Request.Path = "/api/runtime-link-items";
@@ -696,7 +696,7 @@ public static partial class RepositoryRuntimeDiagnostics
         }
 
         var fallbackStore = new KyrolusCacheIdempotencyStore(
-            new NullCacheProvider(),
+            new KyrolusNullCacheProvider(),
             new RuntimeCacheKeyContext("scope-fallback", "region-fallback", tenantId));
         await fallbackStore.SetAsync("fallback-key", entry, TimeSpan.FromMinutes(1), cancellationToken).ConfigureAwait(false);
         var fallbackHit = await fallbackStore.GetAsync("fallback-key", cancellationToken).ConfigureAwait(false);
@@ -775,7 +775,7 @@ public static partial class RepositoryRuntimeDiagnostics
 
     private static KyrolusMartenRepositoryAsync<IDocumentSession, TEntity, Guid> CreateRepositoryWithCacheEnabled<TEntity>(
         IDocumentSession session,
-        ICacheProvider cacheProvider,
+        IKyrolusCacheProvider cacheProvider,
         string tenantId)
         where TEntity : class
     {
@@ -799,7 +799,7 @@ public static partial class RepositoryRuntimeDiagnostics
 
     private static KyrolusMartenSoftDeleteRepositoryAsync<IDocumentSession, MenuItem, Guid> CreateSoftDeleteRepository(
         IDocumentSession session,
-        ICacheProvider cacheProvider,
+        IKyrolusCacheProvider cacheProvider,
         string tenantId,
         IKyrolusMartenSoftDeletePolicy softDeletePolicy)
     {
@@ -819,7 +819,7 @@ public static partial class RepositoryRuntimeDiagnostics
 
     private static KyrolusMartenRepositoryAsync<IDocumentSession, TEntity, Guid> CreateRepositoryWithCacheDisabled<TEntity>(
         IDocumentSession session,
-        ICacheProvider cacheProvider,
+        IKyrolusCacheProvider cacheProvider,
         string tenantId)
         where TEntity : class
     {

@@ -35,16 +35,15 @@ public static class ElasticsearchServiceExtensions
     }
 
     public static IServiceCollection AddElasticsearchTenantProvider<TTenantProvider>(this IServiceCollection services)
-        where TTenantProvider : class, ITenantProvider
+        where TTenantProvider : class, IKyrolusTenantProvider
     {
-        services.AddScoped<ITenantProvider, TTenantProvider>();
+        services.AddScoped<IKyrolusTenantProvider, TTenantProvider>();
         return services;
     }
 
     public static IServiceCollection AddElasticsearchEfSync(this IServiceCollection services)
     {
         services.AddScoped<KyrolusElasticSyncInterceptor>();
-        services.AddScoped<ElasticSyncInterceptor>();
         return services;
     }
 
@@ -63,11 +62,9 @@ public static class ElasticsearchServiceExtensions
         services.AddScoped<IKyrolusElasticRepository<TDocument, TId>>(sp =>
         {
             var inner = sp.GetRequiredService<KyrolusElasticRepository<TDocument, TId>>();
-            var cache = sp.GetService<KyrolusSous.Caching.Abstractions.ICacheProvider>();
+            var cache = sp.GetService<KyrolusSous.Caching.Abstractions.IKyrolusCacheProvider>();
             return new KyrolusCachedElasticRepository<TDocument, TId>(inner, cache, defaultTtl);
         });
-        services.AddScoped<IElasticRepository<TDocument, TId>>(sp =>
-            (IElasticRepository<TDocument, TId>)sp.GetRequiredService<IKyrolusElasticRepository<TDocument, TId>>());
 
         return services;
     }
@@ -98,13 +95,8 @@ public static class ElasticsearchServiceExtensions
         });
 
         services.AddScoped<IKyrolusElasticIndexManager, KyrolusElasticIndexManager>();
-        services.AddScoped<IElasticIndexManager>(sp => (IElasticIndexManager)sp.GetRequiredService<IKyrolusElasticIndexManager>());
-
         services.AddScoped(typeof(IKyrolusElasticRepository<,>), typeof(KyrolusElasticRepository<,>));
-        services.AddScoped(typeof(IElasticRepository<,>), typeof(KyrolusElasticRepository<,>));
-
         services.AddScoped<KyrolusElasticSyncInterceptor>();
-        services.AddScoped<ElasticSyncInterceptor>();
 
         if (options.AutoCreateIndices)
         {

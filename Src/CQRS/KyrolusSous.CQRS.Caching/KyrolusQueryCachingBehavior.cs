@@ -6,11 +6,11 @@ namespace KyrolusSous.CQRS.Caching;
 
 [PipelineOrder(-300)]
 public sealed class KyrolusQueryCachingBehavior<TRequest, TResponse>(
-    ICacheProvider? cacheProvider = null,
+    IKyrolusCacheProvider? cacheProvider = null,
     IKyrolusCacheKeyProvider? cacheKeyProvider = null)
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
-    private readonly ICacheProvider? _cacheProvider = cacheProvider;
+    private readonly IKyrolusCacheProvider? _cacheProvider = cacheProvider;
     private readonly IKyrolusCacheKeyProvider _cacheKeyProvider = cacheKeyProvider ?? new KyrolusDefaultCacheKeyProvider();
 
     public async Task<TResponse> Handle(
