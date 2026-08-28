@@ -78,6 +78,36 @@ public sealed class KyrolusFileStorageProvider : IKyrolusStorageProvider, IKyrol
         return Task.FromResult<Stream>(stream);
     }
 
+    public async Task<Stream> DownloadRangeAsync(string containerName, string blobName, long offset, long length, CancellationToken cancellationToken = default)
+    {
+        var filePath = GetFilePath(containerName, blobName);
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Blob '{blobName}' does not exist in container '{containerName}'.", filePath);
+        }
+
+        var memoryStream = new MemoryStream((int)length);
+        using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true))
+        {
+            fileStream.Seek(offset, SeekOrigin.Begin);
+            var buffer = new byte[Math.Min(81920, length)];
+            long bytesRemaining = length;
+
+            while (bytesRemaining > 0)
+            {
+                var bytesToRead = (int)Math.Min(buffer.Length, bytesRemaining);
+                var read = await fileStream.ReadAsync(buffer.AsMemory(0, bytesToRead), cancellationToken).ConfigureAwait(false);
+                if (read == 0) break;
+
+                await memoryStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                bytesRemaining -= read;
+            }
+        }
+
+        memoryStream.Position = 0;
+        return memoryStream;
+    }
+
     public Task<bool> DeleteAsync(string containerName, string blobName, CancellationToken cancellationToken = default)
     {
         var filePath = GetFilePath(containerName, blobName);

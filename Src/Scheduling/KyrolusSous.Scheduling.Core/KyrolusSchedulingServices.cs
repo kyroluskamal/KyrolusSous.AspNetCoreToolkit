@@ -173,6 +173,29 @@ public sealed class KyrolusJobScheduler : IKyrolusJobScheduler
 
     public IReadOnlyList<KyrolusJobScheduleRegistration> GetRegisteredJobs() => _jobs.AsReadOnly();
     public IReadOnlyList<KyrolusOneShotJobRegistration> GetRegisteredOneShotJobs() => _oneShotJobs.AsReadOnly();
+
+    public async Task<bool> TriggerJobNowAsync(string jobName, IServiceProvider serviceProvider, CancellationToken cancellationToken = default)
+    {
+        var jobReg = _jobs.FirstOrDefault(j => string.Equals(j.JobName, jobName, StringComparison.OrdinalIgnoreCase));
+        if (jobReg is null) return false;
+
+        using var scope = serviceProvider.CreateScope();
+        if (scope.ServiceProvider.GetService(jobReg.JobType) is IKyrolusJob jobInstance)
+        {
+            var context = new KyrolusJobExecutionContext
+            {
+                JobName = jobReg.JobName,
+                ScheduledFireTimeUtc = DateTimeOffset.UtcNow,
+                ActualFireTimeUtc = DateTimeOffset.UtcNow,
+                CancellationToken = cancellationToken
+            };
+
+            await jobInstance.ExecuteAsync(context).ConfigureAwait(false);
+            return true;
+        }
+
+        return false;
+    }
 }
 
 public sealed class KyrolusJobSchedulerBackgroundService(

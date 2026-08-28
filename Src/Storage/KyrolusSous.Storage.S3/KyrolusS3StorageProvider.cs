@@ -83,6 +83,22 @@ public sealed class KyrolusS3StorageProvider : IKyrolusStorageProvider, IKyrolus
         return memoryStream;
     }
 
+    public async Task<Stream> DownloadRangeAsync(string containerName, string blobName, long offset, long length, CancellationToken cancellationToken = default)
+    {
+        var getRequest = new GetObjectRequest
+        {
+            BucketName = containerName,
+            Key = blobName,
+            ByteRange = new ByteRange(offset, offset + length - 1)
+        };
+
+        var response = await _s3Client.GetObjectAsync(getRequest, cancellationToken).ConfigureAwait(false);
+        var memoryStream = new MemoryStream((int)length);
+        await response.ResponseStream.CopyToAsync(memoryStream, cancellationToken).ConfigureAwait(false);
+        memoryStream.Position = 0;
+        return memoryStream;
+    }
+
     public async Task<bool> DeleteAsync(string containerName, string blobName, CancellationToken cancellationToken = default)
     {
         try

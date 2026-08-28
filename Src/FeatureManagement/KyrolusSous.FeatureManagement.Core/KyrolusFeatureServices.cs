@@ -127,6 +127,23 @@ public sealed class KyrolusAppVersionFeatureFilter : IKyrolusFeatureFilter
     }
 }
 
+public sealed class KyrolusIpAddressFeatureFilter : IKyrolusFeatureFilter
+{
+    public string Name => "IpAddress";
+
+    public ValueTask<bool> EvaluateAsync(string featureName, KyrolusFeatureContext? context, IDictionary<string, string> parameters, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(context?.IpAddress) || !parameters.TryGetValue("AllowedIps", out var allowedIpsStr))
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        var allowedIps = allowedIpsStr.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var isAllowed = allowedIps.Contains(context.IpAddress, StringComparer.OrdinalIgnoreCase);
+        return ValueTask.FromResult(isAllowed);
+    }
+}
+
 public sealed class KyrolusInMemoryFeatureStore : IKyrolusFeatureStore
 {
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _states = new(StringComparer.OrdinalIgnoreCase);
@@ -253,6 +270,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IKyrolusFeatureFilter, KyrolusTimeWindowFeatureFilter>();
         services.AddSingleton<IKyrolusFeatureFilter, KyrolusRoleFeatureFilter>();
         services.AddSingleton<IKyrolusFeatureFilter, KyrolusAppVersionFeatureFilter>();
+        services.AddSingleton<IKyrolusFeatureFilter, KyrolusIpAddressFeatureFilter>();
         services.AddSingleton<IKyrolusFeatureStore, KyrolusInMemoryFeatureStore>();
         services.AddSingleton<IKyrolusFeatureManager, KyrolusFeatureManager>();
         return services;

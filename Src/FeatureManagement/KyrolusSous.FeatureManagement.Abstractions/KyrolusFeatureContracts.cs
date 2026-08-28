@@ -11,6 +11,7 @@ public sealed record KyrolusFeatureContext
 {
     public string? UserId { get; init; }
     public string? TenantId { get; init; }
+    public string? IpAddress { get; init; }
     public IReadOnlyList<string>? Roles { get; init; }
     public IDictionary<string, object?> Properties { get; init; } = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 }

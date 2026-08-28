@@ -59,4 +59,5 @@ public interface IKyrolusJobScheduler
     void ScheduleOneShotJob<TJob>(DateTimeOffset fireAtUtc, string? jobName = null) where TJob : class, IKyrolusJob;
     IReadOnlyList<KyrolusJobScheduleRegistration> GetRegisteredJobs();
     IReadOnlyList<KyrolusOneShotJobRegistration> GetRegisteredOneShotJobs();
+    Task<bool> TriggerJobNowAsync(string jobName, IServiceProvider serviceProvider, CancellationToken cancellationToken = default);
 }

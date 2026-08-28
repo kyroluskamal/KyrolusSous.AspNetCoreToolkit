@@ -24,6 +24,16 @@ public interface IKyrolusStorageProvider
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Downloads a partial byte range from a blob (HTTP 206 Partial Content / streaming).
+    /// </summary>
+    Task<Stream> DownloadRangeAsync(
+        string containerName,
+        string blobName,
+        long offset,
+        long length,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Deletes a blob from the specified container.
     /// </summary>
     Task<bool> DeleteAsync(

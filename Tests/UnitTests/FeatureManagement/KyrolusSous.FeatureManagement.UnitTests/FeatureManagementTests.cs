@@ -144,4 +144,31 @@ public sealed class FeatureManagementTests
         await store.SetFeatureStateAsync("BetaFeature", true);
         (await manager.IsEnabledAsync("BetaFeature")).ShouldBeTrue();
     }
+
+    [Fact(DisplayName = "IP Address Feature Filter Allows Whitelisted IPs Only")]
+    public async Task IpAddressFilter_AllowsAuthorizedIpsOnly()
+    {
+        var options = new KyrolusFeatureOptions
+        {
+            Features =
+            {
+                ["InternalDebugEndpoint"] = new KyrolusFeatureDefinition
+                {
+                    Enabled = true,
+                    FilterName = "IpAddress",
+                    Parameters = { ["AllowedIps"] = "127.0.0.1, 192.168.1.100" }
+                }
+            }
+        };
+
+        var manager = new KyrolusFeatureManager(
+            Options.Create(options),
+            new IKyrolusFeatureFilter[] { new KyrolusIpAddressFeatureFilter() });
+
+        var allowedContext = new KyrolusFeatureContext { IpAddress = "127.0.0.1" };
+        (await manager.IsEnabledAsync("InternalDebugEndpoint", allowedContext)).ShouldBeTrue();
+
+        var blockedContext = new KyrolusFeatureContext { IpAddress = "10.0.0.99" };
+        (await manager.IsEnabledAsync("InternalDebugEndpoint", blockedContext)).ShouldBeFalse();
+    }
 }

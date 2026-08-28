@@ -1,5 +1,6 @@
 using KyrolusSous.Scheduling.Abstractions;
 using KyrolusSous.Scheduling.Core;
+using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using Xunit;
 
@@ -89,5 +90,22 @@ public sealed class SchedulingTests
         recent[0].JobName.ShouldBe("NightlyBackup");
         recent[0].Succeeded.ShouldBeTrue();
         recent[0].CompletedAtUtc.ShouldNotBeNull();
+    }
+
+    [Fact(DisplayName = "Job Scheduler Triggers Job Immediately On Demand")]
+    public async Task JobScheduler_TriggersJobImmediately()
+    {
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddScoped<DummyCleanupJob>();
+        var sp = services.BuildServiceProvider();
+
+        var scheduler = new KyrolusJobScheduler();
+        scheduler.ScheduleCronJob<DummyCleanupJob>("0 0 * * *", "InstantTestJob");
+
+        var executed = await scheduler.TriggerJobNowAsync("InstantTestJob", sp);
+        executed.ShouldBeTrue();
+
+        var notFound = await scheduler.TriggerJobNowAsync("NonExistentJob", sp);
+        notFound.ShouldBeFalse();
     }
 }

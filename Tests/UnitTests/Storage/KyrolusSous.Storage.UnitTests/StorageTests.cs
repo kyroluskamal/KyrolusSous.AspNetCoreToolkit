@@ -173,4 +173,17 @@ public sealed class StorageTests : IDisposable
         (await _provider.ExistsAsync("source-bucket", "doc.txt")).ShouldBeFalse(); // Deleted from source
         (await _provider.ExistsAsync("archive-bucket", "doc-moved.txt")).ShouldBeTrue();
     }
+
+    [Fact(DisplayName = "File Storage Downloads Partial Byte Range Correctly")]
+    public async Task FileStorage_DownloadRange_WorksCorrectly()
+    {
+        var content = "0123456789ABCDEF";
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(content));
+        await _provider.UploadAsync("range-bucket", "data.bin", stream);
+
+        using var rangeStream = await _provider.DownloadRangeAsync("range-bucket", "data.bin", offset: 10, length: 6);
+        using var reader = new StreamReader(rangeStream, Encoding.UTF8);
+        var partialText = await reader.ReadToEndAsync();
+        partialText.ShouldBe("ABCDEF");
+    }
 }

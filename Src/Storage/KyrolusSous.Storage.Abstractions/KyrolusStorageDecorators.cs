@@ -43,6 +43,9 @@ public class KyrolusCompressedStorageDecorator(
         return new MemoryStream(decompressedBytes);
     }
 
+    public Task<Stream> DownloadRangeAsync(string containerName, string blobName, long offset, long length, CancellationToken cancellationToken = default)
+        => _inner.DownloadRangeAsync(containerName, blobName, offset, length, cancellationToken);
+
     public Task<bool> DeleteAsync(string containerName, string blobName, CancellationToken cancellationToken = default)
         => _inner.DeleteAsync(containerName, blobName, cancellationToken);
 
@@ -105,6 +108,9 @@ public class KyrolusProtectedStorageDecorator(
         var decryptedBytes = _protector.Unprotect(encryptedBytes);
         return new MemoryStream(decryptedBytes);
     }
+
+    public Task<Stream> DownloadRangeAsync(string containerName, string blobName, long offset, long length, CancellationToken cancellationToken = default)
+        => _inner.DownloadRangeAsync(containerName, blobName, offset, length, cancellationToken);
 
     public Task<bool> DeleteAsync(string containerName, string blobName, CancellationToken cancellationToken = default)
         => _inner.DeleteAsync(containerName, blobName, cancellationToken);
