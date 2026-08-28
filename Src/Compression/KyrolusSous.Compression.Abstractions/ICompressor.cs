@@ -3,7 +3,7 @@ namespace KyrolusSous.Compression;
 /// <summary>
 /// Defines standard compression operations for byte arrays, streams, and strings.
 /// </summary>
-public interface ICompressor
+public interface IKyrolusCompressor
 {
     /// <summary>
     /// Gets the algorithm implemented by this compressor instance.
@@ -69,4 +69,11 @@ public interface ICompressor
     Stream CreateDecompressionStream(
         Stream inputStream,
         bool leaveOpen = false);
+}
+
+/// <summary>
+/// Backward-compatibility interface for <see cref="IKyrolusCompressor"/>.
+/// </summary>
+public interface ICompressor : IKyrolusCompressor
+{
 }

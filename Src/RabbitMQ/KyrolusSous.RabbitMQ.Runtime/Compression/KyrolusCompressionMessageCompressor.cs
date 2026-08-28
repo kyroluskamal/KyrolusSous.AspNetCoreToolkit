@@ -4,15 +4,15 @@ using KyrolusSous.RabbitMQ.Abstractions.Compression;
 namespace KyrolusSous.RabbitMQ.Runtime.Compression;
 
 /// <summary>
-/// Message compressor adapter that directly delegates to the toolkit's unified <see cref="ICompressor"/> implementations.
+/// Message compressor adapter that directly delegates to the toolkit's unified <see cref="IKyrolusCompressor"/> implementations.
 /// </summary>
 public class KyrolusCompressionMessageCompressor : IKyrolusMessageCompressor
 {
-    private readonly ICompressor _compressor;
+    private readonly IKyrolusCompressor _compressor;
 
     public string EncodingName => _compressor.Algorithm.ToString().ToLowerInvariant();
 
-    public KyrolusCompressionMessageCompressor(ICompressor compressor)
+    public KyrolusCompressionMessageCompressor(IKyrolusCompressor compressor)
     {
         _compressor = compressor ?? throw new ArgumentNullException(nameof(compressor));
     }

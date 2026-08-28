@@ -183,11 +183,11 @@ namespace KyrolusSous.RabbitMQ.Runtime.Config
         }
 
         /// <summary>
-        /// Adds message compression using the toolkit's unified <see cref="KyrolusSous.Compression.ICompressor"/> implementations (Gzip, Brotli, Zstd, Lz4, Snappy).
+        /// Adds message compression using the toolkit's unified <see cref="KyrolusSous.Compression.IKyrolusCompressor"/> implementations (Gzip, Brotli, Zstd, Lz4, Snappy).
         /// </summary>
         public static IServiceCollection AddKyrolusRabbitMQCompression(
             this IServiceCollection services,
-            KyrolusSous.Compression.ICompressor compressor)
+            KyrolusSous.Compression.IKyrolusCompressor compressor)
         {
             ArgumentNullException.ThrowIfNull(compressor);
             services.TryAddSingleton<Abstractions.Compression.IKyrolusMessageCompressor>(new Compression.KyrolusCompressionMessageCompressor(compressor));
@@ -195,10 +195,10 @@ namespace KyrolusSous.RabbitMQ.Runtime.Config
         }
 
         /// <summary>
-        /// Adds message compression by resolving the toolkit's <see cref="KyrolusSous.Compression.ICompressor"/> from DI.
+        /// Adds message compression by resolving the toolkit's <see cref="KyrolusSous.Compression.IKyrolusCompressor"/> from DI.
         /// </summary>
         public static IServiceCollection AddKyrolusRabbitMQCompression<TCompressor>(this IServiceCollection services)
-            where TCompressor : class, KyrolusSous.Compression.ICompressor
+            where TCompressor : class, KyrolusSous.Compression.IKyrolusCompressor
         {
             services.TryAddSingleton<TCompressor>();
             services.TryAddSingleton<Abstractions.Compression.IKyrolusMessageCompressor>(sp =>
