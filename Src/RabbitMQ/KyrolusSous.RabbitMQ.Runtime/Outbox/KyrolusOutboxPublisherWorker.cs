@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using KyrolusSous.RabbitMQ.Abstractions.Interfaces;
 using KyrolusSous.RabbitMQ.Abstractions.Outbox;
 using Microsoft.Extensions.Hosting;
@@ -7,7 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace KyrolusSous.RabbitMQ.Runtime.Outbox;
 
 /// <summary>
-/// Background worker that reliably processes and publishes pending transactional outbox messages.
+/// Background worker that reliably processes and publishes pending transactional outbox messages with randomized jitter.
 /// </summary>
 public class KyrolusOutboxPublisherWorker : BackgroundService
 {
@@ -15,6 +16,7 @@ public class KyrolusOutboxPublisherWorker : BackgroundService
     private readonly IKyrolusRabbitMQUtils _rabbitMqUtils;
     private readonly ILogger<KyrolusOutboxPublisherWorker> _logger;
     private readonly TimeSpan _pollInterval;
+    private const int MaxErrorMessageLength = 4000;
 
     public KyrolusOutboxPublisherWorker(
         IKyrolusOutboxStore outboxStore,
@@ -26,6 +28,13 @@ public class KyrolusOutboxPublisherWorker : BackgroundService
         _rabbitMqUtils = rabbitMqUtils ?? throw new ArgumentNullException(nameof(rabbitMqUtils));
         _logger = logger ?? NullLogger<KyrolusOutboxPublisherWorker>.Instance;
         _pollInterval = pollInterval ?? TimeSpan.FromSeconds(2);
+    }
+
+    private TimeSpan GetJitteredInterval()
+    {
+        // Add +/- 20% jitter
+        var jitterFactor = 0.8 + (RandomNumberGenerator.GetInt32(0, 400) / 1000.0);
+        return TimeSpan.FromMilliseconds(_pollInterval.TotalMilliseconds * jitterFactor);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -52,7 +61,6 @@ public class KyrolusOutboxPublisherWorker : BackgroundService
                                 headers[k] = v;
                             }
 
-                            // Raw payload or JSON deserialized
                             await _rabbitMqUtils.PublishAsync(
                                 exchange: msg.Exchange,
                                 routingKey: msg.RoutingKey,
@@ -67,13 +75,19 @@ public class KyrolusOutboxPublisherWorker : BackgroundService
                         catch (Exception ex)
                         {
                             _logger.LogError(ex, "Failed to publish outbox message {Id}", msg.Id);
-                            await _outboxStore.MarkAsFailedAsync(msg.Id, ex.Message, stoppingToken).ConfigureAwait(false);
+                            var errorMsg = ex.ToString();
+                            if (errorMsg.Length > MaxErrorMessageLength)
+                            {
+                                errorMsg = errorMsg[..MaxErrorMessageLength];
+                            }
+
+                            await _outboxStore.MarkAsFailedAsync(msg.Id, errorMsg, stoppingToken).ConfigureAwait(false);
                         }
                     }
                 }
                 else
                 {
-                    await Task.Delay(_pollInterval, stoppingToken).ConfigureAwait(false);
+                    await Task.Delay(GetJitteredInterval(), stoppingToken).ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -83,7 +97,7 @@ public class KyrolusOutboxPublisherWorker : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in outbox processing loop");
-                await Task.Delay(_pollInterval, stoppingToken).ConfigureAwait(false);
+                await Task.Delay(GetJitteredInterval(), stoppingToken).ConfigureAwait(false);
             }
         }
     }

@@ -58,4 +58,13 @@ public static class KyrolusRabbitMQInstrumentation
 
         return default;
     }
+
+    public static void SetActivityError(Activity? activity, Exception ex)
+    {
+        if (activity is null || ex is null) return;
+
+        activity.SetStatus(ActivityStatusCode.Error, ex.Message);
+        activity.SetTag("error.type", ex.GetType().FullName);
+        activity.SetTag("error.message", ex.Message);
+    }
 }

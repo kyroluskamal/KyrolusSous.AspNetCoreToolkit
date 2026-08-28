@@ -178,6 +178,11 @@ namespace KyrolusSous.RabbitMQ.Runtime.Services
         {
             var channel = await GetChannelAsync(cancellationToken).ConfigureAwait(false);
 
+            if (delay <= TimeSpan.Zero)
+            {
+                throw new ArgumentOutOfRangeException(nameof(delay), "Delay duration must be greater than zero.");
+            }
+
             using var activity = KyrolusRabbitMQInstrumentation.ActivitySource.StartActivity(
                 $"RabbitMQ.PublishDelayed {exchange}/{routingKey}",
                 ActivityKind.Producer);
@@ -189,7 +194,8 @@ namespace KyrolusSous.RabbitMQ.Runtime.Services
             KyrolusRabbitMQInstrumentation.InjectTraceContext(mergedHeaders, activity);
 
             var delayMs = (int)Math.Max(1, delay.TotalMilliseconds);
-            var delayQueueName = $"{exchange}.delay.{delayMs}ms";
+            var prefix = exchange.Length > 200 ? exchange[..200] : exchange;
+            var delayQueueName = string.IsNullOrWhiteSpace(prefix) ? $"delay.{delayMs}ms" : $"{prefix}.delay.{delayMs}ms";
 
             var delayArgs = new Dictionary<string, object?>
             {

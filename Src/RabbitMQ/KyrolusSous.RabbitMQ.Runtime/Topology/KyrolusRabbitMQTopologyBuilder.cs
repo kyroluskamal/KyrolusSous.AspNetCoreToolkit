@@ -24,7 +24,25 @@ public class KyrolusRabbitMQTopologyBuilder : IKyrolusRabbitMQTopologyBuilder
         IDictionary<string, object?>? arguments = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        _exchanges.Add(new KyrolusExchangeDefinition(name, type, durable, autoDelete, arguments));
+        if (name.Length > 255) throw new ArgumentOutOfRangeException(nameof(name), "Exchange name cannot exceed 255 characters.");
+
+        var existing = _exchanges.FindIndex(e => e.Name == name);
+        var def = new KyrolusExchangeDefinition(
+            name,
+            type,
+            durable,
+            autoDelete,
+            arguments != null ? new Dictionary<string, object?>(arguments) : null);
+
+        if (existing >= 0)
+        {
+            _exchanges[existing] = def;
+        }
+        else
+        {
+            _exchanges.Add(def);
+        }
+
         return this;
     }
 
@@ -36,7 +54,25 @@ public class KyrolusRabbitMQTopologyBuilder : IKyrolusRabbitMQTopologyBuilder
         IDictionary<string, object?>? arguments = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        _queues.Add(new KyrolusQueueDefinition(name, durable, exclusive, autoDelete, arguments));
+        if (name.Length > 255) throw new ArgumentOutOfRangeException(nameof(name), "Queue name cannot exceed 255 characters.");
+
+        var existing = _queues.FindIndex(q => q.Name == name);
+        var def = new KyrolusQueueDefinition(
+            name,
+            durable,
+            exclusive,
+            autoDelete,
+            arguments != null ? new Dictionary<string, object?>(arguments) : null);
+
+        if (existing >= 0)
+        {
+            _queues[existing] = def;
+        }
+        else
+        {
+            _queues.Add(def);
+        }
+
         return this;
     }
 
@@ -92,7 +128,20 @@ public class KyrolusRabbitMQTopologyBuilder : IKyrolusRabbitMQTopologyBuilder
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(queueName);
         ArgumentException.ThrowIfNullOrWhiteSpace(exchangeName);
-        _bindings.Add(new KyrolusBindingDefinition(queueName, exchangeName, routingKey, arguments));
+
+        var args = arguments != null ? new Dictionary<string, object?>(arguments) : null;
+        var existing = _bindings.FindIndex(b => b.QueueName == queueName && b.ExchangeName == exchangeName && b.RoutingKey == routingKey);
+
+        var def = new KyrolusBindingDefinition(queueName, exchangeName, routingKey, args);
+        if (existing >= 0)
+        {
+            _bindings[existing] = def;
+        }
+        else
+        {
+            _bindings.Add(def);
+        }
+
         return this;
     }
 
@@ -111,8 +160,7 @@ public class KyrolusRabbitMQTopologyBuilder : IKyrolusRabbitMQTopologyBuilder
             ["x-match"] = xMatch
         };
 
-        _bindings.Add(new KyrolusBindingDefinition(queueName, exchangeName, string.Empty, args));
-        return this;
+        return BindQueue(queueName, exchangeName, string.Empty, args);
     }
 
     public async Task ApplyAsync(IChannel channel, CancellationToken cancellationToken = default)

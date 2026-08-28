@@ -603,6 +603,50 @@ public class RabbitMQTests
         executedCompensations.ShouldBe(["Compensate3", "Compensate2", "Compensate1"]);
     }
 
+    [Fact]
+    public void CircuitBreaker_HalfOpenProbe_AllowsOnlyOneExecutionAtATime()
+    {
+        var breaker = new KyrolusSous.RabbitMQ.Runtime.Resilience.KyrolusConsumerCircuitBreaker(
+            consecutiveFailureThreshold: 1,
+            breakDuration: TimeSpan.FromMilliseconds(50));
+
+        breaker.ReportFailure();
+        breaker.CanExecute().ShouldBeFalse();
+
+        // Wait for break duration to transition to HalfOpen
+        Thread.Sleep(70);
+
+        breaker.State.ShouldBe(KyrolusSous.RabbitMQ.Runtime.Resilience.KyrolusCircuitState.HalfOpen);
+
+        // First execution probe should be permitted
+        var probe1 = breaker.CanExecute();
+        probe1.ShouldBeTrue();
+
+        // Second concurrent execution before probe finishes must be rejected
+        var probe2 = breaker.CanExecute();
+        probe2.ShouldBeFalse();
+
+        // After success, circuit closes
+        breaker.ReportSuccess();
+        breaker.State.ShouldBe(KyrolusSous.RabbitMQ.Runtime.Resilience.KyrolusCircuitState.Closed);
+    }
+
+    [Fact]
+    public void TopologyBuilder_DeduplicatesExchangesAndQueues_Properly()
+    {
+        var builder = new KyrolusSous.RabbitMQ.Runtime.Topology.KyrolusRabbitMQTopologyBuilder();
+        builder.AddExchange("events.exchange")
+               .AddExchange("events.exchange") // duplicate
+               .AddQueue("events.queue")
+               .AddQueue("events.queue") // duplicate
+               .BindQueue("events.queue", "events.exchange", "order.created")
+               .BindQueue("events.queue", "events.exchange", "order.created"); // duplicate
+
+        builder.Exchanges.Count.ShouldBe(1);
+        builder.Queues.Count.ShouldBe(1);
+        builder.Bindings.Count.ShouldBe(1);
+    }
+
     #endregion
 }
 
