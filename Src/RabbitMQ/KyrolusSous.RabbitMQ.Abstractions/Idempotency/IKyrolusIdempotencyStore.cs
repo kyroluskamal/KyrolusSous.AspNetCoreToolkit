@@ -9,6 +9,7 @@ public interface IKyrolusIdempotencyStore
     Task SetResultAsync(string idempotencyKey, string result, TimeSpan? expiry = null, CancellationToken cancellationToken = default);
     Task<string?> GetResultAsync(string idempotencyKey, CancellationToken cancellationToken = default);
     Task ReleaseLockAsync(string idempotencyKey, CancellationToken cancellationToken = default);
+    Task<bool> TryExtendLockAsync(string idempotencyKey, TimeSpan additionalDuration, CancellationToken cancellationToken = default) => Task.FromResult(false);
 }
 
 /// <summary>

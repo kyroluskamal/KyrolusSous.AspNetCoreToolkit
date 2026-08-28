@@ -43,4 +43,5 @@ public interface IKyrolusOutboxStore
     Task<IReadOnlyList<IKyrolusOutboxMessage>> GetPendingMessagesAsync(int batchSize = 100, CancellationToken cancellationToken = default);
     Task MarkAsProcessedAsync(string messageId, CancellationToken cancellationToken = default);
     Task MarkAsFailedAsync(string messageId, string error, CancellationToken cancellationToken = default);
+    Task PurgeProcessedMessagesAsync(TimeSpan olderThan, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

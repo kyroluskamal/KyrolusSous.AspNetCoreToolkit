@@ -1,7 +1,7 @@
 namespace KyrolusSous.RabbitMQ.Abstractions.Models
 {
     /// <summary>
-    /// Comprehensive configuration options for Kyrolus RabbitMQ messaging.
+    /// Comprehensive configuration options for Kyrolus RabbitMQ messaging with credential masking.
     /// </summary>
     public sealed class KyrolusRabbitMQOptions
     {
@@ -24,6 +24,11 @@ namespace KyrolusSous.RabbitMQ.Abstractions.Models
         public string DlxRoutingKeyPrefix { get; set; } = "dlx.";
         public bool EnablePublisherConfirms { get; set; } = true;
         public TimeSpan PublisherConfirmTimeout { get; set; } = TimeSpan.FromSeconds(5);
+
+        public override string ToString()
+        {
+            return $"RabbitMQ[Host={HostName}:{Port}, VHost={VirtualHost}, User={UserName}, Password=***, SSL={SslEnabled}]";
+        }
     }
 }
 
@@ -53,5 +58,10 @@ namespace KyrolusSous.IRabbitMQUtilsInterfaces.Models
         public string DlxRoutingKeyPrefix { get; set; } = "dlx.";
         public bool EnablePublisherConfirms { get; set; } = true;
         public TimeSpan PublisherConfirmTimeout { get; set; } = TimeSpan.FromSeconds(5);
+
+        public override string ToString()
+        {
+            return $"RabbitMQ[Host={HostName}:{Port}, VHost={VirtualHost}, User={UserName}, Password=***, SSL={SslEnabled}]";
+        }
     }
 }

@@ -4,19 +4,36 @@ using KyrolusSous.RabbitMQ.Abstractions.Security;
 namespace KyrolusSous.RabbitMQ.Runtime.Security;
 
 /// <summary>
-/// High-security AES-GCM message payload encryptor.
+/// High-security AES-GCM message payload encryptor with key zeroization upon disposal.
 /// </summary>
-public class KyrolusAesMessageEncryptor : IKyrolusMessageEncryptor
+public class KyrolusAesMessageEncryptor : IKyrolusMessageEncryptor, IDisposable
 {
     private readonly byte[] _key;
     private const int NonceSize = 12; // 96-bit nonce for AES-GCM
     private const int TagSize = 16;   // 128-bit authentication tag
+    private bool _disposed;
 
     public KyrolusAesMessageEncryptor(byte[] key)
     {
         if (key is null || (key.Length != 16 && key.Length != 24 && key.Length != 32))
         {
             throw new ArgumentException("Key must be 128, 192, or 256 bits (16, 24, or 32 bytes).", nameof(key));
+        }
+
+        // Check weak key (all zeros)
+        bool allZeroes = true;
+        for (int i = 0; i < key.Length; i++)
+        {
+            if (key[i] != 0)
+            {
+                allZeroes = false;
+                break;
+            }
+        }
+
+        if (allZeroes)
+        {
+            throw new ArgumentException("Weak key detected: all bytes are zero.", nameof(key));
         }
 
         _key = (byte[])key.Clone();
@@ -29,6 +46,7 @@ public class KyrolusAesMessageEncryptor : IKyrolusMessageEncryptor
 
     public byte[] Encrypt(byte[] plainBytes)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(plainBytes);
 
         var nonce = new byte[NonceSize];
@@ -51,6 +69,7 @@ public class KyrolusAesMessageEncryptor : IKyrolusMessageEncryptor
 
     public byte[] Decrypt(byte[] cipherBytes)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(cipherBytes);
 
         if (cipherBytes.Length < NonceSize + TagSize)
@@ -82,5 +101,14 @@ public class KyrolusAesMessageEncryptor : IKyrolusMessageEncryptor
     public ValueTask<byte[]> DecryptAsync(byte[] cipherBytes, CancellationToken cancellationToken = default)
     {
         return ValueTask.FromResult(Decrypt(cipherBytes));
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        CryptographicOperations.ZeroMemory(_key);
+        GC.SuppressFinalize(this);
     }
 }

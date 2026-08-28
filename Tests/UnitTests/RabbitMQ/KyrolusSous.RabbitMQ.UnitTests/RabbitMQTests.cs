@@ -647,6 +647,97 @@ public class RabbitMQTests
         builder.Bindings.Count.ShouldBe(1);
     }
 
+    [Fact]
+    public void AesMessageEncryptor_WeakKeyAllZeroes_ThrowsArgumentException()
+    {
+        var weakKey = new byte[32]; // all zeroes
+
+        Should.Throw<ArgumentException>(() =>
+        {
+            _ = new KyrolusSous.RabbitMQ.Runtime.Security.KyrolusAesMessageEncryptor(weakKey);
+        }).Message.ShouldContain("Weak key detected");
+    }
+
+    [Fact]
+    public void AesMessageEncryptor_Disposed_ThrowsObjectDisposedException()
+    {
+        var key = new byte[32];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(key);
+
+        var encryptor = new KyrolusSous.RabbitMQ.Runtime.Security.KyrolusAesMessageEncryptor(key);
+        encryptor.Dispose();
+
+        Should.Throw<ObjectDisposedException>(() =>
+        {
+            encryptor.Encrypt([1, 2, 3]);
+        });
+    }
+
+    [Fact]
+    public void Options_ToString_MasksPassword()
+    {
+        var options = new KyrolusSous.RabbitMQ.Abstractions.Models.KyrolusRabbitMQOptions
+        {
+            HostName = "prod-rabbit.cluster",
+            UserName = "admin",
+            Password = "SuperSecretPassword123!"
+        };
+
+        var str = options.ToString();
+        str.ShouldContain("Password=***");
+        str.ShouldNotContain("SuperSecretPassword123!");
+    }
+
+    [Fact]
+    public async Task OutboxStore_PurgeProcessedMessages_DeletesOlderMessages()
+    {
+        var store = new KyrolusSous.RabbitMQ.Runtime.Outbox.KyrolusInMemoryOutboxStore();
+        var msg1 = new KyrolusSous.RabbitMQ.Abstractions.Outbox.KyrolusOutboxMessage
+        {
+            Id = "msg-1",
+            Exchange = "ex",
+            RoutingKey = "rk",
+            Payload = "test",
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-10),
+            ProcessedAt = DateTimeOffset.UtcNow.AddDays(-10)
+        };
+
+        var msg2 = new KyrolusSous.RabbitMQ.Abstractions.Outbox.KyrolusOutboxMessage
+        {
+            Id = "msg-2",
+            Exchange = "ex",
+            RoutingKey = "rk",
+            Payload = "test",
+            CreatedAt = DateTimeOffset.UtcNow,
+            ProcessedAt = null
+        };
+
+        await store.AddAsync(msg1);
+        await store.AddAsync(msg2);
+
+        await store.PurgeProcessedMessagesAsync(TimeSpan.FromDays(5));
+
+        var pending = await store.GetPendingMessagesAsync(10);
+        pending.Count.ShouldBe(1);
+        pending[0].Id.ShouldBe("msg-2");
+    }
+
+    [Fact]
+    public async Task IdempotencyStore_TryExtendLock_RenewsActiveLock()
+    {
+        var store = new KyrolusSous.RabbitMQ.Runtime.Idempotency.KyrolusInMemoryIdempotencyStore();
+        var key = "idempotency-extend-1";
+
+        var acquired = await store.TryAcquireLockAsync(key, TimeSpan.FromSeconds(10));
+        acquired.ShouldBeTrue();
+
+        var extended = await store.TryExtendLockAsync(key, TimeSpan.FromSeconds(20));
+        extended.ShouldBeTrue();
+
+        var nonExistentExtended = await store.TryExtendLockAsync("non-existent-key", TimeSpan.FromSeconds(20));
+        nonExistentExtended.ShouldBeFalse();
+    }
+
     #endregion
 }
 

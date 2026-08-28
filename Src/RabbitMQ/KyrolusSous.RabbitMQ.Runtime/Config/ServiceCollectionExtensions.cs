@@ -76,6 +76,7 @@ namespace KyrolusSous.RabbitMQ.Runtime.Config
             this IServiceCollection services,
             Action<KyrolusRabbitMQConsumerOptions>? configure = null)
             where TConsumer : class, IKyrolusRabbitMQConsumer<TMessage>
+            where TMessage : class
         {
             var options = new KyrolusRabbitMQConsumerOptions
             {

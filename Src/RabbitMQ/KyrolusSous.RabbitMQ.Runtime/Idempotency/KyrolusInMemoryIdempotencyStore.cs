@@ -4,7 +4,7 @@ using KyrolusSous.RabbitMQ.Abstractions.Idempotency;
 namespace KyrolusSous.RabbitMQ.Runtime.Idempotency;
 
 /// <summary>
-/// Thread-safe in-memory implementation of <see cref="IKyrolusIdempotencyStore"/> with expiration and bounded memory management.
+/// Thread-safe in-memory implementation of <see cref="IKyrolusIdempotencyStore"/> with expiration, lock renewal, and bounded memory management.
 /// </summary>
 public class KyrolusInMemoryIdempotencyStore : IKyrolusIdempotencyStore
 {
@@ -46,6 +46,21 @@ public class KyrolusInMemoryIdempotencyStore : IKyrolusIdempotencyStore
                 }
             }
         }
+    }
+
+    public Task<bool> TryExtendLockAsync(string idempotencyKey, TimeSpan additionalDuration, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
+
+        var now = DateTimeOffset.UtcNow;
+        if (_locks.TryGetValue(idempotencyKey, out var existing) && existing.Expiry > now)
+        {
+            var extendedExpiry = existing.Expiry.Add(additionalDuration);
+            var updated = _locks.TryUpdate(idempotencyKey, new LockEntry(extendedExpiry), existing);
+            return Task.FromResult(updated);
+        }
+
+        return Task.FromResult(false);
     }
 
     public Task SetResultAsync(string idempotencyKey, string result, TimeSpan? expiry = null, CancellationToken cancellationToken = default)

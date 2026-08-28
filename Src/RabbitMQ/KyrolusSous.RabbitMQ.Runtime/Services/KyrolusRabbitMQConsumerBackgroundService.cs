@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using KyrolusSous.RabbitMQ.Abstractions.Interfaces;
 using KyrolusSous.RabbitMQ.Abstractions.Models;
 using KyrolusSous.RabbitMQ.Runtime.Diagnostics;
@@ -12,12 +13,13 @@ using RabbitMQ.Client.Events;
 namespace KyrolusSous.RabbitMQ.Runtime.Services;
 
 /// <summary>
-/// Background service that consumes strongly-typed messages from a RabbitMQ queue and dispatches them to scoped consumers.
+/// Hosted background service managing the consumer lifecycle, scoped handler invocation, and resilient error recovery.
 /// </summary>
-/// <typeparam name="TConsumer">The consumer type.</typeparam>
+/// <typeparam name="TConsumer">The consumer implementation type.</typeparam>
 /// <typeparam name="TMessage">The message payload type.</typeparam>
 public class KyrolusRabbitMQConsumerBackgroundService<TConsumer, TMessage> : BackgroundService
     where TConsumer : class, IKyrolusRabbitMQConsumer<TMessage>
+    where TMessage : class
 {
     private readonly IKyrolusRabbitMQConnection _connection;
     private readonly IServiceProvider _serviceProvider;
@@ -34,18 +36,23 @@ public class KyrolusRabbitMQConsumerBackgroundService<TConsumer, TMessage> : Bac
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _consumerOptions = consumerOptions ?? throw new ArgumentNullException(nameof(consumerOptions));
         _logger = logger ?? NullLogger<KyrolusRabbitMQConsumerBackgroundService<TConsumer, TMessage>>.Instance;
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(_consumerOptions.QueueName);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (string.IsNullOrWhiteSpace(_consumerOptions.QueueName))
-        {
-            _logger.LogWarning("Consumer queue name is not configured. Consumer service will not start.");
-            return;
-        }
+        _logger.LogInformation("Starting consumer service for {Consumer} on queue {Queue}",
+            typeof(TConsumer).Name, _consumerOptions.QueueName);
 
-        var channel = await _connection.CreateChannelAsync(stoppingToken).ConfigureAwait(false);
-        await channel.BasicQosAsync(prefetchSize: 0, prefetchCount: _consumerOptions.PrefetchCount, global: false, stoppingToken).ConfigureAwait(false);
+        using var channel = await _connection.CreateChannelAsync(stoppingToken).ConfigureAwait(false);
+
+        // Configure QoS
+        await channel.BasicQosAsync(
+            prefetchSize: 0,
+            prefetchCount: _consumerOptions.PrefetchCount,
+            global: false,
+            cancellationToken: stoppingToken).ConfigureAwait(false);
 
         // Declare queue if needed
         await channel.QueueDeclareAsync(
@@ -104,10 +111,22 @@ public class KyrolusRabbitMQConsumerBackgroundService<TConsumer, TMessage> : Bac
                     return;
                 }
 
-                using (var scope = _serviceProvider.CreateScope())
+                var scope = _serviceProvider.CreateScope();
+                try
                 {
                     var consumerInstance = scope.ServiceProvider.GetRequiredService<TConsumer>();
                     await consumerInstance.HandleAsync(message, context, stoppingToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    if (scope is IAsyncDisposable asyncScope)
+                    {
+                        await asyncScope.DisposeAsync().ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        scope.Dispose();
+                    }
                 }
 
                 if (!_consumerOptions.AutoAck)
@@ -118,20 +137,35 @@ public class KyrolusRabbitMQConsumerBackgroundService<TConsumer, TMessage> : Bac
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed processing message delivery {DeliveryTag} on queue {Queue}", ea.DeliveryTag, _consumerOptions.QueueName);
+                KyrolusRabbitMQInstrumentation.SetActivityError(activity, ex);
+
                 if (!_consumerOptions.AutoAck)
                 {
-                    await channel.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: false, cancellationToken: stoppingToken).ConfigureAwait(false);
+                    try
+                    {
+                        await channel.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: false, cancellationToken: stoppingToken).ConfigureAwait(false);
+                    }
+                    catch (Exception nackEx)
+                    {
+                        _logger.LogError(nackEx, "Failed to nack message delivery {DeliveryTag}", ea.DeliveryTag);
+                    }
                 }
             }
         };
 
-        await channel.BasicConsumeAsync(_consumerOptions.QueueName, _consumerOptions.AutoAck, consumer, stoppingToken).ConfigureAwait(false);
+        var consumerTag = await channel.BasicConsumeAsync(_consumerOptions.QueueName, _consumerOptions.AutoAck, consumer, stoppingToken).ConfigureAwait(false);
 
         // Keep running until cancellation requested
-        var tcs = new TaskCompletionSource();
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using (stoppingToken.Register(s => ((TaskCompletionSource)s!).TrySetResult(), tcs))
         {
             await tcs.Task.ConfigureAwait(false);
         }
+
+        try
+        {
+            await channel.BasicCancelAsync(consumerTag, noWait: false, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch { }
     }
 }

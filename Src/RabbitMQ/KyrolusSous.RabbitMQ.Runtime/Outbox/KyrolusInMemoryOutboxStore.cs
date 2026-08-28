@@ -4,7 +4,7 @@ using KyrolusSous.RabbitMQ.Abstractions.Outbox;
 namespace KyrolusSous.RabbitMQ.Runtime.Outbox;
 
 /// <summary>
-/// Thread-safe in-memory store for transactional outbox messages.
+/// Thread-safe in-memory store for transactional outbox messages with retention management.
 /// </summary>
 public class KyrolusInMemoryOutboxStore : IKyrolusOutboxStore
 {
@@ -45,6 +45,20 @@ public class KyrolusInMemoryOutboxStore : IKyrolusOutboxStore
         {
             msg.RetryCount++;
             msg.Error = error;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task PurgeProcessedMessagesAsync(TimeSpan olderThan, CancellationToken cancellationToken = default)
+    {
+        var threshold = DateTimeOffset.UtcNow.Subtract(olderThan);
+        foreach (var (id, msg) in _messages)
+        {
+            if (msg.ProcessedAt.HasValue && msg.ProcessedAt.Value < threshold)
+            {
+                _messages.TryRemove(id, out _);
+            }
         }
 
         return Task.CompletedTask;
