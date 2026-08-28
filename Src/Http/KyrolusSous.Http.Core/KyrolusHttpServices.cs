@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using KyrolusSous.Http.Abstractions;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -127,6 +128,51 @@ public sealed class KyrolusHmacDelegatingHandler(IKyrolusHmacSigner signer, Kyro
     }
 }
 
+public sealed class KyrolusCacheDelegatingHandler(Microsoft.Extensions.Caching.Memory.IMemoryCache cache, TimeSpan? defaultTtl = null) : DelegatingHandler
+{
+    private readonly Microsoft.Extensions.Caching.Memory.IMemoryCache _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+    private readonly TimeSpan _defaultTtl = defaultTtl ?? TimeSpan.FromMinutes(5);
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        if (request.Method != HttpMethod.Get)
+        {
+            return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+
+        var cacheKey = $"http_cache:{request.RequestUri?.AbsoluteUri}";
+        if (_cache.TryGetValue(cacheKey, out var rawObj) && rawObj is byte[] cachedBytes)
+        {
+            var cachedResponse = new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(cachedBytes)
+            };
+            cachedResponse.Headers.Add("X-Kyrolus-Cache", "HIT");
+            return cachedResponse;
+        }
+
+        var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (response.IsSuccessStatusCode && response.Content is not null)
+        {
+            var contentBytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+            _cache.Set(cacheKey, contentBytes, _defaultTtl);
+
+            var clonedResponse = new HttpResponseMessage(response.StatusCode)
+            {
+                Content = new ByteArrayContent(contentBytes)
+            };
+            foreach (var header in response.Headers)
+            {
+                clonedResponse.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            }
+            clonedResponse.Headers.Add("X-Kyrolus-Cache", "MISS");
+            return clonedResponse;
+        }
+
+        return response;
+    }
+}
+
 public static class ServiceCollectionExtensions
 {
     public static IHttpClientBuilder AddKyrolusHttpClient<TClient, TImplementation>(this IServiceCollection services, Action<KyrolusHttpClientOptions>? configure = null)
@@ -140,6 +186,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<KyrolusAuthDelegatingHandler>();
         services.AddTransient<KyrolusCorrelationDelegatingHandler>();
         services.AddTransient<KyrolusLoggingDelegatingHandler>();
+        services.AddTransient<KyrolusCacheDelegatingHandler>();
 
         var builder = services.AddHttpClient<TClient, TImplementation>((sp, client) =>
         {

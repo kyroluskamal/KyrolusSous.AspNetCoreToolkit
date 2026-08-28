@@ -177,6 +177,33 @@ public sealed class KyrolusS3StorageProvider : IKyrolusStorageProvider, IKyrolus
         return result;
     }
 
+    public async Task<KyrolusBlobProperties> CopyBlobAsync(string sourceContainer, string sourceBlob, string destinationContainer, string destinationBlob, CancellationToken cancellationToken = default)
+    {
+        var copyRequest = new CopyObjectRequest
+        {
+            SourceBucket = sourceContainer,
+            SourceKey = sourceBlob,
+            DestinationBucket = destinationContainer,
+            DestinationKey = destinationBlob
+        };
+
+        var response = await _s3Client.CopyObjectAsync(copyRequest, cancellationToken).ConfigureAwait(false);
+        return new KyrolusBlobProperties
+        {
+            ContainerName = destinationContainer,
+            BlobName = destinationBlob,
+            ETag = response.ETag,
+            LastModified = DateTimeOffset.UtcNow
+        };
+    }
+
+    public async Task<KyrolusBlobProperties> MoveBlobAsync(string sourceContainer, string sourceBlob, string destinationContainer, string destinationBlob, CancellationToken cancellationToken = default)
+    {
+        var result = await CopyBlobAsync(sourceContainer, sourceBlob, destinationContainer, destinationBlob, cancellationToken).ConfigureAwait(false);
+        await DeleteAsync(sourceContainer, sourceBlob, cancellationToken).ConfigureAwait(false);
+        return result;
+    }
+
     public async Task<KyrolusMultipartUploadSession> InitiateMultipartUploadAsync(string containerName, string blobName, KyrolusBlobDescriptor? descriptor = null, CancellationToken cancellationToken = default)
     {
         var request = new InitiateMultipartUploadRequest

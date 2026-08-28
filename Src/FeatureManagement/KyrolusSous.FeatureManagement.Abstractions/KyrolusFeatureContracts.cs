@@ -1,9 +1,10 @@
 namespace KyrolusSous.FeatureManagement.Abstractions;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
-public sealed class KyrolusFeatureGateAttribute(string featureName) : Attribute
+public sealed class KyrolusFeatureGateAttribute(string featureName, int requirementStatusCode = 404) : Attribute
 {
     public string FeatureName { get; } = featureName ?? throw new ArgumentNullException(nameof(featureName));
+    public int RequirementStatusCode { get; } = requirementStatusCode;
 }
 
 public sealed record KyrolusFeatureContext

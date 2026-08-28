@@ -46,6 +46,23 @@ public static class KyrolusCronParser
 
         return baseTimeUtc.AddMinutes(1);
     }
+
+    public static IReadOnlyList<DateTimeOffset> GetNextOccurrences(string cronExpression, DateTimeOffset baseTimeUtc, int count)
+    {
+        var occurrences = new List<DateTimeOffset>();
+        var current = baseTimeUtc;
+
+        for (var i = 0; i < count; i++)
+        {
+            var next = GetNextOccurrence(cronExpression, current);
+            if (!next.HasValue) break;
+
+            occurrences.Add(next.Value);
+            current = next.Value;
+        }
+
+        return occurrences;
+    }
 }
 
 public sealed class KyrolusInMemoryJobLockProvider : IKyrolusJobLockProvider

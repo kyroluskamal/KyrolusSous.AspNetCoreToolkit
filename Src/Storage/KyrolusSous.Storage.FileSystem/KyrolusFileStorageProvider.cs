@@ -156,6 +156,43 @@ public sealed class KyrolusFileStorageProvider : IKyrolusStorageProvider, IKyrol
         return Task.FromResult<IReadOnlyList<KyrolusBlobProperties>>(result);
     }
 
+    public async Task<KyrolusBlobProperties> CopyBlobAsync(string sourceContainer, string sourceBlob, string destinationContainer, string destinationBlob, CancellationToken cancellationToken = default)
+    {
+        var srcPath = GetFilePath(sourceContainer, sourceBlob);
+        var destPath = GetFilePath(destinationContainer, destinationBlob);
+
+        if (!File.Exists(srcPath))
+        {
+            throw new FileNotFoundException($"Source blob '{sourceBlob}' in container '{sourceContainer}' was not found.");
+        }
+
+        var destDir = Path.GetDirectoryName(destPath);
+        if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
+        {
+            Directory.CreateDirectory(destDir);
+        }
+
+        File.Copy(srcPath, destPath, overwrite: true);
+
+        var srcProps = await GetPropertiesAsync(sourceContainer, sourceBlob, cancellationToken).ConfigureAwait(false);
+        return new KyrolusBlobProperties
+        {
+            ContainerName = destinationContainer,
+            BlobName = destinationBlob,
+            ContentLength = srcProps?.ContentLength ?? 0,
+            ContentType = srcProps?.ContentType ?? GetMimeType(destinationBlob),
+            LastModified = DateTimeOffset.UtcNow,
+            Metadata = srcProps?.Metadata ?? new Dictionary<string, string>()
+        };
+    }
+
+    public async Task<KyrolusBlobProperties> MoveBlobAsync(string sourceContainer, string sourceBlob, string destinationContainer, string destinationBlob, CancellationToken cancellationToken = default)
+    {
+        var result = await CopyBlobAsync(sourceContainer, sourceBlob, destinationContainer, destinationBlob, cancellationToken).ConfigureAwait(false);
+        await DeleteAsync(sourceContainer, sourceBlob, cancellationToken).ConfigureAwait(false);
+        return result;
+    }
+
     public Task<KyrolusMultipartUploadSession> InitiateMultipartUploadAsync(string containerName, string blobName, KyrolusBlobDescriptor? descriptor = null, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(containerName);

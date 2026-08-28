@@ -82,4 +82,24 @@ public sealed class HttpTests
         var forged = signer.VerifySignature(secret, "forged-signature-abc", timestamp, "POST", "/api/v1/payments", body);
         forged.ShouldBeFalse();
     }
+
+    [Fact(DisplayName = "Cache Delegating Handler Serves Repeated GET Requests From Memory Cache")]
+    public async Task CacheDelegatingHandler_ServesFromMemoryCache()
+    {
+        var memoryCache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+        var inner = new TestInnerHandler();
+        var handler = new KyrolusCacheDelegatingHandler(memoryCache, TimeSpan.FromMinutes(1))
+        {
+            InnerHandler = inner
+        };
+
+        var invoker = new HttpMessageInvoker(handler);
+        var request1 = new HttpRequestMessage(HttpMethod.Get, "https://api.kyrolus.local/categories");
+        var res1 = await invoker.SendAsync(request1, CancellationToken.None);
+        res1.Headers.GetValues("X-Kyrolus-Cache").First().ShouldBe("MISS");
+
+        var request2 = new HttpRequestMessage(HttpMethod.Get, "https://api.kyrolus.local/categories");
+        var res2 = await invoker.SendAsync(request2, CancellationToken.None);
+        res2.Headers.GetValues("X-Kyrolus-Cache").First().ShouldBe("HIT");
+    }
 }

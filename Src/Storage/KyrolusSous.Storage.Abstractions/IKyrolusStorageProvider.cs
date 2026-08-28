@@ -64,4 +64,24 @@ public interface IKyrolusStorageProvider
         string containerName,
         string? prefix = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Copies a blob from a source container/blob to a destination container/blob.
+    /// </summary>
+    Task<KyrolusBlobProperties> CopyBlobAsync(
+        string sourceContainer,
+        string sourceBlob,
+        string destinationContainer,
+        string destinationBlob,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Moves a blob from a source container/blob to a destination container/blob.
+    /// </summary>
+    Task<KyrolusBlobProperties> MoveBlobAsync(
+        string sourceContainer,
+        string sourceBlob,
+        string destinationContainer,
+        string destinationBlob,
+        CancellationToken cancellationToken = default);
 }

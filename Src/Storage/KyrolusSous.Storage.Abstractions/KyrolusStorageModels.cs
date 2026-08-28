@@ -14,6 +14,8 @@ public interface IKyrolusBlobContainer
     Task<KyrolusBlobProperties?> GetPropertiesAsync(string blobName, CancellationToken cancellationToken = default);
     Task<string> GetPresignedUrlAsync(string blobName, TimeSpan expiry, bool isWrite = false, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<KyrolusBlobProperties>> ListBlobsAsync(string? prefix = null, CancellationToken cancellationToken = default);
+    Task<KyrolusBlobProperties> CopyAsync(string sourceBlobName, string destinationBlobName, CancellationToken cancellationToken = default);
+    Task<KyrolusBlobProperties> MoveAsync(string sourceBlobName, string destinationBlobName, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

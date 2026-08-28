@@ -153,4 +153,24 @@ public sealed class StorageTests : IDisposable
         var fullText = await reader.ReadToEndAsync();
         fullText.ShouldBe(part1 + part2 + part3);
     }
+
+    [Fact(DisplayName = "File Storage Copies And Moves Blobs Accurately")]
+    public async Task FileStorage_CopyAndMoveBlobs_WorksCorrectly()
+    {
+        var content = "Original content for copy & move";
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(content));
+        await _provider.UploadAsync("source-bucket", "doc.txt", stream);
+
+        // Copy blob
+        var copied = await _provider.CopyBlobAsync("source-bucket", "doc.txt", "backup-bucket", "doc-copy.txt");
+        copied.ShouldNotBeNull();
+        (await _provider.ExistsAsync("source-bucket", "doc.txt")).ShouldBeTrue();
+        (await _provider.ExistsAsync("backup-bucket", "doc-copy.txt")).ShouldBeTrue();
+
+        // Move blob
+        var moved = await _provider.MoveBlobAsync("source-bucket", "doc.txt", "archive-bucket", "doc-moved.txt");
+        moved.ShouldNotBeNull();
+        (await _provider.ExistsAsync("source-bucket", "doc.txt")).ShouldBeFalse(); // Deleted from source
+        (await _provider.ExistsAsync("archive-bucket", "doc-moved.txt")).ShouldBeTrue();
+    }
 }

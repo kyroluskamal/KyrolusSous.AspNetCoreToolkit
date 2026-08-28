@@ -57,6 +57,12 @@ public class KyrolusCompressedStorageDecorator(
 
     public Task<IReadOnlyList<KyrolusBlobProperties>> ListBlobsAsync(string containerName, string? prefix = null, CancellationToken cancellationToken = default)
         => _inner.ListBlobsAsync(containerName, prefix, cancellationToken);
+
+    public Task<KyrolusBlobProperties> CopyBlobAsync(string sourceContainer, string sourceBlob, string destinationContainer, string destinationBlob, CancellationToken cancellationToken = default)
+        => _inner.CopyBlobAsync(sourceContainer, sourceBlob, destinationContainer, destinationBlob, cancellationToken);
+
+    public Task<KyrolusBlobProperties> MoveBlobAsync(string sourceContainer, string sourceBlob, string destinationContainer, string destinationBlob, CancellationToken cancellationToken = default)
+        => _inner.MoveBlobAsync(sourceContainer, sourceBlob, destinationContainer, destinationBlob, cancellationToken);
 }
 
 /// <summary>
@@ -114,4 +120,10 @@ public class KyrolusProtectedStorageDecorator(
 
     public Task<IReadOnlyList<KyrolusBlobProperties>> ListBlobsAsync(string containerName, string? prefix = null, CancellationToken cancellationToken = default)
         => _inner.ListBlobsAsync(containerName, prefix, cancellationToken);
+
+    public Task<KyrolusBlobProperties> CopyBlobAsync(string sourceContainer, string sourceBlob, string destinationContainer, string destinationBlob, CancellationToken cancellationToken = default)
+        => _inner.CopyBlobAsync(sourceContainer, sourceBlob, destinationContainer, destinationBlob, cancellationToken);
+
+    public Task<KyrolusBlobProperties> MoveBlobAsync(string sourceContainer, string sourceBlob, string destinationContainer, string destinationBlob, CancellationToken cancellationToken = default)
+        => _inner.MoveBlobAsync(sourceContainer, sourceBlob, destinationContainer, destinationBlob, cancellationToken);
 }

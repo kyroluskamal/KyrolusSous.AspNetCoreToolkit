@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using KyrolusSous.FeatureManagement.Abstractions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -207,6 +209,33 @@ public sealed class KyrolusFeatureManager : IKyrolusFeatureManager
             yield return key;
         }
         await Task.CompletedTask;
+    }
+}
+
+public sealed class KyrolusFeatureGateEndpointFilter(string featureName, int requirementStatusCode = 404) : Microsoft.AspNetCore.Http.IEndpointFilter
+{
+    public async ValueTask<object?> InvokeAsync(Microsoft.AspNetCore.Http.EndpointFilterInvocationContext context, Microsoft.AspNetCore.Http.EndpointFilterDelegate next)
+    {
+        var manager = context.HttpContext.RequestServices.GetRequiredService<IKyrolusFeatureManager>();
+        var isEnabled = await manager.IsEnabledAsync(featureName, context.HttpContext.RequestAborted).ConfigureAwait(false);
+
+        if (!isEnabled)
+        {
+            return Microsoft.AspNetCore.Http.Results.StatusCode(requirementStatusCode);
+        }
+
+        return await next(context).ConfigureAwait(false);
+    }
+}
+
+public static class RouteHandlerBuilderExtensions
+{
+    public static Microsoft.AspNetCore.Builder.RouteHandlerBuilder RequireFeature(
+        this Microsoft.AspNetCore.Builder.RouteHandlerBuilder builder,
+        string featureName,
+        int requirementStatusCode = 404)
+    {
+        return builder.AddEndpointFilter(new KyrolusFeatureGateEndpointFilter(featureName, requirementStatusCode));
     }
 }
 

@@ -29,6 +29,18 @@ public sealed class SchedulingTests
         next.Value.Second.ShouldBe(0);
     }
 
+    [Fact(DisplayName = "Cron Parser Previews Multiple Next Occurrences Accurately")]
+    public void CronParser_PreviewsMultipleOccurrences_Accurately()
+    {
+        var baseTime = new DateTimeOffset(2026, 8, 28, 12, 0, 0, TimeSpan.Zero);
+        var occurrences = KyrolusCronParser.GetNextOccurrences("*/10 * * * *", baseTime, 3);
+
+        occurrences.Count.ShouldBe(3);
+        occurrences[0].Minute.ShouldBe(10);
+        occurrences[1].Minute.ShouldBe(20);
+        occurrences[2].Minute.ShouldBe(30);
+    }
+
     [Fact(DisplayName = "In Memory Job Lock Provider Prevents Concurrent Acquisition")]
     public async Task JobLockProvider_PreventsConcurrentAcquisition()
     {

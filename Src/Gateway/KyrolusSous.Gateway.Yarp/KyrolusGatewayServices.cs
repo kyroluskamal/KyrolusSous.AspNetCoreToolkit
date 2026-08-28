@@ -70,6 +70,21 @@ public sealed class KyrolusTenantRoutingTransformProvider : ITransformProvider
     }
 }
 
+public sealed class KyrolusRateLimitTransformProvider : ITransformProvider
+{
+    public void ValidateRoute(TransformRouteValidationContext context) { }
+    public void ValidateCluster(TransformClusterValidationContext context) { }
+
+    public void Apply(TransformBuilderContext context)
+    {
+        context.AddResponseTransform(transformContext =>
+        {
+            transformContext.HttpContext.Response.Headers["X-Kyrolus-Gateway"] = "Active";
+            return ValueTask.CompletedTask;
+        });
+    }
+}
+
 public sealed class KyrolusDynamicInMemoryRouteConfigProvider : IProxyConfigProvider, IKyrolusDynamicRouteProvider
 {
     private sealed class CustomProxyConfig(IReadOnlyList<RouteConfig> routes, IReadOnlyList<ClusterConfig> clusters) : IProxyConfig
@@ -136,6 +151,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITransformProvider, KyrolusCorrelationTransformProvider>();
         services.AddSingleton<ITransformProvider, KyrolusSecurityHeadersTransformProvider>();
         services.AddSingleton<ITransformProvider, KyrolusTenantRoutingTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusRateLimitTransformProvider>();
         services.AddReverseProxy();
 
         return services;
