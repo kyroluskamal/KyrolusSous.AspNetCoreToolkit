@@ -385,6 +385,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "DataProtection", "DataProte
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.UnitTests", "Tests\UnitTests\DataProtection\KyrolusSous.DataProtection.UnitTests\KyrolusSous.DataProtection.UnitTests.csproj", "{45F0D750-39FD-4C6C-BA47-FB39D7D479AA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.DataProtection.Vault", "Src\DataProtection\KyrolusSous.DataProtection.Vault\KyrolusSous.DataProtection.Vault.csproj", "{579A3489-4618-4352-AD3A-3EBDC29E3352}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -2243,6 +2245,18 @@ Global
 		{45F0D750-39FD-4C6C-BA47-FB39D7D479AA}.Release|x64.Build.0 = Release|Any CPU
 		{45F0D750-39FD-4C6C-BA47-FB39D7D479AA}.Release|x86.ActiveCfg = Release|Any CPU
 		{45F0D750-39FD-4C6C-BA47-FB39D7D479AA}.Release|x86.Build.0 = Release|Any CPU
+		{579A3489-4618-4352-AD3A-3EBDC29E3352}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{579A3489-4618-4352-AD3A-3EBDC29E3352}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{579A3489-4618-4352-AD3A-3EBDC29E3352}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{579A3489-4618-4352-AD3A-3EBDC29E3352}.Debug|x64.Build.0 = Debug|Any CPU
+		{579A3489-4618-4352-AD3A-3EBDC29E3352}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{579A3489-4618-4352-AD3A-3EBDC29E3352}.Debug|x86.Build.0 = Debug|Any CPU
+		{579A3489-4618-4352-AD3A-3EBDC29E3352}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{579A3489-4618-4352-AD3A-3EBDC29E3352}.Release|Any CPU.Build.0 = Release|Any CPU
+		{579A3489-4618-4352-AD3A-3EBDC29E3352}.Release|x64.ActiveCfg = Release|Any CPU
+		{579A3489-4618-4352-AD3A-3EBDC29E3352}.Release|x64.Build.0 = Release|Any CPU
+		{579A3489-4618-4352-AD3A-3EBDC29E3352}.Release|x86.ActiveCfg = Release|Any CPU
+		{579A3489-4618-4352-AD3A-3EBDC29E3352}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -2437,5 +2451,6 @@ Global
 		{DE2BD6D2-AB11-4E9D-A496-B390E31C2442} = {ACDD022A-FE33-4E03-BCB9-2A6B9C2E2ADA}
 		{3283ACE6-0A12-0A96-9445-6B812787C457} = {30785934-E017-5D9F-2777-3D61460A5281}
 		{45F0D750-39FD-4C6C-BA47-FB39D7D479AA} = {3283ACE6-0A12-0A96-9445-6B812787C457}
+		{579A3489-4618-4352-AD3A-3EBDC29E3352} = {76491ED7-0E2B-45C2-BFA8-D3D641AA815E}
 	EndGlobalSection
 EndGlobal

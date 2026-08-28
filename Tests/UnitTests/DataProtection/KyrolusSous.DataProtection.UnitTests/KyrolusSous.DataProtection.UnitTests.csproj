@@ -26,6 +26,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Shouldly" Version="4.3.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>
@@ -33,6 +34,8 @@
     <ProjectReference Include="..\..\..\..\Src\DataProtection\KyrolusSous.DataProtection.Runtime\KyrolusSous.DataProtection.Runtime.csproj" />
     <ProjectReference Include="..\..\..\..\Src\DataProtection\KyrolusSous.DataProtection.Ephemeral\KyrolusSous.DataProtection.Ephemeral.csproj" />
     <ProjectReference Include="..\..\..\..\Src\DataProtection\KyrolusSous.DataProtection.FileSystem\KyrolusSous.DataProtection.FileSystem.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\DataProtection\KyrolusSous.DataProtection.EntityFramework\KyrolusSous.DataProtection.EntityFramework.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\DataProtection\KyrolusSous.DataProtection.Vault\KyrolusSous.DataProtection.Vault.csproj" />
   </ItemGroup>
 
 </Project>

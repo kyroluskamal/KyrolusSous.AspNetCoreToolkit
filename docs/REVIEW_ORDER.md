@@ -114,7 +114,8 @@ Independent of everything else. Can be done at any point.
 | 62 | `DataProtection.AzureKeyVault` | ✅ | Azure Key Vault key encryption |
 | 63 | `DataProtection.AwsKms` | ✅ | AWS KMS key encryption |
 | 64 | `DataProtection.GoogleKms` | ✅ | Google Cloud KMS key encryption |
-| 65 | `DataProtection.Cli` | ✅ | Command-line tool for key inspection, revocation, and escrow |
+| 65 | `DataProtection.Vault` | ✅ | HashiCorp Vault Transit secrets engine key encryption |
+| 66 | `DataProtection.Cli` | ✅ | Command-line tool for key inspection, revocation, and escrow |
 
 ## Phase 6 - Authentication & Identity (Storage-Agnostic Suite)
 

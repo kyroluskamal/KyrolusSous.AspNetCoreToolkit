@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
+using System.Text.Json;
 using KyrolusSous.DataProtection.Abstractions;
 using Microsoft.AspNetCore.DataProtection;
 
@@ -12,13 +13,11 @@ public static class KyrolusDataProtectionExtensions
 {
     private const char ExpirySeparator = '\0';
 
+    #region String & Byte Unprotection
+
     /// <summary>
     /// Safely attempts to unprotect string data without throwing exceptions on corrupt or invalid payloads.
     /// </summary>
-    /// <param name="protector">The data protector instance.</param>
-    /// <param name="protectedData">The protected ciphertext.</param>
-    /// <param name="unprotectedData">The decrypted plaintext if successful.</param>
-    /// <returns>True if decryption succeeded; otherwise, false.</returns>
     public static bool TryUnprotect(
         this IDataProtector protector,
         string? protectedData,
@@ -37,17 +36,7 @@ public static class KyrolusDataProtectionExtensions
             unprotectedData = protector.Unprotect(protectedData);
             return true;
         }
-        catch (CryptographicException)
-        {
-            unprotectedData = null;
-            return false;
-        }
-        catch (FormatException)
-        {
-            unprotectedData = null;
-            return false;
-        }
-        catch (Exception)
+        catch
         {
             unprotectedData = null;
             return false;
@@ -57,10 +46,6 @@ public static class KyrolusDataProtectionExtensions
     /// <summary>
     /// Safely attempts to unprotect byte array data without throwing exceptions on corrupt or invalid payloads.
     /// </summary>
-    /// <param name="protector">The data protector instance.</param>
-    /// <param name="protectedData">The protected ciphertext bytes.</param>
-    /// <param name="unprotectedData">The decrypted plaintext bytes if successful.</param>
-    /// <returns>True if decryption succeeded; otherwise, false.</returns>
     public static bool TryUnprotect(
         this IDataProtector protector,
         byte[]? protectedData,
@@ -79,25 +64,20 @@ public static class KyrolusDataProtectionExtensions
             unprotectedData = protector.Unprotect(protectedData);
             return true;
         }
-        catch (CryptographicException)
-        {
-            unprotectedData = null;
-            return false;
-        }
-        catch (Exception)
+        catch
         {
             unprotectedData = null;
             return false;
         }
     }
 
+    #endregion
+
+    #region Time-Limited Expiration
+
     /// <summary>
     /// Protects plaintext with a specified expiration lifetime.
     /// </summary>
-    /// <param name="protector">The data protector instance.</param>
-    /// <param name="plaintext">The plaintext to protect.</param>
-    /// <param name="lifetime">The lifetime duration until expiration.</param>
-    /// <returns>The protected self-expiring payload.</returns>
     public static string ProtectWithExpiry(
         this IDataProtector protector,
         string plaintext,
@@ -109,10 +89,6 @@ public static class KyrolusDataProtectionExtensions
     /// <summary>
     /// Protects plaintext with a specified expiration timestamp.
     /// </summary>
-    /// <param name="protector">The data protector instance.</param>
-    /// <param name="plaintext">The plaintext to protect.</param>
-    /// <param name="expiration">The exact expiration timestamp.</param>
-    /// <returns>The protected self-expiring payload.</returns>
     public static string ProtectWithExpiry(
         this IDataProtector protector,
         string plaintext,
@@ -129,9 +105,6 @@ public static class KyrolusDataProtectionExtensions
     /// <summary>
     /// Unprotects a time-limited payload, throwing <see cref="CryptographicException"/> if expired or corrupt.
     /// </summary>
-    /// <param name="protector">The data protector instance.</param>
-    /// <param name="protectedData">The protected time-limited ciphertext.</param>
-    /// <returns>The decrypted plaintext.</returns>
     public static string UnprotectWithExpiry(
         this IDataProtector protector,
         string protectedData)
@@ -164,10 +137,6 @@ public static class KyrolusDataProtectionExtensions
     /// <summary>
     /// Safely unprotects a time-limited payload, returning false if expired, corrupt, or invalid.
     /// </summary>
-    /// <param name="protector">The data protector instance.</param>
-    /// <param name="protectedData">The protected time-limited ciphertext.</param>
-    /// <param name="unprotectedData">The decrypted plaintext if valid and unexpired.</param>
-    /// <returns>True if decryption succeeded and payload has not expired; otherwise, false.</returns>
     public static bool TryUnprotectWithExpiry(
         this IDataProtector protector,
         string? protectedData,
@@ -186,12 +155,61 @@ public static class KyrolusDataProtectionExtensions
             unprotectedData = protector.UnprotectWithExpiry(protectedData);
             return true;
         }
-        catch (CryptographicException)
+        catch
         {
             unprotectedData = null;
             return false;
         }
-        catch (Exception)
+    }
+
+    #endregion
+
+    #region Base64Url Web-Safe Protection
+
+    /// <summary>
+    /// Protects plaintext and returns a URL-safe Base64Url string suitable for query parameters and route segments.
+    /// </summary>
+    public static string ProtectAsBase64Url(this IDataProtector protector, string plaintext)
+    {
+        ArgumentNullException.ThrowIfNull(protector);
+        var ciphertext = protector.Protect(plaintext);
+        return Base64ToBase64Url(ciphertext);
+    }
+
+    /// <summary>
+    /// Unprotects a URL-safe Base64Url string.
+    /// </summary>
+    public static string UnprotectFromBase64Url(this IDataProtector protector, string base64UrlData)
+    {
+        ArgumentNullException.ThrowIfNull(protector);
+        ArgumentException.ThrowIfNullOrWhiteSpace(base64UrlData);
+
+        var base64 = Base64UrlToBase64(base64UrlData);
+        return protector.Unprotect(base64);
+    }
+
+    /// <summary>
+    /// Safely attempts to unprotect a URL-safe Base64Url string without throwing exceptions.
+    /// </summary>
+    public static bool TryUnprotectFromBase64Url(
+        this IDataProtector protector,
+        string? base64UrlData,
+        [NotNullWhen(true)] out string? unprotectedData)
+    {
+        ArgumentNullException.ThrowIfNull(protector);
+
+        if (string.IsNullOrWhiteSpace(base64UrlData))
+        {
+            unprotectedData = null;
+            return false;
+        }
+
+        try
+        {
+            unprotectedData = protector.UnprotectFromBase64Url(base64UrlData);
+            return true;
+        }
+        catch
         {
             unprotectedData = null;
             return false;
@@ -199,11 +217,229 @@ public static class KyrolusDataProtectionExtensions
     }
 
     /// <summary>
+    /// Protects plaintext with expiration and encodes it as a URL-safe Base64Url string.
+    /// </summary>
+    public static string ProtectWithExpiryAsBase64Url(
+        this IDataProtector protector,
+        string plaintext,
+        TimeSpan lifetime)
+    {
+        var cipher = protector.ProtectWithExpiry(plaintext, lifetime);
+        return Base64ToBase64Url(cipher);
+    }
+
+    /// <summary>
+    /// Protects plaintext with expiration timestamp and encodes it as a URL-safe Base64Url string.
+    /// </summary>
+    public static string ProtectWithExpiryAsBase64Url(
+        this IDataProtector protector,
+        string plaintext,
+        DateTimeOffset expiration)
+    {
+        var cipher = protector.ProtectWithExpiry(plaintext, expiration);
+        return Base64ToBase64Url(cipher);
+    }
+
+    /// <summary>
+    /// Unprotects a time-limited URL-safe Base64Url payload.
+    /// </summary>
+    public static string UnprotectWithExpiryFromBase64Url(
+        this IDataProtector protector,
+        string base64UrlData)
+    {
+        ArgumentNullException.ThrowIfNull(protector);
+        ArgumentException.ThrowIfNullOrWhiteSpace(base64UrlData);
+
+        var base64 = Base64UrlToBase64(base64UrlData);
+        return protector.UnprotectWithExpiry(base64);
+    }
+
+    /// <summary>
+    /// Safely attempts to unprotect a time-limited URL-safe Base64Url payload.
+    /// </summary>
+    public static bool TryUnprotectWithExpiryFromBase64Url(
+        this IDataProtector protector,
+        string? base64UrlData,
+        [NotNullWhen(true)] out string? unprotectedData)
+    {
+        ArgumentNullException.ThrowIfNull(protector);
+
+        if (string.IsNullOrWhiteSpace(base64UrlData))
+        {
+            unprotectedData = null;
+            return false;
+        }
+
+        try
+        {
+            unprotectedData = protector.UnprotectWithExpiryFromBase64Url(base64UrlData);
+            return true;
+        }
+        catch
+        {
+            unprotectedData = null;
+            return false;
+        }
+    }
+
+    #endregion
+
+    #region Generic Object/Record Protection
+
+    /// <summary>
+    /// Serializes an object to JSON and encrypts it into a protected string.
+    /// </summary>
+    public static string ProtectObject<T>(
+        this IDataProtector protector,
+        T value,
+        JsonSerializerOptions? serializerOptions = null)
+    {
+        ArgumentNullException.ThrowIfNull(protector);
+        ArgumentNullException.ThrowIfNull(value);
+
+        var json = JsonSerializer.Serialize(value, serializerOptions);
+        return protector.Protect(json);
+    }
+
+    /// <summary>
+    /// Decrypts a protected payload and deserializes it back to an object.
+    /// </summary>
+    public static T UnprotectObject<T>(
+        this IDataProtector protector,
+        string protectedData,
+        JsonSerializerOptions? serializerOptions = null)
+    {
+        ArgumentNullException.ThrowIfNull(protector);
+        ArgumentException.ThrowIfNullOrWhiteSpace(protectedData);
+
+        var json = protector.Unprotect(protectedData);
+        var result = JsonSerializer.Deserialize<T>(json, serializerOptions);
+        if (result is null)
+        {
+            throw new CryptographicException($"Failed to deserialize protected JSON payload to type '{typeof(T).Name}'.");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Safely attempts to decrypt and deserialize an object without throwing exceptions on error.
+    /// </summary>
+    public static bool TryUnprotectObject<T>(
+        this IDataProtector protector,
+        string? protectedData,
+        [NotNullWhen(true)] out T? value,
+        JsonSerializerOptions? serializerOptions = null)
+    {
+        ArgumentNullException.ThrowIfNull(protector);
+
+        if (string.IsNullOrWhiteSpace(protectedData))
+        {
+            value = default;
+            return false;
+        }
+
+        try
+        {
+            value = protector.UnprotectObject<T>(protectedData, serializerOptions);
+            return value is not null;
+        }
+        catch
+        {
+            value = default;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Serializes an object to JSON and encrypts it with an expiration lifetime.
+    /// </summary>
+    public static string ProtectObjectWithExpiry<T>(
+        this IDataProtector protector,
+        T value,
+        TimeSpan lifetime,
+        JsonSerializerOptions? serializerOptions = null)
+    {
+        ArgumentNullException.ThrowIfNull(protector);
+        ArgumentNullException.ThrowIfNull(value);
+
+        var json = JsonSerializer.Serialize(value, serializerOptions);
+        return protector.ProtectWithExpiry(json, lifetime);
+    }
+
+    /// <summary>
+    /// Serializes an object to JSON and encrypts it with an expiration timestamp.
+    /// </summary>
+    public static string ProtectObjectWithExpiry<T>(
+        this IDataProtector protector,
+        T value,
+        DateTimeOffset expiration,
+        JsonSerializerOptions? serializerOptions = null)
+    {
+        ArgumentNullException.ThrowIfNull(protector);
+        ArgumentNullException.ThrowIfNull(value);
+
+        var json = JsonSerializer.Serialize(value, serializerOptions);
+        return protector.ProtectWithExpiry(json, expiration);
+    }
+
+    /// <summary>
+    /// Decrypts a time-limited payload and deserializes it back to an object.
+    /// </summary>
+    public static T UnprotectObjectWithExpiry<T>(
+        this IDataProtector protector,
+        string protectedData,
+        JsonSerializerOptions? serializerOptions = null)
+    {
+        ArgumentNullException.ThrowIfNull(protector);
+        ArgumentException.ThrowIfNullOrWhiteSpace(protectedData);
+
+        var json = protector.UnprotectWithExpiry(protectedData);
+        var result = JsonSerializer.Deserialize<T>(json, serializerOptions);
+        if (result is null)
+        {
+            throw new CryptographicException($"Failed to deserialize protected JSON payload to type '{typeof(T).Name}'.");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Safely attempts to decrypt and deserialize a time-limited payload.
+    /// </summary>
+    public static bool TryUnprotectObjectWithExpiry<T>(
+        this IDataProtector protector,
+        string? protectedData,
+        [NotNullWhen(true)] out T? value,
+        JsonSerializerOptions? serializerOptions = null)
+    {
+        ArgumentNullException.ThrowIfNull(protector);
+
+        if (string.IsNullOrWhiteSpace(protectedData))
+        {
+            value = default;
+            return false;
+        }
+
+        try
+        {
+            value = protector.UnprotectObjectWithExpiry<T>(protectedData, serializerOptions);
+            return value is not null;
+        }
+        catch
+        {
+            value = default;
+            return false;
+        }
+    }
+
+    #endregion
+
+    #region Re-encryption & Migration
+
+    /// <summary>
     /// Re-encrypts an existing protected ciphertext with the currently active key in the keyring.
     /// </summary>
-    /// <param name="protector">The data protector instance.</param>
-    /// <param name="protectedData">The existing protected ciphertext.</param>
-    /// <returns>The newly re-encrypted ciphertext under the active key.</returns>
     public static string ReEncrypt(
         this IDataProtector protector,
         string protectedData)
@@ -218,10 +454,6 @@ public static class KyrolusDataProtectionExtensions
     /// <summary>
     /// Safely attempts to re-encrypt an existing ciphertext under the active key.
     /// </summary>
-    /// <param name="protector">The data protector instance.</param>
-    /// <param name="protectedData">The existing ciphertext.</param>
-    /// <param name="reEncryptedData">The re-encrypted ciphertext if successful.</param>
-    /// <returns>True if re-encryption succeeded; otherwise, false.</returns>
     public static bool TryReEncrypt(
         this IDataProtector protector,
         string? protectedData,
@@ -238,6 +470,10 @@ public static class KyrolusDataProtectionExtensions
         reEncryptedData = null;
         return false;
     }
+
+    #endregion
+
+    #region Factory & Tenant Helpers
 
     /// <summary>
     /// Creates a type-safe data protector based on the type's full name and optional sub-purpose.
@@ -266,4 +502,32 @@ public static class KyrolusDataProtectionExtensions
         ArgumentNullException.ThrowIfNull(provider);
         return provider.CreateProtector(tenantId, purpose);
     }
+
+    #endregion
+
+    #region Private Base64Url Helpers
+
+    private static string Base64ToBase64Url(string base64)
+    {
+        return base64
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .TrimEnd('=');
+    }
+
+    private static string Base64UrlToBase64(string base64Url)
+    {
+        var base64 = base64Url
+            .Replace('-', '+')
+            .Replace('_', '/');
+
+        return (base64.Length % 4) switch
+        {
+            2 => base64 + "==",
+            3 => base64 + "=",
+            _ => base64
+        };
+    }
+
+    #endregion
 }

@@ -1,10 +1,13 @@
 using System.Security.Cryptography;
 using System.Text;
 using KyrolusSous.DataProtection.Abstractions;
+using KyrolusSous.DataProtection.EntityFramework;
 using KyrolusSous.DataProtection.Ephemeral;
 using KyrolusSous.DataProtection.FileSystem;
 using KyrolusSous.DataProtection.Runtime;
+using KyrolusSous.DataProtection.Vault;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -374,4 +377,214 @@ public class DataProtectionTests
             }
         }
     }
+
+    #region Base64Url Tests
+
+    [Fact]
+    public void ProtectAsBase64Url_ReturnsUrlSafeString()
+    {
+        var original = "Hello+World/With=Special?Chars&Data";
+        var base64Url = _protector.ProtectAsBase64Url(original);
+
+        base64Url.ShouldNotContain("+");
+        base64Url.ShouldNotContain("/");
+        base64Url.ShouldNotContain("=");
+
+        var decrypted = _protector.UnprotectFromBase64Url(base64Url);
+        decrypted.ShouldBe(original);
+    }
+
+    [Fact]
+    public void TryUnprotectFromBase64Url_WithCorruptedString_ReturnsFalseWithoutThrowing()
+    {
+        var success = _protector.TryUnprotectFromBase64Url("InvalidBase64UrlData!@#", out var result);
+
+        success.ShouldBeFalse();
+        result.ShouldBeNull();
+    }
+
+    [Fact]
+    public void ProtectWithExpiryAsBase64Url_HandlesLifetimeAndExpiration()
+    {
+        var original = "UrlSafeExpiringToken";
+        var validToken = _protector.ProtectWithExpiryAsBase64Url(original, TimeSpan.FromMinutes(5));
+
+        validToken.ShouldNotContain("+");
+        validToken.ShouldNotContain("/");
+
+        var decrypted = _protector.UnprotectWithExpiryFromBase64Url(validToken);
+        decrypted.ShouldBe(original);
+
+        var expiredToken = _protector.ProtectWithExpiryAsBase64Url(original, TimeSpan.FromSeconds(-5));
+        _protector.TryUnprotectWithExpiryFromBase64Url(expiredToken, out var _).ShouldBeFalse();
+    }
+
+    #endregion
+
+    #region Generic Object Protection Tests
+
+    [Fact]
+    public void ProtectObject_SerializesAndUnprotectsComplexRecord()
+    {
+        var payload = new TestUserPayload(42, "admin@enterprise.org", "SuperAdministrator");
+        var token = _protector.ProtectObject(payload);
+
+        var decrypted = _protector.UnprotectObject<TestUserPayload>(token);
+        decrypted.ShouldNotBeNull();
+        decrypted.Id.ShouldBe(42);
+        decrypted.Email.ShouldBe("admin@enterprise.org");
+        decrypted.Role.ShouldBe("SuperAdministrator");
+    }
+
+    [Fact]
+    public void TryUnprotectObject_WithCorruptedPayload_ReturnsFalseWithoutThrowing()
+    {
+        var success = _protector.TryUnprotectObject<TestUserPayload>("CorruptedCiphertext", out var payload);
+
+        success.ShouldBeFalse();
+        payload.ShouldBeNull();
+    }
+
+    [Fact]
+    public void ProtectObjectWithExpiry_WhenValidAndExpired_BehavesCorrectly()
+    {
+        var payload = new TestUserPayload(100, "user@test.com", "Member");
+        var token = _protector.ProtectObjectWithExpiry(payload, TimeSpan.FromHours(2));
+
+        var decrypted = _protector.UnprotectObjectWithExpiry<TestUserPayload>(token);
+        decrypted.ShouldNotBeNull();
+        decrypted.Email.ShouldBe("user@test.com");
+
+        var expiredToken = _protector.ProtectObjectWithExpiry(payload, TimeSpan.FromSeconds(-10));
+        _protector.TryUnprotectObjectWithExpiry<TestUserPayload>(expiredToken, out var expiredResult).ShouldBeFalse();
+        expiredResult.ShouldBeNull();
+    }
+
+    #endregion
+
+    #region Stream Encryption Tests
+
+    [Fact]
+    public async Task ProtectStreamAsync_And_UnprotectStreamAsync_RoundtripsStreamCorrectly()
+    {
+        var originalText = string.Join("\n", Enumerable.Range(1, 500).Select(i => $"Large data row number {i} with payload content."));
+        var originalBytes = Encoding.UTF8.GetBytes(originalText);
+
+        using var inputStream = new MemoryStream(originalBytes);
+        using var encryptedStream = new MemoryStream();
+
+        await _protector.ProtectStreamAsync(inputStream, encryptedStream, chunkSize: 512);
+
+        encryptedStream.Position = 0;
+        using var decryptedStream = new MemoryStream();
+
+        await _protector.UnprotectStreamAsync(encryptedStream, decryptedStream);
+
+        var decryptedBytes = decryptedStream.ToArray();
+        var decryptedText = Encoding.UTF8.GetString(decryptedBytes);
+
+        decryptedText.ShouldBe(originalText);
+    }
+
+    [Fact]
+    public async Task UnprotectStreamAsync_WithInvalidMagic_ThrowsCryptographicException()
+    {
+        var badBytes = new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04 };
+        using var badStream = new MemoryStream(badBytes);
+        using var outStream = new MemoryStream();
+
+        await Should.ThrowAsync<CryptographicException>(async () =>
+        {
+            await _protector.UnprotectStreamAsync(badStream, outStream);
+        });
+    }
+
+    #endregion
+
+    #region EF Core Encrypted Property Tests
+
+    [Fact]
+    public async Task EfCore_PropertyWithKyrolusEncryptedAttribute_IsTransparentlyEncrypted()
+    {
+        var options = new DbContextOptionsBuilder<TestCustomerDbContext>()
+            .UseInMemoryDatabase(databaseName: $"CustomerDb_{Guid.NewGuid():N}")
+            .Options;
+
+        var dpProvider = _services.GetRequiredService<IDataProtectionProvider>();
+
+        // 1. Save entity
+        await using (var context = new TestCustomerDbContext(options, dpProvider))
+        {
+            context.Customers.Add(new TestCustomerEntity
+            {
+                Id = 1,
+                Name = "John Doe",
+                SecretSsn = "123-45-6789"
+            });
+            await context.SaveChangesAsync();
+        }
+
+        // 2. Query entity and verify decrypted transparency
+        await using (var context = new TestCustomerDbContext(options, dpProvider))
+        {
+            var customer = await context.Customers.FindAsync(1);
+            customer.ShouldNotBeNull();
+            customer.Name.ShouldBe("John Doe");
+            customer.SecretSsn.ShouldBe("123-45-6789");
+        }
+    }
+
+    #endregion
+
+    #region Vault Options Tests
+
+    [Fact]
+    public void VaultOptions_DefaultsAndConfiguresCorrectly()
+    {
+        var options = new KyrolusVaultOptions
+        {
+            VaultAddress = "https://vault.company.local:8200",
+            Token = "s.mockvaulttoken",
+            KeyName = "app-keys",
+            MountPath = "transit-v2"
+        };
+
+        options.VaultAddress.ShouldBe("https://vault.company.local:8200");
+        options.Token.ShouldBe("s.mockvaulttoken");
+        options.KeyName.ShouldBe("app-keys");
+        options.MountPath.ShouldBe("transit-v2");
+    }
+
+    #endregion
 }
+
+public sealed record TestUserPayload(int Id, string Email, string Role);
+
+public sealed class TestCustomerEntity
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+
+    [KyrolusEncrypted]
+    public string SecretSsn { get; set; } = string.Empty;
+}
+
+public sealed class TestCustomerDbContext : DbContext
+{
+    private readonly IDataProtectionProvider _provider;
+
+    public TestCustomerDbContext(DbContextOptions<TestCustomerDbContext> options, IDataProtectionProvider provider)
+        : base(options)
+    {
+        _provider = provider;
+    }
+
+    public DbSet<TestCustomerEntity> Customers => Set<TestCustomerEntity>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+        modelBuilder.UseDataProtectionEncryption(_provider);
+    }
+}
+
