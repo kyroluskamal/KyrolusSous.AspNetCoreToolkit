@@ -11,11 +11,15 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="Shouldly" Version="4.3.0" />
+    <PackageReference Include="NSubstitute" Version="5.3.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\Src\RabbitMQ\KyrolusSous.IRabbitMQUtilsInterfaces\KyrolusSous.IRabbitMQUtilsInterfaces.csproj" />
-    <ProjectReference Include="..\..\..\..\Src\RabbitMQ\KyrolusSous.RabbitMQUtils\KyrolusSous.RabbitMQUtils.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\RabbitMQ\KyrolusSous.RabbitMQ.Abstractions\KyrolusSous.RabbitMQ.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\RabbitMQ\KyrolusSous.RabbitMQ.Runtime\KyrolusSous.RabbitMQ.Runtime.csproj" />
   </ItemGroup>
 
 </Project>

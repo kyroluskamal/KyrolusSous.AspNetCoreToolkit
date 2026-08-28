@@ -373,8 +373,7 @@
       { "prefix": "OpenApi", "title": "OpenAPI & Documentation" },
       { "prefix": "Elasticsearch", "title": "Search & Elasticsearch" },
       { "prefix": "Resilience", "title": "Resilience & Fault Tolerance" },
-      { "prefix": "RabbitMQUtils", "title": "RabbitMQ" },
-      { "prefix": "IRabbitMQUtilsInterfaces", "title": "RabbitMQ" }
+      { "prefix": "RabbitMQ", "title": "RabbitMQ Messaging" }
     ]
   }
 }
