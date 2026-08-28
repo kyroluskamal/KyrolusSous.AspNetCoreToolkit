@@ -1,6 +1,9 @@
 namespace KyrolusSous.Elasticsearch;
 
-public sealed class SmartSearchBuilder<TDocument> where TDocument : class
+/// <summary>
+/// Fluent query builder for building complex, optimized Elasticsearch queries.
+/// </summary>
+public class KyrolusSmartSearchBuilder<TDocument> where TDocument : class
 {
     private string? _queryText;
     private readonly List<string> _searchFields = [];
@@ -12,8 +15,9 @@ public sealed class SmartSearchBuilder<TDocument> where TDocument : class
     private int _from;
     private int _size = 10;
     private float? _minScore;
+    private readonly List<string> _highlightFields = [];
 
-    public SmartSearchBuilder<TDocument> Search(string queryText, params Expression<Func<TDocument, object>>[] fields)
+    public KyrolusSmartSearchBuilder<TDocument> Search(string queryText, params Expression<Func<TDocument, object>>[] fields)
     {
         _queryText = queryText;
         foreach (var field in fields)
@@ -27,21 +31,34 @@ public sealed class SmartSearchBuilder<TDocument> where TDocument : class
         return this;
     }
 
-    public SmartSearchBuilder<TDocument> Search(string queryText, params string[] fields)
+    public KyrolusSmartSearchBuilder<TDocument> Search(string queryText, params string[] fields)
     {
         _queryText = queryText;
         _searchFields.AddRange(fields.Where(f => !string.IsNullOrWhiteSpace(f)));
         return this;
     }
 
-    public SmartSearchBuilder<TDocument> Fuzzy(string fuzziness = "AUTO", int prefixLength = 0)
+    public KyrolusSmartSearchBuilder<TDocument> Fuzzy(string fuzziness = "AUTO", int prefixLength = 0)
     {
         _fuzziness = fuzziness;
         _fuzzyPrefixLength = prefixLength;
         return this;
     }
 
-    public SmartSearchBuilder<TDocument> Filter<TValue>(Expression<Func<TDocument, TValue>> field, TValue value)
+    public KyrolusSmartSearchBuilder<TDocument> Highlight(params Expression<Func<TDocument, object>>[] fields)
+    {
+        foreach (var f in fields)
+        {
+            var name = ExpressionHelper.GetPropertyName(f);
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                _highlightFields.Add(name);
+            }
+        }
+        return this;
+    }
+
+    public KyrolusSmartSearchBuilder<TDocument> Filter<TValue>(Expression<Func<TDocument, TValue>> field, TValue value)
     {
         var name = ExpressionHelper.GetPropertyName(field);
         if (!string.IsNullOrWhiteSpace(name) && value is not null)
@@ -52,7 +69,7 @@ public sealed class SmartSearchBuilder<TDocument> where TDocument : class
         return this;
     }
 
-    public SmartSearchBuilder<TDocument> FilterIn<TValue>(Expression<Func<TDocument, TValue>> field, IEnumerable<TValue> values)
+    public KyrolusSmartSearchBuilder<TDocument> FilterIn<TValue>(Expression<Func<TDocument, TValue>> field, IEnumerable<TValue> values)
     {
         var name = ExpressionHelper.GetPropertyName(field);
         var valStrings = values.Where(v => v is not null).Select(v => (FieldValue)v!.ToString()!).ToList();
@@ -63,7 +80,7 @@ public sealed class SmartSearchBuilder<TDocument> where TDocument : class
         return this;
     }
 
-    public SmartSearchBuilder<TDocument> Range<TValue>(
+    public KyrolusSmartSearchBuilder<TDocument> Range<TValue>(
         Expression<Func<TDocument, TValue>> field,
         double? min = null,
         double? max = null)
@@ -87,7 +104,25 @@ public sealed class SmartSearchBuilder<TDocument> where TDocument : class
         return this;
     }
 
-    public SmartSearchBuilder<TDocument> GeoDistance<TValue>(
+    public KyrolusSmartSearchBuilder<TDocument> DateRange<TValue>(
+        Expression<Func<TDocument, TValue>> field,
+        DateTimeOffset? from = null,
+        DateTimeOffset? to = null)
+    {
+        var name = ExpressionHelper.GetPropertyName(field);
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            _filterActions.Add(q => q.Range(r => r.DateRange(dr =>
+            {
+                dr.Field(new Field(name));
+                if (from.HasValue) dr.Gte(from.Value.ToString("o"));
+                if (to.HasValue) dr.Lte(to.Value.ToString("o"));
+            })));
+        }
+        return this;
+    }
+
+    public KyrolusSmartSearchBuilder<TDocument> GeoDistance<TValue>(
         Expression<Func<TDocument, TValue>> field,
         double latitude,
         double longitude,
@@ -98,13 +133,17 @@ public sealed class SmartSearchBuilder<TDocument> where TDocument : class
         {
             _filterActions.Add(q => q.GeoDistance(g => g
                 .Field(new Field(name))
-                .Distance($"{distanceKm}km")
-                .Location(new LatLonGeoLocation { Lat = latitude, Lon = longitude })));
+                .Location(GeoLocation.LatitudeLongitude(new LatLonGeoLocation
+                {
+                    Lat = latitude,
+                    Lon = longitude
+                }))
+                .Distance($"{distanceKm}km")));
         }
         return this;
     }
 
-    public SmartSearchBuilder<TDocument> BoostWhen<TValue>(
+    public KyrolusSmartSearchBuilder<TDocument> BoostWhen<TValue>(
         Expression<Func<TDocument, TValue>> field,
         TValue matchValue,
         float boost)
@@ -113,12 +152,17 @@ public sealed class SmartSearchBuilder<TDocument> where TDocument : class
         if (!string.IsNullOrWhiteSpace(name) && matchValue is not null)
         {
             var valStr = matchValue.ToString()!;
-            _shouldActions.Add(q => q.Term(t => t.Field(new Field(name)).Value(valStr).Boost(boost)));
+            _shouldActions.Add(q => q.Term(t => t
+                .Field(new Field(name))
+                .Value(valStr)
+                .Boost(boost)));
         }
         return this;
     }
 
-    public SmartSearchBuilder<TDocument> OrderBy<TValue>(Expression<Func<TDocument, TValue>> field, bool descending = false)
+    public KyrolusSmartSearchBuilder<TDocument> OrderBy<TValue>(
+        Expression<Func<TDocument, TValue>> field,
+        bool descending = false)
     {
         var name = ExpressionHelper.GetPropertyName(field);
         if (!string.IsNullOrWhiteSpace(name))
@@ -131,28 +175,31 @@ public sealed class SmartSearchBuilder<TDocument> where TDocument : class
         return this;
     }
 
-    public SmartSearchBuilder<TDocument> OrderByRelevance()
+    public KyrolusSmartSearchBuilder<TDocument> OrderByScore()
     {
         _sortOptions.Add(SortOptions.Score(new ScoreSort()));
         return this;
     }
 
-    public SmartSearchBuilder<TDocument> Paginate(int page, int pageSize)
+    public KyrolusSmartSearchBuilder<TDocument> Paginate(int page, int pageSize = 10)
     {
-        _from = Math.Max(0, (page - 1) * pageSize);
-        _size = Math.Max(1, pageSize);
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 10;
+        _from = (page - 1) * pageSize;
+        _size = pageSize;
         return this;
     }
 
-    public SmartSearchBuilder<TDocument> MinScore(float minScore)
+    public KyrolusSmartSearchBuilder<TDocument> MinScore(float score)
     {
-        _minScore = minScore;
+        _minScore = score;
         return this;
     }
 
     public void Apply(SearchRequestDescriptor<TDocument> descriptor)
     {
-        descriptor.From(_from).Size(_size);
+        descriptor.From(_from);
+        descriptor.Size(_size);
 
         if (_minScore.HasValue)
         {
@@ -164,39 +211,71 @@ public sealed class SmartSearchBuilder<TDocument> where TDocument : class
             descriptor.Sort(_sortOptions);
         }
 
-        descriptor.Query(q =>
+        if (_highlightFields.Count > 0)
         {
-            q.Bool(b =>
+            descriptor.Highlight(h => h.Fields(dict =>
             {
-                if (!string.IsNullOrWhiteSpace(_queryText))
+                foreach (var f in _highlightFields)
                 {
-                    if (_searchFields.Count > 0)
-                    {
-                        var fields = _searchFields.Select(f => new Field(f)).ToArray();
-                        b.Must(m => m.MultiMatch(mm => mm
-                            .Query(_queryText)
-                            .Fields(fields)
-                            .Fuzziness(new Fuzziness(_fuzziness))
-                            .PrefixLength(_fuzzyPrefixLength)));
-                    }
-                    else
-                    {
-                        b.Must(m => m.QueryString(qs => qs
-                            .Query(_queryText)
-                            .Fuzziness(new Fuzziness(_fuzziness))));
-                    }
+                    dict.Add(new Field(f), _ => { });
                 }
+                return dict;
+            }));
+        }
 
-                if (_filterActions.Count > 0)
-                {
-                    b.Filter(_filterActions.ToArray());
-                }
+        var mustQueries = new List<Action<QueryDescriptor<TDocument>>>();
 
-                if (_shouldActions.Count > 0)
-                {
-                    b.Should(_shouldActions.ToArray());
-                }
-            });
-        });
+        if (!string.IsNullOrWhiteSpace(_queryText))
+        {
+            if (_searchFields.Count == 1)
+            {
+                var fieldName = _searchFields[0];
+                mustQueries.Add(q => q.Match(m => m
+                    .Field(new Field(fieldName))
+                    .Query(_queryText)
+                    .Fuzziness(new Fuzziness(_fuzziness))
+                    .PrefixLength(_fuzzyPrefixLength)));
+            }
+            else if (_searchFields.Count > 1)
+            {
+                var fieldList = _searchFields.Select(f => new Field(f)).ToArray();
+                mustQueries.Add(q => q.MultiMatch(mm => mm
+                    .Fields(fieldList)
+                    .Query(_queryText)
+                    .Fuzziness(new Fuzziness(_fuzziness))
+                    .PrefixLength(_fuzzyPrefixLength)));
+            }
+            else
+            {
+                mustQueries.Add(q => q.QueryString(qs => qs
+                    .Query(_queryText)
+                    .Fuzziness(new Fuzziness(_fuzziness))));
+            }
+        }
+
+        descriptor.Query(q => q.Bool(b =>
+        {
+            if (mustQueries.Count > 0)
+            {
+                b.Must(mustQueries.Select(action => (Action<QueryDescriptor<TDocument>>)(qd => action(qd))).ToArray());
+            }
+
+            if (_filterActions.Count > 0)
+            {
+                b.Filter(_filterActions.Select(action => (Action<QueryDescriptor<TDocument>>)(qd => action(qd))).ToArray());
+            }
+
+            if (_shouldActions.Count > 0)
+            {
+                b.Should(_shouldActions.Select(action => (Action<QueryDescriptor<TDocument>>)(qd => action(qd))).ToArray());
+            }
+        }));
     }
+}
+
+/// <summary>
+/// Backward-compatibility alias for <see cref="KyrolusSmartSearchBuilder{TDocument}"/>.
+/// </summary>
+public sealed class SmartSearchBuilder<TDocument> : KyrolusSmartSearchBuilder<TDocument> where TDocument : class
+{
 }

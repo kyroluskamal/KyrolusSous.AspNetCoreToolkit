@@ -82,7 +82,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Compression - Unit | unit | 58 | none | yes |
 | Caching - Unit | unit | 102 | none | yes |
 | OpenApi - Integration | integration | 22 | none | yes |
-| Elasticsearch - Unit | unit | 7 | none | yes |
+| Elasticsearch - Unit | unit | 10 | none | yes |
 | Resilience - Unit | unit | 9 | none | yes |
 | Mapping - Unit | unit | 54 | none | yes |
 | CQRS - Unit | unit | 52 | none | yes |
@@ -104,7 +104,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | RabbitMQ - Unit | unit | 37 | none | yes |
 | EndpointKit - Unit | unit | 64 | none | yes |
 | DataProtection - Unit | unit | 33 | none | yes |
-| **Total** | | **2295** | | |
+| **Total** | | **2298** | | |
 
 <!-- END:GENERATED:test-suites -->
 

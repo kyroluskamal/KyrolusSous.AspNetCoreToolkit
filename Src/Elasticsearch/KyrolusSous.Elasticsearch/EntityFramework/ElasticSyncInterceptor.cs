@@ -3,14 +3,17 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace KyrolusSous.Elasticsearch;
 
-public class ElasticSyncInterceptor(
+/// <summary>
+/// EF Core SaveChangesInterceptor that automatically synchronizes entity mutations to Elasticsearch indices.
+/// </summary>
+public class KyrolusElasticSyncInterceptor(
     ElasticsearchClient client,
     IOptions<KyrolusElasticsearchOptions> options,
-    ILogger<ElasticSyncInterceptor>? logger = null) : SaveChangesInterceptor
+    ILogger<KyrolusElasticSyncInterceptor>? logger = null) : SaveChangesInterceptor
 {
     private readonly ElasticsearchClient _client = client;
     private readonly KyrolusElasticsearchOptions _options = options.Value;
-    private readonly ILogger<ElasticSyncInterceptor>? _logger = logger;
+    private readonly ILogger<KyrolusElasticSyncInterceptor>? _logger = logger;
 
     public override async ValueTask<int> SavedChangesAsync(
         SaveChangesCompletedEventData eventData,
@@ -25,13 +28,19 @@ public class ElasticSyncInterceptor(
         try
         {
             var entries = eventData.Context.ChangeTracker.Entries()
-                .Where(e => e.Entity.GetType().GetCustomAttribute<SyncToElasticsearchAttribute>() is not null)
+                .Where(e => e.Entity.GetType().GetCustomAttribute<KyrolusSyncToElasticsearchAttribute>() is not null
+                         || e.Entity.GetType().GetCustomAttribute<SyncToElasticsearchAttribute>() is not null)
                 .ToList();
 
             foreach (var entry in entries)
             {
-                var attr = entry.Entity.GetType().GetCustomAttribute<SyncToElasticsearchAttribute>()!;
-                var indexAttr = entry.Entity.GetType().GetCustomAttribute<ElasticIndexAttribute>();
+                var attr = entry.Entity.GetType().GetCustomAttribute<KyrolusSyncToElasticsearchAttribute>()
+                           ?? (KyrolusSyncToElasticsearchAttribute?)entry.Entity.GetType().GetCustomAttribute<SyncToElasticsearchAttribute>();
+
+                var indexAttr = entry.Entity.GetType().GetCustomAttribute<KyrolusElasticIndexAttribute>()
+                                ?? (KyrolusElasticIndexAttribute?)entry.Entity.GetType().GetCustomAttribute<ElasticIndexAttribute>();
+
+                if (attr is null) continue;
 
                 var indexName = attr.IndexName ?? indexAttr?.IndexName ?? entry.Entity.GetType().Name.ToLowerInvariant();
                 var prefix = _options.IndexPrefix ?? string.Empty;
@@ -63,4 +72,15 @@ public class ElasticSyncInterceptor(
 
         return await base.SavedChangesAsync(eventData, result, cancellationToken);
     }
+}
+
+/// <summary>
+/// Backward-compatibility alias for <see cref="KyrolusElasticSyncInterceptor"/>.
+/// </summary>
+public class ElasticSyncInterceptor(
+    ElasticsearchClient client,
+    IOptions<KyrolusElasticsearchOptions> options,
+    ILogger<ElasticSyncInterceptor>? logger = null)
+    : KyrolusElasticSyncInterceptor(client, options, logger is null ? null : null)
+{
 }

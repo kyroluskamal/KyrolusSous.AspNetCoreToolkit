@@ -6,10 +6,17 @@
     <Nullable>enable</Nullable>
     <LangVersion>13.0</LangVersion>
     <RootNamespace>KyrolusSous.Elasticsearch</RootNamespace>
+    <Description>Enterprise Elasticsearch repository, smart search builder, index lifecycle management, vector search, audit logger, and EF/Marten sync for KyrolusSous toolkit.</Description>
+    <PackageTags>elasticsearch;search;vector;knn;repository;ilm;opentelemetry;audit</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Caching\KyrolusSous.Caching.Abstractions\KyrolusSous.Caching.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Compression\KyrolusSous.Compression.Abstractions\KyrolusSous.Compression.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

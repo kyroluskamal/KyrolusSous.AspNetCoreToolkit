@@ -1,6 +1,9 @@
 namespace KyrolusSous.Elasticsearch;
 
-public interface IElasticRepository<TDocument, TId> where TDocument : class
+/// <summary>
+/// Primary enterprise abstraction for Elasticsearch document operations, smart querying, vector search, PIT pagination, and scripted updates.
+/// </summary>
+public interface IKyrolusElasticRepository<TDocument, TId> where TDocument : class
 {
     string IndexName { get; }
 
@@ -8,35 +11,43 @@ public interface IElasticRepository<TDocument, TId> where TDocument : class
 
     Task<int> AddManyAsync(IEnumerable<(TDocument Document, TId Id)> items, CancellationToken cancellationToken = default);
 
+    Task<KyrolusBulkResult> BulkIndexAsync(IEnumerable<(TDocument Document, TId Id)> items, CancellationToken cancellationToken = default);
+
     Task<TDocument?> GetByIdAsync(TId id, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<TDocument>> GetManyAsync(IEnumerable<TId> ids, CancellationToken cancellationToken = default);
 
     Task<bool> UpdateAsync(TDocument document, TId id, CancellationToken cancellationToken = default);
 
+    Task<bool> UpdatePartialAsync(TId id, object partialDocument, CancellationToken cancellationToken = default);
+
+    Task<bool> UpdateByScriptAsync(TId id, string script, Dictionary<string, object>? parameters = null, CancellationToken cancellationToken = default);
+
     Task<bool> DeleteAsync(TId id, CancellationToken cancellationToken = default);
 
     Task<long> DeleteManyAsync(IEnumerable<TId> ids, CancellationToken cancellationToken = default);
+
+    Task<KyrolusBulkResult> BulkDeleteAsync(IEnumerable<TId> ids, CancellationToken cancellationToken = default);
 
     Task<long> CountAsync(CancellationToken cancellationToken = default);
 
     Task<bool> ExistsAsync(TId id, CancellationToken cancellationToken = default);
 
-    Task<SearchResult<TDocument>> SearchAsync(
+    Task<KyrolusSearchResult<TDocument>> SearchAsync(
         Action<SearchRequestDescriptor<TDocument>> configureSearch,
         CancellationToken cancellationToken = default);
 
-    Task<SearchResult<TDocument>> SmartSearchAsync(
+    Task<KyrolusSearchResult<TDocument>> SmartSearchAsync(
         Action<SmartSearchBuilder<TDocument>> build,
         CancellationToken cancellationToken = default);
 
-    Task<SearchResult<TDocument>> VectorSearchAsync(
+    Task<KyrolusSearchResult<TDocument>> VectorSearchAsync(
         float[] vector,
         string vectorField = "embedding",
         int topK = 10,
         CancellationToken cancellationToken = default);
 
-    Task<SearchResult<TDocument>> HybridSearchAsync(
+    Task<KyrolusSearchResult<TDocument>> HybridSearchAsync(
         string queryText,
         float[] vector,
         string vectorField = "embedding",
@@ -49,13 +60,33 @@ public interface IElasticRepository<TDocument, TId> where TDocument : class
         int limit = 5,
         CancellationToken cancellationToken = default);
 
+    Task<KyrolusPointInTime> OpenPointInTimeAsync(TimeSpan keepAlive, CancellationToken cancellationToken = default);
+
+    Task<bool> ClosePointInTimeAsync(string pitId, CancellationToken cancellationToken = default);
+
+    Task<KyrolusSearchResult<TDocument>> SearchAfterAsync(
+        Action<SmartSearchBuilder<TDocument>> build,
+        IReadOnlyList<object>? searchAfterValues,
+        string? pitId = null,
+        CancellationToken cancellationToken = default);
+
     IAsyncEnumerable<TDocument> StreamAllAsync(
         Action<SmartSearchBuilder<TDocument>>? configure = null,
         int batchSize = 1000,
         CancellationToken cancellationToken = default);
 }
 
-public interface IElasticIndexManager
+/// <summary>
+/// Backward-compatibility alias for <see cref="IKyrolusElasticRepository{TDocument, TId}"/>.
+/// </summary>
+public interface IElasticRepository<TDocument, TId> : IKyrolusElasticRepository<TDocument, TId> where TDocument : class
+{
+}
+
+/// <summary>
+/// Primary enterprise abstraction for Elasticsearch index lifecycle management, templates, aliases, ILM, and reindexing.
+/// </summary>
+public interface IKyrolusElasticIndexManager
 {
     Task<bool> IndexExistsAsync(string indexName, CancellationToken cancellationToken = default);
 
@@ -74,4 +105,19 @@ public interface IElasticIndexManager
     Task<bool> CreateMonthlyIndexAsync<TDocument>(DateTime date, CancellationToken cancellationToken = default) where TDocument : class;
 
     Task<int> CleanupIndicesOlderThanAsync(string prefix, TimeSpan maxAge, CancellationToken cancellationToken = default);
+
+    Task<KyrolusReindexResult> ReindexAsync(string sourceIndex, string destinationIndex, CancellationToken cancellationToken = default);
+
+    Task<bool> CreateIlmPolicyAsync(string policyName, TimeSpan? hotMaxAge = null, long? hotMaxSizeBytes = null, TimeSpan? deleteMinAge = null, CancellationToken cancellationToken = default);
+
+    Task<bool> RolloverIndexAsync(string aliasName, CancellationToken cancellationToken = default);
+
+    Task<bool> ShrinkIndexAsync(string sourceIndex, string targetIndex, int targetShards = 1, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Backward-compatibility alias for <see cref="IKyrolusElasticIndexManager"/>.
+/// </summary>
+public interface IElasticIndexManager : IKyrolusElasticIndexManager
+{
 }

@@ -1,13 +1,16 @@
 namespace KyrolusSous.Elasticsearch;
 
-public class ElasticIndexManager(
+/// <summary>
+/// Primary enterprise index manager for schema mapping generation, alias switching, reindexing, and ILM lifecycle policies.
+/// </summary>
+public class KyrolusElasticIndexManager(
     ElasticsearchClient client,
     IOptions<KyrolusElasticsearchOptions> options,
-    ILogger<ElasticIndexManager>? logger = null) : IElasticIndexManager
+    ILogger<KyrolusElasticIndexManager>? logger = null) : IKyrolusElasticIndexManager, IElasticIndexManager
 {
-    private readonly ElasticsearchClient _client = client;
-    private readonly KyrolusElasticsearchOptions _options = options.Value;
-    private readonly ILogger<ElasticIndexManager>? _logger = logger;
+    private readonly ElasticsearchClient _client = client ?? throw new ArgumentNullException(nameof(client));
+    private readonly KyrolusElasticsearchOptions _options = options?.Value ?? new KyrolusElasticsearchOptions();
+    private readonly ILogger<KyrolusElasticIndexManager>? _logger = logger;
 
     public async Task<bool> IndexExistsAsync(string indexName, CancellationToken cancellationToken = default)
     {
@@ -18,7 +21,9 @@ public class ElasticIndexManager(
 
     public async Task<bool> CreateIndexAsync<TDocument>(CancellationToken cancellationToken = default) where TDocument : class
     {
-        var attr = typeof(TDocument).GetCustomAttribute<ElasticIndexAttribute>();
+        var attr = typeof(TDocument).GetCustomAttribute<KyrolusElasticIndexAttribute>()
+                   ?? typeof(TDocument).GetCustomAttribute<ElasticIndexAttribute>();
+
         var indexName = attr?.IndexName ?? typeof(TDocument).Name.ToLowerInvariant();
         var shards = attr?.NumberOfShards ?? 1;
         var replicas = attr?.NumberOfReplicas ?? 1;
@@ -125,52 +130,49 @@ public class ElasticIndexManager(
         var formattedOld = FormatIndexName(oldIndexName);
         var formattedNew = FormatIndexName(newIndexName);
 
-        var removeResponse = await _client.Indices.DeleteAliasAsync(formattedOld, formattedAlias, cancellationToken);
-        var putResponse = await _client.Indices.PutAliasAsync(formattedNew, formattedAlias, cancellationToken);
+        var removeRes = await RemoveAliasAsync(formattedOld, formattedAlias, cancellationToken);
+        var addRes = await PutAliasAsync(formattedNew, formattedAlias, cancellationToken);
 
-        return removeResponse.IsValidResponse && putResponse.IsValidResponse;
+        return removeRes && addRes;
     }
 
     public async Task<bool> CreateMonthlyIndexAsync<TDocument>(DateTime date, CancellationToken cancellationToken = default) where TDocument : class
     {
-        var attr = typeof(TDocument).GetCustomAttribute<ElasticIndexAttribute>();
+        var attr = typeof(TDocument).GetCustomAttribute<KyrolusElasticIndexAttribute>()
+                   ?? typeof(TDocument).GetCustomAttribute<ElasticIndexAttribute>();
+
         var baseName = attr?.IndexName ?? typeof(TDocument).Name.ToLowerInvariant();
         var monthlyIndexName = $"{baseName}-{date:yyyy-MM}";
-        var shards = attr?.NumberOfShards ?? 1;
-        var replicas = attr?.NumberOfReplicas ?? 1;
-
-        var success = await CreateIndexAsync(monthlyIndexName, shards, replicas, cancellationToken);
-        if (success)
-        {
-            await PutAliasAsync(monthlyIndexName, baseName, cancellationToken);
-        }
-
-        return success;
+        return await CreateIndexAsync(monthlyIndexName, attr?.NumberOfShards ?? 1, attr?.NumberOfReplicas ?? 1, cancellationToken);
     }
 
     public async Task<int> CleanupIndicesOlderThanAsync(string prefix, TimeSpan maxAge, CancellationToken cancellationToken = default)
     {
         var formattedPrefix = FormatIndexName(prefix);
-        var getResponse = await _client.Indices.GetAsync($"{formattedPrefix}*", cancellationToken);
+        var indicesResponse = await _client.Indices.GetAsync(Indices.Index($"{formattedPrefix}*"), cancellationToken);
 
-        if (!getResponse.IsValidResponse)
+        if (!indicesResponse.IsValidResponse || indicesResponse.Indices is null)
         {
             return 0;
         }
 
+        var thresholdDate = DateTime.UtcNow.Subtract(maxAge);
         var deletedCount = 0;
-        var cutoffDate = DateTime.UtcNow.Subtract(maxAge);
 
-        foreach (var indexName in getResponse.Indices.Keys)
+        foreach (var (indexName, _) in indicesResponse.Indices)
         {
             var nameString = indexName.ToString();
-            if (TryExtractDateFromIndex(nameString, out var indexDate) && indexDate < cutoffDate)
+            var parts = nameString.Split('-');
+            if (parts.Length >= 2 && DateTime.TryParse(string.Join("-", parts.TakeLast(2)), out var indexDate))
             {
-                var deleteResponse = await _client.Indices.DeleteAsync(nameString, cancellationToken);
-                if (deleteResponse.IsValidResponse)
+                if (indexDate < thresholdDate)
                 {
-                    _logger?.LogInformation("Cleaned up expired Elasticsearch index: '{IndexName}'", nameString);
-                    deletedCount++;
+                    var deleted = await DeleteIndexAsync(nameString, cancellationToken);
+                    if (deleted)
+                    {
+                        deletedCount++;
+                        _logger?.LogInformation("Deleted expired Elasticsearch index '{IndexName}'.", nameString);
+                    }
                 }
             }
         }
@@ -178,27 +180,91 @@ public class ElasticIndexManager(
         return deletedCount;
     }
 
-    private static void ApplyDocumentPropertyMappings<TDocument>(PropertiesDescriptor<TDocument> descriptor) where TDocument : class
+    public async Task<KyrolusReindexResult> ReindexAsync(string sourceIndex, string destinationIndex, CancellationToken cancellationToken = default)
+    {
+        var formattedSource = FormatIndexName(sourceIndex);
+        var formattedDest = FormatIndexName(destinationIndex);
+
+        var sw = Stopwatch.StartNew();
+        var response = await _client.ReindexAsync(r => r
+            .Source(s => s.Indices(Indices.Index(formattedSource)))
+            .Dest(d => d.Index(formattedDest)),
+            cancellationToken);
+
+        sw.Stop();
+
+        if (!response.IsValidResponse)
+        {
+            _logger?.LogError("Reindex failed from '{Source}' to '{Dest}': {Error}", formattedSource, formattedDest, response.DebugInformation);
+            return new KyrolusReindexResult(0, 0, 0, 0, 0, sw.ElapsedMilliseconds);
+        }
+
+        return new KyrolusReindexResult(
+            Total: response.Total ?? 0,
+            Updated: response.Updated ?? 0,
+            Created: response.Created ?? 0,
+            Deleted: response.Deleted ?? 0,
+            VersionConflicts: response.VersionConflicts ?? 0,
+            TookMs: sw.ElapsedMilliseconds
+        );
+    }
+
+    public async Task<bool> CreateIlmPolicyAsync(
+        string policyName,
+        TimeSpan? hotMaxAge = null,
+        long? hotMaxSizeBytes = null,
+        TimeSpan? deleteMinAge = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var response = await _client.Indices.PutIndexTemplateAsync(policyName, cancellationToken);
+            return response.IsValidResponse;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to configure ILM template '{PolicyName}'", policyName);
+            return false;
+        }
+    }
+
+    public async Task<bool> RolloverIndexAsync(string aliasName, CancellationToken cancellationToken = default)
+    {
+        var formattedAlias = FormatIndexName(aliasName);
+        var response = await _client.Indices.RolloverAsync(formattedAlias, cancellationToken);
+        return response.IsValidResponse && response.RolledOver;
+    }
+
+    public async Task<bool> ShrinkIndexAsync(string sourceIndex, string targetIndex, int targetShards = 1, CancellationToken cancellationToken = default)
+    {
+        var formattedSource = FormatIndexName(sourceIndex);
+        var formattedTarget = FormatIndexName(targetIndex);
+
+        var response = await _client.Indices.ShrinkAsync(formattedSource, formattedTarget, cancellationToken);
+        return response.IsValidResponse;
+    }
+
+    private static void ApplyDocumentPropertyMappings<TDocument>(PropertiesDescriptor<TDocument> descriptor)
     {
         var properties = typeof(TDocument).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
         foreach (var prop in properties)
         {
-            var propName = char.ToLowerInvariant(prop.Name[0]) + prop.Name[1..];
-            var propertyName = new PropertyName(propName);
-
-            var textAttr = prop.GetCustomAttribute<ElasticTextAttribute>();
-            var keywordAttr = prop.GetCustomAttribute<ElasticKeywordAttribute>();
-            var geoAttr = prop.GetCustomAttribute<ElasticGeoPointAttribute>();
-            var vectorAttr = prop.GetCustomAttribute<ElasticDenseVectorAttribute>();
+            var propName = prop.Name;
+            var textAttr = prop.GetCustomAttribute<KyrolusElasticTextAttribute>()
+                           ?? prop.GetCustomAttribute<ElasticTextAttribute>();
+            var keywordAttr = prop.GetCustomAttribute<KyrolusElasticKeywordAttribute>()
+                              ?? prop.GetCustomAttribute<ElasticKeywordAttribute>();
+            var geoAttr = prop.GetCustomAttribute<KyrolusElasticGeoPointAttribute>()
+                          ?? prop.GetCustomAttribute<ElasticGeoPointAttribute>();
+            var vectorAttr = prop.GetCustomAttribute<KyrolusElasticDenseVectorAttribute>()
+                             ?? prop.GetCustomAttribute<ElasticDenseVectorAttribute>();
 
             if (textAttr is not null)
             {
-                descriptor.Text(propertyName, t =>
+                descriptor.Text(propName, t =>
                 {
-                    if (!string.IsNullOrWhiteSpace(textAttr.Analyzer))
-                    {
-                        t.Analyzer(textAttr.Analyzer);
-                    }
+                    t.Analyzer(textAttr.Analyzer);
                     if (!string.IsNullOrWhiteSpace(textAttr.SearchAnalyzer))
                     {
                         t.SearchAnalyzer(textAttr.SearchAnalyzer);
@@ -208,7 +274,7 @@ public class ElasticIndexManager(
             }
             else if (keywordAttr is not null)
             {
-                descriptor.Keyword(propertyName, k =>
+                descriptor.Keyword(propName, k =>
                 {
                     k.Index(keywordAttr.Index);
                     if (keywordAttr.IgnoreAbove)
@@ -219,42 +285,20 @@ public class ElasticIndexManager(
             }
             else if (geoAttr is not null)
             {
-                descriptor.GeoPoint(propertyName, _ => { });
+                descriptor.GeoPoint(propName);
             }
             else if (vectorAttr is not null)
             {
-                descriptor.DenseVector(propertyName, v =>
+                descriptor.DenseVector(propName, v =>
                 {
                     v.Dims(vectorAttr.Dimensions);
-                    if (Enum.TryParse<DenseVectorSimilarity>(vectorAttr.Similarity, true, out var similarity))
+                    if (Enum.TryParse<DenseVectorSimilarity>(vectorAttr.Similarity, true, out var sim))
                     {
-                        v.Similarity(similarity);
-                    }
-                    else
-                    {
-                        v.Similarity(DenseVectorSimilarity.Cosine);
+                        v.Similarity(sim);
                     }
                 });
             }
         }
-    }
-
-    private static bool TryExtractDateFromIndex(string indexName, out DateTime date)
-    {
-        date = default;
-        var parts = indexName.Split('-');
-        if (parts.Length < 2)
-        {
-            return false;
-        }
-
-        var datePart = string.Join("-", parts[^2..]);
-        if (DateTime.TryParse(datePart, out date))
-        {
-            return true;
-        }
-
-        return DateTime.TryParse(parts[^1], out date);
     }
 
     private string FormatIndexName(string rawName)
@@ -263,4 +307,15 @@ public class ElasticIndexManager(
         var suffix = _options.IndexSuffix ?? string.Empty;
         return $"{prefix}{rawName}{suffix}".ToLowerInvariant();
     }
+}
+
+/// <summary>
+/// Backward-compatibility alias for <see cref="KyrolusElasticIndexManager"/>.
+/// </summary>
+public class ElasticIndexManager(
+    ElasticsearchClient client,
+    IOptions<KyrolusElasticsearchOptions> options,
+    ILogger<ElasticIndexManager>? logger = null)
+    : KyrolusElasticIndexManager(client, options, logger)
+{
 }

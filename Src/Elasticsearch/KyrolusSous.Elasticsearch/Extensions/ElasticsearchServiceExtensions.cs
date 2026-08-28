@@ -1,7 +1,8 @@
-using Microsoft.EntityFrameworkCore;
-
 namespace KyrolusSous.Elasticsearch;
 
+/// <summary>
+/// Service collection extension methods for registering Kyrolus Elasticsearch services, repositories, caching decorators, and audit loggers.
+/// </summary>
 public static class ElasticsearchServiceExtensions
 {
     public static WebApplicationBuilder AddKyrolusElasticsearch(
@@ -42,7 +43,32 @@ public static class ElasticsearchServiceExtensions
 
     public static IServiceCollection AddElasticsearchEfSync(this IServiceCollection services)
     {
+        services.AddScoped<KyrolusElasticSyncInterceptor>();
         services.AddScoped<ElasticSyncInterceptor>();
+        return services;
+    }
+
+    public static IServiceCollection AddKyrolusElasticsearchAuditLogging(this IServiceCollection services)
+    {
+        services.AddScoped<IKyrolusElasticsearchAuditLogger, KyrolusElasticsearchAuditLogger>();
+        return services;
+    }
+
+    public static IServiceCollection AddKyrolusCachedElasticRepository<TDocument, TId>(
+        this IServiceCollection services,
+        TimeSpan? defaultTtl = null)
+        where TDocument : class
+    {
+        services.AddScoped<KyrolusElasticRepository<TDocument, TId>>();
+        services.AddScoped<IKyrolusElasticRepository<TDocument, TId>>(sp =>
+        {
+            var inner = sp.GetRequiredService<KyrolusElasticRepository<TDocument, TId>>();
+            var cache = sp.GetService<KyrolusSous.Caching.Abstractions.ICacheProvider>();
+            return new KyrolusCachedElasticRepository<TDocument, TId>(inner, cache, defaultTtl);
+        });
+        services.AddScoped<IElasticRepository<TDocument, TId>>(sp =>
+            (IElasticRepository<TDocument, TId>)sp.GetRequiredService<IKyrolusElasticRepository<TDocument, TId>>());
+
         return services;
     }
 
@@ -52,7 +78,7 @@ public static class ElasticsearchServiceExtensions
         Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus? failureStatus = null,
         IEnumerable<string>? tags = null)
     {
-        return builder.AddCheck<ElasticsearchHealthCheck>(
+        return builder.AddCheck<KyrolusElasticsearchHealthCheck>(
             name,
             failureStatus,
             tags ?? ["db", "search", "elasticsearch"]);
@@ -71,13 +97,18 @@ public static class ElasticsearchServiceExtensions
             return new ElasticsearchClient(settings);
         });
 
-        services.AddScoped<IElasticIndexManager, ElasticIndexManager>();
-        services.AddScoped(typeof(IElasticRepository<,>), typeof(ElasticRepository<,>));
+        services.AddScoped<IKyrolusElasticIndexManager, KyrolusElasticIndexManager>();
+        services.AddScoped<IElasticIndexManager>(sp => (IElasticIndexManager)sp.GetRequiredService<IKyrolusElasticIndexManager>());
+
+        services.AddScoped(typeof(IKyrolusElasticRepository<,>), typeof(KyrolusElasticRepository<,>));
+        services.AddScoped(typeof(IElasticRepository<,>), typeof(KyrolusElasticRepository<,>));
+
+        services.AddScoped<KyrolusElasticSyncInterceptor>();
         services.AddScoped<ElasticSyncInterceptor>();
 
         if (options.AutoCreateIndices)
         {
-            services.AddHostedService<ElasticsearchIndexInitializerHostedService>();
+            services.AddHostedService<KyrolusElasticsearchIndexInitializerHostedService>();
         }
 
         return services;
@@ -127,6 +158,11 @@ public static class ElasticsearchServiceExtensions
         if (options.MaxRetries > 0)
         {
             settings.MaximumRetries(options.MaxRetries);
+        }
+
+        if (options.EnableHttpCompression)
+        {
+            settings.EnableHttpCompression();
         }
 
         if (options.EnableDebugMode)

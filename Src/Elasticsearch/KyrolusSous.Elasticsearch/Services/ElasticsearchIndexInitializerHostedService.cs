@@ -1,51 +1,68 @@
+using Microsoft.Extensions.Hosting;
+
 namespace KyrolusSous.Elasticsearch;
 
-public class ElasticsearchIndexInitializerHostedService(
+/// <summary>
+/// Background hosted service that automatically scans loaded assemblies and initializes Elasticsearch indices and mappings on startup.
+/// </summary>
+public class KyrolusElasticsearchIndexInitializerHostedService(
     IServiceProvider serviceProvider,
-    IOptions<KyrolusElasticsearchOptions> options,
-    ILogger<ElasticsearchIndexInitializerHostedService>? logger = null) : Microsoft.Extensions.Hosting.IHostedService
+    ILogger<KyrolusElasticsearchIndexInitializerHostedService>? logger = null) : IHostedService
 {
     private readonly IServiceProvider _serviceProvider = serviceProvider;
-    private readonly KyrolusElasticsearchOptions _options = options.Value;
-    private readonly ILogger<ElasticsearchIndexInitializerHostedService>? _logger = logger;
+    private readonly ILogger<KyrolusElasticsearchIndexInitializerHostedService>? _logger = logger;
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (!_options.AutoCreateIndices)
-        {
-            return;
-        }
+        _logger?.LogInformation("Starting automated Elasticsearch index initialization...");
 
         try
         {
             using var scope = _serviceProvider.CreateScope();
-            var indexManager = scope.ServiceProvider.GetRequiredService<IElasticIndexManager>();
+            var indexManager = scope.ServiceProvider.GetRequiredService<IKyrolusElasticIndexManager>();
 
-            var types = AppDomain.CurrentDomain.GetAssemblies()
+            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+            var documentTypes = assemblies
                 .SelectMany(a =>
                 {
-                    try { return a.GetTypes(); } catch { return []; }
+                    try { return a.GetTypes(); }
+                    catch { return []; }
                 })
-                .Where(t => t.GetCustomAttribute<ElasticIndexAttribute>() is not null);
+                .Where(t => t.IsClass && !t.IsAbstract &&
+                            (t.GetCustomAttribute<KyrolusElasticIndexAttribute>() is not null ||
+                             t.GetCustomAttribute<ElasticIndexAttribute>() is not null))
+                .ToList();
 
-            foreach (var type in types)
+            foreach (var type in documentTypes)
             {
-                var method = typeof(IElasticIndexManager).GetMethods()
-                    .FirstOrDefault(m => m.Name == nameof(IElasticIndexManager.CreateIndexAsync) && m.IsGenericMethod);
+                var method = typeof(IKyrolusElasticIndexManager)
+                    .GetMethod(nameof(IKyrolusElasticIndexManager.CreateIndexAsync), [typeof(CancellationToken)])
+                    ?.MakeGenericMethod(type);
 
-                var genericMethod = method?.MakeGenericMethod(type);
-                if (genericMethod is not null)
+                if (method is not null)
                 {
-                    var task = (Task<bool>)genericMethod.Invoke(indexManager, [cancellationToken])!;
+                    var task = (Task<bool>)method.Invoke(indexManager, [cancellationToken])!;
                     await task;
                 }
             }
+
+            _logger?.LogInformation("Completed Elasticsearch index initialization for {Count} document types.", documentTypes.Count);
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Failed to auto-provision Elasticsearch indices at startup.");
+            _logger?.LogError(ex, "Error occurred during Elasticsearch index auto-initialization.");
         }
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+}
+
+/// <summary>
+/// Backward-compatibility alias for <see cref="KyrolusElasticsearchIndexInitializerHostedService"/>.
+/// </summary>
+public class ElasticsearchIndexInitializerHostedService(
+    IServiceProvider serviceProvider,
+    ILogger<ElasticsearchIndexInitializerHostedService>? logger = null)
+    : KyrolusElasticsearchIndexInitializerHostedService(serviceProvider, logger is null ? null : null)
+{
 }
