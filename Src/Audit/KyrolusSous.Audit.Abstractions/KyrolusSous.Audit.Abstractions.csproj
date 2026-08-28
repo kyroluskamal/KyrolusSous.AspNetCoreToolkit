@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>13.0</LangVersion>
+    <RootNamespace>KyrolusSous.Audit.Abstractions</RootNamespace>
+    <Description>Pure enterprise audit trail, entity change tracking, and compliance contracts for KyrolusSous toolkit.</Description>
+    <PackageTags>audit;auditing;compliance;entityframework;history;tracking</PackageTags>
+  </PropertyGroup>
+
+</Project>

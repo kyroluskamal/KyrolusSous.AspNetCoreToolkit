@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>13.0</LangVersion>
+    <RootNamespace>KyrolusSous.Storage.S3</RootNamespace>
+    <Description>Enterprise Amazon S3 and MinIO cloud blob storage provider for KyrolusSous toolkit.</Description>
+    <PackageTags>storage;blob;s3;minio;aws;cloud;file</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KyrolusSous.Storage.Abstractions\KyrolusSous.Storage.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" Version="3.7.415.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.10" />
+  </ItemGroup>
+
+</Project>

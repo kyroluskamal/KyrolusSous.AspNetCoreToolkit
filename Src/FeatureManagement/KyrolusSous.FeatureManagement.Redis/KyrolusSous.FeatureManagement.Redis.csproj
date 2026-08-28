@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>13.0</LangVersion>
+    <RootNamespace>KyrolusSous.FeatureManagement.Redis</RootNamespace>
+    <Description>Redis distributed feature toggle store and realtime sync for KyrolusSous feature management.</Description>
+    <PackageTags>feature-flags;redis;distributed;sync;toggle;feature-management</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KyrolusSous.FeatureManagement.Abstractions\KyrolusSous.FeatureManagement.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="StackExchange.Redis" Version="2.8.31" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.10" />
+  </ItemGroup>
+
+</Project>
