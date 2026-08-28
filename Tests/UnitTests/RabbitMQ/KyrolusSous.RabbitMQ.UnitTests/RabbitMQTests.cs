@@ -278,6 +278,151 @@ public class RabbitMQTests
         context.Headers["custom-header"].ShouldBe("custom-value");
     }
 
+    [Fact]
+    public async Task OutboxStore_AddAndRetrievePendingMessages_Successfully()
+    {
+        var store = new KyrolusSous.RabbitMQ.Runtime.Outbox.KyrolusInMemoryOutboxStore();
+        var msg = new KyrolusSous.RabbitMQ.Abstractions.Outbox.KyrolusOutboxMessage
+        {
+            Exchange = "orders.exchange",
+            RoutingKey = "order.created",
+            Payload = "{\"OrderId\": 123}",
+            MessageType = "OrderCreated"
+        };
+
+        await store.AddAsync(msg);
+        var pending = await store.GetPendingMessagesAsync(10);
+
+        pending.Count.ShouldBe(1);
+        pending[0].Exchange.ShouldBe("orders.exchange");
+
+        await store.MarkAsProcessedAsync(msg.Id);
+        var afterProcessed = await store.GetPendingMessagesAsync(10);
+        afterProcessed.Count.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task IdempotencyStore_AcquireLockAndCacheResult_PreventsDuplicate()
+    {
+        var store = new KyrolusSous.RabbitMQ.Runtime.Idempotency.KyrolusInMemoryIdempotencyStore();
+        var key = "idemp-key-100";
+
+        var acquiredFirst = await store.TryAcquireLockAsync(key, TimeSpan.FromMinutes(1));
+        acquiredFirst.ShouldBeTrue();
+
+        var acquiredSecond = await store.TryAcquireLockAsync(key, TimeSpan.FromMinutes(1));
+        acquiredSecond.ShouldBeFalse(); // Lock already held
+
+        await store.SetResultAsync(key, "{\"status\": \"success\"}", TimeSpan.FromHours(1));
+
+        var cachedResult = await store.GetResultAsync(key);
+        cachedResult.ShouldBe("{\"status\": \"success\"}");
+    }
+
+    [Fact]
+    public void AesMessageEncryptor_EncryptAndDecrypt_RoundtripsSuccessfully()
+    {
+        var key = new byte[32];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(key);
+
+        var encryptor = new KyrolusSous.RabbitMQ.Runtime.Security.KyrolusAesMessageEncryptor(key);
+        var originalText = "Sensitive Payload: Bank Account #1234-5678";
+        var rawBytes = System.Text.Encoding.UTF8.GetBytes(originalText);
+
+        var encryptedBytes = encryptor.Encrypt(rawBytes);
+        encryptedBytes.ShouldNotBeNull();
+        encryptedBytes.Length.ShouldBeGreaterThan(rawBytes.Length);
+
+        var decryptedBytes = encryptor.Decrypt(encryptedBytes);
+        var decryptedText = System.Text.Encoding.UTF8.GetString(decryptedBytes);
+
+        decryptedText.ShouldBe(originalText);
+    }
+
+    [Fact]
+    public void GzipMessageCompressor_CompressAndDecompress_RoundtripsSuccessfully()
+    {
+        var compressor = new KyrolusSous.RabbitMQ.Runtime.Compression.KyrolusGzipMessageCompressor();
+        compressor.EncodingName.ShouldBe("gzip");
+
+        var largeString = string.Join(",", Enumerable.Repeat("KyrolusSous Enterprise Messaging System Test Data", 100));
+        var rawBytes = System.Text.Encoding.UTF8.GetBytes(largeString);
+
+        var compressed = compressor.Compress(rawBytes);
+        compressed.Length.ShouldBeLessThan(rawBytes.Length);
+
+        var decompressed = compressor.Decompress(compressed);
+        var restoredString = System.Text.Encoding.UTF8.GetString(decompressed);
+
+        restoredString.ShouldBe(largeString);
+    }
+
+    [Fact]
+    public void CircuitBreaker_TripsAfterThreshold_AndRecovers()
+    {
+        var breaker = new KyrolusSous.RabbitMQ.Runtime.Resilience.KyrolusConsumerCircuitBreaker(
+            consecutiveFailureThreshold: 3,
+            breakDuration: TimeSpan.FromMilliseconds(50));
+
+        breaker.CanExecute().ShouldBeTrue();
+        breaker.State.ShouldBe(KyrolusSous.RabbitMQ.Runtime.Resilience.KyrolusCircuitState.Closed);
+
+        breaker.ReportFailure();
+        breaker.ReportFailure();
+        breaker.CanExecute().ShouldBeTrue();
+
+        breaker.ReportFailure(); // 3rd failure -> Opens circuit
+        breaker.State.ShouldBe(KyrolusSous.RabbitMQ.Runtime.Resilience.KyrolusCircuitState.Open);
+        breaker.CanExecute().ShouldBeFalse();
+
+        breaker.Reset();
+        breaker.CanExecute().ShouldBeTrue();
+        breaker.State.ShouldBe(KyrolusSous.RabbitMQ.Runtime.Resilience.KyrolusCircuitState.Closed);
+    }
+
+    [Fact]
+    public void TopologyBuilder_FluentApi_ConfiguresExchangesAndQueues()
+    {
+        var builder = new KyrolusSous.RabbitMQ.Runtime.Topology.KyrolusRabbitMQTopologyBuilder();
+        builder.AddExchange("orders.topic", global::RabbitMQ.Client.ExchangeType.Topic)
+               .AddQueue("orders.processing.queue")
+               .BindQueue("orders.processing.queue", "orders.topic", "orders.#");
+
+        builder.Exchanges.Count.ShouldBe(1);
+        builder.Exchanges[0].Name.ShouldBe("orders.topic");
+        builder.Exchanges[0].Type.ShouldBe(global::RabbitMQ.Client.ExchangeType.Topic);
+
+        builder.Queues.Count.ShouldBe(1);
+        builder.Queues[0].Name.ShouldBe("orders.processing.queue");
+
+        builder.Bindings.Count.ShouldBe(1);
+        builder.Bindings[0].RoutingKey.ShouldBe("orders.#");
+    }
+
+    [Fact]
+    public void DiRegistration_EnterpriseFeatures_RegistersAllServices()
+    {
+        var key = new byte[32];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(key);
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddKyrolusRabbitMQ();
+        services.AddKyrolusRabbitMQOutbox(TimeSpan.FromSeconds(1));
+        services.AddKyrolusRabbitMQIdempotency();
+        services.AddKyrolusRabbitMQTopology(b => b.AddExchange("app.exchange"));
+        services.AddKyrolusRabbitMQEncryption(key);
+        services.AddKyrolusRabbitMQCompression();
+
+        var provider = services.BuildServiceProvider();
+
+        provider.GetService<KyrolusSous.RabbitMQ.Abstractions.Outbox.IKyrolusOutboxStore>().ShouldNotBeNull();
+        provider.GetService<KyrolusSous.RabbitMQ.Abstractions.Idempotency.IKyrolusIdempotencyStore>().ShouldNotBeNull();
+        provider.GetService<KyrolusSous.RabbitMQ.Abstractions.Topology.IKyrolusRabbitMQTopologyBuilder>().ShouldNotBeNull();
+        provider.GetService<KyrolusSous.RabbitMQ.Abstractions.Security.IKyrolusMessageEncryptor>().ShouldNotBeNull();
+        provider.GetService<KyrolusSous.RabbitMQ.Abstractions.Compression.IKyrolusMessageCompressor>().ShouldNotBeNull();
+    }
+
     #endregion
 }
 

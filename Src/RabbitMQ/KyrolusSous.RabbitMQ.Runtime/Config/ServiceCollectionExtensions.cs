@@ -122,6 +122,66 @@ namespace KyrolusSous.RabbitMQ.Runtime.Config
         }
 
         /// <summary>
+        /// Adds Transactional Outbox support with a background publisher worker.
+        /// </summary>
+        public static IServiceCollection AddKyrolusRabbitMQOutbox(
+            this IServiceCollection services,
+            TimeSpan? pollInterval = null)
+        {
+            services.TryAddSingleton<Abstractions.Outbox.IKyrolusOutboxStore, Outbox.KyrolusInMemoryOutboxStore>();
+            services.AddHostedService(sp => new Outbox.KyrolusOutboxPublisherWorker(
+                sp.GetRequiredService<Abstractions.Outbox.IKyrolusOutboxStore>(),
+                sp.GetRequiredService<IKyrolusRabbitMQUtils>(),
+                sp.GetService<Microsoft.Extensions.Logging.ILogger<Outbox.KyrolusOutboxPublisherWorker>>(),
+                pollInterval));
+
+            return services;
+        }
+
+        /// <summary>
+        /// Adds message idempotency and deduplication store.
+        /// </summary>
+        public static IServiceCollection AddKyrolusRabbitMQIdempotency(this IServiceCollection services)
+        {
+            services.TryAddSingleton<Abstractions.Idempotency.IKyrolusIdempotencyStore, Idempotency.KyrolusInMemoryIdempotencyStore>();
+            return services;
+        }
+
+        /// <summary>
+        /// Registers a fluent RabbitMQ topology builder.
+        /// </summary>
+        public static IServiceCollection AddKyrolusRabbitMQTopology(
+            this IServiceCollection services,
+            Action<Abstractions.Topology.IKyrolusRabbitMQTopologyBuilder>? configure = null)
+        {
+            var builder = new Topology.KyrolusRabbitMQTopologyBuilder();
+            configure?.Invoke(builder);
+
+            services.TryAddSingleton<Abstractions.Topology.IKyrolusRabbitMQTopologyBuilder>(builder);
+            return services;
+        }
+
+        /// <summary>
+        /// Adds AES-GCM payload encryption for RabbitMQ messages.
+        /// </summary>
+        public static IServiceCollection AddKyrolusRabbitMQEncryption(
+            this IServiceCollection services,
+            byte[] encryptionKey)
+        {
+            services.TryAddSingleton<Abstractions.Security.IKyrolusMessageEncryptor>(new Security.KyrolusAesMessageEncryptor(encryptionKey));
+            return services;
+        }
+
+        /// <summary>
+        /// Adds Gzip payload compression for RabbitMQ messages.
+        /// </summary>
+        public static IServiceCollection AddKyrolusRabbitMQCompression(this IServiceCollection services)
+        {
+            services.TryAddSingleton<Abstractions.Compression.IKyrolusMessageCompressor, Compression.KyrolusGzipMessageCompressor>();
+            return services;
+        }
+
+        /// <summary>
         /// Backward-compatibility overload for adding RabbitMQ with host, username, password.
         /// </summary>
         public static IServiceCollection AddRabbitMQ(

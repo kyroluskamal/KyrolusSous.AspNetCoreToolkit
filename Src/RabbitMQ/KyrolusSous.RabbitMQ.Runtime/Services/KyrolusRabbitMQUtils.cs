@@ -167,6 +167,67 @@ namespace KyrolusSous.RabbitMQ.Runtime.Services
             }
         }
 
+        public async Task PublishDelayedAsync<TEvent>(
+            string exchange,
+            string routingKey,
+            TEvent body,
+            TimeSpan delay,
+            string? correlationId = null,
+            IDictionary<string, object?>? headers = null,
+            CancellationToken cancellationToken = default)
+        {
+            var channel = await GetChannelAsync(cancellationToken).ConfigureAwait(false);
+
+            using var activity = KyrolusRabbitMQInstrumentation.ActivitySource.StartActivity(
+                $"RabbitMQ.PublishDelayed {exchange}/{routingKey}",
+                ActivityKind.Producer);
+
+            var mergedHeaders = headers is not null
+                ? new Dictionary<string, object?>(headers)
+                : new Dictionary<string, object?>();
+
+            KyrolusRabbitMQInstrumentation.InjectTraceContext(mergedHeaders, activity);
+
+            var delayMs = (int)Math.Max(1, delay.TotalMilliseconds);
+            var delayQueueName = $"{exchange}.delay.{delayMs}ms";
+
+            var delayArgs = new Dictionary<string, object?>
+            {
+                ["x-message-ttl"] = delayMs,
+                ["x-dead-letter-exchange"] = exchange,
+                ["x-dead-letter-routing-key"] = routingKey
+            };
+
+            await channel.QueueDeclareAsync(
+                queue: delayQueueName,
+                durable: true,
+                exclusive: false,
+                autoDelete: false,
+                arguments: delayArgs,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            var props = new BasicProperties
+            {
+                CorrelationId = correlationId,
+                Headers = mergedHeaders,
+                DeliveryMode = DeliveryModes.Persistent
+            };
+
+            var json = JsonSerializer.Serialize(body);
+            var bytes = Encoding.UTF8.GetBytes(json);
+
+            await channel.BasicPublishAsync(
+                exchange: string.Empty,
+                routingKey: delayQueueName,
+                mandatory: true,
+                basicProperties: props,
+                body: bytes,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            _logger.LogDebug("Published delayed message of type {Type} with delay {Delay}ms to queue {Queue}",
+                typeof(TEvent).Name, delayMs, delayQueueName);
+        }
+
         public async Task SetupQueueAsync(
             string exchange,
             IKyrolusQueueSetup[] queues,
