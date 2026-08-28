@@ -33,4 +33,13 @@ public static class ServiceCollectionExtensions
         services.Replace(ServiceDescriptor.Scoped<IKyrolusSessionStore, TStore>());
         return services;
     }
+
+    /// <summary>
+    /// Registers the distributed cache-backed session store using <see cref="KyrolusSous.Caching.Abstractions.IKyrolusCacheProvider"/>.
+    /// </summary>
+    public static IServiceCollection AddKyrolusCacheSessionStore(this IServiceCollection services)
+    {
+        services.Replace(ServiceDescriptor.Singleton<IKyrolusSessionStore, KyrolusCacheSessionStore>());
+        return services;
+    }
 }

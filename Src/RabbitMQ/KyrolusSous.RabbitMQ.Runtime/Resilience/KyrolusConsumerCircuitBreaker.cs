@@ -1,14 +1,10 @@
-namespace KyrolusSous.RabbitMQ.Runtime.Resilience;
+using KyrolusSous.Resilience;
 
-public enum KyrolusCircuitState
-{
-    Closed,
-    Open,
-    HalfOpen
-}
+namespace KyrolusSous.RabbitMQ.Runtime.Resilience;
 
 /// <summary>
 /// Circuit breaker and backpressure controller for RabbitMQ message consumers with Half-Open probe protection.
+/// Utilizes unified <see cref="KyrolusCircuitState"/> from <c>KyrolusSous.Resilience.Abstractions</c>.
 /// </summary>
 public class KyrolusConsumerCircuitBreaker
 {

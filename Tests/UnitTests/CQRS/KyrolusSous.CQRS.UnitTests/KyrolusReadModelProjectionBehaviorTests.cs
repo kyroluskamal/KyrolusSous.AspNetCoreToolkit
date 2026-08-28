@@ -37,7 +37,7 @@ public class KyrolusReadModelProjectionBehaviorTests
             => throw new InvalidOperationException("Projection sync failed");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Projectable command should invoke projector upon success")]
     public async Task Projectable_command_should_invoke_projector_upon_success()
     {
         var services = new ServiceCollection();
@@ -56,7 +56,7 @@ public class KyrolusReadModelProjectionBehaviorTests
         projector.ProjectedModels[0].Name.ShouldBe("Tablet");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Projector exception should be isolated and not throw")]
     public async Task Projector_exception_should_be_isolated_and_not_throw()
     {
         var services = new ServiceCollection();
@@ -71,7 +71,7 @@ public class KyrolusReadModelProjectionBehaviorTests
         result.ShouldBe(10);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Plain command should not invoke projectors")]
     public async Task Plain_command_should_not_invoke_projectors()
     {
         var services = new ServiceCollection();

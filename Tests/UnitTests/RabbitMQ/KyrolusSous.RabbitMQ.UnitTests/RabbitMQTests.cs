@@ -7,17 +7,19 @@ using KyrolusSous.RabbitMQ.Runtime.Diagnostics;
 using KyrolusSous.RabbitMQ.Runtime.Health;
 using KyrolusSous.RabbitMQ.Runtime.Models;
 using KyrolusSous.RabbitMQ.Runtime.Services;
+using KyrolusSous.Resilience;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RabbitMQ.Client;
 using Shouldly;
 using Xunit;
+using NSubstitute;
 
 namespace KyrolusSous.RabbitMQ.UnitTests;
 
 public class RabbitMQTests
 {
-    [Fact]
+    [Fact(DisplayName = "Options Have Safe Defaults")]
     public void Options_HaveSafeDefaults()
     {
         var options = new KyrolusRabbitMQOptions();
@@ -35,7 +37,7 @@ public class RabbitMQTests
         options.EnablePublisherConfirms.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Queue Setup Implements Both Interfaces")]
     public void QueueSetup_ImplementsBothInterfaces()
     {
         var queue = new KyrolusQueueSetup
@@ -53,7 +55,7 @@ public class RabbitMQTests
         queue.RoutingKey.ShouldBe("orders.created");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Backward Compatibility Queue Setup Alias Works")]
     public void BackwardCompatibility_QueueSetupAliasWorks()
     {
         var queue = new KyrolusSous.RabbitMQUtils.Models.QueueSetup
@@ -66,7 +68,7 @@ public class RabbitMQTests
         queue.ShouldBeAssignableTo<KyrolusSous.IRabbitMQUtilsInterfaces.Interfaces.IQueueSetup>();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Message Envelope Initializes With Correlation And Timestamp")]
     public void MessageEnvelope_InitializesWithCorrelationAndTimestamp()
     {
         var payload = new { OrderId = 123, Total = 450.50 };
@@ -79,7 +81,7 @@ public class RabbitMQTests
         envelope.Timestamp.ShouldBeLessThanOrEqualTo(DateTimeOffset.UtcNow);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Di Registration Add Kyrolus Rabbit MQ Registers Expected Services")]
     public void DiRegistration_AddKyrolusRabbitMQ_RegistersExpectedServices()
     {
         var services = new ServiceCollection();
@@ -122,7 +124,7 @@ public class RabbitMQTests
         legacyListener.ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Di Registration Legacy Add Rabbit MQ Registers Expected Services")]
     public void DiRegistration_LegacyAddRabbitMQ_RegistersExpectedServices()
     {
         var services = new ServiceCollection();
@@ -140,7 +142,7 @@ public class RabbitMQTests
         options.SslEnabled.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Message Envelope Serializes And Deserializes Correctly")]
     public void MessageEnvelope_SerializesAndDeserializesCorrectly()
     {
         var original = new KyrolusMessageEnvelope<string>("test-payload", "c-123", "causation-456")
@@ -163,7 +165,7 @@ public class RabbitMQTests
         restored.Headers["environment"].ShouldBe("staging");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Options Allows Custom Heartbeat And Retries")]
     public void Options_AllowsCustomHeartbeatAndRetries()
     {
         var options = new KyrolusRabbitMQOptions
@@ -187,7 +189,7 @@ public class RabbitMQTests
 
     #region Enterprise Features Tests
 
-    [Fact]
+    [Fact(DisplayName = "Consumer Options Defaults And Configures Correctly")]
     public void ConsumerOptions_DefaultsAndConfiguresCorrectly()
     {
         var options = new KyrolusRabbitMQConsumerOptions
@@ -210,7 +212,7 @@ public class RabbitMQTests
         options.UseDeadLetterOnFailure.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Instrumentation Inject And Extract Trace Context Roundtrips Successfully")]
     public void Instrumentation_InjectAndExtractTraceContext_RoundtripsSuccessfully()
     {
         using var activity = new Activity("TestActivity").Start();
@@ -226,7 +228,7 @@ public class RabbitMQTests
         extractedContext.SpanId.ShouldBe(activity.SpanId);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Di Registration Add Consumer And Rpc Client Registers Expected Services")]
     public void DiRegistration_AddConsumerAndRpcClient_RegistersExpectedServices()
     {
         var services = new ServiceCollection();
@@ -255,7 +257,7 @@ public class RabbitMQTests
         hostedServices.ShouldContain(s => s is KyrolusRabbitMQConsumerBackgroundService<TestOrderCreatedConsumer, TestOrderCreatedEvent>);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Consume Context Record Holds All Properties")]
     public void ConsumeContext_Record_HoldsAllProperties()
     {
         var headers = new Dictionary<string, object?> { ["custom-header"] = "custom-value" };
@@ -279,7 +281,7 @@ public class RabbitMQTests
         context.Headers["custom-header"].ShouldBe("custom-value");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Outbox Store Add And Retrieve Pending Messages Successfully")]
     public async Task OutboxStore_AddAndRetrievePendingMessages_Successfully()
     {
         var store = new KyrolusSous.RabbitMQ.Runtime.Outbox.KyrolusInMemoryOutboxStore();
@@ -302,7 +304,7 @@ public class RabbitMQTests
         afterProcessed.Count.ShouldBe(0);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Idempotency Store Acquire Lock And Cache Result Prevents Duplicate")]
     public async Task IdempotencyStore_AcquireLockAndCacheResult_PreventsDuplicate()
     {
         var store = new KyrolusSous.RabbitMQ.Runtime.Idempotency.KyrolusInMemoryIdempotencyStore();
@@ -320,7 +322,7 @@ public class RabbitMQTests
         cachedResult.ShouldBe("{\"status\": \"success\"}");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Aes Message Encryptor Encrypt And Decrypt Roundtrips Successfully")]
     public void AesMessageEncryptor_EncryptAndDecrypt_RoundtripsSuccessfully()
     {
         var key = new byte[32];
@@ -340,7 +342,7 @@ public class RabbitMQTests
         decryptedText.ShouldBe(originalText);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Gzip Message Compressor Compress And Decompress Roundtrips Successfully")]
     public void GzipMessageCompressor_CompressAndDecompress_RoundtripsSuccessfully()
     {
         var compressor = new KyrolusSous.RabbitMQ.Runtime.Compression.KyrolusGzipMessageCompressor();
@@ -358,7 +360,7 @@ public class RabbitMQTests
         restoredString.ShouldBe(largeString);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Circuit Breaker Trips After Threshold And Recovers")]
     public void CircuitBreaker_TripsAfterThreshold_AndRecovers()
     {
         var breaker = new KyrolusSous.RabbitMQ.Runtime.Resilience.KyrolusConsumerCircuitBreaker(
@@ -366,22 +368,22 @@ public class RabbitMQTests
             breakDuration: TimeSpan.FromMilliseconds(50));
 
         breaker.CanExecute().ShouldBeTrue();
-        breaker.State.ShouldBe(KyrolusSous.RabbitMQ.Runtime.Resilience.KyrolusCircuitState.Closed);
+        breaker.State.ShouldBe(KyrolusCircuitState.Closed);
 
         breaker.ReportFailure();
         breaker.ReportFailure();
         breaker.CanExecute().ShouldBeTrue();
 
         breaker.ReportFailure(); // 3rd failure -> Opens circuit
-        breaker.State.ShouldBe(KyrolusSous.RabbitMQ.Runtime.Resilience.KyrolusCircuitState.Open);
+        breaker.State.ShouldBe(KyrolusCircuitState.Open);
         breaker.CanExecute().ShouldBeFalse();
 
         breaker.Reset();
         breaker.CanExecute().ShouldBeTrue();
-        breaker.State.ShouldBe(KyrolusSous.RabbitMQ.Runtime.Resilience.KyrolusCircuitState.Closed);
+        breaker.State.ShouldBe(KyrolusCircuitState.Closed);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Topology Builder Fluent Api Configures Exchanges And Queues")]
     public void TopologyBuilder_FluentApi_ConfiguresExchangesAndQueues()
     {
         var builder = new KyrolusSous.RabbitMQ.Runtime.Topology.KyrolusRabbitMQTopologyBuilder();
@@ -400,7 +402,7 @@ public class RabbitMQTests
         builder.Bindings[0].RoutingKey.ShouldBe("orders.#");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Di Registration Enterprise Features Registers All Services")]
     public void DiRegistration_EnterpriseFeatures_RegistersAllServices()
     {
         var key = new byte[32];
@@ -424,7 +426,7 @@ public class RabbitMQTests
         provider.GetService<KyrolusSous.RabbitMQ.Abstractions.Compression.IKyrolusMessageCompressor>().ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Saga Coordinator Executes Steps And Compensates On Failure Correctly")]
     public async Task SagaCoordinator_ExecutesStepsAndCompensatesOnFailure_Correctly()
     {
         var store = new KyrolusSous.RabbitMQ.Runtime.Sagas.KyrolusInMemorySagaStore<KyrolusSous.RabbitMQ.Abstractions.Sagas.KyrolusSagaState>();
@@ -460,7 +462,7 @@ public class RabbitMQTests
         state.IsFaulted.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Cloud Event Envelope Initializes With Standard Attributes Correctly")]
     public void CloudEventEnvelope_InitializesWithStandardAttributes_Correctly()
     {
         var payload = new { TransactionId = "tx-99", Amount = 1500.00 };
@@ -477,7 +479,7 @@ public class RabbitMQTests
         envelope.Time.ShouldBeLessThanOrEqualTo(DateTimeOffset.UtcNow);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Message Upcaster Transforms V1 To V2 Successfully")]
     public void MessageUpcaster_TransformsV1ToV2_Successfully()
     {
         var registry = new KyrolusSous.RabbitMQ.Runtime.Evolution.KyrolusMessageUpcasterRegistry();
@@ -493,7 +495,7 @@ public class RabbitMQTests
         v2.Email.ShouldBe("unspecified@domain.com");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Rate Limiter Token Bucket Limits And Acquires Tokens")]
     public async Task RateLimiter_TokenBucket_LimitsAndAcquiresTokens()
     {
         var limiter = new KyrolusSous.RabbitMQ.Runtime.RateLimiting.KyrolusTokenBucketRateLimiter(maxTokensPerSecond: 10, burstCapacity: 2);
@@ -513,7 +515,28 @@ public class RabbitMQTests
         await limiter.AcquireAsync(1, cts.Token);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Resilience Consumer Rate Limiter And Partitioned Limiter Work Correctly")]
+    public async Task ResilienceConsumerRateLimiter_And_PartitionedLimiter_WorkCorrectly()
+    {
+        var bclLimiter = new System.Threading.RateLimiting.ConcurrencyLimiter(new System.Threading.RateLimiting.ConcurrencyLimiterOptions
+        {
+            PermitLimit = 1,
+            QueueLimit = 0
+        });
+
+        using var adapter = new KyrolusSous.RabbitMQ.Runtime.RateLimiting.KyrolusResilienceConsumerRateLimiter(bclLimiter);
+        adapter.TryAcquire(1).ShouldBeTrue();
+        adapter.TryAcquire(1).ShouldBeFalse();
+
+        var mockPartitioned = NSubstitute.Substitute.For<KyrolusSous.Resilience.IKyrolusPartitionedRateLimiter>();
+        mockPartitioned.TryAcquire("orders.queue").Returns(true);
+
+        var partitionedAdapter = new KyrolusSous.RabbitMQ.Runtime.RateLimiting.KyrolusPartitionedConsumerRateLimiter(mockPartitioned, "orders.queue");
+        partitionedAdapter.TryAcquire(1).ShouldBeTrue();
+        await partitionedAdapter.AcquireAsync(1);
+    }
+
+    [Fact(DisplayName = "Topology Builder Priority Quorum Streams And Headers Configures Correctly")]
     public void TopologyBuilder_PriorityQuorumStreamsAndHeaders_ConfiguresCorrectly()
     {
         var builder = new KyrolusSous.RabbitMQ.Runtime.Topology.KyrolusRabbitMQTopologyBuilder();
@@ -534,7 +557,7 @@ public class RabbitMQTests
         builder.Bindings[0].Arguments!["tenant"].ShouldBe("emea");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Di Registration Ultra Advanced Features Registers All Services")]
     public void DiRegistration_UltraAdvancedFeatures_RegistersAllServices()
     {
         var services = new ServiceCollection();
@@ -552,7 +575,7 @@ public class RabbitMQTests
         provider.GetService<KyrolusSous.RabbitMQ.Runtime.Evolution.KyrolusMessageUpcasterRegistry>().ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Gzip Compressor Decompression Bomb Throws Invalid Operation Exception")]
     public void GzipCompressor_DecompressionBomb_ThrowsInvalidOperationException()
     {
         // Limit max decompressed bytes to 500 bytes
@@ -570,7 +593,7 @@ public class RabbitMQTests
         }).Message.ShouldContain("Decompression bomb protection");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Upcaster Registry Circular Cycle Throws Invalid Operation Exception")]
     public void UpcasterRegistry_CircularCycle_ThrowsInvalidOperationException()
     {
         var registry = new KyrolusSous.RabbitMQ.Runtime.Evolution.KyrolusMessageUpcasterRegistry();
@@ -585,7 +608,7 @@ public class RabbitMQTests
         }).Message.ShouldContain("Circular schema upcasting loop detected");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Saga Coordinator Multiple Compensations Executes In Reverse Lifo Order")]
     public async Task SagaCoordinator_MultipleCompensations_ExecutesInReverseLifoOrder()
     {
         var store = new KyrolusSous.RabbitMQ.Runtime.Sagas.KyrolusInMemorySagaStore<KyrolusSous.RabbitMQ.Abstractions.Sagas.KyrolusSagaState>();
@@ -604,7 +627,7 @@ public class RabbitMQTests
         executedCompensations.ShouldBe(["Compensate3", "Compensate2", "Compensate1"]);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Circuit Breaker Half Open Probe Allows Only One Execution At A Time")]
     public void CircuitBreaker_HalfOpenProbe_AllowsOnlyOneExecutionAtATime()
     {
         var breaker = new KyrolusSous.RabbitMQ.Runtime.Resilience.KyrolusConsumerCircuitBreaker(
@@ -617,7 +640,7 @@ public class RabbitMQTests
         // Wait for break duration to transition to HalfOpen
         Thread.Sleep(70);
 
-        breaker.State.ShouldBe(KyrolusSous.RabbitMQ.Runtime.Resilience.KyrolusCircuitState.HalfOpen);
+        breaker.State.ShouldBe(KyrolusCircuitState.HalfOpen);
 
         // First execution probe should be permitted
         var probe1 = breaker.CanExecute();
@@ -629,10 +652,10 @@ public class RabbitMQTests
 
         // After success, circuit closes
         breaker.ReportSuccess();
-        breaker.State.ShouldBe(KyrolusSous.RabbitMQ.Runtime.Resilience.KyrolusCircuitState.Closed);
+        breaker.State.ShouldBe(KyrolusCircuitState.Closed);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Topology Builder Deduplicates Exchanges And Queues Properly")]
     public void TopologyBuilder_DeduplicatesExchangesAndQueues_Properly()
     {
         var builder = new KyrolusSous.RabbitMQ.Runtime.Topology.KyrolusRabbitMQTopologyBuilder();
@@ -648,7 +671,7 @@ public class RabbitMQTests
         builder.Bindings.Count.ShouldBe(1);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Aes Message Encryptor Weak Key All Zeroes Throws Argument Exception")]
     public void AesMessageEncryptor_WeakKeyAllZeroes_ThrowsArgumentException()
     {
         var weakKey = new byte[32]; // all zeroes
@@ -659,7 +682,7 @@ public class RabbitMQTests
         }).Message.ShouldContain("Weak key detected");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Aes Message Encryptor Disposed Throws Object Disposed Exception")]
     public void AesMessageEncryptor_Disposed_ThrowsObjectDisposedException()
     {
         var key = new byte[32];
@@ -674,7 +697,7 @@ public class RabbitMQTests
         });
     }
 
-    [Fact]
+    [Fact(DisplayName = "Options To String Masks Password")]
     public void Options_ToString_MasksPassword()
     {
         var options = new KyrolusSous.RabbitMQ.Abstractions.Models.KyrolusRabbitMQOptions
@@ -689,7 +712,7 @@ public class RabbitMQTests
         str.ShouldNotContain("SuperSecretPassword123!");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Outbox Store Purge Processed Messages Deletes Older Messages")]
     public async Task OutboxStore_PurgeProcessedMessages_DeletesOlderMessages()
     {
         var store = new KyrolusSous.RabbitMQ.Runtime.Outbox.KyrolusInMemoryOutboxStore();
@@ -723,7 +746,7 @@ public class RabbitMQTests
         pending[0].Id.ShouldBe("msg-2");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Idempotency Store Try Extend Lock Renews Active Lock")]
     public async Task IdempotencyStore_TryExtendLock_RenewsActiveLock()
     {
         var store = new KyrolusSous.RabbitMQ.Runtime.Idempotency.KyrolusInMemoryIdempotencyStore();
@@ -739,7 +762,7 @@ public class RabbitMQTests
         nonExistentExtended.ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Data Protection Message Encryptor Protects And Unprotects Successfully")]
     public void DataProtectionMessageEncryptor_ProtectsAndUnprotects_Successfully()
     {
         var mockProtector = new TestDataProtector();
@@ -754,7 +777,7 @@ public class RabbitMQTests
         Encoding.UTF8.GetString(decrypted).ShouldBe("Secret Order #456");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Compression Adapter Works With Toolkit Compressors Successfully")]
     public void CompressionAdapter_WorksWithToolkitCompressors_Successfully()
     {
         var mockCompressor = new TestMockCompressor();

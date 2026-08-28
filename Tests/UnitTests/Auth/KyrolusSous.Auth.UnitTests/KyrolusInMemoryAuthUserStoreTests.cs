@@ -8,7 +8,7 @@ public sealed class KyrolusInMemoryAuthUserStoreTests
 {
     private readonly KyrolusInMemoryAuthUserStore _store = new();
 
-    [Fact]
+    [Fact(DisplayName = "Add assigns an id when the record has none")]
     public void Add_assigns_an_id_when_the_record_has_none()
     {
         var user = _store.Add(new KyrolusAuthUser { UserName = "ada" });
@@ -16,7 +16,7 @@ public sealed class KyrolusInMemoryAuthUserStoreTests
         user.Id.ShouldNotBeNullOrWhiteSpace();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Add keeps an id the caller supplied")]
     public void Add_keeps_an_id_the_caller_supplied()
     {
         var user = _store.Add(new KyrolusAuthUser { Id = "fixed", UserName = "ada" });
@@ -24,7 +24,7 @@ public sealed class KyrolusInMemoryAuthUserStoreTests
         user.Id.ShouldBe("fixed");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Lookups by name and email ignore case")]
     public async Task Lookups_by_name_and_email_ignore_case()
     {
         _store.Add(new KyrolusAuthUser { UserName = "Ada", Email = "Ada@Contoso.com" });
@@ -33,7 +33,7 @@ public sealed class KyrolusInMemoryAuthUserStoreTests
         (await _store.FindByEmailAsync("ada@contoso.com")).ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "A missing user comes back as null")]
     public async Task A_missing_user_comes_back_as_null()
     {
         (await _store.FindByIdAsync("nope")).ShouldBeNull();
@@ -42,7 +42,7 @@ public sealed class KyrolusInMemoryAuthUserStoreTests
         (await _store.FindByExternalLoginAsync("Google", "nope")).ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "External login keys do not collide across provider boundaries")]
     public async Task External_login_keys_do_not_collide_across_provider_boundaries()
     {
         var first = _store.Add(new KyrolusAuthUser { UserName = "first" });
@@ -56,7 +56,7 @@ public sealed class KyrolusInMemoryAuthUserStoreTests
         (await _store.FindByExternalLoginAsync("Google", "123"))!.Id.ShouldBe(second.Id);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Recording and clearing failures round trips")]
     public async Task Recording_and_clearing_failures_round_trips()
     {
         var user = _store.Add(new KyrolusAuthUser { UserName = "ada" });
@@ -73,7 +73,7 @@ public sealed class KyrolusInMemoryAuthUserStoreTests
         user.LockoutEnd.ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Is Locked Out only counts a window that has not passed")]
     public void IsLockedOut_only_counts_a_window_that_has_not_passed()
     {
         var now = DateTimeOffset.UtcNow;

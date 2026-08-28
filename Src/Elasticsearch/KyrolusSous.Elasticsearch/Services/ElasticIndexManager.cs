@@ -1,7 +1,15 @@
+using System.Diagnostics;
+using System.Reflection;
+using Elastic.Clients.Elasticsearch;
+using Elastic.Clients.Elasticsearch.IndexManagement;
+using Elastic.Clients.Elasticsearch.Mapping;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
 namespace KyrolusSous.Elasticsearch;
 
 /// <summary>
-/// Primary enterprise index manager for schema mapping generation, alias switching, reindexing, and ILM lifecycle policies.
+/// Primary enterprise index manager for schema mapping generation, index templates, alias switching, reindexing, and ILM lifecycle policies.
 /// </summary>
 public class KyrolusElasticIndexManager(
     ElasticsearchClient client,
@@ -102,7 +110,15 @@ public class KyrolusElasticIndexManager(
     {
         var formattedName = FormatIndexName(indexName);
         var response = await _client.Indices.DeleteAsync(formattedName, cancellationToken);
-        return response.IsValidResponse;
+
+        if (response.IsValidResponse)
+        {
+            _logger?.LogInformation("Successfully deleted Elasticsearch index '{IndexName}'.", formattedName);
+            return true;
+        }
+
+        _logger?.LogError("Failed to delete Elasticsearch index '{IndexName}': {Error}", formattedName, response.DebugInformation);
+        return false;
     }
 
     public async Task<bool> PutAliasAsync(string indexName, string aliasName, CancellationToken cancellationToken = default)
@@ -125,24 +141,32 @@ public class KyrolusElasticIndexManager(
 
     public async Task<bool> SwapAliasAsync(string aliasName, string oldIndexName, string newIndexName, CancellationToken cancellationToken = default)
     {
-        var formattedAlias = FormatIndexName(aliasName);
-        var formattedOld = FormatIndexName(oldIndexName);
-        var formattedNew = FormatIndexName(newIndexName);
+        var removed = await RemoveAliasAsync(oldIndexName, aliasName, cancellationToken);
+        var added = await PutAliasAsync(newIndexName, aliasName, cancellationToken);
 
-        var removeRes = await RemoveAliasAsync(formattedOld, formattedAlias, cancellationToken);
-        var addRes = await PutAliasAsync(formattedNew, formattedAlias, cancellationToken);
+        if (added)
+        {
+            _logger?.LogInformation("Successfully swapped alias '{Alias}' from '{OldIndex}' to '{NewIndex}'.", aliasName, oldIndexName, newIndexName);
+            return true;
+        }
 
-        return removeRes && addRes;
+        _logger?.LogError("Failed to swap alias '{Alias}'.", aliasName);
+        return false;
     }
 
     public async Task<bool> CreateMonthlyIndexAsync<TDocument>(DateTime date, CancellationToken cancellationToken = default) where TDocument : class
     {
-        var attr = typeof(TDocument).GetCustomAttribute<KyrolusElasticIndexAttribute>()
-                   ?? typeof(TDocument).GetCustomAttribute<KyrolusElasticIndexAttribute>();
-
+        var attr = typeof(TDocument).GetCustomAttribute<KyrolusElasticIndexAttribute>();
         var baseName = attr?.IndexName ?? typeof(TDocument).Name.ToLowerInvariant();
         var monthlyIndexName = $"{baseName}-{date:yyyy-MM}";
-        return await CreateIndexAsync(monthlyIndexName, attr?.NumberOfShards ?? 1, attr?.NumberOfReplicas ?? 1, cancellationToken);
+
+        var created = await CreateIndexAsync<TDocument>(cancellationToken);
+        if (created && attr is { UseAlias: true } && !string.IsNullOrWhiteSpace(attr.Alias))
+        {
+            await PutAliasAsync(monthlyIndexName, attr.Alias, cancellationToken);
+        }
+
+        return created;
     }
 
     public async Task<int> CleanupIndicesOlderThanAsync(string prefix, TimeSpan maxAge, CancellationToken cancellationToken = default)
@@ -243,6 +267,81 @@ public class KyrolusElasticIndexManager(
         return response.IsValidResponse;
     }
 
+    public async Task<bool> CreateIndexTemplateAsync(
+        string templateName,
+        string indexPattern,
+        int priority = 100,
+        int shards = 1,
+        int replicas = 1,
+        string? ilmPolicyName = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(templateName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(indexPattern);
+
+        var response = await _client.Indices.PutIndexTemplateAsync(templateName, descriptor =>
+        {
+            descriptor.IndexPatterns(indexPattern);
+            descriptor.Priority(priority);
+            descriptor.Template(t => t.Settings(s =>
+            {
+                s.NumberOfShards(shards);
+                s.NumberOfReplicas(replicas);
+            }));
+        }, cancellationToken);
+
+        return response.IsValidResponse;
+    }
+
+    public async Task<bool> DeleteIndexTemplateAsync(string templateName, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(templateName);
+        var response = await _client.Indices.DeleteIndexTemplateAsync(templateName, cancellationToken);
+        return response.IsValidResponse;
+    }
+
+    public async Task<bool> IndexTemplateExistsAsync(string templateName, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(templateName);
+        var response = await _client.Indices.ExistsIndexTemplateAsync(templateName, cancellationToken);
+        return response.Exists;
+    }
+
+    public async Task<bool> CreatePercolatorIndexAsync<TDocument>(string indexName, CancellationToken cancellationToken = default) where TDocument : class
+    {
+        var formattedName = FormatIndexName(indexName);
+        var exists = await IndexExistsAsync(formattedName, cancellationToken);
+        if (exists) return true;
+
+        var response = await _client.Indices.CreateAsync<TDocument>(formattedName, d =>
+        {
+            d.Mappings(m =>
+            {
+                m.Properties(p =>
+                {
+                    p.Percolator("query");
+                    ApplyDocumentPropertyMappings<TDocument>(p);
+                });
+            });
+        }, cancellationToken);
+
+        return response.IsValidResponse;
+    }
+
+    public async Task<bool> RefreshIndexAsync(string indexName, CancellationToken cancellationToken = default)
+    {
+        var formattedName = FormatIndexName(indexName);
+        var response = await _client.Indices.RefreshAsync(formattedName, cancellationToken);
+        return response.IsValidResponse;
+    }
+
+    public async Task<bool> FlushIndexAsync(string indexName, CancellationToken cancellationToken = default)
+    {
+        var formattedName = FormatIndexName(indexName);
+        var response = await _client.Indices.FlushAsync(formattedName, cancellationToken);
+        return response.IsValidResponse;
+    }
+
     private static void ApplyDocumentPropertyMappings<TDocument>(PropertiesDescriptor<TDocument> descriptor)
     {
         var properties = typeof(TDocument).GetProperties(BindingFlags.Public | BindingFlags.Instance);
@@ -254,8 +353,24 @@ public class KyrolusElasticIndexManager(
             var keywordAttr = prop.GetCustomAttribute<KyrolusElasticKeywordAttribute>();
             var geoAttr = prop.GetCustomAttribute<KyrolusElasticGeoPointAttribute>();
             var vectorAttr = prop.GetCustomAttribute<KyrolusElasticDenseVectorAttribute>();
+            var completionAttr = prop.GetCustomAttribute<KyrolusElasticCompletionAttribute>();
+            var percolatorAttr = prop.GetCustomAttribute<KyrolusElasticPercolatorAttribute>();
 
-            if (textAttr is not null)
+            if (completionAttr is not null)
+            {
+                descriptor.Completion(propName, c =>
+                {
+                    c.Analyzer(completionAttr.Analyzer);
+                    c.PreserveSeparators(completionAttr.PreserveSeparators);
+                    c.PreservePositionIncrements(completionAttr.PreservePositionIncrements);
+                    c.MaxInputLength(completionAttr.MaxInputLength);
+                });
+            }
+            else if (percolatorAttr is not null)
+            {
+                descriptor.Percolator(propName);
+            }
+            else if (textAttr is not null)
             {
                 descriptor.Text(propName, t =>
                 {
@@ -300,6 +415,7 @@ public class KyrolusElasticIndexManager(
     {
         var prefix = _options.IndexPrefix ?? string.Empty;
         var suffix = _options.IndexSuffix ?? string.Empty;
-        return $"{prefix}{rawName}{suffix}".ToLowerInvariant();
+        var combined = $"{prefix}{rawName}{suffix}".Trim().ToLowerInvariant();
+        return combined.Replace(" ", "_").Replace("\\", "_").Replace("/", "_").Replace("*", "_").Replace("?", "_").Replace("\"", "_").Replace("<", "_").Replace(">", "_").Replace("|", "_").Replace(",", "_").Replace("#", "_").Replace(":", "_");
     }
 }

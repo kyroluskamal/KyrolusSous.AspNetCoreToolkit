@@ -112,4 +112,13 @@ public static class ServiceCollectionExtensions
         services.Replace(ServiceDescriptor.Singleton<IKyrolusTokenBlacklist, TBlacklist>());
         return services;
     }
+
+    /// <summary>
+    /// Registers the distributed cache-backed token blacklist using <see cref="KyrolusSous.Caching.Abstractions.IKyrolusCacheProvider"/>.
+    /// </summary>
+    public static IServiceCollection AddKyrolusCacheTokenBlacklist(this IServiceCollection services)
+    {
+        services.Replace(ServiceDescriptor.Singleton<IKyrolusTokenBlacklist, KyrolusCacheTokenBlacklist>());
+        return services;
+    }
 }

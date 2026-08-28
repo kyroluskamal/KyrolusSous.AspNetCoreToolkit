@@ -1,4 +1,10 @@
 using KyrolusSous.Mediator.Abstractions.Interfaces;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Polly;
 
 namespace KyrolusSous.Resilience;
 
@@ -50,6 +56,70 @@ public static class ResilienceServiceExtensions
         return services;
     }
 
+    public static IServiceCollection AddTransientExceptionEvaluator<TEvaluator>(this IServiceCollection services)
+        where TEvaluator : class, IKyrolusTransientExceptionEvaluator
+    {
+        services.AddSingleton<IKyrolusTransientExceptionEvaluator, TEvaluator>();
+        return services;
+    }
+
+    public static IServiceCollection AddResilienceAlertHandler<THandler>(this IServiceCollection services)
+        where THandler : class, IKyrolusResilienceAlertHandler
+    {
+        services.AddSingleton<IKyrolusResilienceAlertHandler, THandler>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers a service implementation wrapped with a resilient dispatch proxy decorator.
+    /// </summary>
+    public static IServiceCollection AddResilientDecorated<TInterface, TImplementation>(
+        this IServiceCollection services,
+        string pipelineName = "default",
+        ServiceLifetime lifetime = ServiceLifetime.Scoped)
+        where TInterface : class
+        where TImplementation : class, TInterface
+    {
+        services.Add(new ServiceDescriptor(typeof(TImplementation), typeof(TImplementation), lifetime));
+        services.Add(new ServiceDescriptor(typeof(TInterface), sp =>
+        {
+            var target = sp.GetRequiredService<TImplementation>();
+            var pipelineProvider = sp.GetRequiredService<IKyrolusResiliencePipelineProvider>();
+            return KyrolusResilienceProxy<TInterface>.Create(target, pipelineProvider, pipelineName);
+        }, lifetime));
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers a declarative fallback for a specific pipeline name and result type.
+    /// </summary>
+    public static IServiceCollection AddResilienceFallback<TResult>(
+        this IServiceCollection services,
+        string pipelineName,
+        Func<Exception, CancellationToken, ValueTask<TResult>> fallback)
+    {
+        services.AddSingleton<IKyrolusFallbackRegistration>(
+            new KyrolusFallbackRegistration<TResult>(pipelineName, fallback));
+        return services;
+    }
+
+    /// <summary>
+    /// Attaches a named Kyrolus resilience delegating handler to an HttpClientBuilder.
+    /// </summary>
+    public static IHttpClientBuilder AddKyrolusResilienceHandler(
+        this IHttpClientBuilder builder,
+        string pipelineName = "default")
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        return builder.AddHttpMessageHandler(sp =>
+        {
+            var pipelineProvider = sp.GetRequiredService<IKyrolusResiliencePipelineProvider>();
+            return new KyrolusResilienceDelegatingHandler(pipelineProvider, pipelineName);
+        });
+    }
+
     public static IServiceCollection AddResilienceMediatorBehavior(this IServiceCollection services)
     {
         services.AddTransient(typeof(IKyrolusPipelineBehavior<,>), typeof(KyrolusResiliencePipelineBehavior<,>));
@@ -97,7 +167,20 @@ public static class ResilienceServiceExtensions
     private static IServiceCollection RegisterResilienceServices(IServiceCollection services)
     {
         services.AddOptions<KyrolusResilienceOptions>();
-        services.AddSingleton<IKyrolusResiliencePipelineProvider, KyrolusResiliencePipelineProvider>();
+        services.TryAddSingleton<IKyrolusCircuitBreakerStateStore, KyrolusInMemoryCircuitBreakerStateStore>();
+        services.TryAddSingleton<IKyrolusResilienceAlertSink, KyrolusCompositeResilienceAlertSink>();
+        services.TryAddSingleton<IKyrolusCircuitBreakerObserver, KyrolusCircuitBreakerObserver>();
+        services.TryAddSingleton<IKyrolusTransientExceptionEvaluator, KyrolusDefaultTransientExceptionEvaluator>();
+        services.TryAddSingleton<IKyrolusFallbackRegistry, KyrolusFallbackRegistry>();
+        services.TryAddSingleton<IKyrolusAdaptiveConcurrencyLimiter>(_ => new KyrolusAdaptiveConcurrencyLimiter());
+        services.TryAddSingleton<IKyrolusSingleFlight, KyrolusSingleFlight>();
+        services.TryAddSingleton<IKyrolusChaosEngine, KyrolusChaosEngine>();
+        services.TryAddSingleton<IKyrolusPartitionedRateLimiter, KyrolusPartitionedRateLimiter>();
+        services.TryAddSingleton<IKyrolusPriorityLoadShedder, KyrolusPriorityLoadShedder>();
+        services.TryAddSingleton<IKyrolusAdaptiveTimeoutEstimator, KyrolusAdaptiveTimeoutEstimator>();
+        services.TryAddSingleton<IKyrolusResilienceQuarantine, KyrolusResilienceQuarantine>();
+        services.TryAddSingleton<IKyrolusResiliencePipelineComposer, KyrolusResiliencePipelineComposer>();
+        services.TryAddSingleton<IKyrolusResiliencePipelineProvider, KyrolusResiliencePipelineProvider>();
         return services;
     }
 }

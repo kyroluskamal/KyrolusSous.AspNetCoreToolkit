@@ -16,7 +16,7 @@ public class UserTokenServiceTests
         SecurityStamp = "initial-security-stamp-guid"
     };
 
-    [Fact]
+    [Fact(DisplayName = "Generate Token And Validate Token Work For Email Confirmation")]
     public void GenerateToken_And_ValidateToken_WorkForEmailConfirmation()
     {
         var token = _service.GenerateToken(_user, KyrolusTokenPurposes.EmailConfirmation);
@@ -27,7 +27,7 @@ public class UserTokenServiceTests
         isValid.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Token Fails When Purpose Mismatches")]
     public void ValidateToken_Fails_WhenPurposeMismatches()
     {
         var emailToken = _service.GenerateToken(_user, KyrolusTokenPurposes.EmailConfirmation);
@@ -37,7 +37,7 @@ public class UserTokenServiceTests
         isValid.ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Token Fails When User Security Stamp Changed")]
     public void ValidateToken_Fails_WhenUserSecurityStampChanged()
     {
         var token = _service.GenerateToken(_user, KyrolusTokenPurposes.PasswordReset);
@@ -49,7 +49,7 @@ public class UserTokenServiceTests
         isValid.ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Token Fails When Token Expired")]
     public void ValidateToken_Fails_WhenTokenExpired()
     {
         // Negative lifetime -> instantly expired
@@ -59,7 +59,7 @@ public class UserTokenServiceTests
         isValid.ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Token Fails When Signature Tampered")]
     public void ValidateToken_Fails_WhenSignatureTampered()
     {
         var token = _service.GenerateToken(_user, KyrolusTokenPurposes.EmailConfirmation);
@@ -69,7 +69,7 @@ public class UserTokenServiceTests
         isValid.ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Token Succeeds When User Id Or Purpose Contains Pipes")]
     public void ValidateToken_Succeeds_WhenUserIdOrPurposeContainsPipes()
     {
         var complexUser = new KyrolusAuthUser
@@ -87,7 +87,7 @@ public class UserTokenServiceTests
         isValid.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Token Returns False On Malformed Base64 Payload Or Signature")]
     public void ValidateToken_ReturnsFalse_OnMalformedBase64PayloadOrSignature()
     {
         _service.ValidateToken(_user, KyrolusTokenPurposes.EmailConfirmation, "invalid-token-without-dots").ShouldBeFalse();
@@ -95,7 +95,7 @@ public class UserTokenServiceTests
         _service.ValidateToken(_user, KyrolusTokenPurposes.EmailConfirmation, "payload.malformed!signature").ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Di Registration Add Kyrolus User Tokens Registers Service")]
     public void DiRegistration_AddKyrolusUserTokens_RegistersService()
     {
         var services = new ServiceCollection();
@@ -106,7 +106,7 @@ public class UserTokenServiceTests
         provider.GetService<IKyrolusUserTokenService>().ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Token Fails Fast When Token Segments Have Modulo One Length")]
     public void ValidateToken_FailsFast_WhenTokenSegmentsHaveModuloOneLength()
     {
         // A single character segment has length % 4 == 1, which is mathematically impossible in Base64
@@ -115,7 +115,7 @@ public class UserTokenServiceTests
         result.ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Token Succeeds Within Clock Skew Tolerance")]
     public void ValidateToken_Succeeds_WithinClockSkewTolerance()
     {
         var options = new KyrolusUserTokenOptions
@@ -133,7 +133,7 @@ public class UserTokenServiceTests
         isFarValid.ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Generate Token Throws When User Id Is Null Or Whitespace")]
     public void GenerateToken_Throws_WhenUserIdIsNullOrWhitespace()
     {
         var invalidUser = new KyrolusAuthUser { Id = "   " };
@@ -141,7 +141,7 @@ public class UserTokenServiceTests
             _service.GenerateToken(invalidUser, KyrolusTokenPurposes.EmailConfirmation));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Token Returns False When Expiry Is Zero Or Negative")]
     public void ValidateToken_ReturnsFalse_WhenExpiryIsZeroOrNegative()
     {
         var payloadBytes = System.Text.Encoding.UTF8.GetBytes($"{_user.Id}|-100|{KyrolusTokenPurposes.PasswordReset}|{_user.SecurityStamp}");
@@ -154,5 +154,25 @@ public class UserTokenServiceTests
         var token = $"{payloadB64}.{sigB64}";
         var isValid = _service.ValidateToken(_user, KyrolusTokenPurposes.PasswordReset, token);
         isValid.ShouldBeFalse();
+    }
+
+    [Fact(DisplayName = "Data Protection User Token Service Generates And Validates Token Correctly")]
+    public void DataProtectionUserTokenService_GeneratesAndValidatesToken_Correctly()
+    {
+        var services = new ServiceCollection();
+        services.AddDataProtection();
+        var sp = services.BuildServiceProvider();
+        var dataProtectionProvider = sp.GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>();
+
+        var dpService = new KyrolusDataProtectionUserTokenService(dataProtectionProvider);
+
+        var token = dpService.GenerateToken(_user, KyrolusTokenPurposes.EmailConfirmation);
+        token.ShouldNotBeNullOrWhiteSpace();
+
+        var isValid = dpService.ValidateToken(_user, KyrolusTokenPurposes.EmailConfirmation, token);
+        isValid.ShouldBeTrue();
+
+        var isPurposeMismatch = dpService.ValidateToken(_user, KyrolusTokenPurposes.PasswordReset, token);
+        isPurposeMismatch.ShouldBeFalse();
     }
 }

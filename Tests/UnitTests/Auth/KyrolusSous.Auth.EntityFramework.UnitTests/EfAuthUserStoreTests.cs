@@ -28,7 +28,7 @@ public class EfAuthUserStoreTests
         return new TestAuthDbContext(options);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Create Async And Find By Id Async Work Correctly")]
     public async Task CreateAsync_And_FindByIdAsync_WorkCorrectly()
     {
         using var db = CreateDbContext(nameof(CreateAsync_And_FindByIdAsync_WorkCorrectly));
@@ -55,7 +55,7 @@ public class EfAuthUserStoreTests
         found.Roles.ShouldContain("Admin");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Find By User Name And Find By Email Return Matching User")]
     public async Task FindByUserName_And_FindByEmail_ReturnMatchingUser()
     {
         using var db = CreateDbContext(nameof(FindByUserName_And_FindByEmail_ReturnMatchingUser));
@@ -78,7 +78,7 @@ public class EfAuthUserStoreTests
         byEmail.UserName.ShouldBe("johndoe");
     }
 
-    [Fact]
+    [Fact(DisplayName = "External Login Link And Find Works Correctly")]
     public async Task ExternalLogin_LinkAndFind_WorksCorrectly()
     {
         using var db = CreateDbContext(nameof(ExternalLogin_LinkAndFind_WorksCorrectly));
@@ -99,7 +99,7 @@ public class EfAuthUserStoreTests
         found.UserName.ShouldBe("alice");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Lockout Store Record And Reset Works Correctly")]
     public async Task LockoutStore_RecordAndReset_WorksCorrectly()
     {
         using var db = CreateDbContext(nameof(LockoutStore_RecordAndReset_WorksCorrectly));
@@ -127,7 +127,7 @@ public class EfAuthUserStoreTests
         userAfterReset.LockoutEnd.ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Di Registration Add Kyrolus Ef Auth Store Registers Store Interfaces")]
     public void DiRegistration_AddKyrolusEfAuthStore_RegistersStoreInterfaces()
     {
         var services = new ServiceCollection();
@@ -140,7 +140,7 @@ public class EfAuthUserStoreTests
         provider.GetService<IKyrolusAuthUserLockoutStore>().ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Find By Email Async And Find By User Name Async Succeeds With Padded And Mixed Case")]
     public async Task FindByEmailAsync_And_FindByUserNameAsync_Succeeds_WithPaddedAndMixedCase()
     {
         using var db = CreateDbContext(nameof(FindByEmailAsync_And_FindByUserNameAsync_Succeeds_WithPaddedAndMixedCase));
@@ -163,7 +163,7 @@ public class EfAuthUserStoreTests
         byName.Email.ShouldBe("charlie.brown@example.com");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Add External Login Async Is Idempotent")]
     public async Task AddExternalLoginAsync_IsIdempotent()
     {
         using var db = CreateDbContext(nameof(AddExternalLoginAsync_IsIdempotent));
@@ -183,7 +183,7 @@ public class EfAuthUserStoreTests
         found.Id.ShouldBe(user.Id);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Record Failed Attempt Async Clamps Negative Access Failed Count")]
     public async Task RecordFailedAttemptAsync_ClampsNegativeAccessFailedCount()
     {
         using var db = CreateDbContext(nameof(RecordFailedAttemptAsync_ClampsNegativeAccessFailedCount));

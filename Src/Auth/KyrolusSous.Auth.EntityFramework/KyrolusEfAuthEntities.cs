@@ -1,5 +1,7 @@
 using System.Text.Json;
 using KyrolusSous.Auth.Abstractions;
+using KyrolusSous.Auth.MagicLink;
+using KyrolusSous.Auth.Sessions;
 using Microsoft.EntityFrameworkCore;
 
 namespace KyrolusSous.Auth.EntityFramework;
@@ -82,6 +84,78 @@ public class KyrolusEfExternalLoginEntity
     public KyrolusEfAuthUserEntity? User { get; set; }
 }
 
+public class KyrolusEfRevokedTokenEntity
+{
+    public string Jti { get; set; } = string.Empty;
+    public DateTimeOffset ExpiresAtUtc { get; set; }
+}
+
+public class KyrolusEfUserRevocationEntity
+{
+    public string UserId { get; set; } = string.Empty;
+    public DateTimeOffset RevokedBeforeUtc { get; set; }
+}
+
+public class KyrolusEfSessionEntity
+{
+    public string SessionId { get; set; } = string.Empty;
+    public string UserId { get; set; } = string.Empty;
+    public string? IpAddress { get; set; }
+    public string? UserAgent { get; set; }
+    public string? DeviceInfo { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset LastActiveAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+    public bool IsRevoked { get; set; }
+
+    public KyrolusUserSession ToSession()
+    {
+        return new KyrolusUserSession
+        {
+            SessionId = SessionId,
+            UserId = UserId,
+            IpAddress = IpAddress,
+            UserAgent = UserAgent,
+            DeviceInfo = DeviceInfo,
+            CreatedAt = CreatedAt,
+            LastActiveAt = LastActiveAt,
+            ExpiresAt = ExpiresAt,
+            IsRevoked = IsRevoked
+        };
+    }
+
+    public static KyrolusEfSessionEntity FromSession(KyrolusUserSession s)
+    {
+        return new KyrolusEfSessionEntity
+        {
+            SessionId = s.SessionId,
+            UserId = s.UserId,
+            IpAddress = s.IpAddress,
+            UserAgent = s.UserAgent,
+            DeviceInfo = s.DeviceInfo,
+            CreatedAt = s.CreatedAt,
+            LastActiveAt = s.LastActiveAt,
+            ExpiresAt = s.ExpiresAt,
+            IsRevoked = s.IsRevoked
+        };
+    }
+}
+
+public class KyrolusEfMagicLinkEntity
+{
+    public string TokenHash { get; set; } = string.Empty;
+    public string UserId { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAtUtc { get; set; }
+    public DateTimeOffset ExpiresAtUtc { get; set; }
+    public bool IsConsumed { get; set; }
+
+    public KyrolusMagicLinkRecord ToRecord()
+    {
+        return new KyrolusMagicLinkRecord(TokenHash, UserId, Email, ExpiresAtUtc);
+    }
+}
+
 public static class ModelBuilderExtensions
 {
     /// <summary>
@@ -109,6 +183,30 @@ public static class ModelBuilderExtensions
             b.HasIndex(l => new { l.Provider, l.ProviderKey }).IsUnique();
             b.Property(l => l.Provider).HasMaxLength(64).IsRequired();
             b.Property(l => l.ProviderKey).HasMaxLength(256).IsRequired();
+        });
+
+        modelBuilder.Entity<KyrolusEfRevokedTokenEntity>(b =>
+        {
+            b.HasKey(t => t.Jti);
+            b.HasIndex(t => t.ExpiresAtUtc);
+        });
+
+        modelBuilder.Entity<KyrolusEfUserRevocationEntity>(b =>
+        {
+            b.HasKey(u => u.UserId);
+        });
+
+        modelBuilder.Entity<KyrolusEfSessionEntity>(b =>
+        {
+            b.HasKey(s => s.SessionId);
+            b.HasIndex(s => s.UserId);
+            b.HasIndex(s => s.ExpiresAt);
+        });
+
+        modelBuilder.Entity<KyrolusEfMagicLinkEntity>(b =>
+        {
+            b.HasKey(m => m.TokenHash);
+            b.HasIndex(m => m.ExpiresAtUtc);
         });
 
         return modelBuilder;

@@ -2,7 +2,7 @@
 
 public class RuntimeQueryHelperAnyAllTests
 {
-    [Fact]
+    [Fact(DisplayName = "Build Filter Any Operator Works With Nested Filter")]
     public void BuildFilter_AnyOperator_Works_WithNestedFilter()
     {
         var result = RuntimeQueryHelperTestData.ApplyFilter(
@@ -12,7 +12,7 @@ public class RuntimeQueryHelperAnyAllTests
         result.All(x => x.Items.Any(i => i.CategoryId == RuntimeQueryHelperTestData.CategoryA)).ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build Filter All Operator Works With Nested Filter")]
     public void BuildFilter_AllOperator_Works_WithNestedFilter()
     {
         var result = RuntimeQueryHelperTestData.ApplyFilter(
@@ -22,7 +22,7 @@ public class RuntimeQueryHelperAnyAllTests
         result.All(x => x.Items.All(i => i.Rating >= 4)).ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build Filter Any Operator Works With Value List")]
     public void BuildFilter_AnyOperator_Works_WithValueList()
     {
         Should.Throw<ArgumentException>(() =>

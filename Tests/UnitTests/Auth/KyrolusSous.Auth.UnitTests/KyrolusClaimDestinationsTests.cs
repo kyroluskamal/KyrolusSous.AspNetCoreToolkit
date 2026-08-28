@@ -15,7 +15,7 @@ public sealed class KyrolusClaimDestinationsTests
         return principal;
     }
 
-    [Theory]
+    [Theory(DisplayName = "A scoped claim reaches the identity token only with its scope")]
     [InlineData(Claims.Email, Scopes.Email)]
     [InlineData(Claims.EmailVerified, Scopes.Email)]
     [InlineData(Claims.Name, Scopes.Profile)]
@@ -38,7 +38,7 @@ public sealed class KyrolusClaimDestinationsTests
         with.ShouldBe([Destinations.AccessToken, Destinations.IdentityToken]);
     }
 
-    [Fact]
+    [Fact(DisplayName = "An application claim goes to the access token only")]
     public void An_application_claim_goes_to_the_access_token_only()
     {
         var destinations = KyrolusClaimDestinations
@@ -49,7 +49,7 @@ public sealed class KyrolusClaimDestinationsTests
         destinations.ShouldBe([Destinations.AccessToken]);
     }
 
-    [Theory]
+    [Theory(DisplayName = "Sensitive claims never leave the server")]
     [InlineData("AspNet.Identity.SecurityStamp")]
     [InlineData("security_stamp")]
     [InlineData("SecurityStamp")]
@@ -66,7 +66,7 @@ public sealed class KyrolusClaimDestinationsTests
         destinations.ShouldBeEmpty();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Set Kyrolus Destinations stamps every claim")]
     public void SetKyrolusDestinations_stamps_every_claim()
     {
         var identity = new ClaimsIdentity("test");
@@ -83,7 +83,7 @@ public sealed class KyrolusClaimDestinationsTests
             .ShouldBe([Destinations.AccessToken, Destinations.IdentityToken]);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Set Kyrolus Destinations honours a custom resolver")]
     public void SetKyrolusDestinations_honours_a_custom_resolver()
     {
         var identity = new ClaimsIdentity("test");

@@ -143,7 +143,7 @@ public sealed class OpenIddictEndpointsIntegrationTests : IAsyncLifetime
         return document.RootElement.Clone();
     }
 
-    [Fact]
+    [Fact(DisplayName = "The password grant issues a token")]
     public async Task The_password_grant_issues_a_token()
     {
         var response = await PostTokenAsync(
@@ -162,7 +162,7 @@ public sealed class OpenIddictEndpointsIntegrationTests : IAsyncLifetime
         payload.GetProperty("expires_in").GetInt64().ShouldBeGreaterThan(0);
     }
 
-    [Fact]
+    [Fact(DisplayName = "A wrong password is refused without leaking which half was wrong")]
     public async Task A_wrong_password_is_refused_without_leaking_which_half_was_wrong()
     {
         var wrongPassword = await PostTokenAsync(
@@ -190,7 +190,7 @@ public sealed class OpenIddictEndpointsIntegrationTests : IAsyncLifetime
             .ShouldBe(second.GetProperty("error_description").GetString());
     }
 
-    [Fact]
+    [Fact(DisplayName = "Error responses keep the standard oauth fields and add the kyrolus code")]
     public async Task Error_responses_keep_the_standard_oauth_fields_and_add_the_kyrolus_code()
     {
         var response = await PostTokenAsync(
@@ -210,7 +210,7 @@ public sealed class OpenIddictEndpointsIntegrationTests : IAsyncLifetime
         payload.GetProperty("error_code").GetString().ShouldBe("unauthorized");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Missing credentials produce field level errors")]
     public async Task Missing_credentials_produce_field_level_errors()
     {
         var response = await PostTokenAsync(
@@ -231,7 +231,7 @@ public sealed class OpenIddictEndpointsIntegrationTests : IAsyncLifetime
         fields.ShouldContain("password");
     }
 
-    [Fact]
+    [Fact(DisplayName = "An unsupported grant type is refused")]
     public async Task An_unsupported_grant_type_is_refused()
     {
         var response = await PostTokenAsync(
@@ -244,7 +244,7 @@ public sealed class OpenIddictEndpointsIntegrationTests : IAsyncLifetime
             .ShouldBe(Errors.UnsupportedGrantType);
     }
 
-    [Fact]
+    [Fact(DisplayName = "A refresh token can be redeemed")]
     public async Task A_refresh_token_can_be_redeemed()
     {
         var first = await ReadJsonAsync(await PostTokenAsync(
@@ -264,7 +264,7 @@ public sealed class OpenIddictEndpointsIntegrationTests : IAsyncLifetime
             .ShouldNotBeNullOrWhiteSpace();
     }
 
-    [Fact]
+    [Fact(DisplayName = "A refresh can narrow the granted scopes")]
     public async Task A_refresh_can_narrow_the_granted_scopes()
     {
         var first = await ReadJsonAsync(await PostTokenAsync(
@@ -293,7 +293,7 @@ public sealed class OpenIddictEndpointsIntegrationTests : IAsyncLifetime
         payload.TryGetProperty("email", out _).ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Disabling an account stops the next refresh")]
     public async Task Disabling_an_account_stops_the_next_refresh()
     {
         var first = await ReadJsonAsync(await PostTokenAsync(
@@ -319,7 +319,7 @@ public sealed class OpenIddictEndpointsIntegrationTests : IAsyncLifetime
             .ShouldContain("disabled");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Userinfo returns the claims the granted scopes allow")]
     public async Task Userinfo_returns_the_claims_the_granted_scopes_allow()
     {
         var token = (await ReadJsonAsync(await PostTokenAsync(
@@ -344,7 +344,7 @@ public sealed class OpenIddictEndpointsIntegrationTests : IAsyncLifetime
         payload.GetProperty("tenant_id").GetString().ShouldBe("contoso");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Userinfo withholds the email when its scope was not granted")]
     public async Task Userinfo_withholds_the_email_when_its_scope_was_not_granted()
     {
         var token = (await ReadJsonAsync(await PostTokenAsync(
@@ -364,7 +364,7 @@ public sealed class OpenIddictEndpointsIntegrationTests : IAsyncLifetime
         payload.TryGetProperty("name", out _).ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Userinfo refuses an unauthenticated request")]
     public async Task Userinfo_refuses_an_unauthenticated_request()
     {
         var response = await _client.GetAsync("/connect/userinfo");
@@ -372,7 +372,7 @@ public sealed class OpenIddictEndpointsIntegrationTests : IAsyncLifetime
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Token endpoint refuses password grant when Allow Password Flow is disabled")]
     public async Task Token_endpoint_refuses_password_grant_when_AllowPasswordFlow_is_disabled()
     {
         var options = _app.Services.GetRequiredService<KyrolusOpenIddictOptions>();
@@ -397,7 +397,7 @@ public sealed class OpenIddictEndpointsIntegrationTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [Fact(DisplayName = "A refresh token is refused when user is locked out")]
     public async Task A_refresh_token_is_refused_when_user_is_locked_out()
     {
         var first = await ReadJsonAsync(await PostTokenAsync(
@@ -429,7 +429,7 @@ public sealed class OpenIddictEndpointsIntegrationTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [Fact(DisplayName = "Userinfo refuses when user is deactivated")]
     public async Task Userinfo_refuses_when_user_is_deactivated()
     {
         var tokenResponse = await ReadJsonAsync(await PostTokenAsync(

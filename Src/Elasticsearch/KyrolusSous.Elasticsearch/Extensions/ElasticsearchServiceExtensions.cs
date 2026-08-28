@@ -69,6 +69,22 @@ public static class ElasticsearchServiceExtensions
         return services;
     }
 
+    public static IServiceCollection AddElasticsearchBulkBuffer<TDocument, TId>(
+        this IServiceCollection services,
+        Action<KyrolusElasticBulkBufferOptions>? configure = null)
+        where TDocument : class, new()
+    {
+        if (configure is not null)
+        {
+            services.Configure(configure);
+        }
+
+        services.AddSingleton<KyrolusElasticsearchBulkBuffer<TDocument, TId>>();
+        services.AddSingleton<IKyrolusElasticsearchBulkBuffer<TDocument, TId>>(sp => sp.GetRequiredService<KyrolusElasticsearchBulkBuffer<TDocument, TId>>());
+        services.AddHostedService(sp => sp.GetRequiredService<KyrolusElasticsearchBulkBuffer<TDocument, TId>>());
+        return services;
+    }
+
     public static IHealthChecksBuilder AddElasticsearchHealthCheck(
         this IHealthChecksBuilder builder,
         string name = "elasticsearch",
@@ -95,6 +111,8 @@ public static class ElasticsearchServiceExtensions
         });
 
         services.AddScoped<IKyrolusElasticIndexManager, KyrolusElasticIndexManager>();
+        services.AddScoped<IKyrolusElasticSnapshotManager, KyrolusElasticSnapshotManager>();
+        services.AddScoped<IKyrolusElasticSynonymManager, KyrolusElasticSynonymManager>();
         services.AddScoped(typeof(IKyrolusElasticRepository<,>), typeof(KyrolusElasticRepository<,>));
         services.AddScoped<KyrolusElasticSyncInterceptor>();
 

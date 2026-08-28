@@ -1,5 +1,6 @@
 using KyrolusSous.Auth.Sessions;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 
 namespace KyrolusSous.Auth.Sessions.UnitTests;
 
@@ -13,7 +14,7 @@ public class SessionManagerTests
         _manager = new KyrolusSessionManager(_store);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Start Session Creates Active Session")]
     public async Task StartSession_CreatesActiveSession()
     {
         var session = await _manager.StartSessionAsync(
@@ -32,7 +33,7 @@ public class SessionManagerTests
         isValid.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Revoke Session Invalidates Session")]
     public async Task RevokeSession_InvalidatesSession()
     {
         var session = await _manager.StartSessionAsync("user-200");
@@ -43,7 +44,7 @@ public class SessionManagerTests
         isValid.ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Revoke Other Sessions Revokes All Except Current")]
     public async Task RevokeOtherSessions_RevokesAllExceptCurrent()
     {
         var session1 = await _manager.StartSessionAsync("user-300", deviceInfo: "Laptop");
@@ -58,7 +59,7 @@ public class SessionManagerTests
         (await _manager.ValidateSessionAsync(session3.SessionId)).ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Heartbeat Updates Activity")]
     public async Task Heartbeat_UpdatesActivity()
     {
         var session = await _manager.StartSessionAsync("user-400");
@@ -73,7 +74,7 @@ public class SessionManagerTests
         updated.IpAddress.ShouldBe("10.0.0.1");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Di Registration Add Kyrolus Sessions Registers Services")]
     public void DiRegistration_AddKyrolusSessions_RegistersServices()
     {
         var services = new ServiceCollection();
@@ -85,7 +86,7 @@ public class SessionManagerTests
         provider.GetService<IKyrolusSessionManager>().ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Heartbeat Does Not Revive Revoked Or Expired Session")]
     public async Task Heartbeat_DoesNotRevive_RevokedOrExpiredSession()
     {
         var session = await _manager.StartSessionAsync("user-dead");
@@ -102,7 +103,7 @@ public class SessionManagerTests
         loaded.LastActiveAt.ShouldBe(originalActivity); // Unchanged!
     }
 
-    [Fact]
+    [Fact(DisplayName = "Purge Inactive Sessions Removes Old Sessions From Memory")]
     public async Task PurgeInactiveSessions_RemovesOldSessionsFromMemory()
     {
         var session1 = await _manager.StartSessionAsync("user-p1", customLifetime: TimeSpan.FromSeconds(-10));
@@ -113,7 +114,7 @@ public class SessionManagerTests
         purged.ShouldBeGreaterThanOrEqualTo(2);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Start Session Truncates Excessively Long User Agent")]
     public async Task StartSession_TruncatesExcessivelyLongUserAgent()
     {
         var hugeAgent = new string('A', 1000);
@@ -123,7 +124,7 @@ public class SessionManagerTests
         session.UserAgent.Length.ShouldBe(512);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Is Active Respects Clock Skew Tolerance")]
     public void IsActive_RespectsClockSkewTolerance()
     {
         var session = new KyrolusUserSession
@@ -139,7 +140,7 @@ public class SessionManagerTests
         session.IsActive(clockSkew: TimeSpan.FromSeconds(5)).ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Start Session Revokes Oldest Session When Max Active Sessions Limit Exceeded")]
     public async Task StartSession_RevokesOldestSession_WhenMaxActiveSessionsLimitExceeded()
     {
         var options = new KyrolusSessionOptions { MaxActiveSessionsPerUser = 2 };
@@ -162,7 +163,7 @@ public class SessionManagerTests
         (await manager.ValidateSessionAsync(s3.SessionId)).ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Create Session Async Does Not Throw Under Rapid Creation")]
     public async Task CreateSessionAsync_DoesNotThrow_UnderRapidCreation()
     {
         var store = new KyrolusInMemorySessionStore();
@@ -181,7 +182,7 @@ public class SessionManagerTests
         active.Count.ShouldBe(100);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Start Session Strips Control Characters From Telemetry")]
     public async Task StartSession_StripsControlCharacters_FromTelemetry()
     {
         var taintedAgent = "Mozilla/5.0\r\nInjected-Header: evil\0";
@@ -200,7 +201,7 @@ public class SessionManagerTests
         device.ShouldBe("iPhone15Pro");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Start Session Clamps Default Lifetime To At Least One Minute")]
     public async Task StartSession_ClampsDefaultLifetime_ToAtLeastOneMinute()
     {
         var managerWithZero = new KyrolusSessionManager(new KyrolusInMemorySessionStore(), new KyrolusSessionOptions
@@ -210,5 +211,30 @@ public class SessionManagerTests
 
         var session = await managerWithZero.StartSessionAsync("user-clamp");
         (session.ExpiresAt - session.CreatedAt).ShouldBeGreaterThanOrEqualTo(TimeSpan.FromMinutes(1));
+    }
+
+    [Fact(DisplayName = "Cache Session Store Creates And Retrieves Sessions Correctly")]
+    public async Task CacheSessionStore_CreatesAndRetrievesSessions_Correctly()
+    {
+        var cache = NSubstitute.Substitute.For<KyrolusSous.Caching.Abstractions.IKyrolusCacheProvider>();
+        var store = new KyrolusCacheSessionStore(cache);
+
+        var session = new KyrolusUserSession
+        {
+            SessionId = "cache-session-id",
+            UserId = "user-cache-1",
+            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(7)
+        };
+
+        cache.GetAsync<KyrolusUserSession>("auth:session:id:cache-session-id", Arg.Any<CancellationToken>())
+            .Returns(session);
+
+        await store.CreateSessionAsync(session);
+        await cache.Received(1).SetAsync("auth:session:id:cache-session-id", session, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+
+        var fetched = await store.GetSessionAsync("cache-session-id");
+        fetched.ShouldNotBeNull();
+        fetched.UserId.ShouldBe("user-cache-1");
     }
 }

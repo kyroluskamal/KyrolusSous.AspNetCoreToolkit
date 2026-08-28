@@ -13,6 +13,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\KyrolusSous.Auth.Abstractions\KyrolusSous.Auth.Abstractions.csproj" />
+    <ProjectReference Include="..\KyrolusSous.Auth.TokenRevocation\KyrolusSous.Auth.TokenRevocation.csproj" />
+    <ProjectReference Include="..\KyrolusSous.Auth.Sessions\KyrolusSous.Auth.Sessions.csproj" />
+    <ProjectReference Include="..\KyrolusSous.Auth.MagicLink\KyrolusSous.Auth.MagicLink.csproj" />
   </ItemGroup>
 
 </Project>

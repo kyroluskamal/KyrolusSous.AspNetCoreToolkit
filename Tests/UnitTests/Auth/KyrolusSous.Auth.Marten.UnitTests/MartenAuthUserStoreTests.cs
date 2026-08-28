@@ -8,7 +8,7 @@ namespace KyrolusSous.Auth.Marten.UnitTests;
 
 public class MartenAuthUserStoreTests
 {
-    [Fact]
+    [Fact(DisplayName = "Model Conversion To Auth User And Copy From Preserve All Fields")]
     public void ModelConversion_ToAuthUser_And_CopyFrom_PreserveAllFields()
     {
         var authUser = new KyrolusAuthUser
@@ -42,7 +42,7 @@ public class MartenAuthUserStoreTests
         backToAuth.Claims["dept"].ShouldBe("Engineering");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Create Async Stores Document And Saves Changes")]
     public async Task CreateAsync_StoresDocumentAndSavesChanges()
     {
         var session = Substitute.For<IDocumentSession>();
@@ -61,7 +61,7 @@ public class MartenAuthUserStoreTests
         await session.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
-    [Fact]
+    [Fact(DisplayName = "Find By Id Async Calls Session Load")]
     public async Task FindByIdAsync_CallsSessionLoad()
     {
         var session = Substitute.For<IDocumentSession>();
@@ -83,7 +83,7 @@ public class MartenAuthUserStoreTests
         found.UserName.ShouldBe("alice");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Record Failed Attempt Async Updates Document And Saves")]
     public async Task RecordFailedAttemptAsync_UpdatesDocumentAndSaves()
     {
         var session = Substitute.For<IDocumentSession>();
@@ -105,7 +105,7 @@ public class MartenAuthUserStoreTests
         await session.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
-    [Fact]
+    [Fact(DisplayName = "Di Registration Add Kyrolus Marten Auth Store Registers Interfaces")]
     public void DiRegistration_AddKyrolusMartenAuthStore_RegistersInterfaces()
     {
         var services = new ServiceCollection();
@@ -119,7 +119,7 @@ public class MartenAuthUserStoreTests
         provider.GetService<IKyrolusAuthUserLockoutStore>().ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Find By Email Async And Find By User Name Async Throw On Whitespace Or Empty")]
     public async Task FindByEmailAsync_And_FindByUserNameAsync_Throw_OnWhitespaceOrEmpty()
     {
         var session = Substitute.For<IDocumentSession>();
@@ -129,7 +129,7 @@ public class MartenAuthUserStoreTests
         await Should.ThrowAsync<ArgumentException>(async () => await store.FindByUserNameAsync("   "));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Record Failed Attempt Async Clamps Negative Count")]
     public async Task RecordFailedAttemptAsync_ClampsNegativeCount()
     {
         var session = Substitute.For<IDocumentSession>();

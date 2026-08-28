@@ -11,7 +11,7 @@ namespace KyrolusSous.Validation.DataAnnotations.Generator.UnitTests;
 
 public sealed class DataAnnotationsGeneratorTests
 {
-    [Fact]
+    [Fact(DisplayName = "Generator Generates Validator Class For Annotated Dto")]
     public void Generator_GeneratesValidatorClassForAnnotatedDto()
     {
         var source = @"

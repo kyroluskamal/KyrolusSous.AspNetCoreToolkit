@@ -28,7 +28,7 @@ public sealed class KyrolusExternalLoginHandlerTests
             DisplayName = "Ada Lovelace",
         };
 
-    [Fact]
+    [Fact(DisplayName = "An already linked identity signs in")]
     public async Task An_already_linked_identity_signs_in()
     {
         var user = _store.Add(new KyrolusAuthUser { UserName = "ada", Roles = { "Admin" } });
@@ -43,7 +43,7 @@ public sealed class KyrolusExternalLoginHandlerTests
             c.Type == KyrolusAuthConstants.Claims.Role && c.Value == "Admin");
     }
 
-    [Fact]
+    [Fact(DisplayName = "An unknown identity is refused when provisioning is off")]
     public async Task An_unknown_identity_is_refused_when_provisioning_is_off()
     {
         var result = await CreateHandler().HandleAsync(LoginInfo(), new KyrolusGoogleAuthOptions());
@@ -52,7 +52,7 @@ public sealed class KyrolusExternalLoginHandlerTests
         result.ErrorCode.ShouldBe(KyrolusAuthConstants.Errors.UserNotFound);
     }
 
-    [Fact]
+    [Fact(DisplayName = "An identity with no subject is refused")]
     public async Task An_identity_with_no_subject_is_refused()
     {
         var options = new KyrolusGoogleAuthOptions { AutoCreateUser = true };
@@ -63,7 +63,7 @@ public sealed class KyrolusExternalLoginHandlerTests
         result.ErrorCode.ShouldBe(KyrolusAuthConstants.Errors.ExternalLoginFailed);
     }
 
-    [Fact]
+    [Fact(DisplayName = "A verified email links to an existing account when allowed")]
     public async Task A_verified_email_links_to_an_existing_account_when_allowed()
     {
         var existing = _store.Add(new KyrolusAuthUser { UserName = "ada", Email = "ada@contoso.com" });
@@ -79,7 +79,7 @@ public sealed class KyrolusExternalLoginHandlerTests
         linked!.Id.ShouldBe(existing.Id);
     }
 
-    [Fact]
+    [Fact(DisplayName = "An unverified email never links to an existing account")]
     public async Task An_unverified_email_never_links_to_an_existing_account()
     {
         _store.Add(new KyrolusAuthUser { UserName = "ada", Email = "ada@contoso.com" });
@@ -93,7 +93,7 @@ public sealed class KyrolusExternalLoginHandlerTests
         result.ErrorCode.ShouldBe(KyrolusAuthConstants.Errors.UserNotFound);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Linking by email stays off unless it is asked for")]
     public async Task Linking_by_email_stays_off_unless_it_is_asked_for()
     {
         _store.Add(new KyrolusAuthUser { UserName = "ada", Email = "ada@contoso.com" });
@@ -103,7 +103,7 @@ public sealed class KyrolusExternalLoginHandlerTests
         result.Succeeded.ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "An unknown identity is provisioned when asked for")]
     public async Task An_unknown_identity_is_provisioned_when_asked_for()
     {
         var options = new KyrolusGoogleAuthOptions { AutoCreateUser = true, DefaultRole = "Member" };
@@ -120,7 +120,7 @@ public sealed class KyrolusExternalLoginHandlerTests
         created.Roles.ShouldContain("Member");
     }
 
-    [Fact]
+    [Fact(DisplayName = "A provisioned user without an email gets a provider scoped user name")]
     public async Task A_provisioned_user_without_an_email_gets_a_provider_scoped_user_name()
     {
         var options = new KyrolusGoogleAuthOptions { AutoCreateUser = true };
@@ -131,7 +131,7 @@ public sealed class KyrolusExternalLoginHandlerTests
         created!.UserName.ShouldBe("google:google-123");
     }
 
-    [Fact]
+    [Fact(DisplayName = "A disabled account is refused")]
     public async Task A_disabled_account_is_refused()
     {
         var user = _store.Add(new KyrolusAuthUser { UserName = "ada", IsActive = false });
@@ -143,7 +143,7 @@ public sealed class KyrolusExternalLoginHandlerTests
         result.ErrorCode.ShouldBe(KyrolusAuthConstants.Errors.UserInactive);
     }
 
-    [Fact]
+    [Fact(DisplayName = "A provisioned user inherits Default Tenant Id and trimmed email")]
     public async Task A_provisioned_user_inherits_DefaultTenantId_and_trimmed_email()
     {
         var options = new KyrolusGoogleAuthOptions

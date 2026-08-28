@@ -42,7 +42,7 @@ public sealed class KyrolusUserAuthenticatorTests
         return _store.Add(user);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Authenticate succeeds with the right password")]
     public async Task Authenticate_succeeds_with_the_right_password()
     {
         var user = SeedUser();
@@ -53,7 +53,7 @@ public sealed class KyrolusUserAuthenticatorTests
         result.User!.Id.ShouldBe(user.Id);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Authenticate succeeds with the email address")]
     public async Task Authenticate_succeeds_with_the_email_address()
     {
         SeedUser();
@@ -63,7 +63,7 @@ public sealed class KyrolusUserAuthenticatorTests
         result.Succeeded.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Authenticate refuses the email address when email sign in is off")]
     public async Task Authenticate_refuses_the_email_address_when_email_sign_in_is_off()
     {
         SeedUser();
@@ -75,7 +75,7 @@ public sealed class KyrolusUserAuthenticatorTests
         result.ErrorCode.ShouldBe(KyrolusAuthConstants.Errors.InvalidCredentials);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Authenticate reports the same error for a wrong password and an unknown user")]
     public async Task Authenticate_reports_the_same_error_for_a_wrong_password_and_an_unknown_user()
     {
         SeedUser();
@@ -90,7 +90,7 @@ public sealed class KyrolusUserAuthenticatorTests
         wrongPassword.ErrorCode.ShouldBe(KyrolusAuthConstants.Errors.InvalidCredentials);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Authenticate refuses a disabled account")]
     public async Task Authenticate_refuses_a_disabled_account()
     {
         SeedUser(configure: u => u.IsActive = false);
@@ -101,7 +101,7 @@ public sealed class KyrolusUserAuthenticatorTests
         result.ErrorCode.ShouldBe(KyrolusAuthConstants.Errors.UserInactive);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Authenticate refuses an unconfirmed email when configured to")]
     public async Task Authenticate_refuses_an_unconfirmed_email_when_configured_to()
     {
         SeedUser(configure: u => u.EmailConfirmed = false);
@@ -113,7 +113,7 @@ public sealed class KyrolusUserAuthenticatorTests
         result.ErrorCode.ShouldBe(KyrolusAuthConstants.Errors.EmailNotConfirmed);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Authenticate refuses a user with no password hash")]
     public async Task Authenticate_refuses_a_user_with_no_password_hash()
     {
         // An account that only ever signs in through an external provider.
@@ -125,7 +125,7 @@ public sealed class KyrolusUserAuthenticatorTests
         result.ErrorCode.ShouldBe(KyrolusAuthConstants.Errors.InvalidCredentials);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Repeated failures lock the account out")]
     public async Task Repeated_failures_lock_the_account_out()
     {
         var user = SeedUser();
@@ -149,7 +149,7 @@ public sealed class KyrolusUserAuthenticatorTests
         locked.ErrorCode.ShouldBe(KyrolusAuthConstants.Errors.UserLockedOut);
     }
 
-    [Fact]
+    [Fact(DisplayName = "A lockout expires")]
     public async Task A_lockout_expires()
     {
         SeedUser();
@@ -167,7 +167,7 @@ public sealed class KyrolusUserAuthenticatorTests
         result.Succeeded.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "A successful sign in clears the failure counter")]
     public async Task A_successful_sign_in_clears_the_failure_counter()
     {
         var user = SeedUser();
@@ -182,7 +182,7 @@ public sealed class KyrolusUserAuthenticatorTests
         user.LockoutEnd.ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Failures are not counted without a lockout store")]
     public async Task Failures_are_not_counted_without_a_lockout_store()
     {
         var user = SeedUser();
@@ -193,7 +193,7 @@ public sealed class KyrolusUserAuthenticatorTests
         user.AccessFailedCount.ShouldBe(0);
     }
 
-    [Theory]
+    [Theory(DisplayName = "Authenticate rejects empty input")]
     [InlineData("", "pw")]
     [InlineData("   ", "pw")]
     [InlineData("ada", "")]
@@ -207,7 +207,7 @@ public sealed class KyrolusUserAuthenticatorTests
         result.ErrorCode.ShouldBe(KyrolusAuthConstants.Errors.InvalidCredentials);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Authenticate succeeds with padded whitespace in username or email")]
     public async Task Authenticate_succeeds_with_padded_whitespace_in_username_or_email()
     {
         var user = SeedUser("grace", "p@ssword!");
@@ -223,7 +223,7 @@ public sealed class KyrolusUserAuthenticatorTests
         resultEmail.User!.Id.ShouldBe(user.Id);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Authenticate Rejects Oversized Inputs")]
     public async Task Authenticate_Rejects_Oversized_Inputs()
     {
         SeedUser("grace", "p@ssword!");
@@ -240,7 +240,7 @@ public sealed class KyrolusUserAuthenticatorTests
         res2.ErrorCode.ShouldBe(KyrolusAuthConstants.Errors.InvalidCredentials);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Kyrolus Auth User Add Role Deduplicates And Trims")]
     public void KyrolusAuthUser_AddRole_DeduplicatesAndTrims()
     {
         var user = new KyrolusAuthUser();
@@ -254,7 +254,7 @@ public sealed class KyrolusUserAuthenticatorTests
         user.Roles.ShouldContain("Editor");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Password Hasher Verify Fast Fails Oversized Password")]
     public void PasswordHasher_Verify_FastFails_OversizedPassword()
     {
         var hasher = new KyrolusPbkdf2PasswordHasher(Microsoft.Extensions.Options.Options.Create(new KyrolusAuthOptions()));
@@ -265,7 +265,7 @@ public sealed class KyrolusUserAuthenticatorTests
         result.ShouldBe(KyrolusPasswordVerificationResult.Failed);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Claims Principal Factory Throws When User Id Is Null Or Whitespace")]
     public async Task ClaimsPrincipalFactory_Throws_WhenUserIdIsNullOrWhitespace()
     {
         var factory = new KyrolusClaimsPrincipalFactory(Microsoft.Extensions.Options.Options.Create(new KyrolusAuthOptions()));
@@ -275,7 +275,7 @@ public sealed class KyrolusUserAuthenticatorTests
             await factory.CreateAsync(user, ["profile"], "test"));
     }
 
-    [Fact]
+    [Fact(DisplayName = "In Memory Auth User Store Find By Id Async Returns Null For Whitespace")]
     public async Task InMemoryAuthUserStore_FindByIdAsync_ReturnsNull_ForWhitespace()
     {
         var store = new KyrolusInMemoryAuthUserStore();

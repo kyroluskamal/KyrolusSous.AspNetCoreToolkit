@@ -35,7 +35,7 @@ public class DataProtectionTests
         _protector = _services.GetRequiredService<IDataProtectionProvider>().CreateProtector("UnitTests.Purpose");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Try Unprotect With Valid Ciphertext Returns True And Plaintext")]
     public void TryUnprotect_WithValidCiphertext_ReturnsTrueAndPlaintext()
     {
         var original = "SecretPassword123!";
@@ -47,7 +47,7 @@ public class DataProtectionTests
         result.ShouldBe(original);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Try Unprotect With Invalid Ciphertext Returns False Without Throwing")]
     public void TryUnprotect_WithInvalidCiphertext_ReturnsFalseWithoutThrowing()
     {
         var invalidCipher = "NotAValidBase64ProtectedString";
@@ -58,7 +58,7 @@ public class DataProtectionTests
         result.ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Try Unprotect With Tampered Ciphertext Returns False Without Throwing")]
     public void TryUnprotect_WithTamperedCiphertext_ReturnsFalseWithoutThrowing()
     {
         var original = "ConfidentialData";
@@ -71,7 +71,7 @@ public class DataProtectionTests
         result.ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Try Unprotect With Null Or Empty Returns False")]
     public void TryUnprotect_WithNullOrEmpty_ReturnsFalse()
     {
         _protector.TryUnprotect((string?)null, out var r1).ShouldBeFalse();
@@ -84,7 +84,7 @@ public class DataProtectionTests
         r3.ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Try Unprotect Bytes With Valid Data Returns True And Plaintext Bytes")]
     public void TryUnprotect_Bytes_WithValidData_ReturnsTrueAndPlaintextBytes()
     {
         var originalBytes = Encoding.UTF8.GetBytes("BinarySecretPayload");
@@ -97,7 +97,7 @@ public class DataProtectionTests
         resultBytes.ShouldBe(originalBytes);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Try Unprotect Bytes With Invalid Data Returns False")]
     public void TryUnprotect_Bytes_WithInvalidData_ReturnsFalse()
     {
         var invalidBytes = new byte[] { 1, 2, 3, 4, 5 };
@@ -108,7 +108,7 @@ public class DataProtectionTests
         result.ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Protect With Expiry With Valid Duration Unprotects Successfully")]
     public void ProtectWithExpiry_WithValidDuration_UnprotectsSuccessfully()
     {
         var original = "SelfExpiringToken";
@@ -118,7 +118,7 @@ public class DataProtectionTests
         decrypted.ShouldBe(original);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Protect With Expiry When Expired Throws Cryptographic Exception On Unprotect")]
     public void ProtectWithExpiry_WhenExpired_ThrowsCryptographicExceptionOnUnprotect()
     {
         var original = "ExpiredToken";
@@ -131,7 +131,7 @@ public class DataProtectionTests
         });
     }
 
-    [Fact]
+    [Fact(DisplayName = "Try Unprotect With Expiry When Expired Returns False Without Throwing")]
     public void TryUnprotectWithExpiry_WhenExpired_ReturnsFalseWithoutThrowing()
     {
         var original = "ExpiredToken";
@@ -143,7 +143,7 @@ public class DataProtectionTests
         decrypted.ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Try Unprotect With Expiry With Valid Token Returns True And Plaintext")]
     public void TryUnprotectWithExpiry_WithValidToken_ReturnsTrueAndPlaintext()
     {
         var original = "FreshValidToken";
@@ -155,7 +155,7 @@ public class DataProtectionTests
         decrypted.ShouldBe(original);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Re Encrypt Re Protects Under Active Key")]
     public void ReEncrypt_ReProtectsUnderActiveKey()
     {
         var original = "DataToMigrate";
@@ -168,7 +168,7 @@ public class DataProtectionTests
         decrypted.ShouldBe(original);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Try Re Encrypt With Invalid Data Returns False")]
     public void TryReEncrypt_WithInvalidData_ReturnsFalse()
     {
         var success = _protector.TryReEncrypt("CorruptedOldCiphertext", out var reEncrypted);
@@ -177,7 +177,7 @@ public class DataProtectionTests
         reEncrypted.ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Tenant Data Protection Provider Isolates Tenants Different Tenants Cannot Decrypt")]
     public void TenantDataProtectionProvider_IsolatesTenants_DifferentTenantsCannotDecrypt()
     {
         var tenantProvider = _services.GetRequiredService<IKyrolusTenantDataProtectionProvider>();
@@ -195,7 +195,7 @@ public class DataProtectionTests
         tenant2Protector.TryUnprotect(cipher, out _).ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Data Protector Factory Creates Named And Typed Protectors")]
     public void DataProtectorFactory_CreatesNamedAndTypedProtectors()
     {
         var factory = _services.GetRequiredService<IKyrolusDataProtectorFactory>();
@@ -210,7 +210,7 @@ public class DataProtectionTests
         protectorB.TryUnprotect(cipherA, out _).ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Key Manager Create Rotate And Revoke Keys")]
     public async Task KeyManager_CreateRotateAndRevokeKeys()
     {
         var keyManager = _services.GetRequiredService<IKyrolusDataProtectionKeyManager>();
@@ -233,7 +233,7 @@ public class DataProtectionTests
         key1AfterRevocation.RevokedAt.ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Key Rotation Worker When Expiring Soon Automatically Rotates Key")]
     public async Task KeyRotationWorker_WhenExpiringSoon_AutomaticallyRotatesKey()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"dp_test_{Guid.NewGuid():N}");
@@ -275,7 +275,7 @@ public class DataProtectionTests
         }
     }
 
-    [Fact]
+    [Fact(DisplayName = "Key Rotation Worker When Healthy Does Not Rotate")]
     public async Task KeyRotationWorker_WhenHealthy_DoesNotRotate()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"dp_test_{Guid.NewGuid():N}");
@@ -314,7 +314,7 @@ public class DataProtectionTests
         }
     }
 
-    [Fact]
+    [Fact(DisplayName = "File Key Escrow Sink Stores Key In Directory")]
     public void FileKeyEscrowSink_StoresKeyInDirectory()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"escrow_test_{Guid.NewGuid():N}");
@@ -338,7 +338,7 @@ public class DataProtectionTests
         }
     }
 
-    [Fact]
+    [Fact(DisplayName = "Options Validator Validates Application Name")]
     public void OptionsValidator_ValidatesApplicationName()
     {
         var validator = new KyrolusDataProtectionOptionsValidator();
@@ -350,7 +350,7 @@ public class DataProtectionTests
         validator.Validate(null, invalidOptions).Failed.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Health Check Returns Healthy Result")]
     public async Task HealthCheck_ReturnsHealthyResult()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"health_test_{Guid.NewGuid():N}");
@@ -380,7 +380,7 @@ public class DataProtectionTests
 
     #region Base64Url Tests
 
-    [Fact]
+    [Fact(DisplayName = "Protect As Base64 Url Returns Url Safe String")]
     public void ProtectAsBase64Url_ReturnsUrlSafeString()
     {
         var original = "Hello+World/With=Special?Chars&Data";
@@ -394,7 +394,7 @@ public class DataProtectionTests
         decrypted.ShouldBe(original);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Try Unprotect From Base64 Url With Corrupted String Returns False Without Throwing")]
     public void TryUnprotectFromBase64Url_WithCorruptedString_ReturnsFalseWithoutThrowing()
     {
         var success = _protector.TryUnprotectFromBase64Url("InvalidBase64UrlData!@#", out var result);
@@ -403,7 +403,7 @@ public class DataProtectionTests
         result.ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Protect With Expiry As Base64 Url Handles Lifetime And Expiration")]
     public void ProtectWithExpiryAsBase64Url_HandlesLifetimeAndExpiration()
     {
         var original = "UrlSafeExpiringToken";
@@ -423,7 +423,7 @@ public class DataProtectionTests
 
     #region Generic Object Protection Tests
 
-    [Fact]
+    [Fact(DisplayName = "Protect Object Serializes And Unprotects Complex Record")]
     public void ProtectObject_SerializesAndUnprotectsComplexRecord()
     {
         var payload = new TestUserPayload(42, "admin@enterprise.org", "SuperAdministrator");
@@ -436,7 +436,7 @@ public class DataProtectionTests
         decrypted.Role.ShouldBe("SuperAdministrator");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Try Unprotect Object With Corrupted Payload Returns False Without Throwing")]
     public void TryUnprotectObject_WithCorruptedPayload_ReturnsFalseWithoutThrowing()
     {
         var success = _protector.TryUnprotectObject<TestUserPayload>("CorruptedCiphertext", out var payload);
@@ -445,7 +445,7 @@ public class DataProtectionTests
         payload.ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Protect Object With Expiry When Valid And Expired Behaves Correctly")]
     public void ProtectObjectWithExpiry_WhenValidAndExpired_BehavesCorrectly()
     {
         var payload = new TestUserPayload(100, "user@test.com", "Member");
@@ -464,7 +464,7 @@ public class DataProtectionTests
 
     #region Stream Encryption Tests
 
-    [Fact]
+    [Fact(DisplayName = "Protect Stream Async And Unprotect Stream Async Roundtrips Stream Correctly")]
     public async Task ProtectStreamAsync_And_UnprotectStreamAsync_RoundtripsStreamCorrectly()
     {
         var originalText = string.Join("\n", Enumerable.Range(1, 500).Select(i => $"Large data row number {i} with payload content."));
@@ -486,7 +486,7 @@ public class DataProtectionTests
         decryptedText.ShouldBe(originalText);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Unprotect Stream Async With Invalid Magic Throws Cryptographic Exception")]
     public async Task UnprotectStreamAsync_WithInvalidMagic_ThrowsCryptographicException()
     {
         var badBytes = new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04 };
@@ -503,7 +503,7 @@ public class DataProtectionTests
 
     #region EF Core Encrypted Property Tests
 
-    [Fact]
+    [Fact(DisplayName = "Ef Core Property With Kyrolus Encrypted Attribute Is Transparently Encrypted")]
     public async Task EfCore_PropertyWithKyrolusEncryptedAttribute_IsTransparentlyEncrypted()
     {
         var options = new DbContextOptionsBuilder<TestCustomerDbContext>()
@@ -538,7 +538,7 @@ public class DataProtectionTests
 
     #region Audit Hardening Tests
 
-    [Fact]
+    [Fact(DisplayName = "Try Unprotect With Expiry With Clock Skew Allows Grace Period")]
     public void TryUnprotectWithExpiry_WithClockSkew_AllowsGracePeriod()
     {
         var original = "SkewTestPayload";
@@ -553,7 +553,7 @@ public class DataProtectionTests
         decrypted.ShouldBe(original);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Base64 Url Modulo One Throws Or Fails Safely")]
     public void Base64Url_ModuloOne_ThrowsOrFailsSafely()
     {
         // 5 characters is mathematically invalid for Base64 (modulo 4 == 1)
@@ -562,7 +562,7 @@ public class DataProtectionTests
         success.ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Try Extract Vault Error Parses Errors Array")]
     public void TryExtractVaultError_ParsesErrorsArray()
     {
         var json = "{\"errors\": [\"permission denied\", \"token expired\"]}";
@@ -570,7 +570,7 @@ public class DataProtectionTests
         error.ShouldBe("permission denied; token expired");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Key Backup Service Export And Import Preserves Xml Content")]
     public async Task KeyBackupService_ExportAndImport_PreservesXmlContent()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"backup_test_{Guid.NewGuid():N}");

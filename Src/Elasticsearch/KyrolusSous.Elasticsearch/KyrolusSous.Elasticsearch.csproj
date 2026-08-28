@@ -17,6 +17,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Caching\KyrolusSous.Caching.Abstractions\KyrolusSous.Caching.Abstractions.csproj" />
     <ProjectReference Include="..\..\Compression\KyrolusSous.Compression.Abstractions\KyrolusSous.Compression.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Resilience\KyrolusSous.Resilience.Abstractions\KyrolusSous.Resilience.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

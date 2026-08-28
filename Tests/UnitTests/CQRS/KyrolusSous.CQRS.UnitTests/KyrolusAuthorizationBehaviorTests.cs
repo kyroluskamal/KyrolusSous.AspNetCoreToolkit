@@ -22,7 +22,7 @@ public class KyrolusAuthorizationBehaviorTests
 
     public sealed record PublicQuery(string Query) : IKyrolusQuery<string>;
 
-    [Fact]
+    [Fact(DisplayName = "Public request should proceed without authentication")]
     public async Task Public_request_should_proceed_without_authentication()
     {
         var behavior = new KyrolusAuthorizationBehavior<PublicQuery, string>(new KyrolusDefaultCurrentUserContext());
@@ -34,7 +34,7 @@ public class KyrolusAuthorizationBehaviorTests
         response.ShouldBe("results");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Unauthenticated user on protected command should throw security exception")]
     public async Task Unauthenticated_user_on_protected_command_should_throw_security_exception()
     {
         var unauthenticatedContext = new KyrolusDefaultCurrentUserContext(new ClaimsPrincipal(new ClaimsIdentity())); // not authenticated
@@ -46,7 +46,7 @@ public class KyrolusAuthorizationBehaviorTests
         ex.Message.ShouldContain("not authenticated");
     }
 
-    [Fact]
+    [Fact(DisplayName = "User with required role should succeed")]
     public async Task User_with_required_role_should_succeed()
     {
         var identity = new ClaimsIdentity(
@@ -67,7 +67,7 @@ public class KyrolusAuthorizationBehaviorTests
         response.ShouldBe("deleted");
     }
 
-    [Fact]
+    [Fact(DisplayName = "User without required role should throw security exception")]
     public async Task User_without_required_role_should_throw_security_exception()
     {
         var identity = new ClaimsIdentity(
@@ -85,7 +85,7 @@ public class KyrolusAuthorizationBehaviorTests
         ex.RequiredClaim.ShouldBe("Admin,Manager");
     }
 
-    [Fact]
+    [Fact(DisplayName = "User with permission should succeed")]
     public async Task User_with_permission_should_succeed()
     {
         var identity = new ClaimsIdentity(
@@ -105,7 +105,7 @@ public class KyrolusAuthorizationBehaviorTests
         response.ShouldBe(100);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Programmatic authorization request should validate properly")]
     public async Task Programmatic_authorization_request_should_validate_properly()
     {
         var identity = new ClaimsIdentity(

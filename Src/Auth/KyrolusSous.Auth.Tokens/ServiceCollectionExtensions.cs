@@ -20,4 +20,20 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
+
+    /// <summary>
+    /// Registers the Data Protection-backed user token service integrating with ASP.NET Core Data Protection key ring.
+    /// </summary>
+    public static IServiceCollection AddKyrolusDataProtectionUserTokens(
+        this IServiceCollection services,
+        Action<KyrolusUserTokenOptions>? configure = null)
+    {
+        var options = new KyrolusUserTokenOptions();
+        configure?.Invoke(options);
+
+        services.TryAddSingleton(options);
+        services.Replace(ServiceDescriptor.Singleton<IKyrolusUserTokenService, KyrolusDataProtectionUserTokenService>());
+
+        return services;
+    }
 }

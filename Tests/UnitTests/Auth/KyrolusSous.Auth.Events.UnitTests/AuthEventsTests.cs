@@ -5,7 +5,7 @@ namespace KyrolusSous.Auth.Events.UnitTests;
 
 public class AuthEventsTests
 {
-    [Fact]
+    [Fact(DisplayName = "Dispatcher Invokes Registered Handler")]
     public async Task Dispatcher_InvokesRegisteredHandler()
     {
         var services = new ServiceCollection();
@@ -26,7 +26,7 @@ public class AuthEventsTests
         TestLoginHandler.HandledEvents[0].EventType.ShouldBe("UserLoggedIn");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Dispatcher Continues Gracefully When Handler Throws")]
     public async Task Dispatcher_ContinuesGracefully_WhenHandlerThrows()
     {
         var services = new ServiceCollection();
@@ -48,7 +48,7 @@ public class AuthEventsTests
         SuccessfulHandler.Executed.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Dispatcher Skips Null Handlers And Executes Remaining")]
     public async Task Dispatcher_SkipsNullHandlers_AndExecutesRemaining()
     {
         var services = new ServiceCollection();
@@ -66,7 +66,7 @@ public class AuthEventsTests
         SuccessfulHandler.Executed.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Dispatcher Dispatches Account Locked And Token Revoked")]
     public async Task Dispatcher_DispatchesAccountLockedAndTokenRevoked()
     {
         var services = new ServiceCollection();
@@ -87,7 +87,7 @@ public class AuthEventsTests
         TestLockedHandler.HandledEvent.FailedCount.ShouldBe(5);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Di Registration Add Kyrolus Auth Events Registers Sink")]
     public void DiRegistration_AddKyrolusAuthEvents_RegistersSink()
     {
         var services = new ServiceCollection();
@@ -98,7 +98,7 @@ public class AuthEventsTests
         provider.GetService<IKyrolusAuthEventSink>().ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Publish Async Respects Cancellation Token")]
     public async Task PublishAsync_RespectsCancellationToken()
     {
         var services = new ServiceCollection();
@@ -117,7 +117,7 @@ public class AuthEventsTests
             await sink.PublishAsync(dummyEvent, cts.Token));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Login Failed Event Sanitizes Excessive Or Suspicious Identifier")]
     public void LoginFailedEvent_SanitizesExcessiveOrSuspiciousIdentifier()
     {
         var hugeIdentifier = new string('x', 500);
@@ -167,7 +167,7 @@ public class AuthEventsTests
         }
     }
 
-    [Fact]
+    [Fact(DisplayName = "Dispatcher Gracefully Handles Resolution Exceptions")]
     public async Task Dispatcher_GracefullyHandles_ResolutionExceptions()
     {
         var faultyProvider = new FaultyServiceProvider();
@@ -181,7 +181,7 @@ public class AuthEventsTests
         public object? GetService(Type serviceType) => throw new InvalidOperationException("DI container broken");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Token Revoked Event Throws When Jti Is Null Or Whitespace")]
     public void TokenRevokedEvent_Throws_WhenJtiIsNullOrWhitespace()
     {
         Should.Throw<ArgumentException>(() =>

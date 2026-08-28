@@ -8,7 +8,7 @@ public class TotpAndRecoveryTests
     private readonly KyrolusTotpService _totp = new();
     private readonly KyrolusRecoveryCodeService _recovery = new();
 
-    [Fact]
+    [Fact(DisplayName = "Generate Secret Returns Valid Base32 String")]
     public void GenerateSecret_ReturnsValidBase32String()
     {
         var secret = _totp.GenerateSecret();
@@ -17,7 +17,7 @@ public class TotpAndRecoveryTests
         secret.Length.ShouldBeGreaterThanOrEqualTo(16);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Generate Code Produces Six Digit Code")]
     public void GenerateCode_ProducesSixDigitCode()
     {
         var secret = _totp.GenerateSecret();
@@ -28,7 +28,7 @@ public class TotpAndRecoveryTests
         int.TryParse(code, out _).ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Code Validates Correct Code")]
     public void ValidateCode_ValidatesCorrectCode()
     {
         var secret = _totp.GenerateSecret();
@@ -40,7 +40,7 @@ public class TotpAndRecoveryTests
         isValid.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Code Allows Clock Drift Window")]
     public void ValidateCode_AllowsClockDriftWindow()
     {
         var secret = _totp.GenerateSecret();
@@ -53,7 +53,7 @@ public class TotpAndRecoveryTests
         isValid.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Code Rejects Wrong Code")]
     public void ValidateCode_RejectsWrongCode()
     {
         var secret = _totp.GenerateSecret();
@@ -67,7 +67,7 @@ public class TotpAndRecoveryTests
         }
     }
 
-    [Fact]
+    [Fact(DisplayName = "Generate Qr Code Uri Formats Correctly")]
     public void GenerateQrCodeUri_FormatsCorrectly()
     {
         var secret = "JBSWY3DPEHPK3PXP";
@@ -80,7 +80,7 @@ public class TotpAndRecoveryTests
         uri.ShouldContain("digits=6");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Recovery Codes Generate And Verify Work Correctly")]
     public void RecoveryCodes_GenerateAndVerify_WorkCorrectly()
     {
         var codes = _recovery.GenerateRecoveryCodes(5, 10);
@@ -95,7 +95,7 @@ public class TotpAndRecoveryTests
         _recovery.VerifyRecoveryCode("WRONGCODE1", hash).ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Generate Recovery Codes Clamps Excessive Count And Length")]
     public void GenerateRecoveryCodes_ClampsExcessiveCountAndLength()
     {
         var codes = _recovery.GenerateRecoveryCodes(count: 1000, length: 500);
@@ -104,7 +104,7 @@ public class TotpAndRecoveryTests
         codes[0].Length.ShouldBe(64);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Di Registration Add Kyrolus Mfa Registers Services")]
     public void DiRegistration_AddKyrolusMfa_RegistersServices()
     {
         var services = new ServiceCollection();
@@ -116,7 +116,7 @@ public class TotpAndRecoveryTests
         provider.GetService<IKyrolusRecoveryCodeService>().ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Code Succeeds When Secret Contains Trailing Equal Padding")]
     public void ValidateCode_Succeeds_WhenSecretContainsTrailingEqualPadding()
     {
         // Secret with RFC 4648 padding '='
@@ -129,7 +129,7 @@ public class TotpAndRecoveryTests
         isValid.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Code Handles Negative Clock Drift Gracefully")]
     public void ValidateCode_HandlesNegativeClockDriftGracefully()
     {
         var secret = _totp.GenerateSecret();
@@ -141,7 +141,7 @@ public class TotpAndRecoveryTests
         isValid.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Verify Recovery Code Normalizes Hyphens And Spaces In User Input")]
     public void VerifyRecoveryCode_NormalizesHyphensAndSpacesInUserInput()
     {
         var rawCode = "ABCDEFGH23";
@@ -152,7 +152,7 @@ public class TotpAndRecoveryTests
         _recovery.VerifyRecoveryCode(" abc-def gh23 ", hash).ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Code Succeeds With Formatted Code And Clamps High Drift")]
     public void ValidateCode_Succeeds_WithFormattedCode_And_ClampsHighDrift()
     {
         var secret = _totp.GenerateSecret();
@@ -167,7 +167,7 @@ public class TotpAndRecoveryTests
         _totp.ValidateCode(secret, spaceFormatted, timestamp: now).ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Totp Enforces Minimum Entropy On Low Entropy Secrets")]
     public void Totp_EnforcesMinimumEntropy_OnLowEntropySecrets()
     {
         var lowEntropySecret = "MY======";

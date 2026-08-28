@@ -24,7 +24,7 @@ public class KyrolusLivePushBehaviorTests
             => throw new InvalidOperationException("WebSocket closed");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Live push command should broadcast to publisher on success")]
     public async Task Live_push_command_should_broadcast_to_publisher_on_success()
     {
         var publisher = new InMemoryLivePushPublisher();
@@ -41,7 +41,7 @@ public class KyrolusLivePushBehaviorTests
         data.ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Live push publisher exception should be isolated and not throw")]
     public async Task Live_push_publisher_exception_should_be_isolated_and_not_throw()
     {
         var publisher = new ThrowingPushPublisher();
@@ -53,7 +53,7 @@ public class KyrolusLivePushBehaviorTests
         response.ShouldBe("Updated");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Plain command should not broadcast to publisher")]
     public async Task Plain_command_should_not_broadcast_to_publisher()
     {
         var publisher = new InMemoryLivePushPublisher();

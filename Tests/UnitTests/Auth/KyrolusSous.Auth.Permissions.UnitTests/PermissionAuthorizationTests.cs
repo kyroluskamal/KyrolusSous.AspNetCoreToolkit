@@ -9,7 +9,7 @@ public class PermissionAuthorizationTests
 {
     private readonly KyrolusClaimPermissionResolver _resolver = new();
 
-    [Fact]
+    [Fact(DisplayName = "Claim Resolver Extracts Permissions And Scopes")]
     public async Task ClaimResolver_ExtractsPermissionsAndScopes()
     {
         var identity = new ClaimsIdentity([
@@ -29,7 +29,7 @@ public class PermissionAuthorizationTests
         permissions.ShouldNotContain("orders.delete");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Authorization Handler Succeeds When All Permissions Present In And Mode")]
     public async Task AuthorizationHandler_Succeeds_WhenAllPermissionsPresent_InAndMode()
     {
         var handler = new KyrolusPermissionAuthorizationHandler(_resolver);
@@ -47,7 +47,7 @@ public class PermissionAuthorizationTests
         context.HasSucceeded.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Authorization Handler Fails When One Permission Missing In And Mode")]
     public async Task AuthorizationHandler_Fails_WhenOnePermissionMissing_InAndMode()
     {
         var handler = new KyrolusPermissionAuthorizationHandler(_resolver);
@@ -64,7 +64,7 @@ public class PermissionAuthorizationTests
         context.HasSucceeded.ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Authorization Handler Succeeds When Any Permission Present In Or Mode")]
     public async Task AuthorizationHandler_Succeeds_WhenAnyPermissionPresent_InOrMode()
     {
         var handler = new KyrolusPermissionAuthorizationHandler(_resolver);
@@ -81,7 +81,7 @@ public class PermissionAuthorizationTests
         context.HasSucceeded.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Authorization Handler Does Not Succeed When User Unauthenticated")]
     public async Task AuthorizationHandler_DoesNotSucceed_WhenUserUnauthenticated()
     {
         var handler = new KyrolusPermissionAuthorizationHandler(_resolver);
@@ -94,7 +94,7 @@ public class PermissionAuthorizationTests
         context.HasSucceeded.ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Di Registration Registers Permissions")]
     public void DiRegistration_RegistersPermissions()
     {
         var services = new ServiceCollection();
@@ -107,7 +107,7 @@ public class PermissionAuthorizationTests
         provider.GetServices<IAuthorizationHandler>().ShouldContain(h => h is KyrolusPermissionAuthorizationHandler);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Permission Handler Fails Closed When Permissions List Is Empty")]
     public async Task PermissionHandler_FailsClosed_WhenPermissionsListIsEmpty()
     {
         var handler = new KyrolusPermissionAuthorizationHandler(_resolver);
@@ -123,7 +123,7 @@ public class PermissionAuthorizationTests
         context.HasSucceeded.ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Permission Handler Succeeds With Different Casing")]
     public async Task PermissionHandler_Succeeds_WithDifferentCasing()
     {
         var handler = new KyrolusPermissionAuthorizationHandler(_resolver);
@@ -140,7 +140,7 @@ public class PermissionAuthorizationTests
         context.HasSucceeded.ShouldBeTrue();
     }
 
-    [Theory]
+    [Theory(DisplayName = "Permission Handler Succeeds With Wildcard And Hierarchy Permissions")]
     [InlineData("*", "orders.create")]
     [InlineData("orders.*", "orders.create")]
     [InlineData("orders:*", "orders:delete")]
@@ -159,7 +159,7 @@ public class PermissionAuthorizationTests
         context.HasSucceeded.ShouldBeTrue();
     }
 
-    [Theory]
+    [Theory(DisplayName = "Permission Handler Rejects Malformed Permissions With Consecutive Separators")]
     [InlineData("orders..create")]
     [InlineData("users::read")]
     public async Task PermissionHandler_RejectsMalformedPermissionsWithConsecutiveSeparators(string malformedPerm)
@@ -176,7 +176,7 @@ public class PermissionAuthorizationTests
         context.HasSucceeded.ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Permission Requirement Sanitizes And Deduplicates Permissions")]
     public void PermissionRequirement_SanitizesAndDeduplicatesPermissions()
     {
         var raw = new[] { "orders.read", "  ", "ORDERS.READ", "  orders.write  " };

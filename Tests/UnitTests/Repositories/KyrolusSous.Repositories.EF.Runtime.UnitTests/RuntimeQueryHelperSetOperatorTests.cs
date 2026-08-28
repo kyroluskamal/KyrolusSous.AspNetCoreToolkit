@@ -2,7 +2,7 @@
 
 public class RuntimeQueryHelperSetOperatorTests
 {
-    [Fact]
+    [Fact(DisplayName = "Build Filter In Operator Works With Nulls For Nullable Types")]
     public void BuildFilter_InOperator_Works_WithNulls_ForNullableTypes()
     {
         var result = RuntimeQueryHelperTestData.ApplyFilter(
@@ -13,7 +13,7 @@ public class RuntimeQueryHelperSetOperatorTests
         result.Any(x => x.NullableInt == 3).ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build Filter In Operator Works For Guid")]
     public void BuildFilter_InOperator_Works_ForGuid()
     {
         var result = RuntimeQueryHelperTestData.ApplyFilter(
@@ -22,7 +22,7 @@ public class RuntimeQueryHelperSetOperatorTests
         result.Select(x => x.Id).OrderBy(x => x).ShouldBe([RuntimeQueryHelperTestData.Id1, RuntimeQueryHelperTestData.Id3]);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build Filter In Operator Works For String With Pipes")]
     public void BuildFilter_InOperator_Works_ForString_WithPipes()
     {
         var result = RuntimeQueryHelperTestData.ApplyFilter(
@@ -31,7 +31,7 @@ public class RuntimeQueryHelperSetOperatorTests
         result.Select(x => x.Name).OrderBy(x => x).ShouldBe(["Alpha", "Gamma"]);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build Filter Between Operator Works For Date Time Offset")]
     public void BuildFilter_BetweenOperator_Works_ForDateTimeOffset()
     {
         var result = RuntimeQueryHelperTestData.ApplyFilter(
@@ -41,7 +41,7 @@ public class RuntimeQueryHelperSetOperatorTests
         result.All(x => x.DateTimeOffsetValue.Year == 2024).ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build Filter Between Operator Works For Time Only")]
     public void BuildFilter_BetweenOperator_Works_ForTimeOnly()
     {
         var result = RuntimeQueryHelperTestData.ApplyFilter(

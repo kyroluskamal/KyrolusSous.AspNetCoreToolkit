@@ -33,4 +33,13 @@ public static class ServiceCollectionExtensions
         services.Replace(ServiceDescriptor.Scoped<IKyrolusMagicLinkStore, TStore>());
         return services;
     }
+
+    /// <summary>
+    /// Registers the distributed cache-backed magic link store using <see cref="KyrolusSous.Caching.Abstractions.IKyrolusCacheProvider"/>.
+    /// </summary>
+    public static IServiceCollection AddKyrolusCacheMagicLinkStore(this IServiceCollection services)
+    {
+        services.Replace(ServiceDescriptor.Singleton<IKyrolusMagicLinkStore, KyrolusCacheMagicLinkStore>());
+        return services;
+    }
 }

@@ -51,3 +51,22 @@ public sealed class KyrolusElasticDateAttribute : Attribute
 {
     public string? Format { get; set; }
 }
+
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, Inherited = false, AllowMultiple = false)]
+public sealed class KyrolusElasticCompletionAttribute : Attribute
+{
+    public string Analyzer { get; set; } = "simple";
+
+    public string? SearchAnalyzer { get; set; }
+
+    public bool PreserveSeparators { get; set; } = true;
+
+    public bool PreservePositionIncrements { get; set; } = true;
+
+    public int MaxInputLength { get; set; } = 50;
+}
+
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, Inherited = false, AllowMultiple = false)]
+public sealed class KyrolusElasticPercolatorAttribute : Attribute
+{
+}

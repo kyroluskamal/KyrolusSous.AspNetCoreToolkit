@@ -54,7 +54,7 @@ public sealed class ExternalLoginPipelineTests
         return (provider, context);
     }
 
-    [Fact]
+    [Fact(DisplayName = "A refused login aborts the sign in")]
     public async Task A_refused_login_aborts_the_sign_in()
     {
         var handler = new StubHandler(KyrolusExternalLoginResult.Fail(
@@ -73,7 +73,7 @@ public sealed class ExternalLoginPipelineTests
         exception.Message.ShouldBe("No local account.");
     }
 
-    [Fact]
+    [Fact(DisplayName = "An unverified email is refused when verification is required")]
     public async Task An_unverified_email_is_refused_when_verification_is_required()
     {
         var options = new KyrolusGoogleAuthOptions { RequireVerifiedEmail = true };
@@ -89,7 +89,7 @@ public sealed class ExternalLoginPipelineTests
         exception.ErrorCode.ShouldBe(KyrolusAuthConstants.Errors.ExternalLoginDenied);
     }
 
-    [Fact]
+    [Fact(DisplayName = "A verified email passes the verification requirement")]
     public async Task A_verified_email_passes_the_verification_requirement()
     {
         var options = new KyrolusGoogleAuthOptions { RequireVerifiedEmail = true };
@@ -105,7 +105,7 @@ public sealed class ExternalLoginPipelineTests
             .ShouldBe(KyrolusAuthConstants.Providers.Google);
     }
 
-    [Fact]
+    [Fact(DisplayName = "The provider and subject are stamped onto the principal")]
     public async Task The_provider_and_subject_are_stamped_onto_the_principal()
     {
         var (provider, context) = Build(new KyrolusGoogleAuthOptions());
@@ -118,7 +118,7 @@ public sealed class ExternalLoginPipelineTests
             .ShouldBe("google-123");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Local claims from the handler are merged into the principal")]
     public async Task Local_claims_from_the_handler_are_merged_into_the_principal()
     {
         var handler = new StubHandler(KyrolusExternalLoginResult.Success(
@@ -138,7 +138,7 @@ public sealed class ExternalLoginPipelineTests
         context.Principal.FindFirst(ClaimTypes.NameIdentifier)!.Value.ShouldBe("google-123");
     }
 
-    [Fact]
+    [Fact(DisplayName = "A handler can replace the principal outright")]
     public async Task A_handler_can_replace_the_principal_outright()
     {
         var replacement = new ClaimsPrincipal(new ClaimsIdentity(
@@ -154,7 +154,7 @@ public sealed class ExternalLoginPipelineTests
         context.Principal.FindFirst(KyrolusAuthConstants.Claims.Sub)!.Value.ShouldBe("user-9");
     }
 
-    [Fact]
+    [Fact(DisplayName = "The handler sees the normalised identity")]
     public async Task The_handler_sees_the_normalised_identity()
     {
         var handler = new StubHandler(KyrolusExternalLoginResult.Success());
@@ -186,7 +186,7 @@ public sealed class ExternalLoginPipelineTests
         handler.ReceivedOptions.ShouldBeSameAs(options);
     }
 
-    [Fact]
+    [Fact(DisplayName = "A caller supplied creating ticket handler still runs")]
     public async Task A_caller_supplied_creating_ticket_handler_still_runs()
     {
         var options = new KyrolusGoogleAuthOptions();
@@ -207,7 +207,7 @@ public sealed class ExternalLoginPipelineTests
         ran.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "An external login without a valid provider key is rejected")]
     public async Task An_external_login_without_a_valid_provider_key_is_rejected()
     {
         var options = new KyrolusGoogleAuthOptions();

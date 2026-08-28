@@ -7,7 +7,7 @@ namespace KyrolusSous.Auth.MultiTenancy.UnitTests;
 
 public class MultiTenancyTests
 {
-    [Fact]
+    [Fact(DisplayName = "Header Resolver Extracts Tenant Id")]
     public async Task HeaderResolver_ExtractsTenantId()
     {
         var resolver = new KyrolusHeaderTenantResolver();
@@ -19,7 +19,7 @@ public class MultiTenancyTests
         tenantId.ShouldBe("tenant-apple");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Claim Resolver Extracts Tenant Claim")]
     public async Task ClaimResolver_ExtractsTenantClaim()
     {
         var resolver = new KyrolusClaimTenantResolver();
@@ -35,7 +35,7 @@ public class MultiTenancyTests
         tenantId.ShouldBe("tenant-microsoft");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Claim Resolver Rejects Non Ascii Tenant Claim")]
     public async Task ClaimResolver_RejectsNonAsciiTenantClaim()
     {
         var resolver = new KyrolusClaimTenantResolver();
@@ -50,7 +50,7 @@ public class MultiTenancyTests
         tenantId.ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Subdomain Resolver Extracts Subdomain")]
     public async Task SubdomainResolver_ExtractsSubdomain()
     {
         var resolver = new KyrolusSubdomainTenantResolver();
@@ -62,7 +62,7 @@ public class MultiTenancyTests
         tenantId.ShouldBe("acme");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Composite Resolver Resolves In Order")]
     public async Task CompositeResolver_ResolvesInOrder()
     {
         var composite = new KyrolusCompositeTenantResolver([
@@ -79,7 +79,7 @@ public class MultiTenancyTests
         tenantId.ShouldBe("header-tenant");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Di Registration Add Kyrolus Multi Tenancy Registers Services")]
     public void DiRegistration_AddKyrolusMultiTenancy_RegistersServices()
     {
         var services = new ServiceCollection();
@@ -91,7 +91,7 @@ public class MultiTenancyTests
         provider.GetService<IKyrolusTenantResolver>().ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Subdomain Resolver Ignores Port And Ip Addresses")]
     public async Task SubdomainResolver_IgnoresPortAndIpAddresses()
     {
         var resolver = new KyrolusSubdomainTenantResolver();
@@ -109,7 +109,7 @@ public class MultiTenancyTests
         portTenant.ShouldBe("tenant-corp");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Header Resolver Rejects Invalid Tenant Characters")]
     public async Task HeaderResolver_RejectsInvalidTenantCharacters()
     {
         var resolver = new KyrolusHeaderTenantResolver();
@@ -122,7 +122,7 @@ public class MultiTenancyTests
         tenantId.ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Tenant Endpoint Filter Forbids User Without Tenant Claim")]
     public async Task TenantEndpointFilter_ForbidsUserWithoutTenantClaim()
     {
         var filter = new KyrolusTenantEndpointFilter();
@@ -149,7 +149,7 @@ public class MultiTenancyTests
         result.ShouldBeOfType<Microsoft.AspNetCore.Http.HttpResults.ForbidHttpResult>();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Composite Resolver Falls Back When Earlier Resolver Throws")]
     public async Task CompositeResolver_FallsBack_WhenEarlierResolverThrows()
     {
         var throwingResolver = new ThrowingTenantResolver();
@@ -165,7 +165,7 @@ public class MultiTenancyTests
         tenantId.ShouldBe("tenant-fallback");
     }
 
-    [Theory]
+    [Theory(DisplayName = "Header Resolver Rejects Non Ascii And Homoglyph Tenant Ids")]
     [InlineData("\u0430cme")]
     [InlineData("t\u00e9nant")]
     [InlineData("tenant id")]
@@ -180,7 +180,7 @@ public class MultiTenancyTests
         result.ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Header Resolver Falls Back To Default Header When Null Or Whitespace")]
     public async Task HeaderResolver_FallsBackToDefaultHeader_WhenNullOrWhitespace()
     {
         var resolver = new KyrolusHeaderTenantResolver("   ");
@@ -191,7 +191,7 @@ public class MultiTenancyTests
         result.ShouldBe("tenant-safe");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Subdomain Resolver Rejects Non Ascii Subdomain")]
     public async Task SubdomainResolver_RejectsNonAsciiSubdomain()
     {
         var resolver = new KyrolusSubdomainTenantResolver();

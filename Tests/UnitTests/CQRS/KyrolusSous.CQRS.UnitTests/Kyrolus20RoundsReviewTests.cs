@@ -37,7 +37,7 @@ public class Kyrolus20RoundsReviewTests
         public TimeSpan ThrottleTimeout => TimeSpan.FromMilliseconds(50);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Round1 Throttling should trim keys and allow clear")]
     public async Task Round1_Throttling_should_trim_keys_and_allow_clear()
     {
         KyrolusThrottlingBehavior<ThrottledReq, int>.ClearSemaphores();
@@ -55,7 +55,7 @@ public class Kyrolus20RoundsReviewTests
     // ==========================================
     public sealed record IdempotentIntCmd(string IdempotencyKey) : IKyrolusCommand<string>, IIdempotentCommand<string>;
 
-    [Fact]
+    [Fact(DisplayName = "Round2 Idempotency should cache and return response")]
     public async Task Round2_Idempotency_should_cache_and_return_response()
     {
         var cache = Substitute.For<IKyrolusCacheProvider>();
@@ -84,7 +84,7 @@ public class Kyrolus20RoundsReviewTests
     // ==========================================
     public sealed record Round3Event(string Message);
 
-    [Fact]
+    [Fact(DisplayName = "Round3 Outbox should resolve types from appdomain")]
     public async Task Round3_Outbox_should_resolve_types_from_appdomain()
     {
         var store = new InMemoryOutboxStore();
@@ -105,7 +105,7 @@ public class Kyrolus20RoundsReviewTests
     // ==========================================
     // Round 4 & Round 9: Security Context & Scopes
     // ==========================================
-    [Fact]
+    [Fact(DisplayName = "Round4 and 9 Current User Context should parse roles and scopes")]
     public void Round4_and_9_CurrentUserContext_should_parse_roles_and_scopes()
     {
         var identity = new ClaimsIdentity([
@@ -145,7 +145,7 @@ public class Kyrolus20RoundsReviewTests
 
     public sealed record DummyCmd() : IKyrolusCommand<string>;
 
-    [Fact]
+    [Fact(DisplayName = "Round5 Ef cascading events should drain completely")]
     public async Task Round5_Ef_cascading_events_should_drain_completely()
     {
         var options = new DbContextOptionsBuilder<CascadingDbContext>()
@@ -175,7 +175,7 @@ public class Kyrolus20RoundsReviewTests
     // ==========================================
     // Round 6: Marten Domain Events from Response
     // ==========================================
-    [Fact]
+    [Fact(DisplayName = "Round6 Marten events from response should be dispatched")]
     public async Task Round6_Marten_events_from_response_should_be_dispatched()
     {
         var publisher = Substitute.For<IKyrolusMediatorPublisher>();
@@ -209,7 +209,7 @@ public class Kyrolus20RoundsReviewTests
         }
     }
 
-    [Fact]
+    [Fact(DisplayName = "Round7 Projection from response should be invoked")]
     public async Task Round7_Projection_from_response_should_be_invoked()
     {
         var services = new ServiceCollection();
@@ -234,7 +234,7 @@ public class Kyrolus20RoundsReviewTests
         public object? PushData => null;
     }
 
-    [Fact]
+    [Fact(DisplayName = "Round8 Live Push should fallback to response when pushdata is null")]
     public async Task Round8_LivePush_should_fallback_to_response_when_pushdata_is_null()
     {
         var publisher = new InMemoryLivePushPublisher();
@@ -254,7 +254,7 @@ public class Kyrolus20RoundsReviewTests
         public bool Cacheable { get; set; } = true;
     }
 
-    [Fact]
+    [Fact(DisplayName = "Round10 Query Caching should passthrough when cache provider is null")]
     public async Task Round10_QueryCaching_should_passthrough_when_cache_provider_is_null()
     {
         var behavior = new KyrolusQueryCachingBehavior<TestQuery, string>(cacheProvider: null, cacheKeyProvider: null);
@@ -265,7 +265,7 @@ public class Kyrolus20RoundsReviewTests
     // ==========================================
     // Round 11: Validation Nullable Collection
     // ==========================================
-    [Fact]
+    [Fact(DisplayName = "Round11 Validation Behavior should construct with null validators")]
     public async Task Round11_ValidationBehavior_should_construct_with_null_validators()
     {
         var behavior = new KyrolusValidationBehavior<TestQuery, string>(validators: null, engine: null);
@@ -276,7 +276,7 @@ public class Kyrolus20RoundsReviewTests
     // ==========================================
     // Round 12: Exception Mapping Nullable Collection
     // ==========================================
-    [Fact]
+    [Fact(DisplayName = "Round12 Exception Mapping Behavior should construct with null mappers")]
     public async Task Round12_ExceptionMappingBehavior_should_construct_with_null_mappers()
     {
         var behavior = new KyrolusExceptionMappingBehavior<TestQuery, string>(mappers: null);
@@ -287,7 +287,7 @@ public class Kyrolus20RoundsReviewTests
     // ==========================================
     // Round 13 & 14 & 15: Bulk & Count Null Safety
     // ==========================================
-    [Fact]
+    [Fact(DisplayName = "Round13 14 15 Handlers should throw Argument Null Exception on null input")]
     public async Task Round13_14_15_Handlers_should_throw_ArgumentNullException_on_null_input()
     {
         var uow = Substitute.For<IKyrolusUnitOfWork>();
@@ -308,7 +308,7 @@ public class Kyrolus20RoundsReviewTests
     // ==========================================
     public sealed record PagedTestQuery(int PageNumber, int PageSize) : IKyrolusQuery<string>;
 
-    [Fact]
+    [Fact(DisplayName = "Round16 Cache Key Provider should include page number and size")]
     public void Round16_CacheKeyProvider_should_include_page_number_and_size()
     {
         var provider = new KyrolusDefaultCacheKeyProvider();
@@ -325,7 +325,7 @@ public class Kyrolus20RoundsReviewTests
     // ==========================================
     // Round 17 & 18: Paged & Seek Navigation Helpers
     // ==========================================
-    [Fact]
+    [Fact(DisplayName = "Round17 and 18 Results should calculate navigation properties")]
     public void Round17_and_18_Results_should_calculate_navigation_properties()
     {
         var paged = new KyrolusPagedResult<string>(["a", "b"], TotalCount: 50, PageNumber: 2, PageSize: 10);
@@ -346,7 +346,7 @@ public class Kyrolus20RoundsReviewTests
     // ==========================================
     // Round 19: Telemetry Options Enabled Check
     // ==========================================
-    [Fact]
+    [Fact(DisplayName = "Round19 Telemetry should bypass when disabled")]
     public async Task Round19_Telemetry_should_bypass_when_disabled()
     {
         var options = new KyrolusCqrsPerformanceOptions { Enabled = false };
@@ -367,7 +367,7 @@ public class Kyrolus20RoundsReviewTests
         public bool IncludePayload => true;
     }
 
-    [Fact]
+    [Fact(DisplayName = "Round20 Audit should redact passwords and tokens")]
     public async Task Round20_Audit_should_redact_passwords_and_tokens()
     {
         var sink = new InMemoryAuditSink();

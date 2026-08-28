@@ -2,7 +2,7 @@
 
 public class RuntimeQueryHelperOrderByTests
 {
-    [Fact]
+    [Fact(DisplayName = "Build Order By Orders By Single Clause")]
     public void BuildOrderBy_OrdersBySingleClause()
     {
         var result = RuntimeQueryHelperTestData.ApplyOrderBy(
@@ -11,7 +11,7 @@ public class RuntimeQueryHelperOrderByTests
         result.Select(x => x.IntValue).ShouldBeInOrder();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build Order By Orders By Multiple Clauses")]
     public void BuildOrderBy_OrdersByMultipleClauses()
     {
         var result = RuntimeQueryHelperTestData.ApplyOrderBy(
@@ -25,7 +25,7 @@ public class RuntimeQueryHelperOrderByTests
         result.ShouldBe(sorted);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build Order By Throws For Invalid Property")]
     public void BuildOrderBy_Throws_ForInvalidProperty()
     {
         var helper = new RuntimeQueryHelper<RuntimeQueryHelperTestData.TestEntity>();

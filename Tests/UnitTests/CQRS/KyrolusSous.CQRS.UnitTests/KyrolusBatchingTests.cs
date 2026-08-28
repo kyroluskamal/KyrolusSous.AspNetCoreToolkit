@@ -23,7 +23,7 @@ public class KyrolusBatchingTests
             => Task.FromResult<IReadOnlyList<string>>(request.Keys.Select(k => $"User_{k}").ToList());
     }
 
-    [Fact]
+    [Fact(DisplayName = "Batch command handler should process items correctly")]
     public async Task Batch_command_handler_should_process_items_correctly()
     {
         var handler = new BulkCreateProductsHandler();
@@ -34,7 +34,7 @@ public class KyrolusBatchingTests
         count.ShouldBe(3);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Batch query handler should retrieve items by keys")]
     public async Task Batch_query_handler_should_retrieve_items_by_keys()
     {
         var handler = new BulkGetUsersHandler();

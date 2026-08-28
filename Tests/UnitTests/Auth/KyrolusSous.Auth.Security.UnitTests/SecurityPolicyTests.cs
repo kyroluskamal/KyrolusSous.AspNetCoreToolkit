@@ -7,7 +7,7 @@ public class SecurityPolicyTests
 {
     private readonly KyrolusPasswordPolicyChecker _checker = new();
 
-    [Fact]
+    [Fact(DisplayName = "Password Policy Accepts Strong Password")]
     public void PasswordPolicy_AcceptsStrongPassword()
     {
         var result = _checker.Check("P@ssw0rdSecure!2026");
@@ -17,7 +17,7 @@ public class SecurityPolicyTests
         result.Score.ShouldBeGreaterThanOrEqualTo(3);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Password Policy Rejects Short Password")]
     public void PasswordPolicy_RejectsShortPassword()
     {
         var result = _checker.Check("Ab1!");
@@ -26,7 +26,7 @@ public class SecurityPolicyTests
         result.Errors.ShouldContain(e => e.Contains("at least 8 characters"));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Password Policy Rejects Missing Special Character")]
     public void PasswordPolicy_RejectsMissingSpecialCharacter()
     {
         var result = _checker.Check("Password12345");
@@ -35,7 +35,7 @@ public class SecurityPolicyTests
         result.Errors.ShouldContain(e => e.Contains("non-alphanumeric"));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Password Policy Rejects Common Passwords")]
     public void PasswordPolicy_RejectsCommonPasswords()
     {
         var result = _checker.Check("password");
@@ -44,7 +44,7 @@ public class SecurityPolicyTests
         result.Errors.ShouldContain(e => e.Contains("too common"));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Brute Force Guard Locks Out After Max Attempts")]
     public async Task BruteForceGuard_LocksOutAfterMaxAttempts()
     {
         var guard = new KyrolusInMemoryBruteForceGuard(new KyrolusBruteForceOptions
@@ -72,7 +72,7 @@ public class SecurityPolicyTests
         (await guard.IsLockedOutAsync(key)).ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Di Registration Add Kyrolus Auth Security Registers Services")]
     public void DiRegistration_AddKyrolusAuthSecurity_RegistersServices()
     {
         var services = new ServiceCollection();
@@ -84,7 +84,7 @@ public class SecurityPolicyTests
         provider.GetService<IKyrolusBruteForceGuard>().ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Brute Force Guard Resets Counter After Lockout Expires")]
     public async Task BruteForceGuard_ResetsCounter_AfterLockoutExpires()
     {
         var guard = new KyrolusInMemoryBruteForceGuard(new KyrolusBruteForceOptions
@@ -111,7 +111,7 @@ public class SecurityPolicyTests
         (await guard.IsLockedOutAsync(key)).ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Password Policy Rejects Forbidden Password With Padded Whitespace Or Mixed Case")]
     public void PasswordPolicy_RejectsForbiddenPassword_WithPaddedWhitespaceOrMixedCase()
     {
         var resultUpper = _checker.Check("  PASSWORD123  ");
@@ -123,7 +123,7 @@ public class SecurityPolicyTests
         resultPadded.Errors.ShouldContain(e => e.Contains("too common"));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Password Policy Does Not Count Whitespace As Non Alphanumeric Special Character")]
     public void PasswordPolicy_DoesNotCountWhitespace_AsNonAlphanumericSpecialCharacter()
     {
         // Password has upper, lower, digit, and space (' '), but NO actual special symbol!
@@ -134,7 +134,7 @@ public class SecurityPolicyTests
         result.Errors.ShouldContain(e => e.Contains("non-alphanumeric"));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Is Password Previously Used Detects Reused Password")]
     public void IsPasswordPreviouslyUsed_DetectsReusedPassword()
     {
         var oldHashes = new List<string> { "hash:oldpassword1", "hash:oldpassword2", "hash:oldpassword3" };
@@ -144,7 +144,7 @@ public class SecurityPolicyTests
         _checker.IsPasswordPreviouslyUsed("brandNewPassword123!", oldHashes, verifier).ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Password Policy Fails Fast When Password Exceeds Max Length")]
     public void PasswordPolicy_FailsFast_WhenPasswordExceedsMaxLength()
     {
         var hugePassword = new string('A', 5000);
@@ -155,7 +155,7 @@ public class SecurityPolicyTests
         result.Errors[0].ShouldContain("cannot exceed");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Brute Force Guard Purges Stale Attempts When Older Than Lockout Duration")]
     public async Task BruteForceGuard_PurgesStaleAttempts_WhenOlderThanLockoutDuration()
     {
         var guard = new KyrolusInMemoryBruteForceGuard(new KyrolusBruteForceOptions
@@ -171,7 +171,7 @@ public class SecurityPolicyTests
         (await guard.IsLockedOutAsync("stale-user")).ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Password Policy Rejects Single Repeated Character Password")]
     public void PasswordPolicy_RejectsSingleRepeatedCharacterPassword()
     {
         var result = _checker.Check("AAAAAAAA", new KyrolusPasswordPolicyOptions
@@ -186,7 +186,7 @@ public class SecurityPolicyTests
         result.Errors.ShouldContain(e => e.Contains("single repeated character"));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Password Policy Throws When Min Length Greater Than Max Length")]
     public void PasswordPolicy_Throws_WhenMinLengthGreaterThanMaxLength()
     {
         var options = new KyrolusPasswordPolicyOptions
@@ -199,7 +199,7 @@ public class SecurityPolicyTests
             _checker.Check("validPassword123!", options));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Brute Force Guard Normalizes Whitespace In Keys")]
     public async Task BruteForceGuard_NormalizesWhitespaceInKeys()
     {
         var guard = new KyrolusInMemoryBruteForceGuard(new KyrolusBruteForceOptions

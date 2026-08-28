@@ -33,7 +33,7 @@ public sealed class ExternalProviderRegistrationTests
 
     // ── Configuration guards ─────────────────────────────────────────────
 
-    [Fact]
+    [Fact(DisplayName = "A provider with no credentials fails at startup")]
     public void A_provider_with_no_credentials_fails_at_startup()
     {
         var services = NewServices();
@@ -44,7 +44,7 @@ public sealed class ExternalProviderRegistrationTests
         exception.Message.ShouldContain("ClientId, ClientSecret");
     }
 
-    [Fact]
+    [Fact(DisplayName = "A provider with no credentials can be registered deliberately disabled")]
     public void A_provider_with_no_credentials_can_be_registered_deliberately_disabled()
     {
         var services = NewServices();
@@ -59,7 +59,7 @@ public sealed class ExternalProviderRegistrationTests
         descriptor.IsConfigured.ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "A second scheme without its own callback path fails at startup")]
     public void A_second_scheme_without_its_own_callback_path_fails_at_startup()
     {
         var services = NewServices();
@@ -76,7 +76,7 @@ public sealed class ExternalProviderRegistrationTests
         exception.Message.ShouldContain("CallbackPath");
     }
 
-    [Fact]
+    [Fact(DisplayName = "A second scheme with its own callback path registers")]
     public void A_second_scheme_with_its_own_callback_path_registers()
     {
         var services = NewServices();
@@ -106,7 +106,7 @@ public sealed class ExternalProviderRegistrationTests
 
     // ── Shared options plumbing ──────────────────────────────────────────
 
-    [Fact]
+    [Fact(DisplayName = "Shared options reach the underlying handler")]
     public void Shared_options_reach_the_underlying_handler()
     {
         var services = NewServices();
@@ -131,7 +131,7 @@ public sealed class ExternalProviderRegistrationTests
         google.Scope.ShouldContain("email");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Google sends hd and prompt as authorization parameters")]
     public void Google_sends_hd_and_prompt_as_authorization_parameters()
     {
         var services = NewServices();
@@ -155,7 +155,7 @@ public sealed class ExternalProviderRegistrationTests
         google.AccessType.ShouldBe("offline");
     }
 
-    [Fact]
+    [Fact(DisplayName = "The provider escape hatch runs last")]
     public void The_provider_escape_hatch_runs_last()
     {
         var services = NewServices();
@@ -174,7 +174,7 @@ public sealed class ExternalProviderRegistrationTests
 
     // ── Per-provider behaviour ───────────────────────────────────────────
 
-    [Fact]
+    [Fact(DisplayName = "Facebook sends the app secret proof by default")]
     public void Facebook_sends_the_app_secret_proof_by_default()
     {
         var services = NewServices();
@@ -192,7 +192,7 @@ public sealed class ExternalProviderRegistrationTests
         facebook.Fields.ShouldContain("birthday");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Git Hub derives its enterprise endpoints from the domain")]
     public void GitHub_derives_its_enterprise_endpoints_from_the_domain()
     {
         var services = NewServices();
@@ -215,7 +215,7 @@ public sealed class ExternalProviderRegistrationTests
         github.UserInformationEndpoint.ShouldNotContain("api.github.contoso.com");
     }
 
-    [Fact]
+    [Fact(DisplayName = "X requires pkce and adds offline access for refresh tokens")]
     public void X_requires_pkce_and_adds_offline_access_for_refresh_tokens()
     {
         var services = NewServices();
@@ -235,7 +235,7 @@ public sealed class ExternalProviderRegistrationTests
         twitter.UserFields.ShouldContain("profile_image_url");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Microsoft points at the tenant specific authority")]
     public void Microsoft_points_at_the_tenant_specific_authority()
     {
         var services = NewServices();
@@ -257,7 +257,7 @@ public sealed class ExternalProviderRegistrationTests
         microsoft.AdditionalAuthorizationParameters["domain_hint"].ShouldBe("contoso.com");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Microsoft keeps the common authority by default")]
     public void Microsoft_keeps_the_common_authority_by_default()
     {
         var services = NewServices();
@@ -272,7 +272,7 @@ public sealed class ExternalProviderRegistrationTests
             .AuthorizationEndpoint.ShouldContain("/common/");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Apple refuses two private key sources")]
     public void Apple_refuses_two_private_key_sources()
     {
         var services = NewServices();
@@ -287,7 +287,7 @@ public sealed class ExternalProviderRegistrationTests
         })).Message.ShouldContain("not both");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Apple refuses a client secret lifetime longer than six months")]
     public void Apple_refuses_a_client_secret_lifetime_longer_than_six_months()
     {
         var services = NewServices();
@@ -302,7 +302,7 @@ public sealed class ExternalProviderRegistrationTests
         })).Message.ShouldContain("6 months");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Apple is not considered configured without a signing key")]
     public void Apple_is_not_considered_configured_without_a_signing_key()
     {
         var services = NewServices();
@@ -316,7 +316,7 @@ public sealed class ExternalProviderRegistrationTests
         })).Message.ShouldContain("PrivateKeyPath");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Every provider registers a descriptor")]
     public void Every_provider_registers_a_descriptor()
     {
         var services = NewServices();

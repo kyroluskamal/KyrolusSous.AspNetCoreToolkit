@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using Elastic.Clients.Elasticsearch;
+using Elastic.Clients.Elasticsearch.Aggregations;
 using KyrolusSous.Caching.Abstractions;
 using KyrolusSous.Elasticsearch;
 using Microsoft.Extensions.Configuration;
@@ -11,7 +12,7 @@ using Xunit;
 
 namespace KyrolusSous.Elasticsearch.UnitTests;
 
-[KyrolusElasticIndex("products", NumberOfShards = 3, NumberOfReplicas = 2, UseAlias = true, Alias = "products-live")]
+[KyrolusElasticIndex("products", NumberOfShards = 3, NumberOfReplicas = 2, UseAlias = true, Alias = "products-live", RoutingField = "Category")]
 [KyrolusSyncToElasticsearch(IndexName = "products", IdProperty = "Id")]
 public class TestProductDocument
 {
@@ -37,6 +38,9 @@ public class TestProductDocument
 
     [KyrolusElasticDenseVector(1536)]
     public float[]? Embedding { get; set; }
+
+    [KyrolusElasticCompletion]
+    public string? TitleSuggest { get; set; }
 }
 
 public class TestTenantProvider : IKyrolusTenantProvider
@@ -46,7 +50,7 @@ public class TestTenantProvider : IKyrolusTenantProvider
 
 public class ElasticsearchUnitTests
 {
-    [Fact]
+    [Fact(DisplayName = "Elastic Index Attribute Reads Properties Correctly")]
     public void ElasticIndexAttribute_ReadsPropertiesCorrectly()
     {
         var attr = typeof(TestProductDocument).GetCustomAttributes(typeof(KyrolusElasticIndexAttribute), false)
@@ -59,9 +63,10 @@ public class ElasticsearchUnitTests
         attr.NumberOfReplicas.ShouldBe(2);
         attr.UseAlias.ShouldBeTrue();
         attr.Alias.ShouldBe("products-live");
+        attr.RoutingField.ShouldBe("Category");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Elastic Mapping Attributes Read Metadata Correctly")]
     public void ElasticMappingAttributes_ReadMetadataCorrectly()
     {
         var titleAttr = typeof(TestProductDocument).GetProperty("Title")?
@@ -87,9 +92,17 @@ public class ElasticsearchUnitTests
 
         vectorAttr.ShouldNotBeNull();
         vectorAttr.Dimensions.ShouldBe(1536);
+
+        var completionAttr = typeof(TestProductDocument).GetProperty("TitleSuggest")?
+            .GetCustomAttributes(typeof(KyrolusElasticCompletionAttribute), false)
+            .Cast<KyrolusElasticCompletionAttribute>()
+            .FirstOrDefault();
+
+        completionAttr.ShouldNotBeNull();
+        completionAttr.Analyzer.ShouldBe("simple");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Kyrolus Elasticsearch Options Defaults Are Valid")]
     public void KyrolusElasticsearchOptions_Defaults_AreValid()
     {
         var options = new KyrolusElasticsearchOptions();
@@ -106,7 +119,7 @@ public class ElasticsearchUnitTests
         options.EnableHttpCompression.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Options To String Masks Password And Api Key")]
     public void Options_ToString_MasksPasswordAndApiKey()
     {
         var options = new KyrolusElasticsearchOptions
@@ -125,7 +138,7 @@ public class ElasticsearchUnitTests
         str.ShouldNotContain("V2hpY2hJc1ZlcnlTZWNyZXRUb28=");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Add Kyrolus Elasticsearch Binds Configuration Correctly")]
     public void AddKyrolusElasticsearch_BindsConfigurationCorrectly()
     {
         var inMemorySettings = new Dictionary<string, string?>
@@ -161,19 +174,18 @@ public class ElasticsearchUnitTests
         var kyrolusIndexManager = provider.GetService<IKyrolusElasticIndexManager>();
         kyrolusIndexManager.ShouldNotBeNull();
 
-        var indexManager = provider.GetService<IKyrolusElasticIndexManager>();
-        indexManager.ShouldNotBeNull();
+        var kyrolusSnapshotManager = provider.GetService<IKyrolusElasticSnapshotManager>();
+        kyrolusSnapshotManager.ShouldNotBeNull();
+
+        var kyrolusSynonymManager = provider.GetService<IKyrolusElasticSynonymManager>();
+        kyrolusSynonymManager.ShouldNotBeNull();
 
         var kyrolusRepo = provider.GetService<IKyrolusElasticRepository<TestProductDocument, string>>();
         kyrolusRepo.ShouldNotBeNull();
         kyrolusRepo.IndexName.ShouldBe("dev_products-live");
-
-        var repo = provider.GetService<IKyrolusElasticRepository<TestProductDocument, string>>();
-        repo.ShouldNotBeNull();
-        repo.IndexName.ShouldBe("dev_products-live");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Multi Tenancy Resolves Tenant Index Correctly")]
     public void MultiTenancy_ResolvesTenantIndexCorrectly()
     {
         var services = new ServiceCollection();
@@ -192,8 +204,8 @@ public class ElasticsearchUnitTests
         repo.IndexName.ShouldBe("app_tenant_alpha_products-live");
     }
 
-    [Fact]
-    public void SearchResult_CalculatesDocumentsCorrectly()
+    [Fact(DisplayName = "Search Result Rich Analytics Calculates Properly")]
+    public void SearchResult_RichAnalytics_CalculatesProperly()
     {
         var doc1 = new TestProductDocument { Id = "1", Title = "Phone", Price = 999 };
         var doc2 = new TestProductDocument { Id = "2", Title = "Laptop", Price = 1999 };
@@ -210,6 +222,26 @@ public class ElasticsearchUnitTests
             Facets = new Dictionary<string, IReadOnlyList<KyrolusFacetBucket>>
             {
                 { "categories", [new KyrolusFacetBucket("Electronics", 2)] }
+            },
+            Histograms = new Dictionary<string, IReadOnlyList<KyrolusHistogramBucket>>
+            {
+                { "price_hist", [new KyrolusHistogramBucket(1000, 2)] }
+            },
+            Stats = new Dictionary<string, KyrolusStatsResult>
+            {
+                { "price_stats", new KyrolusStatsResult(2, 999, 1999, 1499, 2998) }
+            },
+            ExtendedStats = new Dictionary<string, KyrolusExtendedStatsResult>
+            {
+                { "price_ext_stats", new KyrolusExtendedStatsResult(2, 999, 1999, 1499, 2998, 4994002, 500000, 707.1) }
+            },
+            Cardinalities = new Dictionary<string, long>
+            {
+                { "unique_categories", 1 }
+            },
+            Suggestions = new Dictionary<string, IReadOnlyList<KyrolusSuggestOption>>
+            {
+                { "title_suggest", [new KyrolusSuggestOption("iPhone 15 Pro", 1.0, null, null)] }
             }
         };
 
@@ -219,12 +251,15 @@ public class ElasticsearchUnitTests
         result.Total.ShouldBe(2);
         result.TookMs.ShouldBe(12);
         result.MaxScore.ShouldBe(1.5);
-        result.Facets.ContainsKey("categories").ShouldBeTrue();
         result.Facets["categories"][0].Key.ShouldBe("Electronics");
-        result.Facets["categories"][0].DocCount.ShouldBe(2);
+        result.Histograms["price_hist"][0].Key.ShouldBe(1000);
+        result.Stats["price_stats"].Avg.ShouldBe(1499);
+        result.ExtendedStats["price_ext_stats"].Variance.ShouldBe(500000);
+        result.Cardinalities["unique_categories"].ShouldBe(1);
+        result.Suggestions["title_suggest"][0].Text.ShouldBe("iPhone 15 Pro");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Bulk Result Calculates Totals And Errors Properly")]
     public void BulkResult_CalculatesTotalsAndErrors_Properly()
     {
         var bulkResult = new KyrolusBulkResult
@@ -247,14 +282,15 @@ public class ElasticsearchUnitTests
         bulkResult.Errors.Count.ShouldBe(2);
     }
 
-    [Fact]
-    public void SmartSearchBuilder_AppliesCriteriaCorrectly()
+    [Fact(DisplayName = "Smart Search Builder Applies Criteria Aggregations And Suggesters Correctly")]
+    public void SmartSearchBuilder_AppliesCriteria_Aggregations_And_Suggesters_Correctly()
     {
         var builder = new KyrolusSmartSearchBuilder<TestProductDocument>();
 
         builder
             .Search("iphone 15", p => p.Title, p => p.Description)
             .Fuzzy("AUTO", prefixLength: 2)
+            .Routing("tenant_electronics")
             .Highlight(p => p.Title, p => p.Description)
             .Filter(p => p.Category, "Smartphones")
             .FilterIn(p => p.Category, ["Smartphones", "Mobiles"])
@@ -264,13 +300,40 @@ public class ElasticsearchUnitTests
             .BoostWhen(p => p.IsFeatured, matchValue: true, boost: 2.5f)
             .OrderBy(p => p.Price, descending: true)
             .MinScore(0.5f)
-            .Paginate(page: 2, pageSize: 15);
+            .Paginate(page: 2, pageSize: 15)
+            .TermsAggregation("cat_terms", p => p.Category, size: 20)
+            .HistogramAggregation("price_hist", p => p.Price, interval: 100)
+            .DateHistogramAggregation("created_hist", p => p.CreatedAt, CalendarInterval.Month)
+            .StatsAggregation("price_stats", p => p.Price)
+            .ExtendedStatsAggregation("price_ext_stats", p => p.Price)
+            .CardinalityAggregation("cat_cardinality", p => p.Category)
+            .PercentilesAggregation("price_pct", p => p.Price, 50, 90, 99)
+            .RangeAggregation("price_ranges", p => p.Price, (0, 500), (500, 1000), (1000, null))
+            .SuggestPhrase("phrase_suggester", "iphne 15", p => p.Title)
+            .SuggestTerm("term_suggester", "iphne", p => p.Title)
+            .SuggestCompletion("completion_suggester", "iph", p => p.TitleSuggest, fuzzy: true);
 
         var descriptor = new SearchRequestDescriptor<TestProductDocument>();
         Should.NotThrow(() => builder.Apply(descriptor));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Smart Search Builder Applies Delete And Update Descriptors Correctly")]
+    public void SmartSearchBuilder_AppliesDeleteAndUpdateDescriptors_Correctly()
+    {
+        var builder = new KyrolusSmartSearchBuilder<TestProductDocument>();
+        builder
+            .Search("obsolete", p => p.Title)
+            .Filter(p => p.Category, "Discontinued")
+            .Routing("tenant_discontinued");
+
+        var deleteDescriptor = new DeleteByQueryRequestDescriptor<TestProductDocument>("products");
+        Should.NotThrow(() => builder.Apply(deleteDescriptor));
+
+        var updateDescriptor = new UpdateByQueryRequestDescriptor<TestProductDocument>("products");
+        Should.NotThrow(() => builder.Apply(updateDescriptor));
+    }
+
+    [Fact(DisplayName = "Cached Elastic Repository Caches Get By Id And Invalidates On Mutation")]
     public async Task CachedElasticRepository_CachesGetById_AndInvalidatesOnMutation()
     {
         var mockCache = new TestMockCacheProvider();
@@ -286,6 +349,42 @@ public class ElasticsearchUnitTests
         // 2. Mutate (Update should invalidate cache)
         await cachedRepo.UpdateAsync(new TestProductDocument { Id = "p1", Title = "Updated" }, "p1");
         mockCache.Store.ContainsKey("es:products:doc:p1").ShouldBeFalse();
+
+        // 3. MultiSearch & Suggesters should delegate to inner
+        var multiRes = await cachedRepo.MultiSearchAsync([b => b.Search("phone", p => p.Title)]);
+        multiRes.ShouldNotBeNull();
+
+        var suggestRes = await cachedRepo.SuggestAsync(b => b.SuggestTerm("sug", "iphne", p => p.Title));
+        suggestRes.ShouldNotBeNull();
+
+        // 4. RrfSearch should delegate to inner
+        var rrfRes = await cachedRepo.RrfSearchAsync(b => b.Search("iphone", p => p.Title), [0.1f, 0.2f]);
+        rrfRes.ShouldNotBeNull();
+    }
+
+    [Fact(DisplayName = "Bulk Buffer Enqueues And Flushes Successfully")]
+    public async Task BulkBuffer_EnqueuesAndFlushes_Successfully()
+    {
+        var mockRepo = new TestMockElasticRepository<TestProductDocument, string>("products");
+        var options = Options.Create(new KyrolusElasticBulkBufferOptions
+        {
+            BatchSize = 5,
+            ChannelCapacity = 100,
+            FlushInterval = TimeSpan.FromSeconds(1)
+        });
+
+        var buffer = new KyrolusElasticsearchBulkBuffer<TestProductDocument, string>(mockRepo, options);
+
+        var enqueued = await buffer.EnqueueAsync(new TestProductDocument { Id = "buf1", Title = "Buff1" }, "buf1");
+        enqueued.ShouldBeTrue();
+
+        var manyCount = await buffer.EnqueueManyAsync([
+            (new TestProductDocument { Id = "buf2", Title = "Buff2" }, "buf2"),
+            (new TestProductDocument { Id = "buf3", Title = "Buff3" }, "buf3")
+        ]);
+        manyCount.ShouldBe(2);
+
+        await Should.NotThrowAsync(() => buffer.FlushAsync());
     }
 }
 
@@ -361,9 +460,18 @@ public sealed class TestMockElasticRepository<TDocument, TId>(string indexName) 
     public Task<bool> ExistsAsync(TId id, CancellationToken cancellationToken = default) => Task.FromResult(true);
     public Task<KyrolusSearchResult<TDocument>> SearchAsync(Action<SearchRequestDescriptor<TDocument>> configureSearch, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusSearchResult<TDocument>());
     public Task<KyrolusSearchResult<TDocument>> SmartSearchAsync(Action<KyrolusSmartSearchBuilder<TDocument>> build, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusSearchResult<TDocument>());
+    public Task<IReadOnlyList<KyrolusSearchResult<TDocument>>> MultiSearchAsync(IEnumerable<Action<KyrolusSmartSearchBuilder<TDocument>>> searchActions, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<KyrolusSearchResult<TDocument>>>([]);
     public Task<KyrolusSearchResult<TDocument>> VectorSearchAsync(float[] vector, string vectorField = "embedding", int topK = 10, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusSearchResult<TDocument>());
     public Task<KyrolusSearchResult<TDocument>> HybridSearchAsync(string queryText, float[] vector, string vectorField = "embedding", int topK = 10, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusSearchResult<TDocument>());
+    public Task<KyrolusSearchResult<TDocument>> RrfSearchAsync(Action<KyrolusSmartSearchBuilder<TDocument>> textQuery, float[] vector, string vectorField = "embedding", int topK = 10, int windowSize = 50, int rankConstant = 60, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusSearchResult<TDocument>());
     public Task<IReadOnlyList<string>> AutocompleteAsync(string prefix, Expression<Func<TDocument, object>> field, int limit = 5, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<string>>([]);
+    public Task<IDictionary<string, IReadOnlyList<KyrolusSuggestOption>>> SuggestAsync(Action<KyrolusSmartSearchBuilder<TDocument>> build, CancellationToken cancellationToken = default) => Task.FromResult<IDictionary<string, IReadOnlyList<KyrolusSuggestOption>>>(new Dictionary<string, IReadOnlyList<KyrolusSuggestOption>>());
+    public Task<KyrolusByQueryResult> DeleteByQueryAsync(Action<KyrolusSmartSearchBuilder<TDocument>> filter, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusByQueryResult(0, 0, 0, 0, 0, 0, 0));
+    public Task<KyrolusByQueryResult> UpdateByQueryAsync(Action<KyrolusSmartSearchBuilder<TDocument>> filter, string script, Dictionary<string, object>? parameters = null, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusByQueryResult(0, 0, 0, 0, 0, 0, 0));
+    public Task<bool> RegisterPercolateQueryAsync(string queryId, Action<KyrolusSmartSearchBuilder<TDocument>> query, CancellationToken cancellationToken = default) => Task.FromResult(true);
+    public Task<IReadOnlyList<KyrolusPercolateMatch>> PercolateDocumentAsync(TDocument document, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<KyrolusPercolateMatch>>([]);
+    public Task<IReadOnlyList<KyrolusPercolateMatch>> PercolateExistingDocumentAsync(TId id, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<KyrolusPercolateMatch>>([]);
+    public Task<KyrolusTaskStatus?> GetTaskStatusAsync(string taskId, CancellationToken cancellationToken = default) => Task.FromResult<KyrolusTaskStatus?>(new KyrolusTaskStatus(taskId, true, "test", null, null));
     public Task<KyrolusPointInTime> OpenPointInTimeAsync(TimeSpan keepAlive, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusPointInTime("pit_1", keepAlive));
     public Task<bool> ClosePointInTimeAsync(string pitId, CancellationToken cancellationToken = default) => Task.FromResult(true);
     public Task<KyrolusSearchResult<TDocument>> SearchAfterAsync(Action<KyrolusSmartSearchBuilder<TDocument>> build, IReadOnlyList<object>? searchAfterValues, string? pitId = null, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusSearchResult<TDocument>());

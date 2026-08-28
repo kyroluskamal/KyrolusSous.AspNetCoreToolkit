@@ -27,7 +27,7 @@ public sealed class KyrolusClaimsPrincipalFactoryTests
         return new KyrolusClaimsPrincipalFactory(Options.Create(options));
     }
 
-    [Fact]
+    [Fact(DisplayName = "The subject and username are always present")]
     public async Task The_subject_and_username_are_always_present()
     {
         var principal = await CreateFactory().CreateAsync(User, [], "test");
@@ -36,7 +36,7 @@ public sealed class KyrolusClaimsPrincipalFactoryTests
         principal.FindFirst(KyrolusAuthConstants.Claims.PreferredUsername)!.Value.ShouldBe("ada");
     }
 
-    [Fact]
+    [Fact(DisplayName = "The email claim needs the email scope")]
     public async Task The_email_claim_needs_the_email_scope()
     {
         var withoutScope = await CreateFactory().CreateAsync(User, ["openid"], "test");
@@ -47,7 +47,7 @@ public sealed class KyrolusClaimsPrincipalFactoryTests
         withScope.FindFirst(KyrolusAuthConstants.Claims.EmailVerified)!.Value.ShouldBe("true");
     }
 
-    [Fact]
+    [Fact(DisplayName = "The profile claims need the profile scope")]
     public async Task The_profile_claims_need_the_profile_scope()
     {
         var withoutScope = await CreateFactory().CreateAsync(User, ["openid"], "test");
@@ -57,7 +57,7 @@ public sealed class KyrolusClaimsPrincipalFactoryTests
         withScope.FindFirst(KyrolusAuthConstants.Claims.Name)!.Value.ShouldBe("Ada Lovelace");
     }
 
-    [Fact]
+    [Fact(DisplayName = "The phone claims need the phone scope")]
     public async Task The_phone_claims_need_the_phone_scope()
     {
         var withScope = await CreateFactory().CreateAsync(User, ["phone"], "test");
@@ -66,7 +66,7 @@ public sealed class KyrolusClaimsPrincipalFactoryTests
         withScope.FindFirst(KyrolusAuthConstants.Claims.PhoneNumberVerified)!.Value.ShouldBe("false");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Turning scope gating off emits everything")]
     public async Task Turning_scope_gating_off_emits_everything()
     {
         var principal = await CreateFactory(o => o.EnforceScopeBasedClaims = false)
@@ -77,7 +77,7 @@ public sealed class KyrolusClaimsPrincipalFactoryTests
         principal.FindFirst(KyrolusAuthConstants.Claims.PhoneNumber).ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Roles are emitted under the roles scope")]
     public async Task Roles_are_emitted_under_the_roles_scope()
     {
         var principal = await CreateFactory().CreateAsync(User, ["openid", "roles"], "test");
@@ -87,7 +87,7 @@ public sealed class KyrolusClaimsPrincipalFactoryTests
             .ShouldBe(["Admin", "Member"], ignoreOrder: true);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Roles are withheld when the roles scope was not granted")]
     public async Task Roles_are_withheld_when_the_roles_scope_was_not_granted()
     {
         var principal = await CreateFactory().CreateAsync(User, ["openid", "profile"], "test");
@@ -95,7 +95,7 @@ public sealed class KyrolusClaimsPrincipalFactoryTests
         principal.FindAll(KyrolusAuthConstants.Claims.Role).ShouldBeEmpty();
     }
 
-    [Fact]
+    [Fact(DisplayName = "An empty scope set still yields roles")]
     public async Task An_empty_scope_set_still_yields_roles()
     {
         // The client credentials and legacy password grants routinely arrive with no scopes at
@@ -105,7 +105,7 @@ public sealed class KyrolusClaimsPrincipalFactoryTests
         principal.FindAll(KyrolusAuthConstants.Claims.Role).ShouldNotBeEmpty();
     }
 
-    [Fact]
+    [Fact(DisplayName = "The tenant and custom claims are always emitted")]
     public async Task The_tenant_and_custom_claims_are_always_emitted()
     {
         var principal = await CreateFactory().CreateAsync(User, ["openid"], "test");
@@ -114,7 +114,7 @@ public sealed class KyrolusClaimsPrincipalFactoryTests
         principal.FindFirst("department")!.Value.ShouldBe("engineering");
     }
 
-    [Fact]
+    [Fact(DisplayName = "The identity uses the requested authentication type")]
     public async Task The_identity_uses_the_requested_authentication_type()
     {
         var principal = await CreateFactory().CreateAsync(User, [], "my-scheme");
@@ -123,7 +123,7 @@ public sealed class KyrolusClaimsPrincipalFactoryTests
         principal.Identity.IsAuthenticated.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Scope matching is case insensitive and handles padded scopes")]
     public async Task Scope_matching_is_case_insensitive_and_handles_padded_scopes()
     {
         var principal = await CreateFactory().CreateAsync(User, ["  PROFILE  ", "EMAIL"], "test");
@@ -132,7 +132,7 @@ public sealed class KyrolusClaimsPrincipalFactoryTests
         principal.FindFirst(KyrolusAuthConstants.Claims.Email)!.Value.ShouldBe("ada@contoso.com");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Sensitive claims in user claims are never emitted")]
     public async Task Sensitive_claims_in_user_claims_are_never_emitted()
     {
         var userWithSensitiveClaims = new KyrolusAuthUser

@@ -2,7 +2,7 @@
 
 public class RuntimeQueryHelperErrorTests
 {
-    [Fact]
+    [Fact(DisplayName = "Build Filter Returns Null When No Filters")]
     public void BuildFilter_ReturnsNull_WhenNoFilters()
     {
         var helper = new RuntimeQueryHelper<RuntimeQueryHelperTestData.TestEntity>();
@@ -10,7 +10,7 @@ public class RuntimeQueryHelperErrorTests
         helper.BuildFilter(new QueryRequest(Filters: [])).ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build Filter Throws For Missing Property")]
     public void BuildFilter_Throws_ForMissingProperty()
     {
         var helper = new RuntimeQueryHelper<RuntimeQueryHelperTestData.TestEntity>();
@@ -20,7 +20,7 @@ public class RuntimeQueryHelperErrorTests
         ex.Message.ShouldContain("Property");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build Filter Throws For Missing Operator")]
     public void BuildFilter_Throws_ForMissingOperator()
     {
         var helper = new RuntimeQueryHelper<RuntimeQueryHelperTestData.TestEntity>();
@@ -30,7 +30,7 @@ public class RuntimeQueryHelperErrorTests
         ex.Message.ShouldContain("Operator");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build Filter Throws For Invalid Property Path")]
     public void BuildFilter_Throws_ForInvalidPropertyPath()
     {
         var helper = new RuntimeQueryHelper<RuntimeQueryHelperTestData.TestEntity>();
@@ -40,7 +40,7 @@ public class RuntimeQueryHelperErrorTests
         ex.Message.ShouldContain("Invalid filter");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build Filter Throws For Null Operator On Non Nullable")]
     public void BuildFilter_Throws_ForNullOperatorOnNonNullable()
     {
         var helper = new RuntimeQueryHelper<RuntimeQueryHelperTestData.TestEntity>();
@@ -50,7 +50,7 @@ public class RuntimeQueryHelperErrorTests
         ex.Message.ShouldContain("supported only for nullable");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build Filter Throws For Invalid In With Null On Non Nullable")]
     public void BuildFilter_Throws_ForInvalidInWithNullOnNonNullable()
     {
         var helper = new RuntimeQueryHelper<RuntimeQueryHelperTestData.TestEntity>();
@@ -60,7 +60,7 @@ public class RuntimeQueryHelperErrorTests
         ex.Message.ShouldContain("in");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build Filter Throws For Between On Unsupported Type")]
     public void BuildFilter_Throws_ForBetweenOnUnsupportedType()
     {
         var helper = new RuntimeQueryHelper<RuntimeQueryHelperTestData.TestEntity>();
@@ -70,7 +70,7 @@ public class RuntimeQueryHelperErrorTests
         ex.Message.ShouldContain("Invalid filter");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build Filter Throws For Unsupported Operator On Enum")]
     public void BuildFilter_Throws_ForUnsupportedOperatorOnEnum()
     {
         var helper = new RuntimeQueryHelper<RuntimeQueryHelperTestData.TestEntity>();
@@ -80,7 +80,7 @@ public class RuntimeQueryHelperErrorTests
         ex.Message.ShouldContain("Unsupported operator");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Build Filter Throws For Any On Non Collection")]
     public void BuildFilter_Throws_ForAnyOnNonCollection()
     {
         var helper = new RuntimeQueryHelper<RuntimeQueryHelperTestData.TestEntity>();

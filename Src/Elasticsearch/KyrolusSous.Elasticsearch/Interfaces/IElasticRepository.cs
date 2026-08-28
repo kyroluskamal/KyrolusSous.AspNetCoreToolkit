@@ -1,7 +1,10 @@
+using System.Linq.Expressions;
+using Elastic.Clients.Elasticsearch;
+
 namespace KyrolusSous.Elasticsearch;
 
 /// <summary>
-/// Primary enterprise abstraction for Elasticsearch document operations, smart querying, vector search, PIT pagination, and scripted updates.
+/// Primary enterprise abstraction for Elasticsearch document operations, smart querying, vector search, PIT pagination, multi-search, by-query mutations, suggesters, and percolation.
 /// </summary>
 public interface IKyrolusElasticRepository<TDocument, TId> where TDocument : class
 {
@@ -41,6 +44,10 @@ public interface IKyrolusElasticRepository<TDocument, TId> where TDocument : cla
         Action<KyrolusSmartSearchBuilder<TDocument>> build,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<KyrolusSearchResult<TDocument>>> MultiSearchAsync(
+        IEnumerable<Action<KyrolusSmartSearchBuilder<TDocument>>> searchActions,
+        CancellationToken cancellationToken = default);
+
     Task<KyrolusSearchResult<TDocument>> VectorSearchAsync(
         float[] vector,
         string vectorField = "embedding",
@@ -54,10 +61,50 @@ public interface IKyrolusElasticRepository<TDocument, TId> where TDocument : cla
         int topK = 10,
         CancellationToken cancellationToken = default);
 
+    Task<KyrolusSearchResult<TDocument>> RrfSearchAsync(
+        Action<KyrolusSmartSearchBuilder<TDocument>> textQuery,
+        float[] vector,
+        string vectorField = "embedding",
+        int topK = 10,
+        int windowSize = 50,
+        int rankConstant = 60,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<string>> AutocompleteAsync(
         string prefix,
         Expression<Func<TDocument, object>> field,
         int limit = 5,
+        CancellationToken cancellationToken = default);
+
+    Task<IDictionary<string, IReadOnlyList<KyrolusSuggestOption>>> SuggestAsync(
+        Action<KyrolusSmartSearchBuilder<TDocument>> build,
+        CancellationToken cancellationToken = default);
+
+    Task<KyrolusByQueryResult> DeleteByQueryAsync(
+        Action<KyrolusSmartSearchBuilder<TDocument>> filter,
+        CancellationToken cancellationToken = default);
+
+    Task<KyrolusByQueryResult> UpdateByQueryAsync(
+        Action<KyrolusSmartSearchBuilder<TDocument>> filter,
+        string script,
+        Dictionary<string, object>? parameters = null,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> RegisterPercolateQueryAsync(
+        string queryId,
+        Action<KyrolusSmartSearchBuilder<TDocument>> query,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<KyrolusPercolateMatch>> PercolateDocumentAsync(
+        TDocument document,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<KyrolusPercolateMatch>> PercolateExistingDocumentAsync(
+        TId id,
+        CancellationToken cancellationToken = default);
+
+    Task<KyrolusTaskStatus?> GetTaskStatusAsync(
+        string taskId,
         CancellationToken cancellationToken = default);
 
     Task<KyrolusPointInTime> OpenPointInTimeAsync(TimeSpan keepAlive, CancellationToken cancellationToken = default);
@@ -77,7 +124,7 @@ public interface IKyrolusElasticRepository<TDocument, TId> where TDocument : cla
 }
 
 /// <summary>
-/// Primary enterprise abstraction for Elasticsearch index lifecycle management, templates, aliases, ILM, and reindexing.
+/// Primary enterprise abstraction for Elasticsearch index lifecycle management, templates, aliases, ILM, reindexing, and maintenance.
 /// </summary>
 public interface IKyrolusElasticIndexManager
 {
@@ -106,4 +153,16 @@ public interface IKyrolusElasticIndexManager
     Task<bool> RolloverIndexAsync(string aliasName, CancellationToken cancellationToken = default);
 
     Task<bool> ShrinkIndexAsync(string sourceIndex, string targetIndex, int targetShards = 1, CancellationToken cancellationToken = default);
+
+    Task<bool> CreateIndexTemplateAsync(string templateName, string indexPattern, int priority = 100, int shards = 1, int replicas = 1, string? ilmPolicyName = null, CancellationToken cancellationToken = default);
+
+    Task<bool> DeleteIndexTemplateAsync(string templateName, CancellationToken cancellationToken = default);
+
+    Task<bool> IndexTemplateExistsAsync(string templateName, CancellationToken cancellationToken = default);
+
+    Task<bool> CreatePercolatorIndexAsync<TDocument>(string indexName, CancellationToken cancellationToken = default) where TDocument : class;
+
+    Task<bool> RefreshIndexAsync(string indexName, CancellationToken cancellationToken = default);
+
+    Task<bool> FlushIndexAsync(string indexName, CancellationToken cancellationToken = default);
 }

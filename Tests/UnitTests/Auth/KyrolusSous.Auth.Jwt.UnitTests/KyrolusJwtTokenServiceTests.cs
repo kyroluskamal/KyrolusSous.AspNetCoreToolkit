@@ -18,14 +18,14 @@ public class KyrolusJwtTokenServiceTests
         ClockSkew = TimeSpan.Zero
     };
 
-    [Fact]
+    [Fact(DisplayName = "Constructor Throws When Key Too Short")]
     public void Constructor_Throws_WhenKeyTooShort()
     {
         var invalidOptions = new KyrolusJwtOptions { SecretKey = "too-short" };
         Should.Throw<ArgumentException>(() => new KyrolusJwtTokenService(invalidOptions));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Generate Access Token Produces Valid Jwt")]
     public void GenerateAccessToken_ProducesValidJwt()
     {
         var service = new KyrolusJwtTokenService(_options);
@@ -51,7 +51,7 @@ public class KyrolusJwtTokenServiceTests
         principal.IsInRole("Manager").ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Generate Refresh Token Generates Unique Tokens")]
     public void GenerateRefreshToken_GeneratesUniqueTokens()
     {
         var service = new KyrolusJwtTokenService(_options);
@@ -63,7 +63,7 @@ public class KyrolusJwtTokenServiceTests
         token1.ShouldNotBe(token2);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Refresh Token Hash And Verify Work Correctly")]
     public void RefreshToken_HashAndVerify_WorkCorrectly()
     {
         var service = new KyrolusJwtTokenService(_options);
@@ -77,7 +77,7 @@ public class KyrolusJwtTokenServiceTests
         service.VerifyRefreshToken(rawToken, "wrong-hash").ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Access Token Returns Null When Token Invalid")]
     public void ValidateAccessToken_ReturnsNull_WhenTokenInvalid()
     {
         var service = new KyrolusJwtTokenService(_options);
@@ -86,7 +86,7 @@ public class KyrolusJwtTokenServiceTests
         result.ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Di Registration Add Kyrolus Jwt Token Service Registers Service")]
     public void DiRegistration_AddKyrolusJwtTokenService_RegistersService()
     {
         var services = new ServiceCollection();
@@ -100,7 +100,7 @@ public class KyrolusJwtTokenServiceTests
         jwtService.ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Verify Refresh Token Succeeds Regardless Of Stored Hash Casing")]
     public void VerifyRefreshToken_Succeeds_RegardlessOfStoredHashCasing()
     {
         var service = new KyrolusJwtTokenService(_options);
@@ -112,7 +112,7 @@ public class KyrolusJwtTokenServiceTests
         service.VerifyRefreshToken(raw, lowerHash).ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Generate Access Token Deduplicates Core Claims When Present In Additional Claims")]
     public void GenerateAccessToken_DeduplicatesCoreClaims_WhenPresentInAdditionalClaims()
     {
         var service = new KyrolusJwtTokenService(_options);
@@ -132,7 +132,7 @@ public class KyrolusJwtTokenServiceTests
         principal.FindFirst("custom_claim")?.Value.ShouldBe("custom_value");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Generate Access Token Preserves Multi Valued Claims Such As Roles And Permissions")]
     public void GenerateAccessToken_PreservesMultiValuedClaims_SuchAsRolesAndPermissions()
     {
         var service = new KyrolusJwtTokenService(_options);
@@ -164,7 +164,7 @@ public class KyrolusJwtTokenServiceTests
         permissions.ShouldContain("users.write");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Access Token Async Validates Token Without Blocking")]
     public async Task ValidateAccessTokenAsync_ValidatesTokenWithoutBlocking()
     {
         var service = new KyrolusJwtTokenService(_options);
@@ -177,7 +177,7 @@ public class KyrolusJwtTokenServiceTests
         principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value.ShouldBe("user-async-jwt");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Access Token Strips Bearer Prefix And Validates Successfully")]
     public void ValidateAccessToken_StripsBearerPrefix_AndValidatesSuccessfully()
     {
         var service = new KyrolusJwtTokenService(_options);
@@ -189,7 +189,7 @@ public class KyrolusJwtTokenServiceTests
         principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value.ShouldBe("user-bearer-prefix");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validate Access Token Rejects Oversized Tokens")]
     public void ValidateAccessToken_RejectsOversizedTokens()
     {
         var service = new KyrolusJwtTokenService(_options);
@@ -197,7 +197,7 @@ public class KyrolusJwtTokenServiceTests
         service.ValidateAccessToken(giantToken).ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Generate Access Token Throws When User Id Is Null Or Whitespace")]
     public void GenerateAccessToken_Throws_WhenUserIdIsNullOrWhitespace()
     {
         var service = new KyrolusJwtTokenService(_options);
@@ -207,7 +207,7 @@ public class KyrolusJwtTokenServiceTests
             service.GenerateAccessToken(user));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Verify Refresh Token Returns False For Oversized Inputs")]
     public void VerifyRefreshToken_ReturnsFalse_ForOversizedInputs()
     {
         var service = new KyrolusJwtTokenService(_options);

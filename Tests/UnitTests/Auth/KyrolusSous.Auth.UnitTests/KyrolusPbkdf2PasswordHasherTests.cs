@@ -18,7 +18,7 @@ public sealed class KyrolusPbkdf2PasswordHasherTests
         return new KyrolusPbkdf2PasswordHasher(Options.Create(options));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Hash then verify succeeds")]
     public void Hash_then_verify_succeeds()
     {
         var hasher = CreateHasher();
@@ -29,7 +29,7 @@ public sealed class KyrolusPbkdf2PasswordHasherTests
             .ShouldBe(KyrolusPasswordVerificationResult.Success);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Verify rejects a wrong password")]
     public void Verify_rejects_a_wrong_password()
     {
         var hasher = CreateHasher();
@@ -40,7 +40,7 @@ public sealed class KyrolusPbkdf2PasswordHasherTests
             .ShouldBe(KyrolusPasswordVerificationResult.Failed);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Hashing the same password twice produces different hashes")]
     public void Hashing_the_same_password_twice_produces_different_hashes()
     {
         var hasher = CreateHasher();
@@ -48,7 +48,7 @@ public sealed class KyrolusPbkdf2PasswordHasherTests
         hasher.Hash("same").ShouldNotBe(hasher.Hash("same"));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Hash uses the configured parameters")]
     public void Hash_uses_the_configured_parameters()
     {
         var hasher = CreateHasher(o =>
@@ -68,7 +68,7 @@ public sealed class KyrolusPbkdf2PasswordHasherTests
         decoded.Length.ShouldBe(13 + 24 + 48);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Verify asks for a rehash when the stored iteration count is below the configured one")]
     public void Verify_asks_for_a_rehash_when_the_stored_iteration_count_is_below_the_configured_one()
     {
         var weak = CreateHasher(o => o.Pbkdf2Iterations = 10_000);
@@ -79,7 +79,7 @@ public sealed class KyrolusPbkdf2PasswordHasherTests
         strong.Verify(hash, "pw").ShouldBe(KyrolusPasswordVerificationResult.SuccessRehashNeeded);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Verify asks for a rehash when the stored algorithm is weaker than the configured one")]
     public void Verify_asks_for_a_rehash_when_the_stored_algorithm_is_weaker_than_the_configured_one()
     {
         var sha256 = CreateHasher(o => o.Pbkdf2HashAlgorithm = HashAlgorithmName.SHA256);
@@ -90,7 +90,7 @@ public sealed class KyrolusPbkdf2PasswordHasherTests
         sha512.Verify(hash, "pw").ShouldBe(KyrolusPasswordVerificationResult.SuccessRehashNeeded);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Verify accepts a legacy identity v2 hash and asks for a rehash")]
     public void Verify_accepts_a_legacy_identity_v2_hash_and_asks_for_a_rehash()
     {
         // The ASP.NET Identity v2 layout: marker 0x00, a 16-byte salt, then 32 bytes of
@@ -111,7 +111,7 @@ public sealed class KyrolusPbkdf2PasswordHasherTests
             .ShouldBe(KyrolusPasswordVerificationResult.Failed);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Verify accepts an identity v3 hash produced elsewhere")]
     public void Verify_accepts_an_identity_v3_hash_produced_elsewhere()
     {
         // Identity's own default in recent versions: HMACSHA512, 100,000 iterations, 16-byte salt.
@@ -132,7 +132,7 @@ public sealed class KyrolusPbkdf2PasswordHasherTests
             .ShouldBe(KyrolusPasswordVerificationResult.Success);
     }
 
-    [Theory]
+    [Theory(DisplayName = "Verify returns failed for a malformed stored hash")]
     [InlineData("")]
     [InlineData("not base64 at all !!")]
     [InlineData("AA==")]                     // one byte, unknown marker
@@ -145,7 +145,7 @@ public sealed class KyrolusPbkdf2PasswordHasherTests
         hasher.Verify(stored, "pw").ShouldBe(KyrolusPasswordVerificationResult.Failed);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Verify returns failed when the stored hash names an unknown prf")]
     public void Verify_returns_failed_when_the_stored_hash_names_an_unknown_prf()
     {
         var stored = new byte[13 + 16 + 32];
@@ -158,7 +158,7 @@ public sealed class KyrolusPbkdf2PasswordHasherTests
             .ShouldBe(KyrolusPasswordVerificationResult.Failed);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Verify returns failed when the declared salt length runs past the buffer")]
     public void Verify_returns_failed_when_the_declared_salt_length_runs_past_the_buffer()
     {
         // A crafted length that would overflow into a plausible-looking subkey length if the
@@ -173,7 +173,7 @@ public sealed class KyrolusPbkdf2PasswordHasherTests
             .ShouldBe(KyrolusPasswordVerificationResult.Failed);
     }
 
-    [Theory]
+    [Theory(DisplayName = "Constructor rejects a non positive iteration count")]
     [InlineData(0)]
     [InlineData(-1)]
     public void Constructor_rejects_a_non_positive_iteration_count(int iterations)
@@ -181,7 +181,7 @@ public sealed class KyrolusPbkdf2PasswordHasherTests
         Should.Throw<ArgumentOutOfRangeException>(() => CreateHasher(o => o.Pbkdf2Iterations = iterations));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Hash rejects an algorithm the stored format cannot describe")]
     public void Hash_rejects_an_algorithm_the_stored_format_cannot_describe()
     {
         var hasher = CreateHasher(o => o.Pbkdf2HashAlgorithm = HashAlgorithmName.MD5);
@@ -189,7 +189,7 @@ public sealed class KyrolusPbkdf2PasswordHasherTests
         Should.Throw<NotSupportedException>(() => hasher.Hash("pw"));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Verify rejects excessive iterations without burning cpu")]
     public void Verify_rejects_excessive_iterations_without_burning_cpu()
     {
         // Hash crafted with 2,000,000 iterations (> 1,000,000 max allowed)

@@ -12,14 +12,15 @@ public class KyrolusResiliencePipelineBehavior<TRequest, TResponse>(
         CancellationToken cancellationToken)
     {
         var attr = typeof(TRequest).GetCustomAttribute<KyrolusResilientAttribute>(true);
+        var stdAttr = typeof(TRequest).GetCustomAttribute<ResilientAttribute>(true);
         var resilientReq = request as IKyrolusResilientRequest;
 
-        if (attr is null && resilientReq is null)
+        if (attr is null && stdAttr is null && resilientReq is null)
         {
             return await next(cancellationToken);
         }
 
-        var pipelineName = attr?.PipelineName ?? resilientReq?.PipelineName ?? "default";
+        var pipelineName = attr?.PipelineName ?? stdAttr?.PipelineName ?? resilientReq?.PipelineName ?? "default";
         var pipeline = pipelineProvider.GetPipeline<TResponse>(pipelineName);
 
         return await pipeline.ExecuteAsync(async ct => await next(ct), cancellationToken);

@@ -22,7 +22,7 @@ public class KyrolusSpecificationQueryTests
 
     public sealed class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(options);
 
-    [Fact]
+    [Fact(DisplayName = "Ef specification query handler should invoke repository query async")]
     public async Task Ef_specification_query_handler_should_invoke_repository_query_async()
     {
         var unitOfWork = Substitute.For<IKyrolusUnitOfWork>();
@@ -42,7 +42,7 @@ public class KyrolusSpecificationQueryTests
         await repo.Received(1).QueryAsync(spec, Arg.Any<CancellationToken>());
     }
 
-    [Fact]
+    [Fact(DisplayName = "Marten specification query handler should invoke repository get all async")]
     public async Task Marten_specification_query_handler_should_invoke_repository_get_all_async()
     {
         var session = Substitute.For<IDocumentSession>();

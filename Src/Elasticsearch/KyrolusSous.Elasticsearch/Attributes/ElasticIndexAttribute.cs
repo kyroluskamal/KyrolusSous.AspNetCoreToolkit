@@ -17,4 +17,6 @@ public sealed class KyrolusElasticIndexAttribute(string indexName) : Attribute
     public bool UseAlias { get; set; } = false;
 
     public string? IlmPolicyName { get; set; }
+
+    public string? RoutingField { get; set; }
 }

@@ -20,6 +20,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\Src\RabbitMQ\KyrolusSous.RabbitMQ.Abstractions\KyrolusSous.RabbitMQ.Abstractions.csproj" />
     <ProjectReference Include="..\..\..\..\Src\RabbitMQ\KyrolusSous.RabbitMQ.Runtime\KyrolusSous.RabbitMQ.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Resilience\KyrolusSous.Resilience.Abstractions\KyrolusSous.Resilience.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Compression\KyrolusSous.Compression.Abstractions\KyrolusSous.Compression.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>

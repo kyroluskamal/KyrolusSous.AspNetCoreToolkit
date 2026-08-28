@@ -67,15 +67,59 @@ public class KyrolusCachedElasticRepository<TDocument, TId> : IKyrolusElasticRep
         }
 
         var cacheKey = $"es:{IndexName}:doc:{id}";
-        return await _cacheProvider.GetOrCreateAsync(
-            cacheKey,
-            async ct => (await _inner.GetByIdAsync(id, ct))!,
-            new KyrolusCacheEntryOptions { AbsoluteExpirationRelativeToNow = _defaultTtl },
-            cancellationToken);
+        var cached = await _cacheProvider.GetAsync<TDocument>(cacheKey, cancellationToken);
+        if (cached is not null)
+        {
+            return cached;
+        }
+
+        var doc = await _inner.GetByIdAsync(id, cancellationToken);
+        if (doc is not null)
+        {
+            await _cacheProvider.SetAsync(cacheKey, doc, _defaultTtl, cancellationToken);
+        }
+
+        return doc;
     }
 
-    public Task<IReadOnlyList<TDocument>> GetManyAsync(IEnumerable<TId> ids, CancellationToken cancellationToken = default) =>
-        _inner.GetManyAsync(ids, cancellationToken);
+    public async Task<IReadOnlyList<TDocument>> GetManyAsync(IEnumerable<TId> ids, CancellationToken cancellationToken = default)
+    {
+        var idList = ids.ToList();
+        if (idList.Count == 0) return [];
+
+        if (_cacheProvider is null)
+        {
+            return await _inner.GetManyAsync(idList, cancellationToken);
+        }
+
+        var results = new List<TDocument>();
+        var missingIds = new List<TId>();
+
+        foreach (var id in idList)
+        {
+            var cacheKey = $"es:{IndexName}:doc:{id}";
+            var cached = await _cacheProvider.GetAsync<TDocument>(cacheKey, cancellationToken);
+            if (cached is not null)
+            {
+                results.Add(cached);
+            }
+            else
+            {
+                missingIds.Add(id);
+            }
+        }
+
+        if (missingIds.Count > 0)
+        {
+            var fetched = await _inner.GetManyAsync(missingIds, cancellationToken);
+            foreach (var doc in fetched)
+            {
+                results.Add(doc);
+            }
+        }
+
+        return results;
+    }
 
     public async Task<bool> UpdateAsync(TDocument document, TId id, CancellationToken cancellationToken = default)
     {
@@ -159,6 +203,16 @@ public class KyrolusCachedElasticRepository<TDocument, TId> : IKyrolusElasticRep
     public Task<KyrolusSearchResult<TDocument>> HybridSearchAsync(string queryText, float[] vector, string vectorField = "embedding", int topK = 10, CancellationToken cancellationToken = default) =>
         _inner.HybridSearchAsync(queryText, vector, vectorField, topK, cancellationToken);
 
+    public Task<KyrolusSearchResult<TDocument>> RrfSearchAsync(
+        Action<KyrolusSmartSearchBuilder<TDocument>> textQuery,
+        float[] vector,
+        string vectorField = "embedding",
+        int topK = 10,
+        int windowSize = 50,
+        int rankConstant = 60,
+        CancellationToken cancellationToken = default) =>
+        _inner.RrfSearchAsync(textQuery, vector, vectorField, topK, windowSize, rankConstant, cancellationToken);
+
     public Task<IReadOnlyList<string>> AutocompleteAsync(string prefix, Expression<Func<TDocument, object>> field, int limit = 5, CancellationToken cancellationToken = default) =>
         _inner.AutocompleteAsync(prefix, field, limit, cancellationToken);
 
@@ -170,6 +224,63 @@ public class KyrolusCachedElasticRepository<TDocument, TId> : IKyrolusElasticRep
 
     public Task<KyrolusSearchResult<TDocument>> SearchAfterAsync(Action<KyrolusSmartSearchBuilder<TDocument>> build, IReadOnlyList<object>? searchAfterValues, string? pitId = null, CancellationToken cancellationToken = default) =>
         _inner.SearchAfterAsync(build, searchAfterValues, pitId, cancellationToken);
+
+    public Task<IReadOnlyList<KyrolusSearchResult<TDocument>>> MultiSearchAsync(
+        IEnumerable<Action<KyrolusSmartSearchBuilder<TDocument>>> searchActions,
+        CancellationToken cancellationToken = default) =>
+        _inner.MultiSearchAsync(searchActions, cancellationToken);
+
+    public Task<IDictionary<string, IReadOnlyList<KyrolusSuggestOption>>> SuggestAsync(
+        Action<KyrolusSmartSearchBuilder<TDocument>> build,
+        CancellationToken cancellationToken = default) =>
+        _inner.SuggestAsync(build, cancellationToken);
+
+    public async Task<KyrolusByQueryResult> DeleteByQueryAsync(
+        Action<KyrolusSmartSearchBuilder<TDocument>> filter,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _inner.DeleteByQueryAsync(filter, cancellationToken);
+        if (_cacheProvider is not null && result.Deleted > 0)
+        {
+            await _cacheProvider.RemoveKeysByPatternAsync($"es:{IndexName}:doc:*", cancellationToken);
+        }
+        return result;
+    }
+
+    public async Task<KyrolusByQueryResult> UpdateByQueryAsync(
+        Action<KyrolusSmartSearchBuilder<TDocument>> filter,
+        string script,
+        Dictionary<string, object>? parameters = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _inner.UpdateByQueryAsync(filter, script, parameters, cancellationToken);
+        if (_cacheProvider is not null && result.Updated > 0)
+        {
+            await _cacheProvider.RemoveKeysByPatternAsync($"es:{IndexName}:doc:*", cancellationToken);
+        }
+        return result;
+    }
+
+    public Task<bool> RegisterPercolateQueryAsync(
+        string queryId,
+        Action<KyrolusSmartSearchBuilder<TDocument>> query,
+        CancellationToken cancellationToken = default) =>
+        _inner.RegisterPercolateQueryAsync(queryId, query, cancellationToken);
+
+    public Task<IReadOnlyList<KyrolusPercolateMatch>> PercolateDocumentAsync(
+        TDocument document,
+        CancellationToken cancellationToken = default) =>
+        _inner.PercolateDocumentAsync(document, cancellationToken);
+
+    public Task<IReadOnlyList<KyrolusPercolateMatch>> PercolateExistingDocumentAsync(
+        TId id,
+        CancellationToken cancellationToken = default) =>
+        _inner.PercolateExistingDocumentAsync(id, cancellationToken);
+
+    public Task<KyrolusTaskStatus?> GetTaskStatusAsync(
+        string taskId,
+        CancellationToken cancellationToken = default) =>
+        _inner.GetTaskStatusAsync(taskId, cancellationToken);
 
     public IAsyncEnumerable<TDocument> StreamAllAsync(Action<KyrolusSmartSearchBuilder<TDocument>>? configure = null, int batchSize = 1000, CancellationToken cancellationToken = default) =>
         _inner.StreamAllAsync(configure, batchSize, cancellationToken);

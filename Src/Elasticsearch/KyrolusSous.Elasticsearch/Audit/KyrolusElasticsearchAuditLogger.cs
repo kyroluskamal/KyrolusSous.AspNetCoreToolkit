@@ -71,10 +71,16 @@ public class KyrolusElasticsearchAuditLogger : IKyrolusElasticsearchAuditLogger
         foreach (var group in grouped)
         {
             var indexName = group.Key;
-            var response = await _client.BulkAsync(b => b
-                .Index(indexName)
-                .IndexMany(group, (descriptor, ev) => descriptor.Id(ev.Id)),
-                cancellationToken);
+            var groupList = group.ToList();
+            var response = await _client.BulkAsync(b =>
+            {
+                b.Index(indexName);
+                for (var i = 0; i < groupList.Count; i++)
+                {
+                    var ev = groupList[i];
+                    b.Index(ev, d => d.Id(ev.Id));
+                }
+            }, cancellationToken);
 
             if (!response.IsValidResponse || response.Errors)
             {
@@ -87,6 +93,7 @@ public class KyrolusElasticsearchAuditLogger : IKyrolusElasticsearchAuditLogger
     {
         var prefix = _options.IndexPrefix ?? string.Empty;
         var suffix = _options.IndexSuffix ?? string.Empty;
-        return $"{prefix}audit-logs-{timestamp:yyyy-MM}{suffix}".ToLowerInvariant();
+        var combined = $"{prefix}audit-logs-{timestamp:yyyy-MM}{suffix}".Trim().ToLowerInvariant();
+        return combined.Replace(" ", "_").Replace("\\", "_").Replace("/", "_").Replace("*", "_").Replace("?", "_").Replace("\"", "_").Replace("<", "_").Replace(">", "_").Replace("|", "_").Replace(",", "_").Replace("#", "_").Replace(":", "_");
     }
 }

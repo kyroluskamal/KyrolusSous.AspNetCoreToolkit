@@ -7,7 +7,7 @@ public class ApiKeyTests
 {
     private readonly KyrolusApiKeyGenerator _generator = new();
 
-    [Fact]
+    [Fact(DisplayName = "Generate Key Creates Key With Prefix")]
     public void GenerateKey_CreatesKeyWithPrefix()
     {
         var key = _generator.GenerateKey("test_live_");
@@ -17,7 +17,7 @@ public class ApiKeyTests
         key.Length.ShouldBeGreaterThan(20);
     }
 
-    [Theory]
+    [Theory(DisplayName = "Generate Key Rejects Invalid Prefix")]
     [InlineData("has space_")]
     [InlineData("crlf\r\n_")]
     [InlineData("this_prefix_is_way_too_long_and_exceeds_thirty_two_characters_limit_")]
@@ -26,7 +26,7 @@ public class ApiKeyTests
         Should.Throw<ArgumentException>(() => _generator.GenerateKey(invalidPrefix));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Hash Key Is Deterministic")]
     public void HashKey_IsDeterministic()
     {
         var key = "test-key-12345";
@@ -38,7 +38,7 @@ public class ApiKeyTests
         hash1.Length.ShouldBe(64); // SHA-256 hex length
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validator Validates Successfully")]
     public async Task Validator_ValidatesSuccessfully()
     {
         var validator = new TestApiKeyValidator();
@@ -50,7 +50,7 @@ public class ApiKeyTests
         result.ApiKey.Scopes.ShouldContain("orders.read");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validator Rejects Invalid Key")]
     public async Task Validator_RejectsInvalidKey()
     {
         var validator = new TestApiKeyValidator();
@@ -61,7 +61,7 @@ public class ApiKeyTests
         result.FailureReason.ShouldBe("Key not found");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Di Registration Registers Api Key Services")]
     public void DiRegistration_RegistersApiKeyServices()
     {
         var services = new ServiceCollection();
@@ -98,7 +98,7 @@ public class ApiKeyTests
         }
     }
 
-    [Fact]
+    [Fact(DisplayName = "Handler Rejects Multiple Api Key Headers")]
     public async Task Handler_RejectsMultipleApiKeyHeaders()
     {
         var options = new KyrolusApiKeyAuthenticationOptions { HeaderName = "X-Api-Key" };
@@ -120,7 +120,7 @@ public class ApiKeyTests
         result.Failure.Message.ShouldContain("Multiple API key headers are not permitted");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Handler Rejects Inactive Api Key Even If Validator Succeeds")]
     public async Task Handler_RejectsInactiveApiKey_EvenIfValidatorSucceeds()
     {
         var options = new KyrolusApiKeyAuthenticationOptions { HeaderName = "X-Api-Key" };
@@ -148,7 +148,7 @@ public class ApiKeyTests
         result.Failure.Message.ShouldContain("inactive or revoked");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Handler Rejects Expired Api Key Even If Validator Succeeds")]
     public async Task Handler_RejectsExpiredApiKey_EvenIfValidatorSucceeds()
     {
         var options = new KyrolusApiKeyAuthenticationOptions { HeaderName = "X-Api-Key" };
@@ -177,7 +177,7 @@ public class ApiKeyTests
         result.Failure.Message.ShouldContain("expired");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Handler Falls Back To Default Header Name When Configured Header Name Is Null Or Whitespace")]
     public async Task Handler_FallsBackToDefaultHeaderName_WhenConfiguredHeaderNameIsNullOrWhitespace()
     {
         var validKey = new KyrolusApiKey(
@@ -207,7 +207,7 @@ public class ApiKeyTests
         result.Succeeded.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Generator Hash Key Throws For Oversized Key")]
     public void Generator_HashKey_Throws_ForOversizedKey()
     {
         var generator = new KyrolusApiKeyGenerator();

@@ -18,7 +18,7 @@ public sealed class OpenIddictServerRegistrationTests
         => Should.Throw<InvalidOperationException>(
             () => NewServices().AddKyrolusOpenIddictAuthServer(configure)).Message;
 
-    [Fact]
+    [Fact(DisplayName = "A development configuration registers")]
     public void A_development_configuration_registers()
     {
         var services = NewServices();
@@ -30,13 +30,13 @@ public sealed class OpenIddictServerRegistrationTests
             .UseDevelopmentKeys.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "A server with no signing key fails at startup")]
     public void A_server_with_no_signing_key_fails_at_startup()
     {
         RegistrationFailure(_ => { }).ShouldContain("No signing key is configured");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Development keys alongside a real certificate fail at startup")]
     public void Development_keys_alongside_a_real_certificate_fail_at_startup()
     {
         // The generated key would silently win, and the certificate that was configured on
@@ -48,7 +48,7 @@ public sealed class OpenIddictServerRegistrationTests
         }).ShouldContain("Pick one");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Development and ephemeral keys together fail at startup")]
     public void Development_and_ephemeral_keys_together_fail_at_startup()
     {
         RegistrationFailure(o =>
@@ -58,7 +58,7 @@ public sealed class OpenIddictServerRegistrationTests
         }).ShouldContain("cannot both be enabled");
     }
 
-    [Fact]
+    [Fact(DisplayName = "A server with no grant type fails at startup")]
     public void A_server_with_no_grant_type_fails_at_startup()
     {
         RegistrationFailure(o =>
@@ -69,7 +69,7 @@ public sealed class OpenIddictServerRegistrationTests
         }).ShouldContain("No grant type is enabled");
     }
 
-    [Fact]
+    [Fact(DisplayName = "A refresh flow with nothing to refresh fails at startup")]
     public void A_refresh_flow_with_nothing_to_refresh_fails_at_startup()
     {
         RegistrationFailure(o =>
@@ -81,7 +81,7 @@ public sealed class OpenIddictServerRegistrationTests
         }).ShouldContain("no flow that can issue a refresh token");
     }
 
-    [Fact]
+    [Fact(DisplayName = "A refresh token shorter than the access token fails at startup")]
     public void A_refresh_token_shorter_than_the_access_token_fails_at_startup()
     {
         RegistrationFailure(o =>
@@ -92,7 +92,7 @@ public sealed class OpenIddictServerRegistrationTests
         }).ShouldContain("must be longer than");
     }
 
-    [Theory]
+    [Theory(DisplayName = "A relative endpoint path fails at startup")]
     [InlineData("connect/token")]
     [InlineData("")]
     public void A_relative_endpoint_path_fails_at_startup(string path)
@@ -104,7 +104,7 @@ public sealed class OpenIddictServerRegistrationTests
         }).ShouldContain(nameof(KyrolusOpenIddictOptions.TokenEndpoint));
     }
 
-    [Fact]
+    [Fact(DisplayName = "A non absolute issuer fails at startup")]
     public void A_non_absolute_issuer_fails_at_startup()
     {
         RegistrationFailure(o =>
@@ -114,7 +114,7 @@ public sealed class OpenIddictServerRegistrationTests
         }).ShouldContain("absolute URI");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Reference tokens without token storage fail at startup")]
     public void Reference_tokens_without_token_storage_fail_at_startup()
     {
         RegistrationFailure(o =>
@@ -125,7 +125,7 @@ public sealed class OpenIddictServerRegistrationTests
         }).ShouldContain("needs token storage");
     }
 
-    [Fact]
+    [Fact(DisplayName = "A zero lifetime fails at startup")]
     public void A_zero_lifetime_fails_at_startup()
     {
         RegistrationFailure(o =>
@@ -135,7 +135,7 @@ public sealed class OpenIddictServerRegistrationTests
         }).ShouldContain(nameof(KyrolusOpenIddictOptions.AccessTokenLifetime));
     }
 
-    [Fact]
+    [Fact(DisplayName = "The auth runtime defaults are registered alongside the server")]
     public void The_auth_runtime_defaults_are_registered_alongside_the_server()
     {
         var services = NewServices();
@@ -155,7 +155,7 @@ public sealed class OpenIddictServerRegistrationTests
 
     // ── Resource server ──────────────────────────────────────────────────
 
-    [Fact]
+    [Fact(DisplayName = "An api server with no issuer fails at startup")]
     public void An_api_server_with_no_issuer_fails_at_startup()
     {
         Should.Throw<InvalidOperationException>(
@@ -163,7 +163,7 @@ public sealed class OpenIddictServerRegistrationTests
             .Message.ShouldContain(nameof(KyrolusOpenIddictApiOptions.Issuer));
     }
 
-    [Fact]
+    [Fact(DisplayName = "An api server using introspection needs client credentials")]
     public void An_api_server_using_introspection_needs_client_credentials()
     {
         var message = Should.Throw<InvalidOperationException>(
@@ -177,7 +177,7 @@ public sealed class OpenIddictServerRegistrationTests
         message.ShouldContain(nameof(KyrolusOpenIddictApiOptions.ClientSecret));
     }
 
-    [Fact]
+    [Fact(DisplayName = "An api server validating locally registers")]
     public void An_api_server_validating_locally_registers()
     {
         var services = NewServices();

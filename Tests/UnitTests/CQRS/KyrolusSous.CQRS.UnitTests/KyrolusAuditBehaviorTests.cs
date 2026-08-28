@@ -20,7 +20,7 @@ public class KyrolusAuditBehaviorTests
 
     public sealed record PlainCommand(string Action) : IKyrolusCommand<string>;
 
-    [Fact]
+    [Fact(DisplayName = "Audited command should emit successful entry to sink")]
     public async Task Audited_command_should_emit_successful_entry_to_sink()
     {
         var sink = new InMemoryAuditSink();
@@ -53,7 +53,7 @@ public class KyrolusAuditBehaviorTests
         entry.Payload.ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Audited command failure should emit failed entry and rethrow")]
     public async Task Audited_command_failure_should_emit_failed_entry_and_rethrow()
     {
         var sink = new InMemoryAuditSink();
@@ -72,7 +72,7 @@ public class KyrolusAuditBehaviorTests
         entry.ErrorMessage.ShouldBe("Insufficient funds");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Non auditable command should not emit entries")]
     public async Task Non_auditable_command_should_not_emit_entries()
     {
         var sink = new InMemoryAuditSink();

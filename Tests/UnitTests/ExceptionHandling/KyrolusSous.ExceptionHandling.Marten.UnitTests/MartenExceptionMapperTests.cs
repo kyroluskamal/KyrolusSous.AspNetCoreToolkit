@@ -19,13 +19,13 @@ public class MartenExceptionMapperTests
         Method: "POST",
         Culture: null);
 
-    [Fact]
+    [Fact(DisplayName = "Order Should Be Minus50")]
     public void Order_ShouldBe_Minus50()
     {
         mapper.Order.ShouldBe(-50);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Concurrent Update Exception Should Map To Concurrency Conflict")]
     public void ConcurrentUpdateException_ShouldMapTo_ConcurrencyConflict()
     {
         var ex = new ConcurrentUpdateException(new Exception("optimistic concurrency failure"));
@@ -39,7 +39,7 @@ public class MartenExceptionMapperTests
         mapping.Error.Title.ShouldBe("Concurrency conflict");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Existing Stream Id Collision Exception Should Map To Conflict")]
     public void ExistingStreamIdCollisionException_ShouldMapTo_Conflict()
     {
         var ex = new ExistingStreamIdCollisionException("stream-123", typeof(object));
@@ -51,7 +51,7 @@ public class MartenExceptionMapperTests
         mapping.Error.Code.ShouldBe(KyrolusErrorCodes.Conflict);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Non Existent Stream Exception Should Map To Not Found")]
     public void NonExistentStreamException_ShouldMapTo_NotFound()
     {
         var ex = new NonExistentStreamException(Guid.NewGuid());
@@ -63,7 +63,7 @@ public class MartenExceptionMapperTests
         mapping.Error.Code.ShouldBe(KyrolusErrorCodes.NotFound);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Bad Linq Expression Exception Should Map To Bad Request")]
     public void BadLinqExpressionException_ShouldMapTo_BadRequest()
     {
         var ex = new BadLinqExpressionException("invalid linq query");
@@ -75,7 +75,7 @@ public class MartenExceptionMapperTests
         mapping.Error.Code.ShouldBe(KyrolusErrorCodes.BadRequest);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Unrelated Exception Should Return False")]
     public void UnrelatedException_ShouldReturnFalse()
     {
         var ex = new InvalidOperationException("Something bad");
@@ -85,7 +85,7 @@ public class MartenExceptionMapperTests
         mapping.ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Add Kyrolus Marten Exception Mapping Registers Mapper")]
     public void AddKyrolusMartenExceptionMapping_RegistersMapper()
     {
         var services = new ServiceCollection();

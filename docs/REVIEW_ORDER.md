@@ -157,8 +157,8 @@ Zero ORM coupling in core. 105 iterative security and logic audit rounds complet
 | 92 | `OpenApi.SwaggerUI` | ✅ | Companion package isolating Swashbuckle SwaggerUI with IHostingStartup and assembly auto-discovery |
 | 93 | `RabbitMQ.Abstractions` | ✅ | Clean contract abstractions, IKyrolusRabbitMQConsumer, IKyrolusRabbitMQRpcClient, IKyrolusRabbitMQEventHandler, options, and envelope |
 | 94 | `RabbitMQ.Runtime` | ✅ | Enterprise runtime with typed background consumers, RPC client, batch publisher confirms, DLX routing, OpenTelemetry tracing, and health checks |
-| 95 | `Elasticsearch` | ⚡ | Modern Elasticsearch client (v8.17) with repository, fluent search, auto-index lifecycle, and health checks |
-| 96 | `Resilience` | ⚡ | Enterprise Polly v8 & Microsoft.Extensions.Resilience with smart IsTransient evaluation, circuit breaker, and HttpClient extensions |
+| 95 | `Elasticsearch` | ✅ | Modern Elasticsearch client (v8.17) with repository, fluent search, auto-index lifecycle, and health checks |
+| 96 | `Resilience` | ✅ | Enterprise Polly v8 & Microsoft.Extensions.Resilience with smart IsTransient evaluation, circuit breaker, and HttpClient extensions |
 
 ---
 

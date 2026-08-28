@@ -33,7 +33,7 @@ public class KyrolusOutboxTests
         }
     }
 
-    [Fact]
+    [Fact(DisplayName = "Outbox processor should dispatch pending messages and mark processed")]
     public async Task Outbox_processor_should_dispatch_pending_messages_and_mark_processed()
     {
         var store = new InMemoryOutboxStore();
@@ -64,7 +64,7 @@ public class KyrolusOutboxTests
         all[0].Error.ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Outbox processor should handle invalid event type and mark failed")]
     public async Task Outbox_processor_should_handle_invalid_event_type_and_mark_failed()
     {
         var store = new InMemoryOutboxStore();

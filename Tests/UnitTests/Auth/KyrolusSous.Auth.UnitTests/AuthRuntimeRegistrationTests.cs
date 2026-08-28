@@ -9,7 +9,7 @@ namespace KyrolusSous.Auth.UnitTests;
 
 public sealed class AuthRuntimeRegistrationTests
 {
-    [Fact]
+    [Fact(DisplayName = "Add Kyrolus Auth Core registers the defaults")]
     public void AddKyrolusAuthCore_registers_the_defaults()
     {
         var services = new ServiceCollection();
@@ -31,7 +31,7 @@ public sealed class AuthRuntimeRegistrationTests
             .ShouldBeOfType<KyrolusExternalLoginHandler>();
     }
 
-    [Fact]
+    [Fact(DisplayName = "An application supplied implementation wins")]
     public void An_application_supplied_implementation_wins()
     {
         var services = new ServiceCollection();
@@ -46,7 +46,7 @@ public sealed class AuthRuntimeRegistrationTests
         provider.GetRequiredService<IKyrolusPasswordHasher>().ShouldBeOfType<StubPasswordHasher>();
     }
 
-    [Fact]
+    [Fact(DisplayName = "The in memory store serves both the store and lockout roles")]
     public void The_in_memory_store_serves_both_the_store_and_lockout_roles()
     {
         var services = new ServiceCollection();
@@ -63,7 +63,7 @@ public sealed class AuthRuntimeRegistrationTests
         ((KyrolusInMemoryAuthUserStore)store).Users.ShouldContain(u => u.UserName == "seeded");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Add Kyrolus Auth User Store registers the application store")]
     public void AddKyrolusAuthUserStore_registers_the_application_store()
     {
         var services = new ServiceCollection();
@@ -76,7 +76,7 @@ public sealed class AuthRuntimeRegistrationTests
             .ShouldBeOfType<KyrolusInMemoryAuthUserStore>();
     }
 
-    [Theory]
+    [Theory(DisplayName = "A weak iteration count fails validation")]
     [InlineData(1_000)]
     [InlineData(9_999)]
     public void A_weak_iteration_count_fails_validation(int iterations)
@@ -88,7 +88,7 @@ public sealed class AuthRuntimeRegistrationTests
         result.FailureMessage.ShouldContain(nameof(KyrolusAuthOptions.Pbkdf2Iterations));
     }
 
-    [Fact]
+    [Fact(DisplayName = "An unrepresentable hash algorithm fails validation")]
     public void An_unrepresentable_hash_algorithm_fails_validation()
     {
         var result = new KyrolusAuthOptionsValidator().Validate(
@@ -99,14 +99,14 @@ public sealed class AuthRuntimeRegistrationTests
         result.FailureMessage.ShouldContain(nameof(KyrolusAuthOptions.Pbkdf2HashAlgorithm));
     }
 
-    [Fact]
+    [Fact(DisplayName = "The defaults pass validation")]
     public void The_defaults_pass_validation()
     {
         new KyrolusAuthOptionsValidator().Validate(null, new KyrolusAuthOptions())
             .Succeeded.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Validation reports every failure at once")]
     public void Validation_reports_every_failure_at_once()
     {
         var result = new KyrolusAuthOptionsValidator().Validate(null, new KyrolusAuthOptions

@@ -9,7 +9,7 @@ public class ImpersonationTests
 {
     private readonly KyrolusImpersonationService _service = new();
 
-    [Fact]
+    [Fact(DisplayName = "Create Impersonated Principal Embeds Target User And Admin Actor Claims")]
     public void CreateImpersonatedPrincipal_EmbedsTargetUserAndAdminActorClaims()
     {
         var adminIdentity = new ClaimsIdentity([
@@ -45,7 +45,7 @@ public class ImpersonationTests
         _service.GetImpersonationReason(impersonated).ShouldBe("Investigating invoice #4567 payment issue");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Create Impersonated Principal Throws When Admin Unauthenticated")]
     public void CreateImpersonatedPrincipal_Throws_WhenAdminUnauthenticated()
     {
         var unauthAdmin = new ClaimsPrincipal(new ClaimsIdentity());
@@ -55,7 +55,7 @@ public class ImpersonationTests
             _service.CreateImpersonatedPrincipal(targetUser, unauthAdmin));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Is Impersonating Returns False For Regular User")]
     public void IsImpersonating_ReturnsFalse_ForRegularUser()
     {
         var regularIdentity = new ClaimsIdentity([
@@ -68,7 +68,7 @@ public class ImpersonationTests
         _service.GetOriginalAdminId(regularUser).ShouldBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Di Registration Add Kyrolus Impersonation Registers Service")]
     public void DiRegistration_AddKyrolusImpersonation_RegistersService()
     {
         var services = new ServiceCollection();
@@ -79,7 +79,7 @@ public class ImpersonationTests
         provider.GetService<IKyrolusImpersonationService>().ShouldNotBeNull();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Create Impersonated Principal Throws When Caller Is Already Impersonating")]
     public void CreateImpersonatedPrincipal_Throws_WhenCallerIsAlreadyImpersonating()
     {
         var adminUser = new ClaimsPrincipal(new ClaimsIdentity([
@@ -95,7 +95,7 @@ public class ImpersonationTests
         ex.Message.ShouldContain("nested impersonation");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Create Impersonated Principal Throws When Admin Impersonates Self")]
     public void CreateImpersonatedPrincipal_Throws_WhenAdminImpersonatesSelf()
     {
         var adminUser = new ClaimsPrincipal(new ClaimsIdentity([
@@ -110,7 +110,7 @@ public class ImpersonationTests
         ex.Message.ShouldContain("cannot impersonate themselves");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Create Impersonated Principal Sanitizes Target User Existing Impersonation Claims")]
     public void CreateImpersonatedPrincipal_SanitizesTargetUserExistingImpersonationClaims()
     {
         var adminUser = new ClaimsPrincipal(new ClaimsIdentity([
@@ -133,7 +133,7 @@ public class ImpersonationTests
         principal.FindFirst("custom_role")?.Value.ShouldBe("finance");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Is Impersonation Expired Detects Expired Impersonation Session")]
     public void IsImpersonationExpired_DetectsExpiredImpersonationSession()
     {
         var adminUser = new ClaimsPrincipal(new ClaimsIdentity([
@@ -152,7 +152,7 @@ public class ImpersonationTests
         _service.IsImpersonationExpired(adminUser, TimeSpan.FromHours(1)).ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Create Impersonated Principal Throws When Admin User Lacks Identifier")]
     public void CreateImpersonatedPrincipal_Throws_WhenAdminUserLacksIdentifier()
     {
         var invalidAdmin = new ClaimsPrincipal(new ClaimsIdentity([
@@ -165,7 +165,7 @@ public class ImpersonationTests
             _service.CreateImpersonatedPrincipal(targetUser, invalidAdmin));
     }
 
-    [Fact]
+    [Fact(DisplayName = "Create Impersonated Principal Truncates Excessive Reason Length")]
     public void CreateImpersonatedPrincipal_TruncatesExcessiveReasonLength()
     {
         var admin = new ClaimsPrincipal(new ClaimsIdentity([
@@ -182,7 +182,7 @@ public class ImpersonationTests
         reasonClaim.Length.ShouldBe(256);
     }
 
-    [Fact]
+    [Fact(DisplayName = "Create Impersonated Principal Preserves Tenant Id")]
     public void CreateImpersonatedPrincipal_PreservesTenantId()
     {
         var admin = new ClaimsPrincipal(new ClaimsIdentity([

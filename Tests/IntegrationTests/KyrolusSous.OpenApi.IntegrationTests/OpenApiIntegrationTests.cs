@@ -25,7 +25,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         });
     }
 
-    [Fact]
+    [Fact(DisplayName = "Get Open Api Json V1 Returns Success And Correct Content")]
     public async Task GetOpenApiJson_V1_ReturnsSuccessAndCorrectContent()
     {
         var client = _factory.CreateClient();
@@ -58,7 +58,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         responses.TryGetProperty("500", out _).ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Get Open Api Json V2 Returns Success And Correct Content")]
     public async Task GetOpenApiJson_V2_ReturnsSuccessAndCorrectContent()
     {
         var client = _factory.CreateClient();
@@ -79,7 +79,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         info.GetProperty("license").GetProperty("url").GetString().ShouldBe("https://example.com/license");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Get Scalar Ui Returns Success And Html Content")]
     public async Task GetScalarUi_ReturnsSuccessAndHtmlContent()
     {
         var client = _factory.CreateClient();
@@ -90,7 +90,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         response.Content.Headers.ContentType?.ToString().ShouldContain("text/html");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Get Swagger Ui Returns Success And Html Content")]
     public async Task GetSwaggerUi_ReturnsSuccessAndHtmlContent()
     {
         var client = _factory.CreateClient();
@@ -101,7 +101,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         response.Content.Headers.ContentType?.ToString().ShouldContain("text/html");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Get Re Doc Ui Returns Success And Html Content")]
     public async Task GetReDocUi_ReturnsSuccessAndHtmlContent()
     {
         var client = _factory.CreateClient();
@@ -112,7 +112,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         response.Content.Headers.ContentType?.ToString().ShouldContain("text/html");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Open Api Options Defaults Are Valid")]
     public void OpenApiOptions_Defaults_AreValid()
     {
         var options = new KyrolusOpenApiOptions();
@@ -134,7 +134,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         options.BasicAuthSchemeName.ShouldBe("Basic");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Add Kyrolus Open Api Binds Configuration Correctly")]
     public void AddKyrolusOpenApi_BindsConfigurationCorrectly()
     {
         var inMemorySettings = new Dictionary<string, string?>
@@ -163,7 +163,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         options.EnableReDocUi.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Allow Anonymous Endpoint Has No Security Requirements")]
     public async Task AllowAnonymousEndpoint_HasNoSecurityRequirements()
     {
         var client = _factory.CreateClient();
@@ -183,7 +183,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         }
     }
 
-    [Fact]
+    [Fact(DisplayName = "Authorized Endpoint Has Security Requirements And Documents Roles")]
     public async Task AuthorizedEndpoint_HasSecurityRequirements_AndDocumentsRoles()
     {
         var client = _factory.CreateClient();
@@ -205,7 +205,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         desc.ShouldContain("Admin,Manager");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Operations Include Tenant Id Header When Enabled")]
     public async Task Operations_IncludeTenantIdHeader_WhenEnabled()
     {
         var client = _factory.CreateClient();
@@ -233,7 +233,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         hasTenantHeader.ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Error Responses Include Problem Details And Not Found Response")]
     public async Task ErrorResponses_IncludeProblemDetails_And_NotFoundResponse()
     {
         var client = _factory.CreateClient();
@@ -257,7 +257,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         resp404.GetProperty("description").GetString().ShouldBe("Not Found");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Multi Version Scalar And Re Doc Endpoints Return Success")]
     public async Task MultiVersion_ScalarAndReDoc_EndpointsReturnSuccess()
     {
         var client = _factory.CreateClient();
@@ -277,7 +277,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         redocV2.EnsureSuccessStatusCode();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Configure For Open Iddict Configures O Auth2 Correctly")]
     public void ConfigureForOpenIddict_ConfiguresOAuth2Correctly()
     {
         var options = new KyrolusOpenApiOptions();
@@ -294,7 +294,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         options.OAuth2Scopes.ContainsKey("offline_access").ShouldBeTrue();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Tags Are Sorted Alphabetically")]
     public async Task Tags_AreSortedAlphabetically()
     {
         var client = _factory.CreateClient();
@@ -315,7 +315,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         }
     }
 
-    [Fact]
+    [Fact(DisplayName = "Add Kyrolus Swagger Ui Registers Ui Provider In Services")]
     public void AddKyrolusSwaggerUi_RegistersUiProviderInServices()
     {
         var services = new ServiceCollection();
@@ -328,7 +328,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         provider.ProviderName.ShouldBe("SwaggerUI");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Obsolete Endpoint Is Marked As Deprecated And Contains Warning")]
     public async Task ObsoleteEndpoint_IsMarkedAsDeprecated_AndContainsWarning()
     {
         var client = _factory.CreateClient();
@@ -350,7 +350,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         desc.ShouldContain("Use /weatherforecast instead");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Rate Limited Endpoint Documents429 Response")]
     public async Task RateLimitedEndpoint_Documents429Response()
     {
         var client = _factory.CreateClient();
@@ -368,7 +368,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         r429.GetProperty("description").GetString()!.ShouldContain("Too Many Requests");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Configure Open Api Options Applies Custom Document Modification")]
     public async Task ConfigureOpenApiOptions_AppliesCustomDocumentModification()
     {
         var client = _factory.CreateClient();
@@ -386,7 +386,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         r418.GetProperty("description").GetString()!.ShouldContain("I'm a teapot (Custom Hook Applied)");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Save Open Api Document Async Writes Valid File To Disk")]
     public async Task SaveOpenApiDocumentAsync_WritesValidFileToDisk()
     {
         var client = _factory.CreateClient();
@@ -412,7 +412,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         }
     }
 
-    [Fact]
+    [Fact(DisplayName = "Anonymous Endpoint Does Not Contain401 And403 When Smart Auth Enabled")]
     public async Task AnonymousEndpoint_DoesNotContain401And403_WhenSmartAuthEnabled()
     {
         var client = _factory.CreateClient();
@@ -433,7 +433,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         responses.TryGetProperty("403", out _).ShouldBeFalse();
     }
 
-    [Fact]
+    [Fact(DisplayName = "Header Parameters Have Explicit String Schema Definition")]
     public async Task HeaderParameters_HaveExplicitStringSchemaDefinition()
     {
         var client = _factory.CreateClient();
@@ -454,7 +454,7 @@ public class OpenApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         schema.GetProperty("type").GetString().ShouldBe("string");
     }
 
-    [Fact]
+    [Fact(DisplayName = "Re Doc Endpoint Returns Valid Html With Sanitized Content")]
     public async Task ReDocEndpoint_ReturnsValidHtmlWithSanitizedContent()
     {
         var client = _factory.CreateClient();

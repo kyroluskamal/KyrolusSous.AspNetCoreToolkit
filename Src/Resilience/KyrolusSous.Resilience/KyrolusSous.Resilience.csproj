@@ -18,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\KyrolusSous.Resilience.Abstractions\KyrolusSous.Resilience.Abstractions.csproj" />
     <ProjectReference Include="..\..\ExceptionHandling\KyrolusSous.ExceptionHandling.Abstractions\KyrolusSous.ExceptionHandling.Abstractions.csproj" />
     <ProjectReference Include="..\..\Mediator\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj" />
   </ItemGroup>
