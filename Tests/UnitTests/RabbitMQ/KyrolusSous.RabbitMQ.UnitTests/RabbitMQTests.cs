@@ -423,6 +423,134 @@ public class RabbitMQTests
         provider.GetService<KyrolusSous.RabbitMQ.Abstractions.Compression.IKyrolusMessageCompressor>().ShouldNotBeNull();
     }
 
+    [Fact]
+    public async Task SagaCoordinator_ExecutesStepsAndCompensatesOnFailure_Correctly()
+    {
+        var store = new KyrolusSous.RabbitMQ.Runtime.Sagas.KyrolusInMemorySagaStore<KyrolusSous.RabbitMQ.Abstractions.Sagas.KyrolusSagaState>();
+        var coordinator = new KyrolusSous.RabbitMQ.Runtime.Sagas.KyrolusSagaCoordinator<KyrolusSous.RabbitMQ.Abstractions.Sagas.KyrolusSagaState>(store);
+
+        var state = new KyrolusSous.RabbitMQ.Abstractions.Sagas.KyrolusSagaState
+        {
+            CorrelationId = "saga-1234"
+        };
+
+        bool step1Compensated = false;
+
+        await coordinator.ExecuteStepAsync(
+            state,
+            "Step1_ReserveStock",
+            () => Task.CompletedTask,
+            () => { step1Compensated = true; return Task.CompletedTask; });
+
+        state.CurrentState.ShouldBe("Step1_ReserveStock");
+
+        // Step 2 fails and should trigger step 1 compensation
+        await Should.ThrowAsync<InvalidOperationException>(async () =>
+        {
+            await coordinator.ExecuteStepAsync(
+                state,
+                "Step2_ChargePayment",
+                () => throw new InvalidOperationException("Card declined"),
+                () => Task.CompletedTask);
+        });
+
+        step1Compensated.ShouldBeTrue();
+        state.CurrentState.ShouldBe("Compensated");
+        state.IsFaulted.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void CloudEventEnvelope_InitializesWithStandardAttributes_Correctly()
+    {
+        var payload = new { TransactionId = "tx-99", Amount = 1500.00 };
+        var envelope = new KyrolusSous.RabbitMQ.Abstractions.Models.KyrolusCloudEventEnvelope<object>(
+            payload,
+            source: "/billing-service",
+            subject: "tx/created");
+
+        envelope.SpecVersion.ShouldBe("1.0");
+        envelope.Source.ShouldBe("/billing-service");
+        envelope.Subject.ShouldBe("tx/created");
+        envelope.DataContentType.ShouldBe("application/json");
+        envelope.Data.ShouldBe(payload);
+        envelope.Time.ShouldBeLessThanOrEqualTo(DateTimeOffset.UtcNow);
+    }
+
+    [Fact]
+    public void MessageUpcaster_TransformsV1ToV2_Successfully()
+    {
+        var registry = new KyrolusSous.RabbitMQ.Runtime.Evolution.KyrolusMessageUpcasterRegistry();
+        registry.Register(new OrderPlacedV1ToV2Upcaster());
+
+        var v1 = new OrderPlacedV1(101, "Alice");
+        var upcasted = registry.Upcast(v1);
+
+        upcasted.ShouldBeOfType<OrderPlacedV2>();
+        var v2 = (OrderPlacedV2)upcasted;
+        v2.OrderId.ShouldBe(101);
+        v2.CustomerName.ShouldBe("Alice");
+        v2.Email.ShouldBe("unspecified@domain.com");
+    }
+
+    [Fact]
+    public async Task RateLimiter_TokenBucket_LimitsAndAcquiresTokens()
+    {
+        var limiter = new KyrolusSous.RabbitMQ.Runtime.RateLimiting.KyrolusTokenBucketRateLimiter(maxTokensPerSecond: 10, burstCapacity: 2);
+
+        var canAcquire1 = limiter.TryAcquire(1);
+        canAcquire1.ShouldBeTrue();
+
+        var canAcquire2 = limiter.TryAcquire(1);
+        canAcquire2.ShouldBeTrue();
+
+        // Third immediate acquire without refill should fail or wait
+        var canAcquire3 = limiter.TryAcquire(1);
+        canAcquire3.ShouldBeFalse();
+
+        // Async acquire should succeed after short refill delay
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        await limiter.AcquireAsync(1, cts.Token);
+    }
+
+    [Fact]
+    public void TopologyBuilder_PriorityQuorumStreamsAndHeaders_ConfiguresCorrectly()
+    {
+        var builder = new KyrolusSous.RabbitMQ.Runtime.Topology.KyrolusRabbitMQTopologyBuilder();
+        builder.AddPriorityQueue("vip.queue", maxPriority: 5)
+               .AddQuorumQueue("audit.quorum.queue", deliveryLimit: 3)
+               .AddStream("telemetry.stream", maxAge: TimeSpan.FromHours(24))
+               .BindHeadersQueue("tenant.queue", "headers.exchange", "all", new Dictionary<string, object?> { ["tenant"] = "emea" });
+
+        builder.Queues.Count.ShouldBe(3);
+        builder.Queues.ShouldContain(q => q.Name == "vip.queue" && q.Arguments != null && q.Arguments.ContainsKey("x-max-priority"));
+        builder.Queues.ShouldContain(q => q.Name == "audit.quorum.queue" && q.Arguments != null && (string)q.Arguments["x-queue-type"]! == "quorum");
+        builder.Queues.ShouldContain(q => q.Name == "telemetry.stream" && q.Arguments != null && (string)q.Arguments["x-queue-type"]! == "stream");
+
+        builder.Bindings.Count.ShouldBe(1);
+        builder.Bindings[0].QueueName.ShouldBe("tenant.queue");
+        builder.Bindings[0].Arguments.ShouldNotBeNull();
+        builder.Bindings[0].Arguments!["x-match"].ShouldBe("all");
+        builder.Bindings[0].Arguments!["tenant"].ShouldBe("emea");
+    }
+
+    [Fact]
+    public void DiRegistration_UltraAdvancedFeatures_RegistersAllServices()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddKyrolusRabbitMQ();
+        services.AddKyrolusRabbitMQSaga<TestOrderSaga, KyrolusSous.RabbitMQ.Abstractions.Sagas.KyrolusSagaState>();
+        services.AddKyrolusRabbitMQDlqManager();
+        services.AddKyrolusRabbitMQUpcasters(r => r.Register(new OrderPlacedV1ToV2Upcaster()));
+
+        var provider = services.BuildServiceProvider();
+
+        provider.GetService<KyrolusSous.RabbitMQ.Abstractions.Sagas.IKyrolusSagaStore<KyrolusSous.RabbitMQ.Abstractions.Sagas.KyrolusSagaState>>().ShouldNotBeNull();
+        provider.GetService<TestOrderSaga>().ShouldNotBeNull();
+        provider.GetService<KyrolusSous.RabbitMQ.Abstractions.Dlq.IKyrolusDlqManager>().ShouldNotBeNull();
+        provider.GetService<KyrolusSous.RabbitMQ.Runtime.Evolution.KyrolusMessageUpcasterRegistry>().ShouldNotBeNull();
+    }
+
     #endregion
 }
 
@@ -433,5 +561,24 @@ public sealed class TestOrderCreatedConsumer : IKyrolusRabbitMQConsumer<TestOrde
     public Task HandleAsync(TestOrderCreatedEvent message, KyrolusRabbitMQConsumeContext context, CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
+    }
+}
+
+public sealed record OrderPlacedV1(int OrderId, string CustomerName);
+public sealed record OrderPlacedV2(int OrderId, string CustomerName, string Email);
+
+public sealed class OrderPlacedV1ToV2Upcaster : KyrolusSous.RabbitMQ.Abstractions.Evolution.IKyrolusMessageUpcaster<OrderPlacedV1, OrderPlacedV2>
+{
+    public OrderPlacedV2 Upcast(OrderPlacedV1 oldMessage)
+    {
+        return new OrderPlacedV2(oldMessage.OrderId, oldMessage.CustomerName, "unspecified@domain.com");
+    }
+}
+
+public sealed class TestOrderSaga : KyrolusSous.RabbitMQ.Runtime.Sagas.KyrolusSagaCoordinator<KyrolusSous.RabbitMQ.Abstractions.Sagas.KyrolusSagaState>
+{
+    public TestOrderSaga(KyrolusSous.RabbitMQ.Abstractions.Sagas.IKyrolusSagaStore<KyrolusSous.RabbitMQ.Abstractions.Sagas.KyrolusSagaState> store)
+        : base(store)
+    {
     }
 }

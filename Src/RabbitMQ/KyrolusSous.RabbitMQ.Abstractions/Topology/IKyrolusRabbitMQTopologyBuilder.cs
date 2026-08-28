@@ -32,7 +32,7 @@ public sealed record KyrolusBindingDefinition(
     IDictionary<string, object?>? Arguments = null);
 
 /// <summary>
-/// Fluent builder for declarative RabbitMQ topology configuration.
+/// Fluent builder for declarative RabbitMQ topology configuration including Quorum, Streams, Priority, and Headers.
 /// </summary>
 public interface IKyrolusRabbitMQTopologyBuilder
 {
@@ -54,9 +54,33 @@ public interface IKyrolusRabbitMQTopologyBuilder
         bool autoDelete = false,
         IDictionary<string, object?>? arguments = null);
 
+    IKyrolusRabbitMQTopologyBuilder AddPriorityQueue(
+        string name,
+        byte maxPriority = 10,
+        bool durable = true,
+        bool exclusive = false,
+        bool autoDelete = false,
+        IDictionary<string, object?>? arguments = null);
+
+    IKyrolusRabbitMQTopologyBuilder AddQuorumQueue(
+        string name,
+        int? deliveryLimit = null,
+        IDictionary<string, object?>? arguments = null);
+
+    IKyrolusRabbitMQTopologyBuilder AddStream(
+        string name,
+        TimeSpan? maxAge = null,
+        IDictionary<string, object?>? arguments = null);
+
     IKyrolusRabbitMQTopologyBuilder BindQueue(
         string queueName,
         string exchangeName,
         string routingKey,
         IDictionary<string, object?>? arguments = null);
+
+    IKyrolusRabbitMQTopologyBuilder BindHeadersQueue(
+        string queueName,
+        string exchangeName,
+        string xMatch,
+        IDictionary<string, object?> headers);
 }

@@ -182,6 +182,42 @@ namespace KyrolusSous.RabbitMQ.Runtime.Config
         }
 
         /// <summary>
+        /// Registers a distributed Saga process manager and state store.
+        /// </summary>
+        public static IServiceCollection AddKyrolusRabbitMQSaga<TSaga, TState>(this IServiceCollection services)
+            where TSaga : class, Abstractions.Sagas.IKyrolusSaga<TState>
+            where TState : class, Abstractions.Sagas.IKyrolusSagaState
+        {
+            services.TryAddSingleton<Abstractions.Sagas.IKyrolusSagaStore<TState>, Sagas.KyrolusInMemorySagaStore<TState>>();
+            services.TryAddScoped<TSaga>();
+            services.TryAddScoped<Abstractions.Sagas.IKyrolusSaga<TState>, TSaga>();
+            return services;
+        }
+
+        /// <summary>
+        /// Adds the Dead Letter Queue (DLQ) inspection and replay manager.
+        /// </summary>
+        public static IServiceCollection AddKyrolusRabbitMQDlqManager(this IServiceCollection services)
+        {
+            services.TryAddSingleton<Abstractions.Dlq.IKyrolusDlqManager, Dlq.KyrolusDlqManager>();
+            return services;
+        }
+
+        /// <summary>
+        /// Adds the Message Upcaster registry for schema evolution.
+        /// </summary>
+        public static IServiceCollection AddKyrolusRabbitMQUpcasters(
+            this IServiceCollection services,
+            Action<Evolution.KyrolusMessageUpcasterRegistry>? configure = null)
+        {
+            var registry = new Evolution.KyrolusMessageUpcasterRegistry();
+            configure?.Invoke(registry);
+
+            services.TryAddSingleton(registry);
+            return services;
+        }
+
+        /// <summary>
         /// Backward-compatibility overload for adding RabbitMQ with host, username, password.
         /// </summary>
         public static IServiceCollection AddRabbitMQ(
