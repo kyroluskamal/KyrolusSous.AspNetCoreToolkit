@@ -551,6 +551,58 @@ public class RabbitMQTests
         provider.GetService<KyrolusSous.RabbitMQ.Runtime.Evolution.KyrolusMessageUpcasterRegistry>().ShouldNotBeNull();
     }
 
+    [Fact]
+    public void GzipCompressor_DecompressionBomb_ThrowsInvalidOperationException()
+    {
+        // Limit max decompressed bytes to 500 bytes
+        var compressor = new KyrolusSous.RabbitMQ.Runtime.Compression.KyrolusGzipMessageCompressor(maxDecompressedBytes: 500);
+
+        // Generate 2000 bytes
+        var payload = new byte[2000];
+        Array.Fill(payload, (byte)0x41);
+
+        var compressed = compressor.Compress(payload);
+
+        Should.Throw<InvalidOperationException>(() =>
+        {
+            compressor.Decompress(compressed);
+        }).Message.ShouldContain("Decompression bomb protection");
+    }
+
+    [Fact]
+    public void UpcasterRegistry_CircularCycle_ThrowsInvalidOperationException()
+    {
+        var registry = new KyrolusSous.RabbitMQ.Runtime.Evolution.KyrolusMessageUpcasterRegistry();
+        registry.Register(new CircularAtoBUpcaster());
+        registry.Register(new CircularBtoAUpcaster());
+
+        var objA = new CircularA("Data");
+
+        Should.Throw<InvalidOperationException>(() =>
+        {
+            registry.Upcast(objA);
+        }).Message.ShouldContain("Circular schema upcasting loop detected");
+    }
+
+    [Fact]
+    public async Task SagaCoordinator_MultipleCompensations_ExecutesInReverseLifoOrder()
+    {
+        var store = new KyrolusSous.RabbitMQ.Runtime.Sagas.KyrolusInMemorySagaStore<KyrolusSous.RabbitMQ.Abstractions.Sagas.KyrolusSagaState>();
+        var coordinator = new KyrolusSous.RabbitMQ.Runtime.Sagas.KyrolusSagaCoordinator<KyrolusSous.RabbitMQ.Abstractions.Sagas.KyrolusSagaState>(store);
+
+        var state = new KyrolusSous.RabbitMQ.Abstractions.Sagas.KyrolusSagaState { CorrelationId = "saga-lifo-1" };
+        var executedCompensations = new List<string>();
+
+        await coordinator.ExecuteStepAsync(state, "Step1", () => Task.CompletedTask, () => { executedCompensations.Add("Compensate1"); return Task.CompletedTask; });
+        await coordinator.ExecuteStepAsync(state, "Step2", () => Task.CompletedTask, () => { executedCompensations.Add("Compensate2"); return Task.CompletedTask; });
+        await coordinator.ExecuteStepAsync(state, "Step3", () => Task.CompletedTask, () => { executedCompensations.Add("Compensate3"); return Task.CompletedTask; });
+
+        await coordinator.CompensateAsync(state);
+
+        // Must be in reverse order: Step 3 -> Step 2 -> Step 1
+        executedCompensations.ShouldBe(["Compensate3", "Compensate2", "Compensate1"]);
+    }
+
     #endregion
 }
 
@@ -581,4 +633,17 @@ public sealed class TestOrderSaga : KyrolusSous.RabbitMQ.Runtime.Sagas.KyrolusSa
         : base(store)
     {
     }
+}
+
+public sealed record CircularA(string Value);
+public sealed record CircularB(string Value);
+
+public sealed class CircularAtoBUpcaster : KyrolusSous.RabbitMQ.Abstractions.Evolution.IKyrolusMessageUpcaster<CircularA, CircularB>
+{
+    public CircularB Upcast(CircularA oldMessage) => new(oldMessage.Value);
+}
+
+public sealed class CircularBtoAUpcaster : KyrolusSous.RabbitMQ.Abstractions.Evolution.IKyrolusMessageUpcaster<CircularB, CircularA>
+{
+    public CircularA Upcast(CircularB oldMessage) => new(oldMessage.Value);
 }

@@ -18,6 +18,7 @@ public sealed class KyrolusRabbitMQRpcClient : IKyrolusRabbitMQRpcClient, IDispo
     private IChannel? _channel;
     private readonly SemaphoreSlim _channelLock = new(1, 1);
     private bool _consumerStarted;
+    private bool _disposed;
 
     public KyrolusRabbitMQRpcClient(IKyrolusRabbitMQConnection connection)
     {
@@ -26,6 +27,8 @@ public sealed class KyrolusRabbitMQRpcClient : IKyrolusRabbitMQRpcClient, IDispo
 
     private async ValueTask<IChannel> EnsureChannelAndConsumerAsync(CancellationToken cancellationToken = default)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         if (_channel is not null && _channel.IsOpen && _consumerStarted)
         {
             return _channel;
@@ -34,6 +37,8 @@ public sealed class KyrolusRabbitMQRpcClient : IKyrolusRabbitMQRpcClient, IDispo
         await _channelLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
             if (_channel is not null && _channel.IsOpen && _consumerStarted)
             {
                 return _channel;
@@ -72,6 +77,8 @@ public sealed class KyrolusRabbitMQRpcClient : IKyrolusRabbitMQRpcClient, IDispo
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         var channel = await EnsureChannelAndConsumerAsync(cancellationToken).ConfigureAwait(false);
         var correlationId = Guid.NewGuid().ToString("N");
         var effectiveTimeout = timeout ?? TimeSpan.FromSeconds(30);
@@ -86,7 +93,14 @@ public sealed class KyrolusRabbitMQRpcClient : IKyrolusRabbitMQRpcClient, IDispo
         {
             if (_pendingRequests.TryRemove(correlationId, out var removedTcs))
             {
-                removedTcs.TrySetException(new TimeoutException($"RPC request timed out after {effectiveTimeout} waiting for correlationId {correlationId}."));
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    removedTcs.TrySetCanceled(cancellationToken);
+                }
+                else
+                {
+                    removedTcs.TrySetException(new TimeoutException($"RPC request timed out after {effectiveTimeout} waiting for correlationId {correlationId}."));
+                }
             }
         });
 
@@ -128,6 +142,9 @@ public sealed class KyrolusRabbitMQRpcClient : IKyrolusRabbitMQRpcClient, IDispo
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+
         foreach (var (_, tcs) in _pendingRequests)
         {
             tcs.TrySetCanceled();

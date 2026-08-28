@@ -4,7 +4,7 @@ using KyrolusSous.RabbitMQ.Abstractions.Idempotency;
 namespace KyrolusSous.RabbitMQ.Runtime.Idempotency;
 
 /// <summary>
-/// Thread-safe in-memory implementation of <see cref="IKyrolusIdempotencyStore"/> with expiration.
+/// Thread-safe in-memory implementation of <see cref="IKyrolusIdempotencyStore"/> with expiration and bounded memory management.
 /// </summary>
 public class KyrolusInMemoryIdempotencyStore : IKyrolusIdempotencyStore
 {
@@ -13,6 +13,7 @@ public class KyrolusInMemoryIdempotencyStore : IKyrolusIdempotencyStore
 
     private readonly ConcurrentDictionary<string, LockEntry> _locks = new();
     private readonly ConcurrentDictionary<string, ResultEntry> _results = new();
+    private const int MaxEntriesBeforePurge = 5000;
 
     public Task<bool> TryAcquireLockAsync(string idempotencyKey, TimeSpan lockDuration, CancellationToken cancellationToken = default)
     {
@@ -57,6 +58,11 @@ public class KyrolusInMemoryIdempotencyStore : IKyrolusIdempotencyStore
         // Release lock upon setting result
         _locks.TryRemove(idempotencyKey, out _);
 
+        if (_results.Count > MaxEntriesBeforePurge)
+        {
+            PurgeExpired();
+        }
+
         return Task.CompletedTask;
     }
 
@@ -83,5 +89,25 @@ public class KyrolusInMemoryIdempotencyStore : IKyrolusIdempotencyStore
         ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
         _locks.TryRemove(idempotencyKey, out _);
         return Task.CompletedTask;
+    }
+
+    private void PurgeExpired()
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var (key, entry) in _results)
+        {
+            if (entry.Expiry.HasValue && entry.Expiry.Value < now)
+            {
+                _results.TryRemove(key, out _);
+            }
+        }
+
+        foreach (var (key, entry) in _locks)
+        {
+            if (entry.Expiry < now)
+            {
+                _locks.TryRemove(key, out _);
+            }
+        }
     }
 }

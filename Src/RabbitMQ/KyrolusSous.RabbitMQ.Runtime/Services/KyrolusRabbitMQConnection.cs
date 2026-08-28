@@ -4,7 +4,7 @@ using RabbitMQ.Client;
 namespace KyrolusSous.RabbitMQ.Runtime.Services
 {
     /// <summary>
-    /// Thread-safe managed RabbitMQ connection implementation.
+    /// Thread-safe managed RabbitMQ connection implementation with automatic recovery and disposed state protection.
     /// </summary>
     public class KyrolusRabbitMQConnection : IKyrolusRabbitMQConnection, global::KyrolusSous.IRabbitMQUtilsInterfaces.Interfaces.IRabbitMQConnection
     {
@@ -22,6 +22,8 @@ namespace KyrolusSous.RabbitMQ.Runtime.Services
         {
             get
             {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+
                 if (_connection is not null && _connection.IsOpen)
                 {
                     return _connection;
@@ -30,6 +32,8 @@ namespace KyrolusSous.RabbitMQ.Runtime.Services
                 _connectionLock.Wait();
                 try
                 {
+                    ObjectDisposedException.ThrowIf(_disposed, this);
+
                     if (_connection is not null && _connection.IsOpen)
                     {
                         return _connection;
@@ -51,12 +55,21 @@ namespace KyrolusSous.RabbitMQ.Runtime.Services
 
             if (_connection is not null && _connection.IsOpen)
             {
-                return await _connection.CreateChannelAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    return await _connection.CreateChannelAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // If connection just closed, fall through to reconnect under lock
+                }
             }
 
             await _connectionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+
                 if (_connection is null || !_connection.IsOpen)
                 {
                     _connection = await _connectionFactory.CreateConnectionAsync(cancellationToken).ConfigureAwait(false);

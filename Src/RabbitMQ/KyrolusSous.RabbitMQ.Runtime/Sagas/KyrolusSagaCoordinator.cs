@@ -13,6 +13,7 @@ public class KyrolusSagaCoordinator<TState> : IKyrolusSaga<TState> where TState 
     private readonly IKyrolusSagaStore<TState> _sagaStore;
     private readonly ILogger<KyrolusSagaCoordinator<TState>> _logger;
     private readonly List<Func<Task>> _compensations = [];
+    private readonly object _lock = new();
 
     public KyrolusSagaCoordinator(
         IKyrolusSagaStore<TState> sagaStore,
@@ -42,7 +43,10 @@ public class KyrolusSagaCoordinator<TState> : IKyrolusSaga<TState> where TState 
 
             if (compensatingAction != null)
             {
-                _compensations.Insert(0, compensatingAction); // Push to LIFO stack
+                lock (_lock)
+                {
+                    _compensations.Insert(0, compensatingAction); // Push to LIFO stack
+                }
             }
 
             await _sagaStore.SaveAsync(state, cancellationToken).ConfigureAwait(false);
@@ -63,9 +67,16 @@ public class KyrolusSagaCoordinator<TState> : IKyrolusSaga<TState> where TState 
     {
         ArgumentNullException.ThrowIfNull(state);
 
-        _logger.LogWarning("Running {Count} compensating action(s) for Saga correlation ID {CorrelationId}", _compensations.Count, state.CorrelationId);
+        List<Func<Task>> compensationsCopy;
+        lock (_lock)
+        {
+            compensationsCopy = new List<Func<Task>>(_compensations);
+            _compensations.Clear();
+        }
 
-        foreach (var compensation in _compensations)
+        _logger.LogWarning("Running {Count} compensating action(s) for Saga correlation ID {CorrelationId}", compensationsCopy.Count, state.CorrelationId);
+
+        foreach (var compensation in compensationsCopy)
         {
             try
             {
@@ -77,7 +88,6 @@ public class KyrolusSagaCoordinator<TState> : IKyrolusSaga<TState> where TState 
             }
         }
 
-        _compensations.Clear();
         state.CurrentState = "Compensated";
         await _sagaStore.SaveAsync(state, cancellationToken).ConfigureAwait(false);
     }
