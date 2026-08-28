@@ -9,7 +9,7 @@ public sealed class KyrolusFileStorageOptions
     public string RootPath { get; set; } = Path.Combine(AppContext.BaseDirectory, "KyrolusStorage");
 }
 
-public sealed class KyrolusFileStorageProvider : IKyrolusStorageProvider
+public sealed class KyrolusFileStorageProvider : IKyrolusStorageProvider, IKyrolusMultipartStorageProvider
 {
     private readonly string _rootPath;
 
@@ -156,6 +156,107 @@ public sealed class KyrolusFileStorageProvider : IKyrolusStorageProvider
         return Task.FromResult<IReadOnlyList<KyrolusBlobProperties>>(result);
     }
 
+    public Task<KyrolusMultipartUploadSession> InitiateMultipartUploadAsync(string containerName, string blobName, KyrolusBlobDescriptor? descriptor = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(containerName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(blobName);
+
+        var uploadId = Guid.NewGuid().ToString("N");
+        var partsDir = Path.Combine(_rootPath, ".multipart", uploadId);
+        Directory.CreateDirectory(partsDir);
+
+        return Task.FromResult(new KyrolusMultipartUploadSession
+        {
+            UploadId = uploadId,
+            ContainerName = containerName,
+            BlobName = blobName
+        });
+    }
+
+    public async Task<KyrolusMultipartPartInfo> UploadPartAsync(KyrolusMultipartUploadSession session, int partNumber, Stream partStream, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(partStream);
+
+        var partsDir = Path.Combine(_rootPath, ".multipart", session.UploadId);
+        Directory.CreateDirectory(partsDir);
+
+        var partPath = Path.Combine(partsDir, $"part_{partNumber:D6}.dat");
+        using (var fs = new FileStream(partPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+        {
+            await partStream.CopyToAsync(fs, cancellationToken).ConfigureAwait(false);
+        }
+
+        var partInfo = new FileInfo(partPath);
+        return new KyrolusMultipartPartInfo
+        {
+            PartNumber = partNumber,
+            ETag = $"\"part-{partNumber}-{partInfo.Length}\"",
+            Size = partInfo.Length
+        };
+    }
+
+    public async Task<KyrolusBlobProperties> CompleteMultipartUploadAsync(KyrolusMultipartUploadSession session, IEnumerable<KyrolusMultipartPartInfo> parts, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var sortedParts = parts.OrderBy(p => p.PartNumber).ToList();
+
+        var containerDir = Path.Combine(_rootPath, SanitizePath(session.ContainerName));
+        Directory.CreateDirectory(containerDir);
+        var finalPath = Path.Combine(containerDir, SanitizePath(session.BlobName));
+
+        var dirName = Path.GetDirectoryName(finalPath);
+        if (!string.IsNullOrEmpty(dirName))
+        {
+            Directory.CreateDirectory(dirName);
+        }
+
+        var tempPath = finalPath + ".tmp." + Guid.NewGuid().ToString("N");
+        var partsDir = Path.Combine(_rootPath, ".multipart", session.UploadId);
+
+        using (var finalFs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+        {
+            foreach (var part in sortedParts)
+            {
+                var partPath = Path.Combine(partsDir, $"part_{part.PartNumber:D6}.dat");
+                if (File.Exists(partPath))
+                {
+                    using var partFs = new FileStream(partPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+                    await partFs.CopyToAsync(finalFs, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+
+        File.Move(tempPath, finalPath, overwrite: true);
+
+        if (Directory.Exists(partsDir))
+        {
+            Directory.Delete(partsDir, recursive: true);
+        }
+
+        var fileInfo = new FileInfo(finalPath);
+        return new KyrolusBlobProperties
+        {
+            ContainerName = session.ContainerName,
+            BlobName = session.BlobName,
+            ContentLength = fileInfo.Length,
+            ContentType = GetMimeType(session.BlobName),
+            LastModified = fileInfo.LastWriteTimeUtc
+        };
+    }
+
+    public Task<bool> AbortMultipartUploadAsync(KyrolusMultipartUploadSession session, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var partsDir = Path.Combine(_rootPath, ".multipart", session.UploadId);
+        if (Directory.Exists(partsDir))
+        {
+            Directory.Delete(partsDir, recursive: true);
+            return Task.FromResult(true);
+        }
+        return Task.FromResult(false);
+    }
+
     private string GetFilePath(string containerName, string blobName)
     {
         return Path.Combine(_rootPath, SanitizePath(containerName), SanitizePath(blobName));
@@ -194,6 +295,7 @@ public static class ServiceCollectionExtensions
         }
 
         services.AddSingleton<IKyrolusStorageProvider, KyrolusFileStorageProvider>();
+        services.AddSingleton<IKyrolusMultipartStorageProvider>(sp => (KyrolusFileStorageProvider)sp.GetRequiredService<IKyrolusStorageProvider>());
         return services;
     }
 }

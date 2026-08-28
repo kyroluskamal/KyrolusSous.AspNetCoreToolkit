@@ -72,6 +72,61 @@ public sealed class KyrolusLoggingDelegatingHandler(ILogger<KyrolusLoggingDelega
     }
 }
 
+public sealed class KyrolusHmacSigner : IKyrolusHmacSigner
+{
+    public string ComputeSignature(string secretKey, string timestamp, string httpMethod, string pathAndQuery, byte[]? body)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(secretKey);
+        var bodyHash = body is { Length: > 0 } ? Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(body)) : string.Empty;
+        var payload = $"{timestamp}:{httpMethod.ToUpperInvariant()}:{pathAndQuery}:{bodyHash}";
+
+        using var hmac = new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes(secretKey));
+        var signatureBytes = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(payload));
+        return Convert.ToHexStringLower(signatureBytes);
+    }
+
+    public bool VerifySignature(string secretKey, string signature, string timestamp, string httpMethod, string pathAndQuery, byte[]? body)
+    {
+        if (string.IsNullOrEmpty(signature) || string.IsNullOrEmpty(timestamp))
+        {
+            return false;
+        }
+
+        var expectedSignature = ComputeSignature(secretKey, timestamp, httpMethod, pathAndQuery, body);
+        return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(signature),
+            System.Text.Encoding.UTF8.GetBytes(expectedSignature));
+    }
+}
+
+public sealed class KyrolusHmacDelegatingHandler(IKyrolusHmacSigner signer, KyrolusHmacOptions options) : DelegatingHandler
+{
+    private readonly IKyrolusHmacSigner _signer = signer ?? throw new ArgumentNullException(nameof(signer));
+    private readonly KyrolusHmacOptions _options = options ?? throw new ArgumentNullException(nameof(options));
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        var method = request.Method.Method;
+        var pathAndQuery = request.RequestUri?.PathAndQuery ?? "/";
+
+        byte[]? bodyBytes = null;
+        if (request.Content is not null)
+        {
+            bodyBytes = await request.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        var signature = _signer.ComputeSignature(_options.SecretKey, timestamp, method, pathAndQuery, bodyBytes);
+
+        request.Headers.Remove(_options.HeaderName);
+        request.Headers.Remove(_options.TimestampHeaderName);
+        request.Headers.Add(_options.HeaderName, signature);
+        request.Headers.Add(_options.TimestampHeaderName, timestamp);
+
+        return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+}
+
 public static class ServiceCollectionExtensions
 {
     public static IHttpClientBuilder AddKyrolusHttpClient<TClient, TImplementation>(this IServiceCollection services, Action<KyrolusHttpClientOptions>? configure = null)
@@ -81,6 +136,7 @@ public static class ServiceCollectionExtensions
         var options = new KyrolusHttpClientOptions();
         configure?.Invoke(options);
 
+        services.AddSingleton<IKyrolusHmacSigner, KyrolusHmacSigner>();
         services.AddTransient<KyrolusAuthDelegatingHandler>();
         services.AddTransient<KyrolusCorrelationDelegatingHandler>();
         services.AddTransient<KyrolusLoggingDelegatingHandler>();

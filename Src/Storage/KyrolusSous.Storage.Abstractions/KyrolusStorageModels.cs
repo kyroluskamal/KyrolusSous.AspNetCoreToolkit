@@ -40,3 +40,36 @@ public sealed record KyrolusBlobProperties
     public DateTimeOffset? LastModified { get; init; }
     public IDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 }
+
+/// <summary>
+/// Represents an active multipart upload session.
+/// </summary>
+public sealed record KyrolusMultipartUploadSession
+{
+    public required string UploadId { get; init; }
+    public required string ContainerName { get; init; }
+    public required string BlobName { get; init; }
+    public DateTimeOffset InitiatedAt { get; init; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
+/// Represents a single part/chunk in a multipart upload.
+/// </summary>
+public sealed record KyrolusMultipartPartInfo
+{
+    public required int PartNumber { get; init; }
+    public required string ETag { get; init; }
+    public long Size { get; init; }
+}
+
+/// <summary>
+/// Provider supporting multipart and chunked uploads for large blobs.
+/// </summary>
+public interface IKyrolusMultipartStorageProvider
+{
+    Task<KyrolusMultipartUploadSession> InitiateMultipartUploadAsync(string containerName, string blobName, KyrolusBlobDescriptor? descriptor = null, CancellationToken cancellationToken = default);
+    Task<KyrolusMultipartPartInfo> UploadPartAsync(KyrolusMultipartUploadSession session, int partNumber, Stream partStream, CancellationToken cancellationToken = default);
+    Task<KyrolusBlobProperties> CompleteMultipartUploadAsync(KyrolusMultipartUploadSession session, IEnumerable<KyrolusMultipartPartInfo> parts, CancellationToken cancellationToken = default);
+    Task<bool> AbortMultipartUploadAsync(KyrolusMultipartUploadSession session, CancellationToken cancellationToken = default);
+}
+

@@ -20,6 +20,13 @@ public interface IKyrolusFeatureFilter
     ValueTask<bool> EvaluateAsync(string featureName, KyrolusFeatureContext? context, IDictionary<string, string> parameters, CancellationToken cancellationToken = default);
 }
 
+public interface IKyrolusFeatureStore
+{
+    Task<bool?> GetFeatureStateAsync(string featureName, CancellationToken cancellationToken = default);
+    Task SetFeatureStateAsync(string featureName, bool enabled, CancellationToken cancellationToken = default);
+    Task<IReadOnlyDictionary<string, bool>> GetAllStatesAsync(CancellationToken cancellationToken = default);
+}
+
 public interface IKyrolusFeatureManager
 {
     ValueTask<bool> IsEnabledAsync(string featureName, CancellationToken cancellationToken = default);

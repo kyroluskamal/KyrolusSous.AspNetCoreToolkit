@@ -47,7 +47,8 @@ public sealed class NotificationsTests
 
         var dispatcher = new KyrolusResilientNotificationDispatcher(
             new[] { primarySender, fallbackSender },
-            Enumerable.Empty<IKyrolusSmsSender>());
+            Enumerable.Empty<IKyrolusSmsSender>(),
+            Enumerable.Empty<IKyrolusPushSender>());
 
         var email = new KyrolusEmailMessage
         {
@@ -60,5 +61,26 @@ public sealed class NotificationsTests
         result.Succeeded.ShouldBeTrue();
         result.ProviderName.ShouldBe("SendGridFallback");
         result.MessageId.ShouldBe("msg-123");
+    }
+
+    [Fact(DisplayName = "In-App Notification Store Saves And Marks Read Correctly")]
+    public async Task InAppStore_SavesAndMarksRead_Correctly()
+    {
+        var store = new KyrolusInMemoryInAppNotificationStore();
+        var notif1 = new KyrolusInAppNotification { UserId = "user1", Title = "Order Shipped", Message = "Your order #1 is on its way." };
+        var notif2 = new KyrolusInAppNotification { UserId = "user1", Title = "Discount Voucher", Message = "Here is 10% off." };
+
+        await store.SaveNotificationAsync(notif1);
+        await store.SaveNotificationAsync(notif2);
+
+        var list = await store.GetNotificationsAsync("user1", unreadOnly: true);
+        list.Count.ShouldBe(2);
+
+        var marked = await store.MarkAsReadAsync(notif1.Id, "user1");
+        marked.ShouldBeTrue();
+
+        var unreadAfter = await store.GetNotificationsAsync("user1", unreadOnly: true);
+        unreadAfter.Count.ShouldBe(1);
+        unreadAfter[0].Id.ShouldBe(notif2.Id);
     }
 }

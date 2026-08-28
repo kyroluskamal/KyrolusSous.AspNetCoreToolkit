@@ -58,4 +58,24 @@ public sealed class SchedulingTests
         registered[0].JobName.ShouldBe("DailyDatabaseCleanup");
         registered[0].JobType.ShouldBe(typeof(DummyCleanupJob));
     }
+
+    [Fact(DisplayName = "Job Execution Tracker Records And Queries Executions Correctly")]
+    public async Task ExecutionTracker_RecordsAndQueries_Correctly()
+    {
+        var tracker = new KyrolusInMemoryJobExecutionTracker();
+        var record = new KyrolusJobExecutionRecord
+        {
+            JobName = "NightlyBackup",
+            StartedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-5)
+        };
+
+        await tracker.RecordExecutionStartAsync(record);
+        await tracker.RecordExecutionEndAsync(record.Id, succeeded: true);
+
+        var recent = await tracker.GetRecentExecutionsAsync(10);
+        recent.Count.ShouldBe(1);
+        recent[0].JobName.ShouldBe("NightlyBackup");
+        recent[0].Succeeded.ShouldBeTrue();
+        recent[0].CompletedAtUtc.ShouldNotBeNull();
+    }
 }

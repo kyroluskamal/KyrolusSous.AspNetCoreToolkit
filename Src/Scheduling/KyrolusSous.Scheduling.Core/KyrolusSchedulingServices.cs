@@ -85,9 +85,53 @@ public sealed class KyrolusInMemoryJobLockProvider : IKyrolusJobLockProvider
     }
 }
 
+public sealed class KyrolusInMemoryJobExecutionTracker : IKyrolusJobExecutionTracker
+{
+    private readonly List<KyrolusJobExecutionRecord> _records = [];
+    private readonly object _lock = new();
+
+    public Task RecordExecutionStartAsync(KyrolusJobExecutionRecord record, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        lock (_lock)
+        {
+            _records.Add(record);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task RecordExecutionEndAsync(string recordId, bool succeeded, string? errorMessage = null, CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            var existing = _records.FirstOrDefault(r => r.Id == recordId);
+            if (existing != null)
+            {
+                var idx = _records.IndexOf(existing);
+                _records[idx] = existing with
+                {
+                    CompletedAtUtc = DateTimeOffset.UtcNow,
+                    Succeeded = succeeded,
+                    ErrorMessage = errorMessage
+                };
+            }
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<KyrolusJobExecutionRecord>> GetRecentExecutionsAsync(int limit = 50, CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            return Task.FromResult<IReadOnlyList<KyrolusJobExecutionRecord>>(_records.OrderByDescending(r => r.StartedAtUtc).Take(limit).ToList());
+        }
+    }
+}
+
 public sealed class KyrolusJobScheduler : IKyrolusJobScheduler
 {
     private readonly List<KyrolusJobScheduleRegistration> _jobs = [];
+    private readonly List<KyrolusOneShotJobRegistration> _oneShotJobs = [];
 
     public void ScheduleCronJob<TJob>(string cronExpression, string? jobName = null, bool useDistributedLock = true) where TJob : class, IKyrolusJob
     {
@@ -100,13 +144,25 @@ public sealed class KyrolusJobScheduler : IKyrolusJobScheduler
         });
     }
 
+    public void ScheduleOneShotJob<TJob>(DateTimeOffset fireAtUtc, string? jobName = null) where TJob : class, IKyrolusJob
+    {
+        _oneShotJobs.Add(new KyrolusOneShotJobRegistration
+        {
+            JobName = jobName ?? typeof(TJob).Name,
+            JobType = typeof(TJob),
+            FireAtUtc = fireAtUtc
+        });
+    }
+
     public IReadOnlyList<KyrolusJobScheduleRegistration> GetRegisteredJobs() => _jobs.AsReadOnly();
+    public IReadOnlyList<KyrolusOneShotJobRegistration> GetRegisteredOneShotJobs() => _oneShotJobs.AsReadOnly();
 }
 
 public sealed class KyrolusJobSchedulerBackgroundService(
     IServiceProvider serviceProvider,
     IKyrolusJobScheduler scheduler,
     IKyrolusJobLockProvider lockProvider,
+    IKyrolusJobExecutionTracker? tracker = null,
     ILogger<KyrolusJobSchedulerBackgroundService>? logger = null) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -141,6 +197,17 @@ public sealed class KyrolusJobSchedulerBackgroundService(
     private async Task ExecuteJobSafeAsync(KyrolusJobScheduleRegistration jobReg, CancellationToken cancellationToken)
     {
         IAsyncDisposable? jobLock = null;
+        var record = new KyrolusJobExecutionRecord
+        {
+            JobName = jobReg.JobName,
+            StartedAtUtc = DateTimeOffset.UtcNow
+        };
+
+        if (tracker is not null)
+        {
+            await tracker.RecordExecutionStartAsync(record, cancellationToken).ConfigureAwait(false);
+        }
+
         try
         {
             if (jobReg.UseDistributedLock)
@@ -165,11 +232,20 @@ public sealed class KyrolusJobSchedulerBackgroundService(
                 };
 
                 await jobInstance.ExecuteAsync(context).ConfigureAwait(false);
+
+                if (tracker is not null)
+                {
+                    await tracker.RecordExecutionEndAsync(record.Id, succeeded: true, cancellationToken: cancellationToken).ConfigureAwait(false);
+                }
             }
         }
         catch (Exception ex)
         {
             logger?.LogError(ex, "Error executing scheduled job {JobName}.", jobReg.JobName);
+            if (tracker is not null)
+            {
+                await tracker.RecordExecutionEndAsync(record.Id, succeeded: false, errorMessage: ex.Message, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
         }
         finally
         {
@@ -190,6 +266,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IKyrolusJobScheduler>(scheduler);
         services.AddSingleton<IKyrolusJobLockProvider, KyrolusInMemoryJobLockProvider>();
+        services.AddSingleton<IKyrolusJobExecutionTracker, KyrolusInMemoryJobExecutionTracker>();
         services.AddHostedService<KyrolusJobSchedulerBackgroundService>();
         return services;
     }

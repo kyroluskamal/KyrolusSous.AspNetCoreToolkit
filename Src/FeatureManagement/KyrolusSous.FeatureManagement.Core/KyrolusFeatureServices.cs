@@ -78,17 +78,92 @@ public sealed class KyrolusTimeWindowFeatureFilter : IKyrolusFeatureFilter
     }
 }
 
+public sealed class KyrolusRoleFeatureFilter : IKyrolusFeatureFilter
+{
+    public string Name => "Role";
+
+    public ValueTask<bool> EvaluateAsync(string featureName, KyrolusFeatureContext? context, IDictionary<string, string> parameters, CancellationToken cancellationToken = default)
+    {
+        if (context?.Roles is null || context.Roles.Count == 0 || !parameters.TryGetValue("AllowedRoles", out var rolesStr))
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        var allowedRoles = rolesStr.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var isAllowed = context.Roles.Any(r => allowedRoles.Contains(r, StringComparer.OrdinalIgnoreCase));
+        return ValueTask.FromResult(isAllowed);
+    }
+}
+
+public sealed class KyrolusAppVersionFeatureFilter : IKyrolusFeatureFilter
+{
+    public string Name => "AppVersion";
+
+    public ValueTask<bool> EvaluateAsync(string featureName, KyrolusFeatureContext? context, IDictionary<string, string> parameters, CancellationToken cancellationToken = default)
+    {
+        if (context is null || !context.Properties.TryGetValue("AppVersion", out var versionObj) || versionObj is null)
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        if (!Version.TryParse(versionObj.ToString(), out var clientVersion))
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        if (parameters.TryGetValue("MinVersion", out var minVerStr) && Version.TryParse(minVerStr, out var minVer) && clientVersion < minVer)
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        if (parameters.TryGetValue("MaxVersion", out var maxVerStr) && Version.TryParse(maxVerStr, out var maxVer) && clientVersion > maxVer)
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        return ValueTask.FromResult(true);
+    }
+}
+
+public sealed class KyrolusInMemoryFeatureStore : IKyrolusFeatureStore
+{
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _states = new(StringComparer.OrdinalIgnoreCase);
+
+    public Task<bool?> GetFeatureStateAsync(string featureName, CancellationToken cancellationToken = default)
+    {
+        if (_states.TryGetValue(featureName, out var state))
+        {
+            return Task.FromResult<bool?>(state);
+        }
+        return Task.FromResult<bool?>(null);
+    }
+
+    public Task SetFeatureStateAsync(string featureName, bool enabled, CancellationToken cancellationToken = default)
+    {
+        _states[featureName] = enabled;
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyDictionary<string, bool>> GetAllStatesAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyDictionary<string, bool>>(_states.ToDictionary(k => k.Key, v => v.Value));
+    }
+}
+
 public sealed class KyrolusFeatureManager : IKyrolusFeatureManager
 {
     private readonly KyrolusFeatureOptions _options;
     private readonly Dictionary<string, IKyrolusFeatureFilter> _filters;
+    private readonly IKyrolusFeatureStore? _featureStore;
 
     public KyrolusFeatureManager(
         IOptions<KyrolusFeatureOptions> options,
-        IEnumerable<IKyrolusFeatureFilter> filters)
+        IEnumerable<IKyrolusFeatureFilter> filters,
+        IKyrolusFeatureStore? featureStore = null)
     {
         _options = options?.Value ?? new KyrolusFeatureOptions();
         _filters = filters.ToDictionary(f => f.Name, f => f, StringComparer.OrdinalIgnoreCase);
+        _featureStore = featureStore;
     }
 
     public ValueTask<bool> IsEnabledAsync(string featureName, CancellationToken cancellationToken = default)
@@ -97,6 +172,15 @@ public sealed class KyrolusFeatureManager : IKyrolusFeatureManager
     public async ValueTask<bool> IsEnabledAsync(string featureName, KyrolusFeatureContext context, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(featureName);
+
+        if (_featureStore is not null)
+        {
+            var dynamicState = await _featureStore.GetFeatureStateAsync(featureName, cancellationToken).ConfigureAwait(false);
+            if (dynamicState.HasValue)
+            {
+                return dynamicState.Value;
+            }
+        }
 
         if (!_options.Features.TryGetValue(featureName, out var definition) || !definition.Enabled)
         {
@@ -138,6 +222,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IKyrolusFeatureFilter, KyrolusPercentageFeatureFilter>();
         services.AddSingleton<IKyrolusFeatureFilter, KyrolusTenantFeatureFilter>();
         services.AddSingleton<IKyrolusFeatureFilter, KyrolusTimeWindowFeatureFilter>();
+        services.AddSingleton<IKyrolusFeatureFilter, KyrolusRoleFeatureFilter>();
+        services.AddSingleton<IKyrolusFeatureFilter, KyrolusAppVersionFeatureFilter>();
+        services.AddSingleton<IKyrolusFeatureStore, KyrolusInMemoryFeatureStore>();
         services.AddSingleton<IKyrolusFeatureManager, KyrolusFeatureManager>();
         return services;
     }

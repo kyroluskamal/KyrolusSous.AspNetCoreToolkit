@@ -118,4 +118,39 @@ public sealed class StorageTests : IDisposable
         var decryptedText = await reader.ReadToEndAsync();
         decryptedText.ShouldBe(content);
     }
+
+    [Fact(DisplayName = "File Storage Multipart Upload Sessions Assemble Chunks Correctly")]
+    public async Task FileStorage_MultipartUpload_WorksCorrectly()
+    {
+        var multipartProvider = (IKyrolusMultipartStorageProvider)_provider;
+        var session = await multipartProvider.InitiateMultipartUploadAsync("bigfiles", "video.mp4");
+        session.ShouldNotBeNull();
+        session.UploadId.ShouldNotBeNullOrWhiteSpace();
+
+        var part1 = "Chunk1Data-";
+        var part2 = "Chunk2Data-";
+        var part3 = "Chunk3Data";
+
+        using var s1 = new MemoryStream(Encoding.UTF8.GetBytes(part1));
+        using var s2 = new MemoryStream(Encoding.UTF8.GetBytes(part2));
+        using var s3 = new MemoryStream(Encoding.UTF8.GetBytes(part3));
+
+        var info1 = await multipartProvider.UploadPartAsync(session, 1, s1);
+        var info2 = await multipartProvider.UploadPartAsync(session, 2, s2);
+        var info3 = await multipartProvider.UploadPartAsync(session, 3, s3);
+
+        info1.PartNumber.ShouldBe(1);
+        info2.PartNumber.ShouldBe(2);
+        info3.PartNumber.ShouldBe(3);
+
+        var completed = await multipartProvider.CompleteMultipartUploadAsync(session, [info1, info2, info3]);
+        completed.ShouldNotBeNull();
+        completed.BlobName.ShouldBe("video.mp4");
+        completed.ContentLength.ShouldBe(part1.Length + part2.Length + part3.Length);
+
+        using var downloadStream = await _provider.DownloadAsync("bigfiles", "video.mp4");
+        using var reader = new StreamReader(downloadStream, Encoding.UTF8);
+        var fullText = await reader.ReadToEndAsync();
+        fullText.ShouldBe(part1 + part2 + part3);
+    }
 }

@@ -93,4 +93,55 @@ public sealed class FeatureManagementTests
         (await manager.IsEnabledAsync("BlackFridaySale")).ShouldBeTrue();
         (await manager.IsEnabledAsync("ExpiredSale")).ShouldBeFalse();
     }
+
+    [Fact(DisplayName = "Role Feature Filter Allows Authorized Roles Only")]
+    public async Task RoleFilter_AllowsAuthorizedRolesOnly()
+    {
+        var options = new KyrolusFeatureOptions
+        {
+            Features =
+            {
+                ["AdminDashboard"] = new KyrolusFeatureDefinition
+                {
+                    Enabled = true,
+                    FilterName = "Role",
+                    Parameters = { ["AllowedRoles"] = "Administrator, SuperUser" }
+                }
+            }
+        };
+
+        var manager = new KyrolusFeatureManager(
+            Options.Create(options),
+            new IKyrolusFeatureFilter[] { new KyrolusRoleFeatureFilter() });
+
+        var adminContext = new KyrolusFeatureContext { Roles = ["Administrator"] };
+        (await manager.IsEnabledAsync("AdminDashboard", adminContext)).ShouldBeTrue();
+
+        var userContext = new KyrolusFeatureContext { Roles = ["Customer"] };
+        (await manager.IsEnabledAsync("AdminDashboard", userContext)).ShouldBeFalse();
+    }
+
+    [Fact(DisplayName = "Dynamic Feature Store Overrides Static Options")]
+    public async Task FeatureStore_OverridesStaticOptions()
+    {
+        var options = new KyrolusFeatureOptions
+        {
+            Features =
+            {
+                ["BetaFeature"] = new KyrolusFeatureDefinition { Enabled = false }
+            }
+        };
+
+        var store = new KyrolusInMemoryFeatureStore();
+        var manager = new KyrolusFeatureManager(
+            Options.Create(options),
+            new IKyrolusFeatureFilter[] { },
+            store);
+
+        (await manager.IsEnabledAsync("BetaFeature")).ShouldBeFalse();
+
+        // Enable dynamically at runtime via store
+        await store.SetFeatureStateAsync("BetaFeature", true);
+        (await manager.IsEnabledAsync("BetaFeature")).ShouldBeTrue();
+    }
 }

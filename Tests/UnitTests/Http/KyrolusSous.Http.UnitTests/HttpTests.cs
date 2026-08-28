@@ -64,4 +64,22 @@ public sealed class HttpTests
         inner.LastRequest.Headers.Contains("X-Correlation-ID").ShouldBeTrue();
         inner.LastRequest.Headers.GetValues("X-Correlation-ID").First().ShouldBe("corr-987654321");
     }
+
+    [Fact(DisplayName = "Hmac Signer Generates And Verifies Signatures Accurately")]
+    public void HmacSigner_GeneratesAndVerifies_Accurately()
+    {
+        var signer = new KyrolusHmacSigner();
+        var secret = "super-secret-enterprise-key-12345";
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        var body = System.Text.Encoding.UTF8.GetBytes("{\"amount\": 100}");
+
+        var signature = signer.ComputeSignature(secret, timestamp, "POST", "/api/v1/payments", body);
+        signature.ShouldNotBeNullOrWhiteSpace();
+
+        var verified = signer.VerifySignature(secret, signature, timestamp, "POST", "/api/v1/payments", body);
+        verified.ShouldBeTrue();
+
+        var forged = signer.VerifySignature(secret, "forged-signature-abc", timestamp, "POST", "/api/v1/payments", body);
+        forged.ShouldBeFalse();
+    }
 }

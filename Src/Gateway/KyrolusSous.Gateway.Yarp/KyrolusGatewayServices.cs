@@ -48,6 +48,28 @@ public sealed class KyrolusSecurityHeadersTransformProvider : ITransformProvider
     }
 }
 
+public sealed class KyrolusTenantRoutingTransformProvider : ITransformProvider
+{
+    public void ValidateRoute(TransformRouteValidationContext context) { }
+    public void ValidateCluster(TransformClusterValidationContext context) { }
+
+    public void Apply(TransformBuilderContext context)
+    {
+        context.AddRequestTransform(transformContext =>
+        {
+            var host = transformContext.HttpContext.Request.Host.Host;
+            var parts = host.Split('.');
+            if (parts.Length > 2)
+            {
+                var tenantSubdomain = parts[0];
+                transformContext.ProxyRequest.Headers.Remove("X-Tenant-ID");
+                transformContext.ProxyRequest.Headers.Add("X-Tenant-ID", tenantSubdomain);
+            }
+            return ValueTask.CompletedTask;
+        });
+    }
+}
+
 public sealed class KyrolusDynamicInMemoryRouteConfigProvider : IProxyConfigProvider, IKyrolusDynamicRouteProvider
 {
     private sealed class CustomProxyConfig(IReadOnlyList<RouteConfig> routes, IReadOnlyList<ClusterConfig> clusters) : IProxyConfig
@@ -113,6 +135,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IKyrolusDynamicRouteProvider>(provider);
         services.AddSingleton<ITransformProvider, KyrolusCorrelationTransformProvider>();
         services.AddSingleton<ITransformProvider, KyrolusSecurityHeadersTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusTenantRoutingTransformProvider>();
         services.AddReverseProxy();
 
         return services;
