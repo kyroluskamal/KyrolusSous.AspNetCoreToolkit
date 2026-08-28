@@ -1,6 +1,8 @@
+using System.Linq.Expressions;
+
 namespace KyrolusSous.Elasticsearch;
 
-internal static class ExpressionHelper
+public static class ExpressionHelper
 {
     public static string GetPropertyName<T, TProperty>(Expression<Func<T, TProperty>> expression)
     {
