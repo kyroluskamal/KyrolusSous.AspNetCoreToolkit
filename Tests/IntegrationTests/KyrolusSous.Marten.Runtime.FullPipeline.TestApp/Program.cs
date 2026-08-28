@@ -63,7 +63,7 @@ builder.Services.AddKyrolusLogging(builder.Configuration);
 builder.Host.UseKyrolusLogging();
 
 var postgresConnString = builder.Configuration.GetConnectionString("Marten")
-    ?? "Host=localhost;Port=5432;Database=kyrolus_marten_fullpipeline_tests;Username=postgres;Password=postgres;Maximum Pool Size=5;Minimum Pool Size=0;Connection Idle Lifetime=5;Command Timeout=30;Timeout=30";
+    ?? "Host=localhost;Port=5432;Database=kyrolus_marten_fullpipeline_tests;Username=postgres;Password=postgres;Maximum Pool Size=5;Minimum Pool Size=0;Connection Idle Lifetime=30;Connection Pruning Interval=10;Command Timeout=30;Timeout=30";
 var redisConnString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
 var authSigningKey = builder.Configuration["Auth:SigningKey"]
     ?? "KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Default.Auth.SigningKey.2026";

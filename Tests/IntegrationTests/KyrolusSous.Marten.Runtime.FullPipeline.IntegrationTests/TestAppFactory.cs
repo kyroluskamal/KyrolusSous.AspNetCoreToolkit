@@ -17,7 +17,7 @@ public sealed class TestAppFactory : WebApplicationFactory<Program>
         {
             var overrides = new Dictionary<string, string?>
             {
-                ["ConnectionStrings:Marten"] = "Host=localhost;Port=5432;Database=kyrolus_marten_fullpipeline_tests;Username=postgres;Password=postgres;Maximum Pool Size=5;Minimum Pool Size=0;Connection Idle Lifetime=5;Command Timeout=30;Timeout=30",
+                ["ConnectionStrings:Marten"] = "Host=localhost;Port=5432;Database=kyrolus_marten_fullpipeline_tests;Username=postgres;Password=postgres;Maximum Pool Size=5;Minimum Pool Size=0;Connection Idle Lifetime=30;Connection Pruning Interval=10;Command Timeout=30;Timeout=30",
                 ["ConnectionStrings:Redis"] = "localhost:6379",
                 ["Auth:SigningKey"] = "KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests.Auth.SigningKey.2026"
             };
