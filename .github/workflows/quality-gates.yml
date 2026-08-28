@@ -127,6 +127,15 @@ jobs:
       - name: Add .NET tools to PATH
         run: echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
 
+      - name: Tune PostgreSQL Connections
+        run: |
+          CONTAINER_ID=$(docker ps -q -f ancestor=postgres:16 | head -n 1)
+          if [ -n "$CONTAINER_ID" ]; then
+            docker exec "$CONTAINER_ID" psql -U postgres -c "ALTER SYSTEM SET max_connections = '300';"
+            docker restart "$CONTAINER_ID"
+            until docker exec "$CONTAINER_ID" pg_isready -U postgres; do sleep 1; done
+          fi
+
       - name: Run coverage + gates
         run: |
           chmod +x scripts/*.sh
@@ -192,6 +201,15 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Tune PostgreSQL Connections
+        run: |
+          CONTAINER_ID=$(docker ps -q -f ancestor=postgres:16 | head -n 1)
+          if [ -n "$CONTAINER_ID" ]; then
+            docker exec "$CONTAINER_ID" psql -U postgres -c "ALTER SYSTEM SET max_connections = '300';"
+            docker restart "$CONTAINER_ID"
+            until docker exec "$CONTAINER_ID" pg_isready -U postgres; do sleep 1; done
+          fi
 
       - name: Test
         run: dotnet test "${{ matrix.suite.project }}" -c Debug --logger "trx;LogFileName=results.trx" -m:1
