@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>Core implementation for Kyrolus template rendering, resilient multi-provider dispatching, and background notification queuing.</Description>
+    <PackageTags>$(PackageTags);notifications;email;sms;templates;core</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KyrolusSous.Notifications.Abstractions\KyrolusSous.Notifications.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Resilience\KyrolusSous.Resilience.Abstractions\KyrolusSous.Resilience.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
+  </ItemGroup>
+
+</Project>
