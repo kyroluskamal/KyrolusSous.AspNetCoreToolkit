@@ -18,9 +18,12 @@ public static class AddKyrolusDefaultsExtension
         services.AddKyrolusProblemDetailsWriter();
         services.AddSingleton<KyrolusModuleBuilder>();
         services.AddSingleton(typeof(IKyrolusApiConfig<>), typeof(KyrolusEfApiConfig<>));
+        services.AddSingleton(typeof(IKyrolusRouteMapper<,,>), typeof(KyrolusEfRouteMapper<,,>));
         services.AddSingleton(typeof(IRouteMapper<,,>), typeof(KyrolusEfRouteMapper<,,>));
         services.AddSingleton<IKyrolusMapper, KyrolusMapper>();
+        services.AddScoped(typeof(IKyrolusCommandQueryHandler<,,>), typeof(DefaultCommandQueryHandler<,,>));
         services.AddScoped(typeof(ICommandQueryHandler<,,>), typeof(DefaultCommandQueryHandler<,,>));
+        services.AddScoped(typeof(IKyrolusEfCommandQueryHandler<,,>), typeof(DefaultCommandQueryHandler<,,>));
         services.TryAddSingleton<IHttpContextAccessor, HttpContextAccessor>();
         services.TryAddScoped<IKyrolusEndpointContext, KyrolusHttpEndpointContext>();
         services.TryAddScoped<IKyrolusCacheKeyContext, KyrolusEndpointCacheKeyContext>();

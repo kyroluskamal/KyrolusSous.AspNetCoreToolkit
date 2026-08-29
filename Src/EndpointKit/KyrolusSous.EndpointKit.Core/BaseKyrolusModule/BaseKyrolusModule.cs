@@ -1,11 +1,12 @@
 namespace KyrolusSous.EndpointKit.Core.BaseKyrolusModule;
 
-public class BaseKyrolusModule<TResponse, TModel, TKey>(IRouteMapper<TResponse, TModel, TKey> routeMapper,
- IKyrolusApiConfig<TResponse> config = default!) :
- IKyrolusModule<TResponse, TModel, TKey>
-where TResponse : class
-where TModel : class
-where TKey : notnull, IEquatable<TKey>
+public class BaseKyrolusModule<TResponse, TModel, TKey>(
+    IKyrolusRouteMapper<TResponse, TModel, TKey> routeMapper,
+    IKyrolusApiConfig<TResponse> config = default!) :
+    IKyrolusModule<TResponse, TModel, TKey>
+    where TResponse : class
+    where TModel : class
+    where TKey : notnull, IEquatable<TKey>
 {
     protected readonly IKyrolusApiConfig<TResponse> _config = config;
 
@@ -13,6 +14,4 @@ where TKey : notnull, IEquatable<TKey>
     {
         return routeMapper.MapEndpoints(app, _config);
     }
-
 }
-
