@@ -21,7 +21,8 @@ namespace KyrolusSous.Marten.Runtime.FullPipeline.TestApp.CQRS.MenuItems;
 
 public sealed class AddMenuItemHandler(
     IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
-    IKyrolusTenantResolver tenantResolver)
+    IKyrolusTenantResolver tenantResolver,
+    IKyrolusCacheProvider cacheProvider)
     : IKyrolusCommandHandler<AddCommand<MenuItem>, MenuItem>
 {
     public async Task<MenuItem> Handle(AddCommand<MenuItem> command, CancellationToken cancellationToken)
@@ -34,13 +35,15 @@ public sealed class AddMenuItemHandler(
 
         var result = await repo.AddAsync(entity, cancellationToken).ConfigureAwait(false);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await cacheProvider.RemoveAsync(CacheKeys.MenuItemsAll(entity.TenantId), cancellationToken).ConfigureAwait(false);
         return result;
     }
 }
 
 public sealed class AddMenuItemRangeHandler(
     IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
-    IKyrolusTenantResolver tenantResolver)
+    IKyrolusTenantResolver tenantResolver,
+    IKyrolusCacheProvider cacheProvider)
     : IKyrolusCommandHandler<AddRangeCommand<MenuItem>, IEnumerable<MenuItem>>
 {
     public async Task<IEnumerable<MenuItem>> Handle(AddRangeCommand<MenuItem> command, CancellationToken cancellationToken)
@@ -57,13 +60,15 @@ public sealed class AddMenuItemRangeHandler(
 
         var result = await repo.AddRangeAsync(entities, cancellationToken).ConfigureAwait(false);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await cacheProvider.RemoveAsync(CacheKeys.MenuItemsAll(tenant), cancellationToken).ConfigureAwait(false);
         return result;
     }
 }
 
 public sealed class UpdateMenuItemHandler(
     IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
-    IKyrolusTenantResolver tenantResolver)
+    IKyrolusTenantResolver tenantResolver,
+    IKyrolusCacheProvider cacheProvider)
     : IKyrolusCommandHandler<UpdateCommand<MenuItem>, MenuItem>
 {
     public async Task<MenuItem> Handle(UpdateCommand<MenuItem> command, CancellationToken cancellationToken)
@@ -77,13 +82,16 @@ public sealed class UpdateMenuItemHandler(
         var result = await repo.UpdateAsync(entity, command.ExpectedVersion, tenantId: null, cancellationToken)
             .ConfigureAwait(false);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await cacheProvider.RemoveAsync(CacheKeys.MenuItemById(entity.TenantId, entity.Id), cancellationToken).ConfigureAwait(false);
+        await cacheProvider.RemoveAsync(CacheKeys.MenuItemsAll(entity.TenantId), cancellationToken).ConfigureAwait(false);
         return result ?? entity;
     }
 }
 
 public sealed class UpdateMenuItemRangeHandler(
     IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
-    IKyrolusTenantResolver tenantResolver)
+    IKyrolusTenantResolver tenantResolver,
+    IKyrolusCacheProvider cacheProvider)
     : IKyrolusCommandHandler<UpdateRangeCommand<MenuItem>, IEnumerable<MenuItem>>
 {
     public async Task<IEnumerable<MenuItem>> Handle(UpdateRangeCommand<MenuItem> command, CancellationToken cancellationToken)
@@ -100,57 +108,88 @@ public sealed class UpdateMenuItemRangeHandler(
 
         var result = await repo.UpdateRangeAsync(entities, tenantId: null, cancellationToken).ConfigureAwait(false);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var entity in entities)
+        {
+            await cacheProvider.RemoveAsync(CacheKeys.MenuItemById(entity.TenantId, entity.Id), cancellationToken).ConfigureAwait(false);
+        }
+        await cacheProvider.RemoveAsync(CacheKeys.MenuItemsAll(tenant), cancellationToken).ConfigureAwait(false);
         return result;
     }
 }
 
 public sealed class RemoveMenuItemByIdHandler(
-    IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork)
+    IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
+    IKyrolusTenantResolver tenantResolver,
+    IKyrolusCacheProvider cacheProvider)
     : IKyrolusCommandHandler<RemoveByIdCommand<MenuItem, Guid>>
 {
     public async Task Handle(RemoveByIdCommand<MenuItem, Guid> command, CancellationToken cancellationToken)
     {
         var repo = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, MenuItem, Guid>>();
+        var tenant = tenantResolver.ResolveTenantId() ?? string.Empty;
         await repo.RemoveAsync(command.Id, command.ExpectedVersion, tenantId: null, cancellationToken).ConfigureAwait(false);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await cacheProvider.RemoveAsync(CacheKeys.MenuItemById(tenant, command.Id), cancellationToken).ConfigureAwait(false);
+        await cacheProvider.RemoveAsync(CacheKeys.MenuItemsAll(tenant), cancellationToken).ConfigureAwait(false);
     }
 }
 
 public sealed class RemoveMenuItemRangeHandler(
-    IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork)
+    IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
+    IKyrolusTenantResolver tenantResolver,
+    IKyrolusCacheProvider cacheProvider)
     : IKyrolusCommandHandler<RemoveRangeCommand<MenuItem>>
 {
     public async Task Handle(RemoveRangeCommand<MenuItem> command, CancellationToken cancellationToken)
     {
         var repo = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, MenuItem, Guid>>();
+        var tenant = tenantResolver.ResolveTenantId() ?? string.Empty;
         await repo.RemoveRangeAsync(command.Entities, tenantId: null, cancellationToken).ConfigureAwait(false);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        if (command.Entities is not null)
+        {
+            foreach (var entity in command.Entities)
+            {
+                await cacheProvider.RemoveAsync(CacheKeys.MenuItemById(tenant, entity.Id), cancellationToken).ConfigureAwait(false);
+            }
+        }
+        await cacheProvider.RemoveAsync(CacheKeys.MenuItemsAll(tenant), cancellationToken).ConfigureAwait(false);
     }
 }
 
 public sealed class PatchMenuItemHandler(
-    IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork)
+    IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
+    IKyrolusTenantResolver tenantResolver,
+    IKyrolusCacheProvider cacheProvider)
     : IKyrolusCommandHandler<MenuItemPatchCommand, MenuItem>
 {
     public async Task<MenuItem> Handle(MenuItemPatchCommand command, CancellationToken cancellationToken)
     {
         var repo = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, MenuItem, Guid>>();
+        var tenant = tenantResolver.ResolveTenantId() ?? string.Empty;
         var result = await repo.PatchAsync(command.Id, command.Updates, tenantId: null, cancellationToken).ConfigureAwait(false);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await cacheProvider.RemoveAsync(CacheKeys.MenuItemById(tenant, command.Id), cancellationToken).ConfigureAwait(false);
+        await cacheProvider.RemoveAsync(CacheKeys.MenuItemsAll(tenant), cancellationToken).ConfigureAwait(false);
         return result?.Entity ?? throw new KyrolusNotFoundException(nameof(MenuItem), command.Id.ToString());
     }
 }
 
 public sealed class SoftDeleteMenuItemByIdHandler(
-    IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork)
+    IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
+    IKyrolusTenantResolver tenantResolver,
+    IKyrolusCacheProvider cacheProvider)
     : IKyrolusCommandHandler<SoftDeleteByIdCommand<MenuItem, Guid>, bool>
 {
     public async Task<bool> Handle(SoftDeleteByIdCommand<MenuItem, Guid> command, CancellationToken cancellationToken)
     {
         var repo = unitOfWork.GetRepository<IKyrolusMartenSoftDeleteRepositoryAsync<IDocumentSession, MenuItem, Guid>>();
+        var tenant = tenantResolver.ResolveTenantId() ?? string.Empty;
         var id = ResolveKey(command.KeyValues);
         var result = await repo.RemoveAsync(id, expectedVersion: null, tenantId: null, cancellationToken).ConfigureAwait(false);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await cacheProvider.RemoveAsync(CacheKeys.MenuItemById(tenant, id), cancellationToken).ConfigureAwait(false);
+        await cacheProvider.RemoveAsync(CacheKeys.MenuItemsAll(tenant), cancellationToken).ConfigureAwait(false);
         return result;
     }
 
@@ -161,15 +200,20 @@ public sealed class SoftDeleteMenuItemByIdHandler(
 }
 
 public sealed class RestoreMenuItemByIdHandler(
-    IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork)
+    IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
+    IKyrolusTenantResolver tenantResolver,
+    IKyrolusCacheProvider cacheProvider)
     : IKyrolusCommandHandler<RestoreByIdCommand<MenuItem, Guid>, bool>
 {
     public async Task<bool> Handle(RestoreByIdCommand<MenuItem, Guid> command, CancellationToken cancellationToken)
     {
         var repo = unitOfWork.GetRepository<IKyrolusMartenSoftDeleteRepositoryAsync<IDocumentSession, MenuItem, Guid>>();
+        var tenant = tenantResolver.ResolveTenantId() ?? string.Empty;
         var id = ResolveKey(command.KeyValues);
         var result = await repo.RestoreAsync(id, tenantId: null, cancellationToken).ConfigureAwait(false);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await cacheProvider.RemoveAsync(CacheKeys.MenuItemById(tenant, id), cancellationToken).ConfigureAwait(false);
+        await cacheProvider.RemoveAsync(CacheKeys.MenuItemsAll(tenant), cancellationToken).ConfigureAwait(false);
         return result;
     }
 
@@ -307,7 +351,9 @@ public sealed class GetMenuItemByIdHandler(
 }
 
 public sealed class ExecuteMenuItemsUpdateHandler(
-    IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork)
+    IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
+    IKyrolusTenantResolver tenantResolver,
+    IKyrolusCacheProvider cacheProvider)
     : IKyrolusCommandHandler<ExecuteUpdateCommand<MenuItem, Guid>, int>
 {
     public async Task<int> Handle(ExecuteUpdateCommand<MenuItem, Guid> command, CancellationToken cancellationToken)
@@ -318,15 +364,19 @@ public sealed class ExecuteMenuItemsUpdateHandler(
         }
 
         var repo = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, MenuItem, Guid>>();
+        var tenant = tenantResolver.ResolveTenantId() ?? string.Empty;
         var affected = await repo.PatchWhereAsync(command.Filter, command.Updates, tenantId: null, cancellationToken)
             .ConfigureAwait(false);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await cacheProvider.RemoveAsync(CacheKeys.MenuItemsAll(tenant), cancellationToken).ConfigureAwait(false);
         return affected;
     }
 }
 
 public sealed class ExecuteMenuItemsDeleteHandler(
-    IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork)
+    IKyrolusMartenUnitOfWork<IDocumentSession> unitOfWork,
+    IKyrolusTenantResolver tenantResolver,
+    IKyrolusCacheProvider cacheProvider)
     : IKyrolusCommandHandler<ExecuteDeleteCommand<MenuItem, Guid>, int>
 {
     public async Task<int> Handle(ExecuteDeleteCommand<MenuItem, Guid> command, CancellationToken cancellationToken)
@@ -337,9 +387,11 @@ public sealed class ExecuteMenuItemsDeleteHandler(
         }
 
         var repo = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, MenuItem, Guid>>();
+        var tenant = tenantResolver.ResolveTenantId() ?? string.Empty;
         var affected = await repo.DeleteWhereAsync(command.Filter, tenantId: null, cancellationToken)
             .ConfigureAwait(false);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await cacheProvider.RemoveAsync(CacheKeys.MenuItemsAll(tenant), cancellationToken).ConfigureAwait(false);
         return affected;
     }
 }

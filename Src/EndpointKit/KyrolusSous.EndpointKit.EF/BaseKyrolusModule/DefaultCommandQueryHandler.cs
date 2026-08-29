@@ -2766,7 +2766,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         if (config.GetEntityId is not null)
         {
             var existing = config.GetEntityId(entity);
-            if (existing is TKey existingKey && !EqualityComparer<TKey>.Default.Equals(existingKey, id))
+            if (existing is TKey existingKey && !EqualityComparer<TKey>.Default.Equals(existingKey, default) && !EqualityComparer<TKey>.Default.Equals(existingKey, id))
             {
                 errorResult = BuildBadRequest("The provided id does not match the entity id.");
                 return false;
@@ -2780,11 +2780,14 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         }
 
         var keyProperty = efConfig?.KeyPropertyName;
-        if (!string.IsNullOrWhiteSpace(keyProperty) && !TrySetPropertyValue(entity, keyProperty, id))
+        var propertyName = !string.IsNullOrWhiteSpace(keyProperty) ? keyProperty : "Id";
+        if (!TrySetPropertyValue(entity, propertyName, id))
         {
-            errorResult = BuildBadRequest($"Cannot set key property '{keyProperty}'.");
-            return false;
-
+            if (!string.IsNullOrWhiteSpace(keyProperty))
+            {
+                errorResult = BuildBadRequest($"Cannot set key property '{keyProperty}'.");
+                return false;
+            }
         }
 
         return true;
