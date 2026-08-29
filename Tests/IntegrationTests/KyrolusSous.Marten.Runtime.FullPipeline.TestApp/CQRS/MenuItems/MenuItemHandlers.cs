@@ -35,6 +35,7 @@ public sealed class AddMenuItemHandler(
 
         var result = await repo.AddAsync(entity, cancellationToken).ConfigureAwait(false);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await cacheProvider.RemoveAsync(CacheKeys.MenuItemById(entity.TenantId, entity.Id), cancellationToken).ConfigureAwait(false);
         await cacheProvider.RemoveAsync(CacheKeys.MenuItemsAll(entity.TenantId), cancellationToken).ConfigureAwait(false);
         return result;
     }
@@ -60,6 +61,10 @@ public sealed class AddMenuItemRangeHandler(
 
         var result = await repo.AddRangeAsync(entities, cancellationToken).ConfigureAwait(false);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var entity in entities)
+        {
+            await cacheProvider.RemoveAsync(CacheKeys.MenuItemById(entity.TenantId, entity.Id), cancellationToken).ConfigureAwait(false);
+        }
         await cacheProvider.RemoveAsync(CacheKeys.MenuItemsAll(tenant), cancellationToken).ConfigureAwait(false);
         return result;
     }
@@ -323,10 +328,18 @@ public sealed class GetMenuItemByIdHandler(
         if (query.IncludeExpressions is null && (query.IncludeProperties?.Count ?? 0) == 0)
         {
             var cacheKey = CacheKeys.MenuItemById(tenant, query.Id);
-            return await cacheProvider.GetOrCreateAsync(
-                cacheKey,
-                _ => FetchAsync(query, opts, cancellationToken),
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+            var cached = await cacheProvider.GetAsync<MenuItem>(cacheKey, cancellationToken).ConfigureAwait(false);
+            if (cached is not null)
+            {
+                return cached;
+            }
+
+            var fetched = await FetchAsync(query, opts, cancellationToken).ConfigureAwait(false);
+            if (fetched is not null)
+            {
+                await cacheProvider.SetAsync(cacheKey, fetched, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            return fetched;
         }
 
         return await FetchAsync(query, opts, cancellationToken).ConfigureAwait(false);
