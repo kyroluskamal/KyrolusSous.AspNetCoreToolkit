@@ -238,4 +238,23 @@ public class KyrolusDomainExceptionsTests
 
         ex.Message.ShouldBe("Duplicate code registered");
     }
+
+    [Fact(DisplayName = "KyrolusDomainException should throw KyrolusErrorCodeRegistryException when StrictMode is enabled and code is unregistered")]
+    public void DomainException_Should_Throw_When_StrictMode_Enabled_And_Code_Unregistered()
+    {
+        try
+        {
+            KyrolusErrorCodeRegistry.EnableStrictMode();
+
+            var ex = Should.Throw<KyrolusErrorCodeRegistryException>(() =>
+                _ = new KyrolusDomainException("unregistered_domain_code", "Detail message"));
+
+            ex.Message.ShouldContain("Strict Mode Violation");
+            ex.Message.ShouldContain("unregistered_domain_code");
+        }
+        finally
+        {
+            KyrolusErrorCodeRegistry.ResetToDefault();
+        }
+    }
 }

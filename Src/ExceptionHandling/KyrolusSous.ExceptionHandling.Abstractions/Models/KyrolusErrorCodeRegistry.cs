@@ -16,6 +16,12 @@ public static partial class KyrolusErrorCodeRegistry
         RegisterCoreDefaults();
     }
 
+    public static bool StrictMode { get; set; }
+
+    public static void EnableStrictMode() => StrictMode = true;
+
+    public static void DisableStrictMode() => StrictMode = false;
+
     public static bool IsConfigured => _configuredBy is not null;
 
     public static string? ConfiguredMethod => _configuredBy;
@@ -67,6 +73,7 @@ public static partial class KyrolusErrorCodeRegistry
             _customPattern = null;
             _customValidator = null;
             _configuredBy = null;
+            StrictMode = false;
         }
     }
 
@@ -91,7 +98,17 @@ public static partial class KyrolusErrorCodeRegistry
     }
 
     public static bool TryGet(string code, out KyrolusErrorCodeDefinition definition)
-        => Registry.TryGetValue(code, out definition!);
+    {
+        var found = Registry.TryGetValue(code, out definition!);
+        if (!found && StrictMode)
+        {
+            throw new KyrolusErrorCodeRegistryException(
+                $"[Strict Mode Violation] Error code '{code}' is not registered in KyrolusErrorCodeRegistry. " +
+                $"Please register the error code during application startup before using it.");
+        }
+
+        return found;
+    }
 
     public static IReadOnlyCollection<KyrolusErrorCodeDefinition> Snapshot()
         => [.. Registry.Values];

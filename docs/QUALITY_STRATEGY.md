@@ -73,7 +73,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Validation.Generator - Unit | unit | 6 | none | yes |
 | Validation.DataAnnotations - Unit | unit | 8 | none | yes |
 | Validation.DataAnnotations.Generator - Unit | unit | 1 | none | yes |
-| ExceptionHandling.Runtime - Unit | unit | 136 | none | yes |
+| ExceptionHandling.Runtime - Unit | unit | 141 | none | yes |
 | ExceptionHandling.ProblemDetails - Unit | unit | 5 | none | yes |
 | ExceptionHandling.EntityFramework - Unit | unit | 6 | none | yes |
 | ExceptionHandling.FluentValidation - Unit | unit | 4 | none | yes |
@@ -105,7 +105,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | EndpointKit - Unit | unit | 64 | none | yes |
 | DataProtection - Unit | unit | 33 | none | yes |
 | Payments - Unit | unit | 57 | none | yes |
-| **Total** | | **2381** | | |
+| **Total** | | **2386** | | |
 
 <!-- END:GENERATED:test-suites -->
 

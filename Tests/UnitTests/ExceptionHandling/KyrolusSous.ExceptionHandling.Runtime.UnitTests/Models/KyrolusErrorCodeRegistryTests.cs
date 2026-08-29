@@ -158,4 +158,50 @@ public class KyrolusErrorCodeRegistryTests : IDisposable
         var withLogging = mapping.WithLogging(true);
         withLogging.ShouldLog.ShouldBeTrue();
     }
+
+    [Fact(DisplayName = "StrictMode when disabled should return false for unregistered codes without throwing")]
+    public void StrictMode_Disabled_Should_Return_False_For_Unregistered_Code()
+    {
+        KyrolusErrorCodeRegistry.StrictMode = false;
+
+        var result = KyrolusErrorCodeRegistry.TryGet("unregistered_test_code", out var def);
+
+        result.ShouldBeFalse();
+        def.ShouldBeNull();
+    }
+
+    [Fact(DisplayName = "StrictMode when enabled should throw KyrolusErrorCodeRegistryException for unregistered codes")]
+    public void StrictMode_Enabled_Should_Throw_For_Unregistered_Code()
+    {
+        KyrolusErrorCodeRegistry.EnableStrictMode();
+
+        var ex = Should.Throw<KyrolusErrorCodeRegistryException>(() =>
+            KyrolusErrorCodeRegistry.TryGet("unregistered_strict_code", out _));
+
+        ex.Message.ShouldContain("Strict Mode Violation");
+        ex.Message.ShouldContain("unregistered_strict_code");
+    }
+
+    [Fact(DisplayName = "StrictMode when enabled should still succeed for registered codes")]
+    public void StrictMode_Enabled_Should_Succeed_For_Registered_Code()
+    {
+        KyrolusErrorCodeRegistry.EnableStrictMode();
+
+        var result = KyrolusErrorCodeRegistry.TryGet(KyrolusErrorCodes.NotFound, out var def);
+
+        result.ShouldBeTrue();
+        def.ShouldNotBeNull();
+        def.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact(DisplayName = "ResetToDefault should reset StrictMode to false")]
+    public void ResetToDefault_Should_Reset_StrictMode()
+    {
+        KyrolusErrorCodeRegistry.EnableStrictMode();
+        KyrolusErrorCodeRegistry.StrictMode.ShouldBeTrue();
+
+        KyrolusErrorCodeRegistry.ResetToDefault();
+
+        KyrolusErrorCodeRegistry.StrictMode.ShouldBeFalse();
+    }
 }

@@ -12,6 +12,7 @@ public sealed class KyrolusExceptionHandlingOptions
     public string? TenantIdClaimType { get; set; } = "tenant_id";
     public bool LogHandledExceptions { get; set; }
     public bool LogUnhandledExceptions { get; set; } = true;
+    public bool EnforceErrorCodeRegistry { get; set; }
 
     public Func<KyrolusExceptionMapping, Exception, LogLevel> LogLevelSelector { get; set; } = (mapping, _) =>
         (int)mapping.StatusCode >= 500 ? LogLevel.Error : LogLevel.Warning;

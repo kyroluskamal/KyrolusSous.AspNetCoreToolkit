@@ -4,7 +4,16 @@ public static class ExceptionHandlingExtension
 {
     public static IServiceCollection AddKyrolusExceptionHandling(this IServiceCollection services, Action<KyrolusExceptionHandlingOptions>? configure = null)
     {
-        if (configure is not null) services.Configure(configure);
+        if (configure is not null)
+        {
+            var options = new KyrolusExceptionHandlingOptions();
+            configure(options);
+            if (options.EnforceErrorCodeRegistry)
+            {
+                KyrolusErrorCodeRegistry.EnableStrictMode();
+            }
+            services.Configure(configure);
+        }
 
         services.TryAddSingleton<KyrolusHttpErrorContextFactory>();
         services.TryAddSingleton<KyrolusExceptionMappingService>();

@@ -276,7 +276,7 @@ public sealed class GetMenuItemByIdHandler(
             TenantId: tenant,
             IncludeSoftDeleted: query.IncludeDeleted);
 
-        if (!query.IncludeDeleted && query.IncludeExpressions is null && (query.IncludeProperties?.Count ?? 0) == 0)
+        if (query.IncludeExpressions is null && (query.IncludeProperties?.Count ?? 0) == 0)
         {
             var cacheKey = CacheKeys.MenuItemById(tenant, query.Id);
             return await cacheProvider.GetOrCreateAsync(

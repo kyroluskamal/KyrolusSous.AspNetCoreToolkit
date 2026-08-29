@@ -126,10 +126,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         var query = config.QueryById;
         ApplyCacheable(query, cacheable);
         ApplyGetByIdQueryOptions(query, id, useStringIncludes ? includes : null, includeExpressions, includeGraphValue, asNoTracking: null, useSplitQuery: null);
-        if (includeDeleted == true)
-        {
-            TrySetProperty(query, IncludeDeletedPropertyName, true);
-        }
+        TrySetProperty(query, IncludeDeletedPropertyName, includeDeleted ?? false);
 
         var result = await mediator.SendAsync(query, CancellationToken.None);
         if (result is null) return BuildNotFound();
@@ -2073,10 +2070,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         var query = config.QueryById;
         ApplyCacheable(query, cacheable);
         ApplyGetByIdQueryOptions(query, id, includeProperties: null, includeExpressions: null, includeGraph: null, asNoTracking: true, useSplitQuery: null);
-        if (includeDeleted)
-        {
-            TrySetProperty(query, IncludeDeletedPropertyName, true);
-        }
+        TrySetProperty(query, IncludeDeletedPropertyName, includeDeleted);
         return await mediator.SendAsync(query, CancellationToken.None).ConfigureAwait(false);
     }
 
@@ -2085,10 +2079,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         var query = efConfig?.QueryByKeyValues ?? new GetByKeyValuesQuery<TResponse, TKey>(keyValues, cacheable ?? false);
         ApplyCacheable(query, cacheable);
         ApplyGetByKeyValuesQueryOptions(query, keyValues, includeProperties: null, includeExpressions: null, includeGraph: null, asNoTracking: true, useSplitQuery: null);
-        if (includeDeleted)
-        {
-            TrySetProperty(query, IncludeDeletedPropertyName, true);
-        }
+        TrySetProperty(query, IncludeDeletedPropertyName, includeDeleted);
         return await mediator.SendAsync(query, CancellationToken.None).ConfigureAwait(false);
     }
 
