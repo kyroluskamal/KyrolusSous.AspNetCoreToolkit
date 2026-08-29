@@ -75,7 +75,7 @@ public sealed record KyrolusRefundResult
     public DateTimeOffset RefundedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }
 
-public sealed record KyrolusWebhookEvent
+public record KyrolusWebhookEvent
 {
     public required string EventId { get; init; }
     public required string EventType { get; init; }

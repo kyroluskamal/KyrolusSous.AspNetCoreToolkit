@@ -104,8 +104,8 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | RabbitMQ - Unit | unit | 38 | none | yes |
 | EndpointKit - Unit | unit | 64 | none | yes |
 | DataProtection - Unit | unit | 33 | none | yes |
-| Payments - Unit | unit | 5 | none | yes |
-| **Total** | | **2329** | | |
+| Payments - Unit | unit | 57 | none | yes |
+| **Total** | | **2381** | | |
 
 <!-- END:GENERATED:test-suites -->
 

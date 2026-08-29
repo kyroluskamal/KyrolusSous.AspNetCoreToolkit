@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using KyrolusSous.Caching.Abstractions;
 using KyrolusSous.Payments.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -10,6 +11,7 @@ namespace KyrolusSous.Payments.PayPal;
 public sealed class KyrolusPayPalPaymentProvider(
     HttpClient httpClient,
     IOptions<KyrolusPayPalOptions> options,
+    IKyrolusCacheProvider? cacheProvider = null,
     ILogger<KyrolusPayPalPaymentProvider>? logger = null) : IKyrolusPaymentProvider
 {
     public string ProviderName => "PayPal";
@@ -27,6 +29,13 @@ public sealed class KyrolusPayPalPaymentProvider(
 
     private async Task<string> GetAccessTokenAsync(CancellationToken cancellationToken)
     {
+        var cacheKey = $"kyrolus:paypal:token:{_options.ClientId}";
+        if (cacheProvider is not null)
+        {
+            var cached = await cacheProvider.GetAsync<string>(cacheKey, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrEmpty(cached)) return cached;
+        }
+
         if (!string.IsNullOrEmpty(_accessToken) && DateTimeOffset.UtcNow < _tokenExpiry)
         {
             return _accessToken;
@@ -48,6 +57,11 @@ public sealed class KyrolusPayPalPaymentProvider(
         _accessToken = doc.RootElement.GetProperty("access_token").GetString()!;
         var expiresIn = doc.RootElement.GetProperty("expires_in").GetInt32();
         _tokenExpiry = DateTimeOffset.UtcNow.AddSeconds(expiresIn - 60);
+
+        if (cacheProvider is not null)
+        {
+            await cacheProvider.SetAsync(cacheKey, _accessToken, TimeSpan.FromSeconds(Math.Max(10, expiresIn - 60)), cancellationToken).ConfigureAwait(false);
+        }
 
         return _accessToken;
     }
