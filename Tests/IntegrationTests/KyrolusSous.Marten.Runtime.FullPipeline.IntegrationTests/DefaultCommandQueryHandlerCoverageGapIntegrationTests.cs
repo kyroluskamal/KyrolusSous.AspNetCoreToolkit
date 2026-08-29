@@ -24,7 +24,8 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class DefaultCommandQueryHandlerCoverageGapIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class DefaultCommandQueryHandlerCoverageGapIntegrationTests(TestAppFactory factory)
 {
     [Fact(DisplayName = "DefaultCommandQueryHandler marten batch - unknown operation type is rejected by allowlist validation")]
     public async Task Batch_unknown_operation_type_is_rejected_by_allowlist_validation()

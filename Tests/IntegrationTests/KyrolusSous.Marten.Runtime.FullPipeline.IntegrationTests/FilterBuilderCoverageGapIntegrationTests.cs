@@ -6,7 +6,8 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class FilterBuilderCoverageGapIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class FilterBuilderCoverageGapIntegrationTests(TestAppFactory factory)
 {
     [Theory(DisplayName = "Marten filter builder menu - type conversion and token parsing matrix")]
     [MemberData(nameof(MenuFilterTemplateCases))]

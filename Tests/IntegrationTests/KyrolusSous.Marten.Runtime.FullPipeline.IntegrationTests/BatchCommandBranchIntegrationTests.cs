@@ -17,7 +17,8 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory)
 {
     [Fact(DisplayName = "Batch endpoint - operation not allowed marks next operation as skipped")]
     public async Task Batch_operation_not_allowed_marks_next_operation_as_skipped()

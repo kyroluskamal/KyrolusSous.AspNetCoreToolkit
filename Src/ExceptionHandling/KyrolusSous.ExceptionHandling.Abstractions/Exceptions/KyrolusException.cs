@@ -32,15 +32,10 @@ public abstract class KyrolusException : Exception
         IsTransient = isTransient;
         ShouldLog = shouldLog;
 
-        if (errors is { Count: > 0 })
-        {
-            _errors = [.. errors];
-        }
+        if (errors is { Count: > 0 }) _errors = [.. errors];
 
         if (metadata is { Count: > 0 })
-        {
             _metadata = new Dictionary<string, object?>(metadata, StringComparer.OrdinalIgnoreCase);
-        }
     }
 
     public KyrolusException WithMetadata(string key, object? value)
@@ -55,10 +50,7 @@ public abstract class KyrolusException : Exception
     {
         ArgumentNullException.ThrowIfNull(metadata);
         _metadata ??= new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (k, v) in metadata)
-        {
-            _metadata[k] = v;
-        }
+        foreach (var (k, v) in metadata) _metadata[k] = v;
         return this;
     }
 

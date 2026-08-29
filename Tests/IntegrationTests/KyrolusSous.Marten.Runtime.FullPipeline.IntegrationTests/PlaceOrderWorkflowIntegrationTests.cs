@@ -8,7 +8,8 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class PlaceOrderWorkflowIntegrationTests : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class PlaceOrderWorkflowIntegrationTests
 {
     private readonly TestAppFactory factory;
 

@@ -48,26 +48,14 @@ public class KyrolusDomainException : KyrolusException
     }
 
     private static HttpStatusCode ResolveStatusCode(string code)
-    {
-        return KyrolusErrorCodeRegistry.TryGet(code, out var definition)
-            ? definition.StatusCode
-            : HttpStatusCode.BadRequest;
-    }
+        => KyrolusErrorCodeRegistry.TryGet(code, out var definition) ? definition.StatusCode : HttpStatusCode.BadRequest;
 
     private static string ResolveTitle(string code)
-    {
-        return KyrolusErrorCodeRegistry.TryGet(code, out var definition)
-            ? definition.Title
-            : code;
-    }
+        => KyrolusErrorCodeRegistry.TryGet(code, out var definition) ? definition.Title : code;
 
     private static bool ResolveIsTransient(string code)
-    {
-        return KyrolusErrorCodeRegistry.TryGet(code, out var definition) && definition.IsTransient;
-    }
+        => KyrolusErrorCodeRegistry.TryGet(code, out var definition) && definition.IsTransient;
 
     private static bool ResolveShouldLog(string code)
-    {
-        return !KyrolusErrorCodeRegistry.TryGet(code, out var definition) || definition.ShouldLog;
-    }
+        => !KyrolusErrorCodeRegistry.TryGet(code, out var definition) || definition.ShouldLog;
 }

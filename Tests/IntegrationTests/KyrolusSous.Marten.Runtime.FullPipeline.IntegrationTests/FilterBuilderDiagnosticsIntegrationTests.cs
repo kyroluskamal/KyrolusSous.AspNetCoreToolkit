@@ -6,7 +6,8 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class FilterBuilderDiagnosticsIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class FilterBuilderDiagnosticsIntegrationTests(TestAppFactory factory)
 {
     [Theory(DisplayName = "Marten filter builder - string mode scenarios")]
     [MemberData(nameof(StringModeCases))]

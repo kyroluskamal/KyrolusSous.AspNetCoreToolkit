@@ -5,7 +5,8 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class RoutingHelperDiagnosticsIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class RoutingHelperDiagnosticsIntegrationTests(TestAppFactory factory)
 {
     [Theory(DisplayName = "Routing helper diagnostics - string input handles allowlist and strict mode")]
     [MemberData(nameof(StringInputCases))]

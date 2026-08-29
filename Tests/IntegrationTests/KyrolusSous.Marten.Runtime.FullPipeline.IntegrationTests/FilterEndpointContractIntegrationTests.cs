@@ -5,7 +5,8 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class FilterEndpointContractIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class FilterEndpointContractIntegrationTests(TestAppFactory factory)
 {
 
     [Fact(DisplayName = "Filter endpoint - equals operator")]

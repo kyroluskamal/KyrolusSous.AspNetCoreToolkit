@@ -5,7 +5,8 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class OpenApiDocumentIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class OpenApiDocumentIntegrationTests(TestAppFactory factory)
 {
     private static readonly string[] CandidateOpenApiRoutes =
     [

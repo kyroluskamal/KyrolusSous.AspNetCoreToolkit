@@ -5,7 +5,8 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class CrudEndpointContractIntegrationTests : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class CrudEndpointContractIntegrationTests
 {
     private readonly TestAppFactory factory;
 

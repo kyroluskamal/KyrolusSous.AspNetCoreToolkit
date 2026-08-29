@@ -8,7 +8,8 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class MartenRuntimeQueryHelperIntegrationTests(TestAppFactory factory)
 {
     [Theory(DisplayName = "Marten query helper - supports scalar filter operators")]
     [MemberData(nameof(ScalarFilterCases))]

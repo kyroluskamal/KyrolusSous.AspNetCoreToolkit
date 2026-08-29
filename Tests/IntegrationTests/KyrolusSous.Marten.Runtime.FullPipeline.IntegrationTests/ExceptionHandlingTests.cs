@@ -4,7 +4,8 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class ExceptionHandlingTests : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class ExceptionHandlingTests
 {
     private readonly TestAppFactory factory;
 

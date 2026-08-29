@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.0" />
+    <PackageReference Include="Shouldly" Version="4.3.0" />
+    <PackageReference Include="NSubstitute" Version="5.3.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Src\Payments\KyrolusSous.Payments.Abstractions\KyrolusSous.Payments.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Payments\KyrolusSous.Payments.Core\KyrolusSous.Payments.Core.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Payments\KyrolusSous.Payments.Stripe\KyrolusSous.Payments.Stripe.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Payments\KyrolusSous.Payments.PayPal\KyrolusSous.Payments.PayPal.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Payments\KyrolusSous.Payments.Paymob\KyrolusSous.Payments.Paymob.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Payments\KyrolusSous.Payments.Fawry\KyrolusSous.Payments.Fawry.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Payments\KyrolusSous.Payments.Adyen\KyrolusSous.Payments.Adyen.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Payments\KyrolusSous.Payments.Mollie\KyrolusSous.Payments.Mollie.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Payments\KyrolusSous.Payments.Klarna\KyrolusSous.Payments.Klarna.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Payments\KyrolusSous.Payments.Square\KyrolusSous.Payments.Square.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Payments\KyrolusSous.Payments.Tap\KyrolusSous.Payments.Tap.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Payments\KyrolusSous.Payments.Checkout\KyrolusSous.Payments.Checkout.csproj" />
+  </ItemGroup>
+
+</Project>

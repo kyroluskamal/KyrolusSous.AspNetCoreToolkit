@@ -7,7 +7,8 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class ETagAndPagingContractIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class ETagAndPagingContractIntegrationTests(TestAppFactory factory)
 {
     [Fact(DisplayName = "ETag handling - get by id returns ETag and If-None-Match returns 304")]
     public async Task Get_by_id_returns_etag_and_if_none_match_returns_not_modified()

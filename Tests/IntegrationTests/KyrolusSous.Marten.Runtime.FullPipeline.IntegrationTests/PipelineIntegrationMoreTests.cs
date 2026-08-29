@@ -6,7 +6,8 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class CrudPipelineIntegrationMoreTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class CrudPipelineIntegrationMoreTests(TestAppFactory factory)
 {
     [Fact(DisplayName = "CRUD pipeline - create returns 201 and item id")]
     public async Task Create_returns_201_and_id()
@@ -201,7 +202,8 @@ public sealed class CrudPipelineIntegrationMoreTests(TestAppFactory factory) : I
     }
 }
 
-public sealed class AuthPipelineIntegrationMoreTests : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class AuthPipelineIntegrationMoreTests
 {
     private readonly TestAppFactory factory;
 
@@ -243,7 +245,8 @@ public sealed class AuthPipelineIntegrationMoreTests : IClassFixture<TestAppFact
     }
 }
 
-public sealed class ProtectedReadPipelineIntegrationMoreTests : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class ProtectedReadPipelineIntegrationMoreTests
 {
     private readonly TestAppFactory factory;
 
@@ -283,7 +286,8 @@ public sealed class ProtectedReadPipelineIntegrationMoreTests : IClassFixture<Te
     }
 }
 
-public sealed class DataProtectionPipelineIntegrationMoreTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class DataProtectionPipelineIntegrationMoreTests(TestAppFactory factory)
 {
 
     [Fact(DisplayName = "DataProtection - protected value changes with input")]

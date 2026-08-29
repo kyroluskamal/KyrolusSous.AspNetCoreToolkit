@@ -9,7 +9,8 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class CacheIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class CacheIntegrationTests(TestAppFactory factory)
 {
     [Fact(DisplayName = "Cache - get-all endpoint stores cache entry")]
     public async Task Get_all_endpoint_is_cached()

@@ -22,7 +22,8 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class DefaultCommandQueryHandlerMartenIntegrationTests(TestAppFactory factory)
 {
     [Theory(DisplayName = "DefaultCommandQueryHandler marten query - supports clause operators")]
     [MemberData(nameof(FilterClauseCases))]

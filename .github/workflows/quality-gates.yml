@@ -107,6 +107,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 12
+          -c max_connections=500
 
     steps:
       - uses: actions/checkout@v4
@@ -129,9 +130,12 @@ jobs:
 
       - name: Tune PostgreSQL Connections
         run: |
-          CONTAINER_ID=$(docker ps -q -f ancestor=postgres:16 | head -n 1)
+          CONTAINER_ID=$(docker ps -q --filter "publish=5432" | head -n 1)
+          if [ -z "$CONTAINER_ID" ]; then
+            CONTAINER_ID=$(docker ps -q -f ancestor=postgres:16 | head -n 1)
+          fi
           if [ -n "$CONTAINER_ID" ]; then
-            docker exec "$CONTAINER_ID" psql -U postgres -c "ALTER SYSTEM SET max_connections = '300';"
+            docker exec "$CONTAINER_ID" psql -U postgres -c "ALTER SYSTEM SET max_connections = '500';"
             docker restart "$CONTAINER_ID"
             until docker exec "$CONTAINER_ID" pg_isready -U postgres; do sleep 1; done
           fi
@@ -185,6 +189,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 12
+          -c max_connections=500
       redis:
         image: redis:7
         ports:
@@ -204,9 +209,12 @@ jobs:
 
       - name: Tune PostgreSQL Connections
         run: |
-          CONTAINER_ID=$(docker ps -q -f ancestor=postgres:16 | head -n 1)
+          CONTAINER_ID=$(docker ps -q --filter "publish=5432" | head -n 1)
+          if [ -z "$CONTAINER_ID" ]; then
+            CONTAINER_ID=$(docker ps -q -f ancestor=postgres:16 | head -n 1)
+          fi
           if [ -n "$CONTAINER_ID" ]; then
-            docker exec "$CONTAINER_ID" psql -U postgres -c "ALTER SYSTEM SET max_connections = '300';"
+            docker exec "$CONTAINER_ID" psql -U postgres -c "ALTER SYSTEM SET max_connections = '500';"
             docker restart "$CONTAINER_ID"
             until docker exec "$CONTAINER_ID" pg_isready -U postgres; do sleep 1; done
           fi

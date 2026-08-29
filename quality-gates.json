@@ -352,6 +352,13 @@
       "kind": "unit",
       "services": [],
       "ci": true
+    },
+    {
+      "name": "Payments - Unit",
+      "project": "Tests/UnitTests/Payments/KyrolusSous.Payments.UnitTests/KyrolusSous.Payments.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
     }
   ],
 
@@ -373,7 +380,8 @@
       { "prefix": "OpenApi", "title": "OpenAPI & Documentation" },
       { "prefix": "Elasticsearch", "title": "Search & Elasticsearch" },
       { "prefix": "Resilience", "title": "Resilience & Fault Tolerance" },
-      { "prefix": "RabbitMQ", "title": "RabbitMQ Messaging" }
+      { "prefix": "RabbitMQ", "title": "RabbitMQ Messaging" },
+      { "prefix": "Payments", "title": "Payments & Gateways" }
     ]
   }
 }

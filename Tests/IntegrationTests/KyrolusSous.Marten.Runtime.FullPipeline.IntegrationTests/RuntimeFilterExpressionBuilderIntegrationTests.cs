@@ -7,7 +7,8 @@ using Shouldly;
 
 namespace KyrolusSous.Marten.Runtime.FullPipeline.IntegrationTests;
 
-public sealed class RuntimeFilterExpressionBuilderIntegrationTests(TestAppFactory factory) : IClassFixture<TestAppFactory>
+[Collection("MartenPipelineTestCollection")]
+public sealed class RuntimeFilterExpressionBuilderIntegrationTests(TestAppFactory factory)
 {
     [Theory(DisplayName = "Runtime filter expression builder - menu scalar parser matrix")]
     [MemberData(nameof(MenuExpressionCases))]
