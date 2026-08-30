@@ -6,7 +6,8 @@ public class KyrolusExceptionTranslatorTests
 {
     private static KyrolusExceptionTranslator CreateTranslator(
         Action<KyrolusExceptionHandlingOptions>? configureOptions = null,
-        IHostEnvironment? hostEnvironment = null)
+        IHostEnvironment? hostEnvironment = null,
+        IKyrolusErrorLocalizer? errorLocalizer = null)
     {
         var options = new KyrolusExceptionHandlingOptions();
         configureOptions?.Invoke(options);
@@ -18,11 +19,12 @@ public class KyrolusExceptionTranslatorTests
             new KyrolusFrameworkExceptionMapper(),
             new KyrolusDefaultExceptionMapper()
         };
-        var mappingService = new KyrolusExceptionMappingService(mappers, new KyrolusNullErrorLocalizer());
+        var mappingService = new KyrolusExceptionMappingService(mappers);
         var sanitizer = new KyrolusDefaultErrorMetadataSanitizer(optionsWrapper);
         var environment = hostEnvironment ?? new TestHostEnvironment("Development");
+        var localizer = errorLocalizer ?? new KyrolusNullErrorLocalizer();
 
-        return new KyrolusExceptionTranslator(mappingService, sanitizer, environment, optionsWrapper);
+        return new KyrolusExceptionTranslator(mappingService, sanitizer, environment, optionsWrapper, localizer);
     }
 
     [Fact(DisplayName = "TranslateToMapping with custom context and explicit includeDetails should enrich mapping")]
@@ -135,5 +137,36 @@ public class KyrolusExceptionTranslatorTests
         result.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
         result.ExceptionType.ShouldBe(typeof(InvalidOperationException).FullName);
         result.Error.Code.ShouldBe(KyrolusErrorCodes.InternalError);
+    }
+
+    [Fact(DisplayName = "TranslateToMapping should localize title and detail using injected IKyrolusErrorLocalizer")]
+    public void TranslateToMapping_Should_Localize_Title_And_Detail()
+    {
+        var localizer = new TestCustomErrorLocalizer();
+        var translator = CreateTranslator(errorLocalizer: localizer);
+        var context = new KyrolusErrorContext(
+            TraceId: "trace-xyz",
+            CorrelationId: null,
+            UserId: null,
+            TenantId: null,
+            Path: null,
+            Method: null,
+            Culture: CultureInfo.GetCultureInfo("ar-EG"));
+
+        var domainEx = new KyrolusDomainException(HttpStatusCode.BadRequest, "order_failed", "Order Failed", "Stock issue");
+
+        var mapping = translator.TranslateToMapping(domainEx, context);
+
+        mapping.ShouldNotBeNull();
+        mapping.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        mapping.Error.Code.ShouldBe("order_failed");
+        mapping.Error.Title.ShouldBe("Localized: Order Failed");
+        mapping.Error.Detail.ShouldBe("Localized: Stock issue");
+    }
+
+    private sealed class TestCustomErrorLocalizer : IKyrolusErrorLocalizer
+    {
+        public string? Localize(string code, string? defaultMessage, CultureInfo? culture)
+            => $"Localized: {defaultMessage}";
     }
 }

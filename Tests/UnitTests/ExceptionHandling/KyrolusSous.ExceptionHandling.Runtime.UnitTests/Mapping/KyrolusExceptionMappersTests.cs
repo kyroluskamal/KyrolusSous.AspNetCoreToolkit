@@ -248,10 +248,9 @@ public class KyrolusExceptionMappersTests
         mapping.Error.Metadata["orderId"].ShouldBe("ORD-123");
     }
 
-    [Fact(DisplayName = "KyrolusExceptionMappingService should order mappers and localize output")]
-    public void KyrolusExceptionMappingService_Should_Order_Mappers_And_Localize()
+    [Fact(DisplayName = "KyrolusExceptionMappingService should order mappers and map to highest priority matching mapper")]
+    public void KyrolusExceptionMappingService_Should_Order_Mappers_And_Map()
     {
-        var localizer = new TestErrorLocalizer();
         var mappers = new IKyrolusExceptionMapper[]
         {
             new KyrolusDefaultExceptionMapper(),
@@ -259,30 +258,15 @@ public class KyrolusExceptionMappersTests
             new KyrolusFrameworkExceptionMapper()
         };
 
-        var service = new KyrolusExceptionMappingService(mappers, localizer);
+        var service = new KyrolusExceptionMappingService(mappers);
         var domainEx = new KyrolusDomainException(HttpStatusCode.BadRequest, "order_failed", "Order Failed", "Stock issue");
 
         var result = service.Map(domainEx, TestContext);
 
         result.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         result.Error.Code.ShouldBe("order_failed");
-        result.Error.Title.ShouldBe("Localized: Order Failed");
-        result.Error.Detail.ShouldBe("Localized: Stock issue");
-    }
-
-    [Fact(DisplayName = "KyrolusExceptionMappingService should preserve original title and detail when localizer returns null")]
-    public void KyrolusExceptionMappingService_Should_Preserve_Original_Title_And_Detail_When_Localizer_Returns_Null()
-    {
-        var localizer = new TestNullErrorLocalizer();
-        var mappers = new IKyrolusExceptionMapper[] { new KyrolusDomainExceptionMapper() };
-
-        var service = new KyrolusExceptionMappingService(mappers, localizer);
-        var domainEx = new KyrolusDomainException(HttpStatusCode.BadRequest, "unknown_code", "Original Title", "Original Detail");
-
-        var result = service.Map(domainEx, TestContext);
-
-        result.Error.Title.ShouldBe("Original Title");
-        result.Error.Detail.ShouldBe("Original Detail");
+        result.Error.Title.ShouldBe("Order Failed");
+        result.Error.Detail.ShouldBe("Stock issue");
     }
 
     [Fact(DisplayName = "KyrolusExceptionMappingService should fallback to default internal error when no mappers match")]
@@ -508,14 +492,4 @@ public class KyrolusExceptionMappersTests
         public IReadOnlyList<KyrolusErrorItem>? GetErrors() => errors;
     }
 
-    private sealed class TestErrorLocalizer : IKyrolusErrorLocalizer
-    {
-        public string? Localize(string code, string? defaultMessage, CultureInfo? culture)
-            => $"Localized: {defaultMessage}";
-    }
-
-    private sealed class TestNullErrorLocalizer : IKyrolusErrorLocalizer
-    {
-        public string? Localize(string code, string? defaultMessage, CultureInfo? culture) => null;
-    }
 }

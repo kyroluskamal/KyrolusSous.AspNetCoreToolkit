@@ -15,8 +15,7 @@ public sealed class KyrolusDefaultErrorMetadataSanitizer(IOptions<KyrolusExcepti
         {
             var filtered = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
             foreach (var (key, value) in metadata)
-                if (allowList.Contains(key))
-                    filtered[key] = value;
+                if (allowList.Contains(key)) filtered[key] = value;
 
             return filtered;
         }
@@ -34,10 +33,7 @@ public sealed class KyrolusDefaultErrorMetadataSanitizer(IOptions<KyrolusExcepti
         if (options.SensitiveMetadataKeys.Contains(key)) return true;
 
         foreach (var sensitiveKey in options.SensitiveMetadataKeys)
-        {
-            if (key.Contains(sensitiveKey, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
+            if (key.Contains(sensitiveKey, StringComparison.OrdinalIgnoreCase)) return true;
 
         return false;
     }

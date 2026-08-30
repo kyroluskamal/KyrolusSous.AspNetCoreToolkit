@@ -82,11 +82,11 @@ public class KyrolusJsonErrorResponseWriterTests
     {
         KyrolusExceptionJsonContext.Default.KyrolusErrorEnvelope.ShouldNotBeNull();
         KyrolusExceptionJsonContext.Default.KyrolusErrorItem.ShouldNotBeNull();
-        KyrolusExceptionJsonContext.Default.ErrorContextInfo.ShouldNotBeNull();
+        KyrolusExceptionJsonContext.Default.KyrolusErrorContextInfo.ShouldNotBeNull();
 
         KyrolusExceptionJsonContext.Default.GetTypeInfo(typeof(KyrolusErrorEnvelope)).ShouldNotBeNull();
         KyrolusExceptionJsonContext.Default.GetTypeInfo(typeof(KyrolusErrorItem)).ShouldNotBeNull();
-        KyrolusExceptionJsonContext.Default.GetTypeInfo(typeof(ErrorContextInfo)).ShouldNotBeNull();
+        KyrolusExceptionJsonContext.Default.GetTypeInfo(typeof(KyrolusErrorContextInfo)).ShouldNotBeNull();
         KyrolusExceptionJsonContext.Default.GetTypeInfo(typeof(Dictionary<string, object?>)).ShouldNotBeNull();
         KyrolusExceptionJsonContext.Default.GetTypeInfo(typeof(IReadOnlyDictionary<string, object?>)).ShouldNotBeNull();
     }
@@ -132,10 +132,10 @@ public class KyrolusJsonErrorResponseWriterTests
         deserialized.Metadata["orderId"]!.ToString().ShouldBe("ORD-999");
     }
 
-    [Fact(DisplayName = "KyrolusExceptionJsonContext should serialize ErrorContextInfo correctly")]
-    public void JsonContext_Should_Serialize_ErrorContextInfo_Correctly()
+    [Fact(DisplayName = "KyrolusExceptionJsonContext should serialize KyrolusErrorContextInfo correctly")]
+    public void JsonContext_Should_Serialize_KyrolusErrorContextInfo_Correctly()
     {
-        var contextInfo = new ErrorContextInfo
+        var contextInfo = new KyrolusErrorContextInfo
         {
             RequestPath = "/api/test",
             HttpMethod = "GET",
@@ -144,7 +144,7 @@ public class KyrolusJsonErrorResponseWriterTests
             EndpointName = "GetProductById"
         };
 
-        var json = JsonSerializer.Serialize(contextInfo, KyrolusExceptionJsonContext.Default.ErrorContextInfo);
+        var json = JsonSerializer.Serialize(contextInfo, KyrolusExceptionJsonContext.Default.KyrolusErrorContextInfo);
 
         json.ShouldNotBeNullOrWhiteSpace();
         json.ShouldContain("\"requestPath\":\"/api/test\"");

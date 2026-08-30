@@ -6,9 +6,16 @@ public class SslAuthenticationException : AuthenticationException
     public SslAuthenticationException(string message, Exception innerException) : base(message, innerException) { }
 }
 
-public class SslAuthenticationExceptionHandler(ILogger<SslAuthenticationExceptionHandler> logger)
+public class SslAuthenticationExceptionHandler(
+    ILogger<SslAuthenticationExceptionHandler> logger,
+    IKyrolusErrorLocalizer? localizer = null,
+    IKyrolusErrorMetadataSanitizer? sanitizer = null,
+    KyrolusHttpErrorContextFactory? contextFactory = null)
     : KyrolusExceptionHandlerBase<AuthenticationException>(
         logger,
         HttpStatusCode.BadGateway,
         KyrolusErrorCodes.ExternalService,
-        "SSL Authentication failed");
+        "SSL Authentication failed",
+        localizer,
+        sanitizer,
+        contextFactory);

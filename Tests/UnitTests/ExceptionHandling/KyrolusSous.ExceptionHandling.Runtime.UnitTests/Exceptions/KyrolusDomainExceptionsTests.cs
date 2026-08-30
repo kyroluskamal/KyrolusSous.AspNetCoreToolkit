@@ -1,5 +1,6 @@
 namespace KyrolusSous.ExceptionHandling.Runtime.UnitTests.Exceptions;
 
+[Collection("ErrorCodeRegistry")]
 public class KyrolusDomainExceptionsTests
 {
     private static readonly KyrolusErrorContext TestErrorContext = new(

@@ -2,20 +2,18 @@ namespace KyrolusSous.ExceptionHandling.Runtime.Writers;
 
 public sealed class KyrolusJsonErrorResponseWriter : IKyrolusErrorResponseWriter
 {
-    public Task WriteAsync(HttpContext context, KyrolusExceptionMapping mapping, KyrolusErrorContext errorContext, CancellationToken cancellationToken)
+    public Task WriteAsync(HttpContext httpContext, KyrolusExceptionMapping mapping, KyrolusErrorContext errorContext, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(httpContext);
 
-        if (context.Response.HasStarted)
-        {
+        if (httpContext.Response.HasStarted)
             return Task.CompletedTask;
-        }
 
-        context.Response.ContentType = "application/json";
-        context.Response.StatusCode = (int)mapping.StatusCode;
+        httpContext.Response.ContentType = "application/json";
+        httpContext.Response.StatusCode = (int)mapping.StatusCode;
 
         return JsonSerializer.SerializeAsync(
-            context.Response.Body,
+            httpContext.Response.Body,
             mapping.Error,
             KyrolusExceptionJsonContext.Default.KyrolusErrorEnvelope,
             cancellationToken);

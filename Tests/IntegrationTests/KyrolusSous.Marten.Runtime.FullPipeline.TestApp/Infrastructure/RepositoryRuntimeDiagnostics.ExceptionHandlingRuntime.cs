@@ -385,13 +385,19 @@ public static partial class RepositoryRuntimeDiagnostics
         }
 
         var localizedMappingService = new KyrolusExceptionMappingService(
-            [new KyrolusFrameworkExceptionMapper()],
-            new KyrolusDictionaryErrorLocalizer(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                [KyrolusErrorCodes.Unauthorized] = "Localized unauthorized",
-                [$"{KyrolusErrorCodes.Unauthorized}.detail"] = "Localized unauthorized detail"
-            }));
-        var localizedUnauthorized = localizedMappingService.Map(new UnauthorizedAccessException("denied"), translatorContext);
+            [new KyrolusFrameworkExceptionMapper()]);
+        var testLocalizer = new KyrolusDictionaryErrorLocalizer(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [KyrolusErrorCodes.Unauthorized] = "Localized unauthorized",
+            [$"{KyrolusErrorCodes.Unauthorized}.detail"] = "Localized unauthorized detail"
+        });
+        var testLocalizingTranslator = new KyrolusExceptionTranslator(
+            localizedMappingService,
+            metadataSanitizer,
+            new RuntimeHostEnvironment("Development"),
+            Options.Create(new KyrolusExceptionHandlingOptions()),
+            testLocalizer);
+        var localizedUnauthorized = testLocalizingTranslator.TranslateToMapping(new UnauthorizedAccessException("denied"), translatorContext);
         if (localizedUnauthorized.StatusCode == HttpStatusCode.Unauthorized &&
             localizedUnauthorized.Error.Title == "Localized unauthorized" &&
             localizedUnauthorized.Error.Detail == "Localized unauthorized detail")

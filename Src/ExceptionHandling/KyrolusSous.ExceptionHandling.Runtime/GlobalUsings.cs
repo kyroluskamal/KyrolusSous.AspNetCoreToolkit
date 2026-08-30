@@ -7,6 +7,7 @@ global using System.Security.Claims;
 global using System.Text.Json;
 global using System.Text.Json.Serialization;
 global using KyrolusSous.ExceptionHandling.Abstractions.Exceptions;
+global using KyrolusSous.ExceptionHandling.Abstractions.Extensions;
 global using KyrolusSous.ExceptionHandling.Abstractions.Interfaces;
 global using KyrolusSous.ExceptionHandling.Abstractions.Models;
 global using KyrolusSous.ExceptionHandling.Abstractions.Helpers;
@@ -28,5 +29,7 @@ global using Microsoft.Extensions.Hosting;
 global using Microsoft.Extensions.Localization;
 global using Microsoft.Extensions.Logging;
 global using Microsoft.Extensions.Options;
+global using System.Reflection;
+global using System.Text.RegularExpressions;
 
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("KyrolusSous.ExceptionHandling.Runtime.UnitTests")]

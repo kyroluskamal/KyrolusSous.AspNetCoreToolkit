@@ -323,6 +323,56 @@ public class KyrolusExceptionHandlersTests
         json.ShouldContain("custom_code");
     }
 
+    [Fact(DisplayName = "Handler should apply localization when IKyrolusErrorLocalizer is provided")]
+    public async Task Handler_Should_Apply_Localization_When_Localizer_Is_Provided()
+    {
+        var localizer = new KyrolusDictionaryErrorLocalizer(new Dictionary<string, string>
+        {
+            [KyrolusErrorCodes.BadRequest] = "طلب غير صالح",
+            [$"{KyrolusErrorCodes.BadRequest}.detail"] = "المعامل المرسل غير صالح"
+        });
+
+        var logger = new TestLogger<ArgumentExceptionHandler>();
+        var handler = new ArgumentExceptionHandler(logger, localizer: localizer);
+        var exception = new ArgumentException("Invalid param");
+
+        var context = new DefaultHttpContext();
+        using var responseStream = new MemoryStream();
+        context.Response.Body = responseStream;
+
+        var handled = await handler.TryHandleAsync(context, exception, CancellationToken.None);
+
+        handled.ShouldBeTrue();
+        responseStream.Seek(0, SeekOrigin.Begin);
+        var envelope = await JsonSerializer.DeserializeAsync(responseStream, KyrolusExceptionJsonContext.Default.KyrolusErrorEnvelope);
+        envelope.ShouldNotBeNull();
+        envelope.Title.ShouldBe("طلب غير صالح");
+        envelope.Detail.ShouldBe("المعامل المرسل غير صالح");
+    }
+
+    [Fact(DisplayName = "Handler should sanitize metadata when IKyrolusErrorMetadataSanitizer is provided")]
+    public async Task Handler_Should_Sanitize_Metadata_When_Sanitizer_Is_Provided()
+    {
+        var sanitizer = new KyrolusDefaultErrorMetadataSanitizer(Options.Create(new KyrolusExceptionHandlingOptions()));
+        var logger = new TestLogger();
+        var handler = new TestPaymentFailedExceptionHandler(logger, sanitizer: sanitizer);
+        var exception = new TestPaymentFailedException("ORD-99", "TX-123", "Account balance is too low");
+
+        var context = new DefaultHttpContext();
+        using var responseStream = new MemoryStream();
+        context.Response.Body = responseStream;
+
+        var handled = await handler.TryHandleAsync(context, exception, CancellationToken.None);
+
+        handled.ShouldBeTrue();
+        responseStream.Seek(0, SeekOrigin.Begin);
+        using var reader = new StreamReader(responseStream);
+        var json = await reader.ReadToEndAsync();
+
+        json.ShouldContain("ORD-99");
+        json.ShouldNotContain("SuperSecretPassword");
+    }
+
     [Fact(DisplayName = "AddKyrolusBuiltInExceptionHandlers should register all 10 built-in exception handlers in IServiceCollection")]
     public void AddKyrolusBuiltInExceptionHandlers_Should_Register_All_10_Handlers()
     {
@@ -366,7 +416,8 @@ public class KyrolusExceptionHandlersTests
         public IReadOnlyDictionary<string, object?> GetMetadata() => new Dictionary<string, object?>
         {
             ["orderId"] = orderId,
-            ["transactionId"] = transactionId
+            ["transactionId"] = transactionId,
+            ["password"] = "SuperSecretPassword"
         };
 
         public IReadOnlyList<KyrolusErrorItem>? GetErrors() =>
@@ -375,12 +426,17 @@ public class KyrolusExceptionHandlersTests
         ];
     }
 
-    private sealed class TestPaymentFailedExceptionHandler(ILogger logger)
+    private sealed class TestPaymentFailedExceptionHandler(
+        ILogger logger,
+        IKyrolusErrorLocalizer? localizer = null,
+        IKyrolusErrorMetadataSanitizer? sanitizer = null)
         : KyrolusExceptionHandlerBase<TestPaymentFailedException>(
             logger,
             HttpStatusCode.PaymentRequired,
             "payment_failed",
-            "Payment Failed");
+            "Payment Failed",
+            localizer,
+            sanitizer);
 
     private sealed class TestValidationException(string message, IReadOnlyList<KyrolusErrorItem> errors)
         : Exception(message), IKyrolusExceptionWithErrors

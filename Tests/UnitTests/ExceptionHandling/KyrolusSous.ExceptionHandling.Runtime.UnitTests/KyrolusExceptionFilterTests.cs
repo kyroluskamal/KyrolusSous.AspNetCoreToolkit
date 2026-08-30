@@ -24,10 +24,10 @@ public class KyrolusExceptionFilterTests
             new KyrolusFrameworkExceptionMapper(),
             new KyrolusDefaultExceptionMapper()
         };
-        var mappingService = new KyrolusExceptionMappingService(mappers, new KyrolusNullErrorLocalizer());
+        var mappingService = new KyrolusExceptionMappingService(mappers);
         var sanitizer = new KyrolusDefaultErrorMetadataSanitizer(optionsWrapper);
         var environment = new TestHostEnvironment("Development");
-        var translator = new KyrolusExceptionTranslator(mappingService, sanitizer, environment, optionsWrapper);
+        var translator = new KyrolusExceptionTranslator(mappingService, sanitizer, environment, optionsWrapper, new KyrolusNullErrorLocalizer());
         var writer = new KyrolusJsonErrorResponseWriter();
 
         return new KyrolusExceptionFilter(

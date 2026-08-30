@@ -1,6 +1,6 @@
 namespace KyrolusSous.ExceptionHandling.Runtime.Helpers;
 
-public class ErrorContextInfo
+public class KyrolusErrorContextInfo
 {
     public string RequestPath { get; set; } = string.Empty;
     public string HttpMethod { get; set; } = string.Empty;
@@ -8,9 +8,9 @@ public class ErrorContextInfo
     public string? Action { get; set; }
     public string? EndpointName { get; set; }
 
-    public ErrorContextInfo() { }
+    public KyrolusErrorContextInfo() { }
 
-    public ErrorContextInfo(HttpContext? context)
+    public KyrolusErrorContextInfo(HttpContext? context)
     {
         if (context is null) return;
 
@@ -23,9 +23,7 @@ public class ErrorContextInfo
 
         var endpoint = context.GetEndpoint();
         if (endpoint is not null)
-        {
             EndpointName = endpoint.Metadata.GetMetadata<IEndpointNameMetadata>()?.EndpointName
                             ?? endpoint.DisplayName;
-        }
     }
 }

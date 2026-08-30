@@ -1,7 +1,20 @@
 namespace KyrolusSous.ExceptionHandling.Abstractions.Helpers;
 
+/// <summary>
+/// Utility helper for extracting structured diagnostic metadata from various .NET and custom exception types.
+/// </summary>
+/// <remarks>
+/// Automatically inspects <see cref="Exception.Data"/>, <see cref="Interfaces.IKyrolusExceptionWithMetadata"/>,
+/// and common .NET BCL exceptions (e.g. <see cref="ArgumentException.ParamName"/>, <see cref="JsonException.LineNumber"/>, <see cref="SocketException.SocketErrorCode"/>).
+/// </remarks>
 public static class KyrolusMetadataExtractor
 {
+    /// <summary>
+    /// Extracts a combined dictionary of diagnostic metadata from the exception and explicit metadata dictionary.
+    /// </summary>
+    /// <param name="exception">The exception to extract metadata from.</param>
+    /// <param name="explicitMetadata">Optional explicit metadata to merge.</param>
+    /// <returns>A dictionary of extracted metadata, or <c>null</c> if no metadata was found.</returns>
     public static Dictionary<string, object?>? Extract(
         Exception exception,
         IReadOnlyDictionary<string, object?>? explicitMetadata = null)
@@ -20,17 +33,10 @@ public static class KyrolusMetadataExtractor
     private static void ExtractExceptionData(Exception exception, Dictionary<string, object?> dict)
     {
         if (exception.Data.Count == 0)
-        {
             return;
-        }
 
         foreach (var key in exception.Data.Keys)
-        {
-            if (key is not null)
-            {
-                dict[key.ToString()!] = exception.Data[key];
-            }
-        }
+            if (key is not null) dict[key.ToString()!] = exception.Data[key];
     }
 
     private static void ExtractCustomMetadata(Exception exception, Dictionary<string, object?> dict)
@@ -39,12 +45,8 @@ public static class KyrolusMetadataExtractor
         {
             var customMetadata = metadataEx.GetMetadata();
             if (customMetadata is { Count: > 0 })
-            {
                 foreach (var (key, value) in customMetadata)
-                {
                     dict[key] = value;
-                }
-            }
         }
     }
 
@@ -61,24 +63,16 @@ public static class KyrolusMetadataExtractor
         {
             case CultureNotFoundException cultureEx:
                 if (!string.IsNullOrWhiteSpace(cultureEx.InvalidCultureName))
-                {
                     dict["invalidCultureName"] = cultureEx.InvalidCultureName;
-                }
                 if (!string.IsNullOrWhiteSpace(cultureEx.ParamName))
-                {
                     dict["paramName"] = cultureEx.ParamName;
-                }
                 break;
 
             case ArgumentOutOfRangeException outOfRangeEx:
                 if (!string.IsNullOrWhiteSpace(outOfRangeEx.ParamName))
-                {
                     dict["paramName"] = outOfRangeEx.ParamName;
-                }
                 if (outOfRangeEx.ActualValue is not null)
-                {
                     dict["actualValue"] = outOfRangeEx.ActualValue;
-                }
                 break;
 
             case ArgumentException argEx when !string.IsNullOrWhiteSpace(argEx.ParamName):
@@ -98,9 +92,7 @@ public static class KyrolusMetadataExtractor
 
             case HttpRequestException httpEx:
                 if (httpEx.StatusCode.HasValue)
-                {
                     dict["httpStatusCode"] = (int)httpEx.StatusCode.Value;
-                }
                 dict["httpRequestError"] = httpEx.HttpRequestError.ToString();
                 break;
         }
@@ -112,17 +104,11 @@ public static class KyrolusMetadataExtractor
         {
             case JsonException jsonEx:
                 if (jsonEx.LineNumber.HasValue)
-                {
                     dict["lineNumber"] = jsonEx.LineNumber.Value;
-                }
                 if (jsonEx.BytePositionInLine.HasValue)
-                {
                     dict["bytePositionInLine"] = jsonEx.BytePositionInLine.Value;
-                }
                 if (!string.IsNullOrWhiteSpace(jsonEx.Path))
-                {
                     dict["jsonPath"] = jsonEx.Path;
-                }
                 break;
 
             case FileNotFoundException fileEx when !string.IsNullOrWhiteSpace(fileEx.FileName):

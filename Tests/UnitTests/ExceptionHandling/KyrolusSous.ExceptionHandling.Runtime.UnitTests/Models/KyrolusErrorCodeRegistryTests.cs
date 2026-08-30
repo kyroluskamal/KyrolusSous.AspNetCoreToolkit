@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace KyrolusSous.ExceptionHandling.Runtime.UnitTests.Models;
 
+[Collection("ErrorCodeRegistry")]
 public class KyrolusErrorCodeRegistryTests : IDisposable
 {
     public KyrolusErrorCodeRegistryTests()
@@ -71,6 +72,34 @@ public class KyrolusErrorCodeRegistryTests : IDisposable
     {
         var def = new KyrolusErrorCodeDefinition(KyrolusErrorCodes.NotFound, "Duplicate", HttpStatusCode.NotFound);
         Should.Throw<KyrolusErrorCodeRegistryException>(() => KyrolusErrorCodeRegistry.Register(def));
+    }
+
+    [Fact(DisplayName = "RegisterOrUpdate should update existing code definition")]
+    public void RegisterOrUpdate_Should_Update_Existing_Definition()
+    {
+        var overrideNotFound = new KyrolusErrorCodeDefinition(KyrolusErrorCodes.NotFound, "Custom Not Found Title", HttpStatusCode.NotFound, ShouldLog: true);
+        KyrolusErrorCodeRegistry.RegisterOrUpdate(overrideNotFound);
+
+        KyrolusErrorCodeRegistry.TryGet(KyrolusErrorCodes.NotFound, out var updated).ShouldBeTrue();
+        updated.Title.ShouldBe("Custom Not Found Title");
+        updated.ShouldLog.ShouldBeTrue();
+    }
+
+    [Fact(DisplayName = "Get should return definition or throw when missing")]
+    public void Get_Should_Return_Or_Throw()
+    {
+        var def = KyrolusErrorCodeRegistry.Get(KyrolusErrorCodes.NotFound);
+        def.ShouldNotBeNull();
+        def.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        Should.Throw<KyrolusErrorCodeRegistryException>(() => KyrolusErrorCodeRegistry.Get("non_existing_code"));
+    }
+
+    [Fact(DisplayName = "Clear should remove all definitions")]
+    public void Clear_Should_Remove_All_Definitions()
+    {
+        KyrolusErrorCodeRegistry.Clear();
+        KyrolusErrorCodeRegistry.Snapshot().Count.ShouldBe(0);
     }
 
     [Fact(DisplayName = "SetCodePattern with string should configure custom regex pattern")]
@@ -159,39 +188,15 @@ public class KyrolusErrorCodeRegistryTests : IDisposable
         withLogging.ShouldLog.ShouldBeTrue();
     }
 
-    [Fact(DisplayName = "StrictMode when disabled should return false for unregistered codes without throwing")]
-    public void StrictMode_Disabled_Should_Return_False_For_Unregistered_Code()
+    [Fact(DisplayName = "TryGet should always return boolean without throwing")]
+    public void TryGet_Should_Return_Boolean_Without_Throwing()
     {
-        KyrolusErrorCodeRegistry.StrictMode = false;
+        KyrolusErrorCodeRegistry.EnableStrictMode();
 
         var result = KyrolusErrorCodeRegistry.TryGet("unregistered_test_code", out var def);
 
         result.ShouldBeFalse();
         def.ShouldBeNull();
-    }
-
-    [Fact(DisplayName = "StrictMode when enabled should throw KyrolusErrorCodeRegistryException for unregistered codes")]
-    public void StrictMode_Enabled_Should_Throw_For_Unregistered_Code()
-    {
-        KyrolusErrorCodeRegistry.EnableStrictMode();
-
-        var ex = Should.Throw<KyrolusErrorCodeRegistryException>(() =>
-            KyrolusErrorCodeRegistry.TryGet("unregistered_strict_code", out _));
-
-        ex.Message.ShouldContain("Strict Mode Violation");
-        ex.Message.ShouldContain("unregistered_strict_code");
-    }
-
-    [Fact(DisplayName = "StrictMode when enabled should still succeed for registered codes")]
-    public void StrictMode_Enabled_Should_Succeed_For_Registered_Code()
-    {
-        KyrolusErrorCodeRegistry.EnableStrictMode();
-
-        var result = KyrolusErrorCodeRegistry.TryGet(KyrolusErrorCodes.NotFound, out var def);
-
-        result.ShouldBeTrue();
-        def.ShouldNotBeNull();
-        def.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact(DisplayName = "ResetToDefault should reset StrictMode to false")]

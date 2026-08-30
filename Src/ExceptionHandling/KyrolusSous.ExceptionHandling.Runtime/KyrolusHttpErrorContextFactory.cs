@@ -6,12 +6,12 @@ public sealed class KyrolusHttpErrorContextFactory(
     IOptions<KyrolusExceptionHandlingOptions> options,
     IHttpContextAccessor? accessor = null)
 {
-    private readonly IHttpContextAccessor? accessor = accessor;
+    private readonly IHttpContextAccessor? _accessor = accessor;
     private readonly KyrolusExceptionHandlingOptions options = options.Value;
 
     public KyrolusErrorContext Create(HttpContext? context = null)
     {
-        context ??= accessor?.HttpContext;
+        context ??= _accessor?.HttpContext;
         if (context is null)
             return new KyrolusErrorContext(
                 TraceId: Activity.Current?.Id,
@@ -70,10 +70,7 @@ public sealed class KyrolusHttpErrorContextFactory(
                 var cultureName = lang.Split(';')[0].Trim();
                 if (string.IsNullOrWhiteSpace(cultureName) || cultureName == "*") continue;
 
-                if (!PredefinedCultureNames.Contains(cultureName))
-                {
-                    continue;
-                }
+                if (!PredefinedCultureNames.Contains(cultureName))                    continue;
 
                 try
                 {

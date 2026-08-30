@@ -6,9 +6,16 @@ public class UnauthorizedException : Exception
     public UnauthorizedException(string message, Exception innerException) : base(message, innerException) { }
 }
 
-public class UnauthorizedExceptionHandler(ILogger<UnauthorizedExceptionHandler> logger)
+public class UnauthorizedExceptionHandler(
+    ILogger<UnauthorizedExceptionHandler> logger,
+    IKyrolusErrorLocalizer? localizer = null,
+    IKyrolusErrorMetadataSanitizer? sanitizer = null,
+    KyrolusHttpErrorContextFactory? contextFactory = null)
     : KyrolusExceptionHandlerBase<UnauthorizedException>(
         logger,
         HttpStatusCode.Unauthorized,
         KyrolusErrorCodes.Unauthorized,
-        "Unauthorized");
+        "Unauthorized",
+        localizer,
+        sanitizer,
+        contextFactory);
