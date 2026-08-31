@@ -30,7 +30,7 @@ public static class ServiceCollectionExtensions
         params KyrolusValidationProfile[] profiles)
     {
         ArgumentNullException.ThrowIfNull(profiles);
-        if (profiles.Length == 0) throw new ArgumentException("At least one profile must be provided.", nameof(profiles))   ;
+        if (profiles.Length == 0) throw new ArgumentException("At least one profile must be provided.", nameof(profiles));
         
         return AddKyrolusValidationProfiles(services, (IEnumerable<KyrolusValidationProfile>)profiles);
     }
@@ -49,6 +49,11 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
+
+    // Validation.Runtime has no localization-specific registration of its own: KyrolusValidationEngine
+    // takes IKyrolusLocalizer directly as an optional dependency. Register one via
+    // KyrolusSous.Localization.Json's AddKyrolusJsonLocalization / AddKyrolusDictionaryLocalization, or
+    // KyrolusSous.Localization.StringLocalizer's AddKyrolusStringLocalizerLocalization<TResource>.
 
     [RequiresUnreferencedCode("Uses reflection to scan for validators. This is not AOT-friendly.")]
     public static IServiceCollection AddKyrolusValidationRuntimeScanning(

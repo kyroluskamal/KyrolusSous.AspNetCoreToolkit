@@ -1,11 +1,27 @@
 namespace KyrolusSous.Validation.FluentValidation;
 
+/// <summary>
+/// Adapter integrating FluentValidation's <see cref="IValidator{T}"/> with <see cref="IKyrolusRequestValidatorWithContext{TRequest}"/>.
+/// Resolves registered FluentValidation validators from DI, maps RuleSets, and translates failures to <see cref="KyrolusValidationFailure"/>.
+/// </summary>
+/// <typeparam name="TRequest">The type of the request being validated.</typeparam>
+/// <example>
+/// <code>
+/// // Register FluentValidation in DI
+/// services.AddValidatorsFromAssemblyContaining&lt;CreateUserValidator&gt;();
+/// services.AddKyrolusFluentValidationAdapter();
+/// 
+/// // Execute through the unified engine
+/// var failures = await engine.ValidateAsync(createUserRequest, ct);
+/// </code>
+/// </example>
 public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider serviceProvider)
     : IKyrolusRequestValidatorWithContext<TRequest>
 {
     private readonly IReadOnlyList<IValidator<TRequest>> _validators =
         serviceProvider?.GetServices<IValidator<TRequest>>().Where(v => v is not null).ToArray() ?? [];
 
+    /// <inheritdoc />
     public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(
         TRequest request,
         CancellationToken cancellationToken = default)
@@ -13,6 +29,7 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
         return ValidateAsync(request, KyrolusValidationContext.Default, cancellationToken);
     }
 
+    /// <inheritdoc />
     public async ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(
         TRequest request,
         KyrolusValidationContext context,
@@ -23,20 +40,7 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
             return [];
         }
 
-        var validationContext = context.RuleSets is { Count: > 0 }
-            ? ValidationContext<TRequest>.CreateWithOptions(request, options =>
-            {
-                if (context.RuleSets.Contains("*"))
-                {
-                    options.IncludeAllRuleSets();
-                }
-                else
-                {
-                    options.IncludeRuleSets(context.RuleSets.ToArray());
-                }
-            })
-            : new ValidationContext<TRequest>(request);
-
+        var validationContext = CreateValidationContext(request, context);
         var allFailures = new List<KyrolusValidationFailure>();
 
         foreach (var validator in _validators)
@@ -48,29 +52,51 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
                 continue;
             }
 
-            var failures = result.Errors
-                .Where(error => error is not null)
-                .Select(error =>
-                {
-                    var metadata = BuildMetadata(error);
-                    var group = ResolveGroup(error);
-                    var ruleSet = context.RuleSets is { Count: > 0 } ? context.RuleSets.First() : null;
-                    return new KyrolusValidationFailure(
-                        error.PropertyName,
-                        error.ErrorMessage,
-                        error.ErrorCode,
-                        MapSeverity(error.Severity),
-                        RuleSet: ruleSet,
-                        Group: group,
-                        MessageKey: string.IsNullOrWhiteSpace(error.ErrorCode) ? null : error.ErrorCode,
-                        AttemptedValue: error.AttemptedValue,
-                        Metadata: metadata);
-                });
-
-            allFailures.AddRange(failures);
+            foreach (var error in result.Errors.Where(error => error is not null))
+            {
+                allFailures.Add(MapToFailure(error, context));
+            }
         }
 
         return allFailures;
+    }
+
+    private static ValidationContext<TRequest> CreateValidationContext(TRequest request, KyrolusValidationContext context)
+    {
+        if (context.RuleSets is not { Count: > 0 })
+        {
+            return new ValidationContext<TRequest>(request);
+        }
+
+        return ValidationContext<TRequest>.CreateWithOptions(request, options =>
+        {
+            if (context.RuleSets.Contains("*"))
+            {
+                options.IncludeAllRuleSets();
+            }
+            else
+            {
+                options.IncludeRuleSets(context.RuleSets.ToArray());
+            }
+        });
+    }
+
+    private static KyrolusValidationFailure MapToFailure(ValidationFailure error, KyrolusValidationContext context)
+    {
+        var metadata = BuildMetadata(error);
+        var groups = ResolveGroups(error);
+        var ruleSet = context.RuleSets is { Count: > 0 } ? context.RuleSets.First() : null;
+
+        return new KyrolusValidationFailure(
+            error.PropertyName,
+            error.ErrorMessage,
+            error.ErrorCode,
+            MapSeverity(error.Severity),
+            RuleSet: ruleSet,
+            MessageKey: string.IsNullOrWhiteSpace(error.ErrorCode) ? null : error.ErrorCode,
+            AttemptedValue: error.AttemptedValue,
+            Metadata: metadata,
+            Groups: groups.Count > 0 ? groups : null);
     }
 
     private static KyrolusValidationSeverity MapSeverity(Severity severity)
@@ -85,41 +111,71 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
 
     private static IReadOnlyDictionary<string, object?>? BuildMetadata(ValidationFailure error)
     {
-        Dictionary<string, object?>? metadata = null;
+        if (error.CustomState is null && error.FormattedMessagePlaceholderValues is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        var metadata = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
         if (error.FormattedMessagePlaceholderValues is { Count: > 0 })
         {
-            metadata = new Dictionary<string, object?>(error.FormattedMessagePlaceholderValues);
+            foreach (var (k, v) in error.FormattedMessagePlaceholderValues)
+            {
+                metadata[k] = v;
+            }
         }
 
-        if (error.CustomState is not null)
+        if (error.CustomState is not null and not KyrolusValidationGroup)
         {
-            metadata ??= [];
             metadata["customState"] = error.CustomState;
         }
 
         return metadata;
     }
 
-    private static string? ResolveGroup(ValidationFailure error)
+    private static IReadOnlyList<string> ResolveGroups(ValidationFailure error)
     {
         if (error.CustomState is KyrolusValidationGroup group)
         {
-            return group.Name;
+            return group.Names;
         }
 
-        if (error.CustomState is string name && !string.IsNullOrWhiteSpace(name))
+        if (error.CustomState is string groupName && !string.IsNullOrWhiteSpace(groupName))
         {
-            return name;
+            return [groupName];
         }
 
-        if (error.CustomState is IReadOnlyDictionary<string, object?> map
-            && map.TryGetValue("group", out var value)
-            && value is not null)
+        if (error.CustomState is IDictionary<string, object?> dict)
         {
-            return value.ToString();
+            return ResolveGroupsFromDictionary(dict);
         }
 
-        return null;
+        return [];
+    }
+
+    private static IReadOnlyList<string> ResolveGroupsFromDictionary(IDictionary<string, object?> dict)
+    {
+        if (dict.TryGetValue("groups", out var groupsObj))
+        {
+            if (groupsObj is IEnumerable<string> stringEnum)
+            {
+                return stringEnum.Where(g => !string.IsNullOrWhiteSpace(g)).ToArray();
+            }
+
+            if (groupsObj is string singleGroup && !string.IsNullOrWhiteSpace(singleGroup))
+            {
+                return [singleGroup];
+            }
+        }
+
+        if (dict.TryGetValue("group", out var singleGroupObj) &&
+            singleGroupObj is string gName &&
+            !string.IsNullOrWhiteSpace(gName))
+        {
+            return [gName];
+        }
+
+        return [];
     }
 }

@@ -844,10 +844,11 @@ public sealed class PaymentTests
             DisplayName = "Kyrolus Apple Pay"
         };
 
+        // KyrolusDefaultApplePayDecryptor has no merchant certificate to decrypt with, so it must
+        // fail loudly instead of fabricating a fake decrypted card.
         var result = await decryptor.DecryptTokenAsync(token);
-        result.Succeeded.ShouldBeTrue();
-        result.PrimaryAccountNumber.ShouldNotBeNullOrWhiteSpace();
-        result.ExpirationYear.ShouldBeGreaterThan(2025);
+        result.Succeeded.ShouldBeFalse();
+        result.ErrorMessage.ShouldNotBeNullOrWhiteSpace();
     }
 
     [Fact(DisplayName = "Metered Billing Engine Aggregates Usage And Calculates Tiered Costs")]
@@ -1289,7 +1290,8 @@ public sealed class PaymentTests
         });
         incomplete.Status.ShouldBe(KyrolusKycStatus.ActionRequired);
 
-        // 2. Complete docs -> Enterprise approved
+        // 2. Complete docs -> queued for real review, not auto-approved. This default engine does
+        // no identity/document verification, so it must never grant a high processing tier on its own.
         var complete = await engine.EvaluateKycSubmissionAsync(new KyrolusMerchantKycSubmission
         {
             MerchantId = "m_2",
@@ -1300,8 +1302,8 @@ public sealed class PaymentTests
             BeneficialOwnerNationalIdOrPassport = "PASSPORT-777",
             CountryCode = "EG"
         });
-        complete.Status.ShouldBe(KyrolusKycStatus.Approved);
-        complete.ApprovedTier.ShouldBe(KyrolusKycTier.Tier3_Enterprise);
+        complete.Status.ShouldBe(KyrolusKycStatus.UnderReview);
+        complete.ApprovedTier.ShouldBe(KyrolusKycTier.Tier1_Starter);
     }
 
     [Fact(DisplayName = "Interchange Plus Calculator Breaks Down Issuing Scheme And Acquirer Fees")]

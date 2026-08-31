@@ -20,6 +20,7 @@ public static class ServiceCollectionExtensions
         services.Configure(configure);
         services.AddHttpClient<KyrolusPayPalPaymentProvider>();
         services.AddHttpClient<KyrolusPayPalSubscriptionProvider>();
+        services.AddHttpClient<KyrolusPayPalWebhookHandler>();
 
         services.AddSingleton<IKyrolusPaymentProvider, KyrolusPayPalPaymentProvider>();
         services.AddSingleton<IKyrolusWebhookHandler, KyrolusPayPalWebhookHandler>();

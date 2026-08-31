@@ -4,10 +4,13 @@ using KyrolusSous.Payments.Abstractions;
 
 namespace KyrolusSous.Payments.Core;
 
-public sealed class KyrolusCachePaymentIdempotencyStore(IKyrolusCacheProvider? cacheProvider = null) : IKyrolusPaymentIdempotencyStore
+public sealed class KyrolusCachePaymentIdempotencyStore(
+    IKyrolusCacheProvider? cacheProvider = null,
+    IKyrolusDistributedLockProvider? distributedLockProvider = null) : IKyrolusPaymentIdempotencyStore
 {
     private readonly ConcurrentDictionary<string, (KyrolusPaymentResult Result, DateTimeOffset Expiry)> _memoryStore = new();
     private readonly ConcurrentDictionary<string, DateTimeOffset> _activeLocks = new();
+    private readonly ConcurrentDictionary<string, IKyrolusDistributedLockHandle> _distributedLocks = new();
 
     public async Task<KyrolusPaymentResult?> GetResultAsync(string idempotencyKey, CancellationToken cancellationToken = default)
     {
@@ -48,9 +51,21 @@ public sealed class KyrolusCachePaymentIdempotencyStore(IKyrolusCacheProvider? c
         _activeLocks.TryRemove(idempotencyKey, out _);
     }
 
-    public Task<bool> TryAcquireLockAsync(string idempotencyKey, TimeSpan lockDuration, CancellationToken cancellationToken = default)
+    public async Task<bool> TryAcquireLockAsync(string idempotencyKey, TimeSpan lockDuration, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(idempotencyKey)) return Task.FromResult(true);
+        if (string.IsNullOrWhiteSpace(idempotencyKey)) return true;
+
+        // Prefer a real cross-instance lock when one is configured: a purely in-process
+        // ConcurrentDictionary only prevents duplicate charges within a single instance and is
+        // unsafe the moment the app is scaled to 2+ instances behind a load balancer.
+        if (distributedLockProvider is not null)
+        {
+            var lockKey = $"kyrolus:payment:idempotency:lock:{idempotencyKey}";
+            var handle = await distributedLockProvider.TryAcquireLockAsync(lockKey, TimeSpan.Zero, lockDuration, cancellationToken).ConfigureAwait(false);
+            if (handle is null) return false;
+            _distributedLocks[idempotencyKey] = handle;
+            return true;
+        }
 
         var now = DateTimeOffset.UtcNow;
         var expiry = now.Add(lockDuration);
@@ -61,30 +76,34 @@ public sealed class KyrolusCachePaymentIdempotencyStore(IKyrolusCacheProvider? c
             {
                 if (now < currentExpiry)
                 {
-                    return Task.FromResult(false); // Locked
+                    return false; // Locked
                 }
 
                 if (_activeLocks.TryUpdate(idempotencyKey, expiry, currentExpiry))
                 {
-                    return Task.FromResult(true);
+                    return true;
                 }
             }
             else
             {
                 if (_activeLocks.TryAdd(idempotencyKey, expiry))
                 {
-                    return Task.FromResult(true);
+                    return true;
                 }
             }
         }
     }
 
-    public Task ReleaseLockAsync(string idempotencyKey, CancellationToken cancellationToken = default)
+    public async Task ReleaseLockAsync(string idempotencyKey, CancellationToken cancellationToken = default)
     {
-        if (!string.IsNullOrWhiteSpace(idempotencyKey))
+        if (string.IsNullOrWhiteSpace(idempotencyKey)) return;
+
+        if (_distributedLocks.TryRemove(idempotencyKey, out var handle))
         {
-            _activeLocks.TryRemove(idempotencyKey, out _);
+            await handle.DisposeAsync().ConfigureAwait(false);
+            return;
         }
-        return Task.CompletedTask;
+
+        _activeLocks.TryRemove(idempotencyKey, out _);
     }
 }

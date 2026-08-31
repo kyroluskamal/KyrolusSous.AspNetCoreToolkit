@@ -18,7 +18,7 @@ public class ExceptionHandlingExtensionTests
 
         provider.GetService<KyrolusHttpErrorContextFactory>().ShouldNotBeNull();
         provider.GetService<KyrolusExceptionMappingService>().ShouldNotBeNull();
-        provider.GetService<IKyrolusErrorLocalizer>().ShouldBeOfType<KyrolusNullErrorLocalizer>();
+        provider.GetService<IKyrolusLocalizer>().ShouldBeNull();
         provider.GetService<IKyrolusErrorMetadataSanitizer>().ShouldBeOfType<KyrolusDefaultErrorMetadataSanitizer>();
         provider.GetService<IKyrolusErrorResponseWriter>().ShouldBeOfType<KyrolusJsonErrorResponseWriter>();
         provider.GetService<KyrolusExceptionTranslator>().ShouldNotBeNull();
@@ -96,39 +96,4 @@ public class ExceptionHandlingExtensionTests
         result.ShouldBeSameAs(app);
     }
 
-    [Fact(DisplayName = "AddKyrolusExceptionHandlingLocalization with dictionary should register DictionaryErrorLocalizer")]
-    public void AddKyrolusExceptionHandlingLocalization_Dictionary_Should_Register_Localizer()
-    {
-        var services = new ServiceCollection();
-        var translations = new Dictionary<string, string>
-        {
-            ["not_found"] = "Element non trouvé"
-        };
-
-        services.AddKyrolusExceptionHandlingLocalization(translations);
-
-        var provider = services.BuildServiceProvider();
-        var localizer = provider.GetService<IKyrolusErrorLocalizer>();
-
-        localizer.ShouldNotBeNull();
-        localizer.ShouldBeOfType<KyrolusDictionaryErrorLocalizer>();
-        localizer.Localize("not_found", "Default", null).ShouldBe("Element non trouvé");
-    }
-
-    [Fact(DisplayName = "AddKyrolusExceptionHandlingLocalization with generic resource should register StringLocalizerErrorLocalizer")]
-    public void AddKyrolusExceptionHandlingLocalization_Resource_Should_Register_Localizer()
-    {
-        var services = new ServiceCollection();
-        services.AddSingleton<IStringLocalizer<ITestSharedResource>>(new TestTypedStringLocalizer<ITestSharedResource>(
-            new Dictionary<string, string> { ["forbidden"] = "Accès refusé" }));
-
-        services.AddKyrolusExceptionHandlingLocalization<ITestSharedResource>();
-
-        var provider = services.BuildServiceProvider();
-        var localizer = provider.GetService<IKyrolusErrorLocalizer>();
-
-        localizer.ShouldNotBeNull();
-        localizer.ShouldBeOfType<KyrolusStringLocalizerErrorLocalizer>();
-        localizer.Localize("forbidden", "Default", null).ShouldBe("Accès refusé");
-    }
 }

@@ -323,14 +323,15 @@ public class KyrolusExceptionHandlersTests
         json.ShouldContain("custom_code");
     }
 
-    [Fact(DisplayName = "Handler should apply localization when IKyrolusErrorLocalizer is provided")]
+    [Fact(DisplayName = "Handler should apply localization when IKyrolusLocalizer is provided")]
     public async Task Handler_Should_Apply_Localization_When_Localizer_Is_Provided()
     {
-        var localizer = new KyrolusDictionaryErrorLocalizer(new Dictionary<string, string>
+        var translations = new Dictionary<string, string>
         {
             [KyrolusErrorCodes.BadRequest] = "طلب غير صالح",
             [$"{KyrolusErrorCodes.BadRequest}.detail"] = "المعامل المرسل غير صالح"
-        });
+        };
+        var localizer = new TestKeyLookupLocalizer(translations);
 
         var logger = new TestLogger<ArgumentExceptionHandler>();
         var handler = new ArgumentExceptionHandler(logger, localizer: localizer);
@@ -397,6 +398,18 @@ public class KyrolusExceptionHandlersTests
         handlerDescriptors.ShouldContain(typeof(GeneralExceptionHandler));
     }
 
+    private sealed class TestKeyLookupLocalizer(IReadOnlyDictionary<string, string> translations) : IKyrolusLocalizer
+    {
+        public KyrolusLocalizationResult GetString(string key, CultureInfo? culture = null) =>
+            translations.TryGetValue(key, out var value)
+                ? new KyrolusLocalizationResult(value, ResourceNotFound: false)
+                : new KyrolusLocalizationResult(key, ResourceNotFound: true);
+
+        public KyrolusLocalizationResult GetString(string key, object? arguments, CultureInfo? culture = null) => GetString(key, culture);
+
+        public string Format(string template, object? arguments) => template;
+    }
+
     private sealed class TestOverriddenExceptionHandler(ILogger logger)
         : KyrolusExceptionHandlerBase<InvalidOperationException>(
             logger,
@@ -428,7 +441,7 @@ public class KyrolusExceptionHandlersTests
 
     private sealed class TestPaymentFailedExceptionHandler(
         ILogger logger,
-        IKyrolusErrorLocalizer? localizer = null,
+        IKyrolusLocalizer? localizer = null,
         IKyrolusErrorMetadataSanitizer? sanitizer = null)
         : KyrolusExceptionHandlerBase<TestPaymentFailedException>(
             logger,

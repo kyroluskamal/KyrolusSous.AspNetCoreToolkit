@@ -9,5 +9,6 @@
 	</ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\KyrolusSous.ExceptionHandling.Abstractions\KyrolusSous.ExceptionHandling.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Localization\KyrolusSous.Localization.Abstractions\KyrolusSous.Localization.Abstractions.csproj" />
   </ItemGroup>
 </Project>

@@ -37,15 +37,27 @@ public sealed class KyrolusDefaultWebhookReplayProtector(IKyrolusCacheProvider? 
             return true;
         }
 
-        if (_seenEvents.TryGetValue(eventId, out var expiry))
+        // Atomic check-and-record (compare-and-swap loop) instead of a separate TryGetValue then
+        // write: two concurrent deliveries of the same event id must not both observe "not seen yet".
+        var newExpiry = DateTimeOffset.UtcNow.Add(tolerance * 2);
+        while (true)
         {
-            if (DateTimeOffset.UtcNow <= expiry)
+            if (_seenEvents.TryGetValue(eventId, out var existingExpiry))
             {
-                return false; // Replay attack detected
+                if (DateTimeOffset.UtcNow <= existingExpiry)
+                {
+                    return false; // Replay attack detected
+                }
+
+                if (_seenEvents.TryUpdate(eventId, newExpiry, existingExpiry))
+                {
+                    return true;
+                }
+            }
+            else if (_seenEvents.TryAdd(eventId, newExpiry))
+            {
+                return true;
             }
         }
-
-        _seenEvents[eventId] = DateTimeOffset.UtcNow.Add(tolerance * 2);
-        return true;
     }
 }

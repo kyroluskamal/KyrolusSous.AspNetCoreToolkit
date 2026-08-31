@@ -27,6 +27,11 @@ public sealed class KyrolusPayPalPaymentProvider(
     private string? _accessToken;
     private DateTimeOffset _tokenExpiry = DateTimeOffset.MinValue;
 
+    // PayPal rejects amounts with more decimal places than the currency supports (e.g. JPY must be
+    // sent as "1000", not "1000.00").
+    private static string FormatAmount(decimal amount, string currency) =>
+        amount.ToString("F" + KyrolusCurrencyHelper.GetDecimalPlaces(currency), System.Globalization.CultureInfo.InvariantCulture);
+
     private async Task<string> GetAccessTokenAsync(CancellationToken cancellationToken)
     {
         var cacheKey = $"kyrolus:paypal:token:{_options.ClientId}";
@@ -84,7 +89,7 @@ public sealed class KyrolusPayPalPaymentProvider(
                         amount = new
                         {
                             currency_code = request.Currency.ToUpperInvariant(),
-                            value = request.Amount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+                            value = FormatAmount(request.Amount, request.Currency)
                         }
                     }
                 },
@@ -165,9 +170,30 @@ public sealed class KyrolusPayPalPaymentProvider(
         try
         {
             var token = await GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
+
+            // A partial capture requires the order's currency, which this method isn't given -
+            // look it up so the requested amount isn't silently dropped in favor of a full capture.
+            object body = new { };
+            if (amount.HasValue)
+            {
+                var orderRequest = new HttpRequestMessage(HttpMethod.Get, $"{_options.BaseUrl}/v2/checkout/orders/{transactionId}");
+                orderRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                var orderResponse = await httpClient.SendAsync(orderRequest, cancellationToken).ConfigureAwait(false);
+                var orderContent = await orderResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+                if (!orderResponse.IsSuccessStatusCode)
+                {
+                    return new KyrolusPaymentResult { TransactionId = transactionId, Status = KyrolusPaymentStatus.Failed, ErrorMessage = orderContent };
+                }
+
+                using var orderDoc = JsonDocument.Parse(orderContent);
+                var currencyCode = orderDoc.RootElement.GetProperty("purchase_units")[0].GetProperty("amount").GetProperty("currency_code").GetString()!;
+                body = new { amount = new { value = FormatAmount(amount.Value, currencyCode), currency_code = currencyCode } };
+            }
+
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{_options.BaseUrl}/v2/checkout/orders/{transactionId}/capture")
             {
-                Content = new StringContent("{}", Encoding.UTF8, "application/json")
+                Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json")
             };
             httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -242,7 +268,7 @@ public sealed class KyrolusPayPalPaymentProvider(
         {
             var token = await GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
             var payload = request.Amount.HasValue
-                ? new { amount = new { value = request.Amount.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture), currency_code = (request.Currency ?? "USD").ToUpperInvariant() } }
+                ? new { amount = new { value = FormatAmount(request.Amount.Value, request.Currency ?? "USD"), currency_code = (request.Currency ?? "USD").ToUpperInvariant() } }
                 : (object)new { };
 
             var jsonContent = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");

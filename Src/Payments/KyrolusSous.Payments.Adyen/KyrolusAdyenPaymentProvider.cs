@@ -107,7 +107,9 @@ public sealed class KyrolusAdyenPaymentProvider(
             var payload = new
             {
                 merchantAccount = _options.MerchantAccount,
-                amount = amount.HasValue ? (object)new { currency = "EUR", value = (long)(amount.Value * 100) } : null,
+                amount = amount.HasValue
+                    ? (object)new { currency = _options.DefaultCaptureCurrency, value = KyrolusCurrencyHelper.ToSmallestUnit(amount.Value, _options.DefaultCaptureCurrency) }
+                    : null,
                 reference = $"capture_{transactionId}"
             };
 

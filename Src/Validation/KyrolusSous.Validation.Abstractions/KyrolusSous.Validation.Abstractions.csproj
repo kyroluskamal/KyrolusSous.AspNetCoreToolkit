@@ -6,4 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\Localization\KyrolusSous.Localization.Abstractions\KyrolusSous.Localization.Abstractions.csproj" />
+  </ItemGroup>
+
 </Project>

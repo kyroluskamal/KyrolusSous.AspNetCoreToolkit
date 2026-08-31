@@ -201,7 +201,7 @@ public class KyrolusValidationEngineTests
         var serviceProvider = TestHelper.BuildServiceProviderWithValidationRuntime(services =>
         {
             services.AddSingleton<IKyrolusRequestValidator<CacheableTestRequest>>(validator);
-            services.AddSingleton<IKyrolusValidationErrorLocalizer>(localizer);
+            services.AddSingleton<IKyrolusLocalizer>(localizer);
         });
 
         var validationEngine = serviceProvider.GetRequiredService<IKyrolusValidationEngine>();
@@ -358,9 +358,9 @@ public class KyrolusValidationEngineTests
         // Merged Groups: ["GroupA", "GroupB", "ContextGroup"] (OtherGroup is filtered out)
         failures.ShouldNotBeNull();
         failures.Count.ShouldBe(3);
-        failures.ShouldContain(f => f.Group == "GroupA");
-        failures.ShouldContain(f => f.Group == "GroupB");
-        failures.ShouldContain(f => f.Group == "ContextGroup");
+        failures.ShouldContain(f => f.Groups != null && f.Groups.Contains("GroupA"));
+        failures.ShouldContain(f => f.Groups != null && f.Groups.Contains("GroupB"));
+        failures.ShouldContain(f => f.Groups != null && f.Groups.Contains("ContextGroup"));
     }
     #endregion
 

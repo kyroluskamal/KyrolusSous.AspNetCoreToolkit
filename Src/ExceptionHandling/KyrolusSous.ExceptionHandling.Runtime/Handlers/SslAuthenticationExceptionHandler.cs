@@ -8,7 +8,7 @@ public class SslAuthenticationException : AuthenticationException
 
 public class SslAuthenticationExceptionHandler(
     ILogger<SslAuthenticationExceptionHandler> logger,
-    IKyrolusErrorLocalizer? localizer = null,
+    IKyrolusLocalizer? localizer = null,
     IKyrolusErrorMetadataSanitizer? sanitizer = null,
     KyrolusHttpErrorContextFactory? contextFactory = null)
     : KyrolusExceptionHandlerBase<AuthenticationException>(

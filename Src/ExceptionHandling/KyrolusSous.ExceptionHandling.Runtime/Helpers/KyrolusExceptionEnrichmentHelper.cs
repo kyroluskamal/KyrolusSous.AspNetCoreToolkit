@@ -16,6 +16,22 @@ public static class KyrolusExceptionEnrichmentHelper
             || (options.IncludeExceptionDetailsInDevelopment && environment.IsDevelopment());
 
     /// <summary>
+    /// Localizes an envelope's title and detail. The envelope's <see cref="KyrolusErrorEnvelope.Code"/>
+    /// is used as the translation key (and "{Code}.detail" for the detail message); falls back to the
+    /// envelope's own title/detail when no localizer is configured or no translation is found.
+    /// </summary>
+    public static KyrolusErrorEnvelope LocalizeEnvelope(IKyrolusLocalizer? localizer, KyrolusErrorEnvelope envelope, CultureInfo? culture)
+    {
+        if (localizer is null)
+            return envelope;
+
+        var title = localizer.GetStringOrDefault(envelope.Code, envelope.Title, culture);
+        var detail = localizer.GetStringOrDefault($"{envelope.Code}.detail", envelope.Detail, culture);
+
+        return envelope with { Title = title, Detail = detail };
+    }
+
+    /// <summary>
     /// Enriches exception metadata with ambient request context claims and diagnostic exception details.
     /// </summary>
     /// <param name="baseMetadata">The initial metadata dictionary extracted from the exception.</param>

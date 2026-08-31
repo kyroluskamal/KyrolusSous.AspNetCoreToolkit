@@ -112,12 +112,15 @@ public class CacheableTestValidator : IKyrolusRequestValidator<CacheableTestRequ
     }
 }
 
-public class TestLocalizer : IKyrolusValidationErrorLocalizer
+public class TestLocalizer : IKyrolusLocalizer
 {
-    public string Localize(KyrolusValidationFailure failure, CultureInfo? culture = null)
-    {
-        return $"Localized: {failure.ErrorMessage}";
-    }
+    public KyrolusLocalizationResult GetString(string key, CultureInfo? culture = null) =>
+        new($"Localized: {key}", ResourceNotFound: false);
+
+    public KyrolusLocalizationResult GetString(string key, object? arguments, CultureInfo? culture = null) =>
+        GetString(key, culture);
+
+    public string Format(string template, object? arguments) => template;
 }
 
 public class ContextValidatorTestRequest
@@ -162,10 +165,10 @@ public class GroupTestValidator : IKyrolusRequestValidator<GroupTestRequest>
     {
         IReadOnlyList<KyrolusValidationFailure> failures =
         [
-            new("Prop1", "Error in GroupA", Group: "GroupA"),
-            new("Prop2", "Error in GroupB", Group: "GroupB"),
-            new("Prop3", "Error in ContextGroup", Group: "ContextGroup"),
-            new("Prop4", "Error in OtherGroup", Group: "OtherGroup")
+            new("Prop1", "Error in GroupA", Groups: ["GroupA"]),
+            new("Prop2", "Error in GroupB", Groups: ["GroupB"]),
+            new("Prop3", "Error in ContextGroup", Groups: ["ContextGroup"]),
+            new("Prop4", "Error in OtherGroup", Groups: ["OtherGroup"])
         ];
 
         return ValueTask.FromResult(failures);
@@ -245,7 +248,7 @@ public class NullRuleSetAndGroupValidator : IKyrolusRequestValidator<NullRuleSet
     {
         IReadOnlyList<KyrolusValidationFailure> failures =
         [
-            new("Prop", "Failure with null RuleSet and null Group", RuleSet: null, Group: null)
+            new("Prop", "Failure with null RuleSet and null Group", RuleSet: null, Groups: null)
         ];
         return ValueTask.FromResult(failures);
     }

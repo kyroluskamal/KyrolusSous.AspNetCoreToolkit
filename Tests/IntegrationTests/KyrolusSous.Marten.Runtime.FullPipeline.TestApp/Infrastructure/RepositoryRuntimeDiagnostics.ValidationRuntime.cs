@@ -54,6 +54,8 @@ using KyrolusSous.Repositories.Marten.Runtime.Repository;
 using KyrolusSous.Repositories.Marten.Runtime.Repository.Decorators;
 using KyrolusSous.Repositories.Marten.Runtime.Saga;
 using KyrolusSous.Repositories.Marten.Runtime.UnitOfWork;
+using KyrolusSous.Localization.Abstractions;
+using KyrolusSous.Localization.Json;
 using KyrolusSous.Validation.Abstractions;
 using KyrolusSous.Validation.FluentValidation;
 using KyrolusSous.Validation.Runtime;
@@ -111,7 +113,7 @@ public static partial class RepositoryRuntimeDiagnostics
                 Groups: ["default"])));
         services.AddKyrolusValidationRuntimeScanning(typeof(RuntimeScannedValidationRequestValidator).Assembly);
 
-        services.AddSingleton<IKyrolusValidationErrorLocalizer>(new KyrolusDictionaryValidationErrorLocalizer(
+        services.AddSingleton<IKyrolusLocalizer>(new KyrolusDictionaryLocalizer(
             new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.OrdinalIgnoreCase)
             {
                 ["en-US"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -153,7 +155,7 @@ public static partial class RepositoryRuntimeDiagnostics
         var runtimeCacheStore = serviceProvider.GetRequiredService<IKyrolusValidationCacheStore>();
         var engine = new KyrolusValidationEngine(
             serviceProvider,
-            serviceProvider.GetRequiredService<IKyrolusValidationErrorLocalizer>(),
+            serviceProvider.GetRequiredService<IKyrolusLocalizer>(),
             runtimeCacheStore,
             serviceProvider.GetRequiredService<IKyrolusValidationCacheKeyProvider>(),
             serviceProvider.GetRequiredService<IKyrolusValidationErrorCodeMapper>(),
@@ -351,8 +353,9 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
-        var nullLocalizer = new KyrolusNullValidationErrorLocalizer();
-        if (nullLocalizer.Localize(new KyrolusValidationFailure("Name", "raw-message")) == "raw-message")
+        IKyrolusLocalizer? nullLocalizer = null;
+        var rawFailure = new KyrolusValidationFailure("Name", "raw-message");
+        if (nullLocalizer.GetStringOrDefault(rawFailure.ErrorMessage, rawFailure, rawFailure.ErrorMessage) == "raw-message")
         {
             checks++;
         }

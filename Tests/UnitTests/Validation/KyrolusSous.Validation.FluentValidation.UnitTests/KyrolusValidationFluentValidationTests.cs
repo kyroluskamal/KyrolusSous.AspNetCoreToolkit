@@ -116,16 +116,19 @@ public class KyrolusValidationFluentValidationTests
         failures.Count.ShouldBe(3);
 
         var titleFailure = failures.Single(f => f.PropertyName == "Title");
-        titleFailure.Group.ShouldBe("TitleGroup");
+        titleFailure.Groups.ShouldNotBeNull();
+        titleFailure.Groups.ShouldContain("TitleGroup");
         titleFailure.Severity.ShouldBe(KyrolusValidationSeverity.Warning);
         titleFailure.RuleSet.ShouldBe("DefaultRuleSet");
 
         var descFailure = failures.Single(f => f.PropertyName == "Description");
-        descFailure.Group.ShouldBe("DescGroup");
+        descFailure.Groups.ShouldNotBeNull();
+        descFailure.Groups.ShouldContain("DescGroup");
         descFailure.Severity.ShouldBe(KyrolusValidationSeverity.Info);
 
         var catFailure = failures.Single(f => f.PropertyName == "Category");
-        catFailure.Group.ShouldBe("MapGroup");
+        catFailure.Groups.ShouldNotBeNull();
+        catFailure.Groups.ShouldContain("MapGroup");
     }
 
     [Fact(DisplayName = "ValidateAsync with wildcard RuleSets includes all rule sets")]
@@ -173,7 +176,8 @@ public class KyrolusValidationFluentValidationTests
         var failures = await validator.ValidateAsync(new GroupTestModel());
 
         failures.Count.ShouldBe(1);
-        failures[0].Group.ShouldBe("StringGroup");
+        failures[0].Groups.ShouldNotBeNull();
+        failures[0].Groups!.ShouldContain("StringGroup");
         failures[0].Metadata.ShouldNotBeNull();
         failures[0].Metadata!["customState"].ShouldBe("StringGroup");
     }
@@ -192,7 +196,7 @@ public class KyrolusValidationFluentValidationTests
         var failures = await validator.ValidateAsync(new GroupTestModel());
 
         failures.Count.ShouldBe(1);
-        failures[0].Group.ShouldBeNull();
+        failures[0].Groups.ShouldBeNull();
     }
     #endregion
 
@@ -331,6 +335,46 @@ public class KyrolusValidationFluentValidationTests
         KyrolusValidationMessages.ShouldBeGreaterThanZero("Age").ShouldBe("Age should be greater than zero.");
         KyrolusValidationMessages.ExceedsMaxLength(20).ShouldBe("can not have more than 20 characters.");
         KyrolusValidationMessages.DuplicateEntityWithProperty("User", "Email").ShouldContain("Email");
+    }
+    #endregion
+
+    #region Multi-Group Tests
+    private sealed class MultiGroupModel
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Phone { get; set; } = string.Empty;
+    }
+
+    private sealed class MultiGroupModelValidator : AbstractValidator<MultiGroupModel>
+    {
+        public MultiGroupModelValidator()
+        {
+            RuleFor(x => x.Email).NotEmpty().WithGroups("Account", "Contact");
+            RuleFor(x => x.Phone).NotEmpty().WithGroups(["Support", "Contact"]);
+        }
+    }
+
+    [Fact(DisplayName = "WithGroups registers multiple groups on FluentValidation failure")]
+    public async Task WithGroups_Registers_Multiple_Groups_Correctly()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IValidator<MultiGroupModel>, MultiGroupModelValidator>();
+        var provider = services.BuildServiceProvider();
+
+        var validator = new FluentValidationRequestValidator<MultiGroupModel>(provider);
+        var failures = await validator.ValidateAsync(new MultiGroupModel());
+
+        failures.Count.ShouldBe(2);
+
+        var emailFailure = failures.First(f => f.PropertyName == "Email");
+        emailFailure.Groups.ShouldNotBeNull();
+        emailFailure.Groups.ShouldContain("Account");
+        emailFailure.Groups.ShouldContain("Contact");
+
+        var phoneFailure = failures.First(f => f.PropertyName == "Phone");
+        phoneFailure.Groups.ShouldNotBeNull();
+        phoneFailure.Groups.ShouldContain("Support");
+        phoneFailure.Groups.ShouldContain("Contact");
     }
     #endregion
 }

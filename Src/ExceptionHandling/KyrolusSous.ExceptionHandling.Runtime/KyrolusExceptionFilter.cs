@@ -31,7 +31,7 @@ public sealed class KyrolusExceptionFilter(
         var mapping = translator.TranslateToMapping(context.Exception, errorContext);
 
         var isIgnoredLogType = options.IgnoredExceptionLogTypes.Count > 0 &&
-                               options.IgnoredExceptionLogTypes.Any(t => t.IsInstanceOfType(context.Exception));
+                                options.IgnoredExceptionLogTypes.Any(t => t.IsInstanceOfType(context.Exception));
 
         if (mapping.ShouldLog && options.LogUnhandledExceptions && !isIgnoredLogType)
         {

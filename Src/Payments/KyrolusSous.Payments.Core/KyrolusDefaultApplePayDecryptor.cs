@@ -8,28 +8,17 @@ public sealed class KyrolusDefaultApplePayDecryptor : IKyrolusApplePayDecryptor
         KyrolusApplePayPaymentToken token,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(token.PaymentData))
-        {
-            return Task.FromResult(new KyrolusDecryptedPaymentTokenResult
-            {
-                Succeeded = false,
-                PrimaryAccountNumber = string.Empty,
-                ExpirationMonth = 0,
-                ExpirationYear = 0,
-                ErrorMessage = "Payment data cannot be empty."
-            });
-        }
-
-        // Simulates EC_v1 token validation & extraction of the DPAN
-        var dpan = "4242424242424242";
+        // No merchant identity certificate / private key is configured anywhere in this library,
+        // so the EC_v1/RSA_v1 payment data cannot actually be decrypted here. Returning a fake
+        // PAN would silently charge the wrong card instead of failing loudly.
         return Task.FromResult(new KyrolusDecryptedPaymentTokenResult
         {
-            Succeeded = true,
-            PrimaryAccountNumber = dpan,
-            ExpirationMonth = 12,
-            ExpirationYear = 2030,
-            CardholderName = token.DisplayName ?? "Apple Pay User",
-            PaymentDataType = "3DSecure"
+            Succeeded = false,
+            PrimaryAccountNumber = string.Empty,
+            ExpirationMonth = 0,
+            ExpirationYear = 0,
+            ErrorMessage = "Apple Pay token decryption is not implemented. Register a real IKyrolusApplePayDecryptor " +
+                            "backed by your merchant identity certificate before accepting Apple Pay payments."
         });
     }
 }

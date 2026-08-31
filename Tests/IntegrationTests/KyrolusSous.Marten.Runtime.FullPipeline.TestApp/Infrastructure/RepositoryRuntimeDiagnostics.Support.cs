@@ -1109,7 +1109,7 @@ internal sealed class RuntimeValidationProbeRequestValidator : IKyrolusRequestVa
                 ErrorCode: "name.required",
                 Severity: KyrolusValidationSeverity.Warning,
                 RuleSet: "strict",
-                Group: "api",
+                Groups: ["api"],
                 MessageKey: "name.required"));
         }
 
@@ -1144,7 +1144,7 @@ internal sealed class RuntimeValidationProbeContextValidator : IKyrolusRequestVa
                 ErrorCode: "context.filtered",
                 Severity: KyrolusValidationSeverity.Info,
                 RuleSet: "strict",
-                Group: "api",
+                Groups: ["api"],
                 MessageKey: "context.filtered")
         ]);
     }
@@ -1164,7 +1164,7 @@ internal sealed class RuntimeScannedValidationRequestValidator : IKyrolusRequest
                 ErrorCode: "scanned.invalid",
                 Severity: KyrolusValidationSeverity.Error,
                 RuleSet: "default",
-                Group: "default",
+                Groups: ["default"],
                 MessageKey: "scanned.invalid")
         ]);
     }

@@ -25,6 +25,8 @@ namespace KyrolusSous.ExceptionHandling.Runtime;
 [JsonSerializable(typeof(object))]
 [JsonSerializable(typeof(IReadOnlyDictionary<string, object?>))]
 [JsonSerializable(typeof(Dictionary<string, object?>))]
+[JsonSerializable(typeof(Dictionary<string, string>))]
+[JsonSerializable(typeof(IReadOnlyDictionary<string, string>))]
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]

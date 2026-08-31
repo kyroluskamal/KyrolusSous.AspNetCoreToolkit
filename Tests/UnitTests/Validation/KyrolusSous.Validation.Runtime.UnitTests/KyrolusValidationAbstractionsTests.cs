@@ -7,7 +7,7 @@ public class KyrolusValidationAbstractionsTests
     public void KyrolusValidationGroup_ShouldStoreName()
     {
         var group = new KyrolusValidationGroup("UiHints");
-        group.Name.ShouldBe("UiHints");
+        group.Names.ShouldContain("UiHints");
     }
     #endregion
 

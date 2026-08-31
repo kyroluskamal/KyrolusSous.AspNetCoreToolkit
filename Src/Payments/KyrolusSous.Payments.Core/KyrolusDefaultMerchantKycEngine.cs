@@ -31,12 +31,16 @@ public sealed class KyrolusDefaultMerchantKycEngine : IKyrolusMerchantKycEngine
             });
         }
 
+        // Presence of these fields only proves the submission is well-formed, not that the merchant's
+        // identity/documents are genuine. This default engine performs no real verification (no
+        // sanctions/PEP screening, no document authenticity or registry check), so it must not
+        // auto-approve a high processing tier - it can only queue the submission for real review.
         return Task.FromResult(new KyrolusMerchantKycResult
         {
             MerchantId = submission.MerchantId,
-            Status = KyrolusKycStatus.Approved,
-            ApprovedTier = KyrolusKycTier.Tier3_Enterprise,
-            MonthlyProcessingLimit = 1_000_000m
+            Status = KyrolusKycStatus.UnderReview,
+            ApprovedTier = KyrolusKycTier.Tier1_Starter,
+            MonthlyProcessingLimit = 5000m
         });
     }
 }

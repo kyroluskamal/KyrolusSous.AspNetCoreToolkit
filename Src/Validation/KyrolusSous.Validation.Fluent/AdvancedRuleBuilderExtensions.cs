@@ -1,7 +1,3 @@
-using System.Numerics;
-using System.Text.Json;
-using System.Text.RegularExpressions;
-
 namespace KyrolusSous.Validation.Fluent;
 
 public sealed record KyrolusPasswordOptions(
@@ -31,63 +27,49 @@ public static class AdvancedRuleBuilderExtensions
         if (string.IsNullOrWhiteSpace(nationalId)) return false;
         var sanitized = nationalId.Trim();
 
-        if (string.Equals(countryCode, "EG", StringComparison.OrdinalIgnoreCase))
+        return countryCode.ToUpperInvariant() switch
         {
-            if (sanitized.Length != 14 || !sanitized.All(char.IsDigit)) return false;
+            "EG" or "EGYPT" => IsEgyptianNationalIdValid(sanitized),
+            "ES" or "ES-NIF" or "SPAIN" => IsSpanishNifValid(sanitized),
+            "ES-DNI" => IsSpanishDniValid(sanitized),
+            "ES-NIE" => IsSpanishNieValid(sanitized),
+            "ES-CIF" => IsSpanishCifValid(sanitized),
+            _ => sanitized.Length >= 6 && sanitized.All(char.IsLetterOrDigit)
+        };
+    }
 
-            // Century check (2 = 1900-1999, 3 = 2000-2099)
-            int centuryDigit = sanitized[0] - '0';
-            if (centuryDigit != 2 && centuryDigit != 3) return false;
+    private static bool IsEgyptianNationalIdValid(string sanitized)
+    {
+        if (sanitized.Length != 14 || !sanitized.All(char.IsDigit)) return false;
 
-            int year = (centuryDigit == 2 ? 1900 : 2000) + int.Parse(sanitized.Substring(1, 2));
-            int month = int.Parse(sanitized.Substring(3, 2));
-            int day = int.Parse(sanitized.Substring(5, 2));
+        // Century check (2 = 1900-1999, 3 = 2000-2099)
+        int centuryDigit = sanitized[0] - '0';
+        if (centuryDigit != 2 && centuryDigit != 3) return false;
 
-            if (!DateOnly.TryParseExact($"{year:D4}-{month:D2}-{day:D2}", "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _)) return false;
+        int year = (centuryDigit == 2 ? 1900 : 2000) + int.Parse(sanitized.Substring(1, 2));
+        int month = int.Parse(sanitized.Substring(3, 2));
+        int day = int.Parse(sanitized.Substring(5, 2));
 
-            // Governorate code check (01 to 88)
-            int govCode = int.Parse(sanitized.Substring(7, 2));
-            if (govCode < 1 || govCode > 88) return false;
+        if (!DateOnly.TryParseExact($"{year:D4}-{month:D2}-{day:D2}", "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _)) return false;
 
-            // Egyptian Checksum (Modulo 11 with weights 2,7,6,5,4,3,2,7,6,5,4,3,2)
-            int[] weights = [2, 7, 6, 5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
-            int sum = 0;
-            for (int i = 0; i < 13; i++)
-            {
-                sum += (sanitized[i] - '0') * weights[i];
-            }
+        // Governorate code check (01 to 88)
+        int govCode = int.Parse(sanitized.Substring(7, 2));
+        if (govCode < 1 || govCode > 88) return false;
 
-            int checkDigit = 11 - (sum % 11);
-            if (checkDigit == 11) checkDigit = 0;
-            if (checkDigit == 10) checkDigit = 1;
-
-            int lastDigit = sanitized[13] - '0';
-            return checkDigit == lastDigit;
+        // Egyptian Checksum (Modulo 11 with weights 2,7,6,5,4,3,2,7,6,5,4,3,2)
+        int[] weights = [2, 7, 6, 5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+        int sum = 0;
+        for (int i = 0; i < 13; i++)
+        {
+            sum += (sanitized[i] - '0') * weights[i];
         }
 
-        if (string.Equals(countryCode, "ES", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(countryCode, "ES-NIF", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(countryCode, "SPAIN", StringComparison.OrdinalIgnoreCase))
-        {
-            return IsSpanishNifValid(sanitized);
-        }
+        int checkDigit = 11 - (sum % 11);
+        if (checkDigit == 11) checkDigit = 0;
+        if (checkDigit == 10) checkDigit = 1;
 
-        if (string.Equals(countryCode, "ES-DNI", StringComparison.OrdinalIgnoreCase))
-        {
-            return IsSpanishDniValid(sanitized);
-        }
-
-        if (string.Equals(countryCode, "ES-NIE", StringComparison.OrdinalIgnoreCase))
-        {
-            return IsSpanishNieValid(sanitized);
-        }
-
-        if (string.Equals(countryCode, "ES-CIF", StringComparison.OrdinalIgnoreCase))
-        {
-            return IsSpanishCifValid(sanitized);
-        }
-
-        return sanitized.Length >= 6 && sanitized.All(char.IsLetterOrDigit);
+        int lastDigit = sanitized[13] - '0';
+        return checkDigit == lastDigit;
     }
 
     /// <summary>
@@ -271,7 +253,10 @@ public static class AdvancedRuleBuilderExtensions
 
         try
         {
-            while (reader.Read()) { }
+            while (reader.Read())
+            {
+                _ = reader.TokenType;
+            }
             return true;
         }
         catch (JsonException)
@@ -289,10 +274,10 @@ public static class AdvancedRuleBuilderExtensions
         var trimmed = base64.Trim();
         if (trimmed.Length % 4 != 0) return false;
 
-        const int StackAllocThreshold = 256;
-        if (trimmed.Length <= StackAllocThreshold)
+        const int stackAllocThreshold = 256;
+        if (trimmed.Length <= stackAllocThreshold)
         {
-            Span<byte> buffer = stackalloc byte[StackAllocThreshold];
+            Span<byte> buffer = stackalloc byte[stackAllocThreshold];
             return Convert.TryFromBase64String(trimmed, buffer, out _);
         }
 
@@ -322,15 +307,7 @@ public static class AdvancedRuleBuilderExtensions
         var parts = cron.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length != 5) return false;
 
-        foreach (var part in parts)
-        {
-            if (part != "*" && !part.All(ch => char.IsDigit(ch) || ch == '/' || ch == '-' || ch == ','))
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return parts.All(part => part == "*" || part.All(ch => char.IsDigit(ch) || ch == '/' || ch == '-' || ch == ','));
     }
 
     /// <summary>

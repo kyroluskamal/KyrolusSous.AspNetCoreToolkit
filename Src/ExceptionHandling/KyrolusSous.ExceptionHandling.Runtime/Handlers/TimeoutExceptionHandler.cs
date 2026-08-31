@@ -2,7 +2,7 @@ namespace KyrolusSous.ExceptionHandling.Runtime.Handlers;
 
 public class TimeoutExceptionHandler(
     ILogger<TimeoutExceptionHandler> logger,
-    IKyrolusErrorLocalizer? localizer = null,
+    IKyrolusLocalizer? localizer = null,
     IKyrolusErrorMetadataSanitizer? sanitizer = null,
     KyrolusHttpErrorContextFactory? contextFactory = null)
     : KyrolusExceptionHandlerBase<TimeoutException>(

@@ -8,13 +8,13 @@ public sealed class KyrolusExceptionTranslator(
     IKyrolusErrorMetadataSanitizer metadataSanitizer,
     IHostEnvironment environment,
     IOptions<KyrolusExceptionHandlingOptions> options,
-    IKyrolusErrorLocalizer? localizer = null)
+    IKyrolusLocalizer? localizer = null)
 {
     private readonly KyrolusExceptionMappingService mappingService = mappingService;
     private readonly IKyrolusErrorMetadataSanitizer metadataSanitizer = metadataSanitizer;
     private readonly IHostEnvironment environment = environment;
     private readonly KyrolusExceptionHandlingOptions options = options.Value;
-    private readonly IKyrolusErrorLocalizer? localizer = localizer;
+    private readonly IKyrolusLocalizer? localizer = localizer;
 
     /// <summary>
     /// Translates an exception into an enriched <see cref="KyrolusExceptionMapping"/> including status code and logging directives.
@@ -31,7 +31,7 @@ public sealed class KyrolusExceptionTranslator(
         var mapping = mappingService.Map(exception, resolvedContext);
 
         // 2. Localize human-readable title and detail according to culture
-        var localizedEnvelope = localizer.Localize(mapping.Error, resolvedContext.Culture);
+        var localizedEnvelope = KyrolusExceptionEnrichmentHelper.LocalizeEnvelope(localizer, mapping.Error, resolvedContext.Culture);
         mapping = mapping with { Error = localizedEnvelope };
 
         // 3. Enrich distributed tracing Activity (OpenTelemetry)

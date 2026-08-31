@@ -1,54 +1,90 @@
+using System.Linq.Expressions;
+using FluentValidation;
+using KyrolusSous.Validation.Abstractions;
+using KyrolusSous.Validation.Fluent;
+using static KyrolusSous.Validation.FluentValidation.KyrolusValidationMessages;
+
 namespace KyrolusSous.Validation.FluentValidation;
 
+/// <summary>
+/// Provides domain-specific validation extensions for FluentValidation (e.g. National IDs, Colors, URLs, Groups, Severities).
+/// </summary>
 public static class KyrolusFluentValidationExtensions
 {
+    /// <summary>Ensures the property is not empty and applies a standardized required error message.</summary>
     public static IRuleBuilderOptions<T, TProperty> Required<T, TProperty>(
-        this IRuleBuilder<T, TProperty> ruleBuilder, Expression<Func<T, object>> expr, string propertyName = "")
+        this IRuleBuilder<T, TProperty> ruleBuilder,
+        Expression<Func<T, object>>? expr = null,
+        string propertyName = "")
     {
         return ruleBuilder.NotEmpty()
-                          .OverridePropertyName(ReturnMemberExpression(expr) ?? propertyName)
-                          .WithMessage(IsRequired);
+            .ApplyPropertyName(expr, propertyName)
+            .WithMessage(IsRequired);
     }
 
-    public static IRuleBuilderOptions<T, int> ShouldCreatedBySomeone<T>(this IRuleBuilder<T, int> ruleBuilder, Expression<Func<T, object>> expr, string propertyName = "")
+    /// <summary>Ensures an audit integer field is greater than zero.</summary>
+    public static IRuleBuilderOptions<T, int> ShouldCreatedBySomeone<T>(
+        this IRuleBuilder<T, int> ruleBuilder,
+        Expression<Func<T, object>>? expr = null,
+        string propertyName = "")
     {
         return ruleBuilder.GreaterThan(0)
-                          .OverridePropertyName(ReturnMemberExpression(expr) ?? propertyName)
-                          .WithMessage(ShouldBeCreatedBySomeone);
+            .ApplyPropertyName(expr, propertyName)
+            .WithMessage(ShouldBeCreatedBySomeone);
     }
 
-    public static IRuleBuilderOptions<T, int> IdCanNotBeZero<T>(this IRuleBuilder<T, int> ruleBuilder, Expression<Func<T, object>> expr, string propertyName = "")
+    /// <summary>Ensures an identifier integer field is strictly positive (greater than 0).</summary>
+    public static IRuleBuilderOptions<T, int> IdCanNotBeZero<T>(
+        this IRuleBuilder<T, int> ruleBuilder,
+        Expression<Func<T, object>>? expr = null,
+        string propertyName = "")
     {
         return ruleBuilder.GreaterThan(0)
-                          .OverridePropertyName(ReturnMemberExpression(expr) ?? propertyName)
-                          .WithMessage(CanNotBeZero);
+            .ApplyPropertyName(expr, propertyName)
+            .WithMessage(CanNotBeZero);
     }
 
-    public static IRuleBuilderOptions<T, string> HasMaximumLength<T>(this IRuleBuilder<T, string> ruleBuilder, int length, Expression<Func<T, object>> expr, string propertyName = "")
+    /// <summary>Ensures a string property does not exceed the specified maximum length.</summary>
+    public static IRuleBuilderOptions<T, string> HasMaximumLength<T>(
+        this IRuleBuilder<T, string> ruleBuilder,
+        int length,
+        Expression<Func<T, object>>? expr = null,
+        string propertyName = "")
     {
         return ruleBuilder.MaximumLength(length)
-                          .OverridePropertyName(ReturnMemberExpression(expr) ?? propertyName)
-                          .WithMessage(ExceedsMaxLength(length));
+            .ApplyPropertyName(expr, propertyName)
+            .WithMessage(ExceedsMaxLength(length));
     }
 
-    public static IRuleBuilderOptions<T, string> IsColor<T>(this IRuleBuilder<T, string> ruleBuilder, Expression<Func<T, object>> expr, string propertyName = "")
+    /// <summary>Validates that the string matches a hex color format (#RRGGBB).</summary>
+    public static IRuleBuilderOptions<T, string> IsColor<T>(
+        this IRuleBuilder<T, string> ruleBuilder,
+        Expression<Func<T, object>>? expr = null,
+        string propertyName = "")
     {
         return ruleBuilder
             .Matches(@"^#[0-9A-Fa-f]{6}$")
-            .OverridePropertyName(ReturnMemberExpression(expr) ?? propertyName)
+            .ApplyPropertyName(expr, propertyName)
             .WithMessage(InvalidHexColor);
     }
 
+    /// <summary>Validates that a collection or array property is not null or empty.</summary>
     public static IRuleBuilderOptions<T, TProperty> ArrayNotEmpty<T, TProperty>(
-        this IRuleBuilder<T, TProperty> ruleBuilder, Expression<Func<T, object>> expr, string propertyName = "")
+        this IRuleBuilder<T, TProperty> ruleBuilder,
+        Expression<Func<T, object>>? expr = null,
+        string propertyName = "")
     {
         return ruleBuilder.NotEmpty()
-                          .OverridePropertyName(ReturnMemberExpression(expr) ?? propertyName)
-                          .WithMessage(CanNotBeEmpty);
+            .ApplyPropertyName(expr, propertyName)
+            .WithMessage(CanNotBeEmpty);
     }
 
-    public static IRuleBuilderOptions<T, string> IsUrl<T>(this IRuleBuilder<T, string> ruleBuilder,
-        Expression<Func<T, object>> expr, string propertyName = "", bool isNullOrEmpty = false)
+    /// <summary>Validates that a string is a valid HTTP/HTTPS absolute URL.</summary>
+    public static IRuleBuilderOptions<T, string> IsUrl<T>(
+        this IRuleBuilder<T, string> ruleBuilder,
+        Expression<Func<T, object>>? expr = null,
+        string propertyName = "",
+        bool isNullOrEmpty = false)
     {
         return ruleBuilder.Must(url =>
             {
@@ -61,13 +97,14 @@ public static class KyrolusFluentValidationExtensions
                     && Uri.TryCreate(url, UriKind.Absolute, out var uriResult)
                     && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
             })
-            .OverridePropertyName(string.IsNullOrEmpty(propertyName) ? ReturnMemberExpression(expr) : propertyName)
+            .ApplyPropertyName(expr, propertyName)
             .WithMessage(InvalidUrl);
     }
 
+    /// <summary>Validates an Egyptian 14-digit National Identification Number format.</summary>
     public static IRuleBuilderOptions<T, string> IsEgyptianNationalId<T>(
         this IRuleBuilder<T, string> ruleBuilder,
-        Expression<Func<T, object>> expr,
+        Expression<Func<T, object>>? expr = null,
         string propertyName = "",
         bool isNullOrEmpty = false)
     {
@@ -89,134 +126,91 @@ public static class KyrolusFluentValidationExtensions
                     _ => false
                 };
             })
-            .OverridePropertyName(string.IsNullOrEmpty(propertyName) ? ReturnMemberExpression(expr) : propertyName)
+            .ApplyPropertyName(expr, propertyName)
             .WithMessage(InvalidEgyptianNationalId);
     }
 
+    /// <summary>Validates a Spanish DNI document number.</summary>
     public static IRuleBuilderOptions<T, string> IsSpanishDni<T>(
         this IRuleBuilder<T, string> ruleBuilder,
         Expression<Func<T, object>>? expr = null,
         string propertyName = "",
         bool isNullOrEmpty = false)
     {
-        var builder = ruleBuilder.Must(dni =>
-            {
-                if (string.IsNullOrEmpty(dni) && isNullOrEmpty)
-                {
-                    return true;
-                }
-
-                return KyrolusSous.Validation.Fluent.AdvancedRuleBuilderExtensions.IsSpanishDniValid(dni);
-            });
-
-        var prop = !string.IsNullOrEmpty(propertyName)
-            ? propertyName
-            : (expr != null ? ReturnMemberExpression(expr) : string.Empty);
-
-        if (!string.IsNullOrEmpty(prop))
-        {
-            builder = builder.OverridePropertyName(prop);
-        }
-
-        return builder.WithMessage(InvalidSpanishDni);
+        return ruleBuilder
+            .Must(dni => (string.IsNullOrEmpty(dni) && isNullOrEmpty) || AdvancedRuleBuilderExtensions.IsSpanishDniValid(dni))
+            .ApplyPropertyName(expr, propertyName)
+            .WithMessage(InvalidSpanishDni);
     }
 
+    /// <summary>Validates a Spanish NIE document number.</summary>
     public static IRuleBuilderOptions<T, string> IsSpanishNie<T>(
         this IRuleBuilder<T, string> ruleBuilder,
         Expression<Func<T, object>>? expr = null,
         string propertyName = "",
         bool isNullOrEmpty = false)
     {
-        var builder = ruleBuilder.Must(nie =>
-            {
-                if (string.IsNullOrEmpty(nie) && isNullOrEmpty)
-                {
-                    return true;
-                }
-
-                return KyrolusSous.Validation.Fluent.AdvancedRuleBuilderExtensions.IsSpanishNieValid(nie);
-            });
-
-        var prop = !string.IsNullOrEmpty(propertyName)
-            ? propertyName
-            : (expr != null ? ReturnMemberExpression(expr) : string.Empty);
-
-        if (!string.IsNullOrEmpty(prop))
-        {
-            builder = builder.OverridePropertyName(prop);
-        }
-
-        return builder.WithMessage(InvalidSpanishNie);
+        return ruleBuilder
+            .Must(nie => (string.IsNullOrEmpty(nie) && isNullOrEmpty) || AdvancedRuleBuilderExtensions.IsSpanishNieValid(nie))
+            .ApplyPropertyName(expr, propertyName)
+            .WithMessage(InvalidSpanishNie);
     }
 
+    /// <summary>Validates a Spanish CIF document number.</summary>
     public static IRuleBuilderOptions<T, string> IsSpanishCif<T>(
         this IRuleBuilder<T, string> ruleBuilder,
         Expression<Func<T, object>>? expr = null,
         string propertyName = "",
         bool isNullOrEmpty = false)
     {
-        var builder = ruleBuilder.Must(cif =>
-            {
-                if (string.IsNullOrEmpty(cif) && isNullOrEmpty)
-                {
-                    return true;
-                }
-
-                return KyrolusSous.Validation.Fluent.AdvancedRuleBuilderExtensions.IsSpanishCifValid(cif);
-            });
-
-        var prop = !string.IsNullOrEmpty(propertyName)
-            ? propertyName
-            : (expr != null ? ReturnMemberExpression(expr) : string.Empty);
-
-        if (!string.IsNullOrEmpty(prop))
-        {
-            builder = builder.OverridePropertyName(prop);
-        }
-
-        return builder.WithMessage(InvalidSpanishCif);
+        return ruleBuilder
+            .Must(cif => (string.IsNullOrEmpty(cif) && isNullOrEmpty) || AdvancedRuleBuilderExtensions.IsSpanishCifValid(cif))
+            .ApplyPropertyName(expr, propertyName)
+            .WithMessage(InvalidSpanishCif);
     }
 
+    /// <summary>Validates a Spanish NIF document number.</summary>
     public static IRuleBuilderOptions<T, string> IsSpanishNif<T>(
         this IRuleBuilder<T, string> ruleBuilder,
         Expression<Func<T, object>>? expr = null,
         string propertyName = "",
         bool isNullOrEmpty = false)
     {
-        var builder = ruleBuilder.Must(nif =>
-            {
-                if (string.IsNullOrEmpty(nif) && isNullOrEmpty)
-                {
-                    return true;
-                }
-
-                return KyrolusSous.Validation.Fluent.AdvancedRuleBuilderExtensions.IsSpanishNifValid(nif);
-            });
-
-        var prop = !string.IsNullOrEmpty(propertyName)
-            ? propertyName
-            : (expr != null ? ReturnMemberExpression(expr) : string.Empty);
-
-        if (!string.IsNullOrEmpty(prop))
-        {
-            builder = builder.OverridePropertyName(prop);
-        }
-
-        return builder.WithMessage(InvalidSpanishNif);
+        return ruleBuilder
+            .Must(nif => (string.IsNullOrEmpty(nif) && isNullOrEmpty) || AdvancedRuleBuilderExtensions.IsSpanishNifValid(nif))
+            .ApplyPropertyName(expr, propertyName)
+            .WithMessage(InvalidSpanishNif);
     }
 
+    /// <summary>Associates a single logical group tag with this FluentValidation rule via CustomState.</summary>
     public static IRuleBuilderOptions<T, TProperty> WithGroup<T, TProperty>(
         this IRuleBuilderOptions<T, TProperty> ruleBuilder, string groupName)
     {
         return ruleBuilder.WithState(_ => new KyrolusValidationGroup(groupName));
     }
 
+    /// <summary>Associates a <see cref="KyrolusValidationGroup"/> instance with this FluentValidation rule via CustomState.</summary>
     public static IRuleBuilderOptions<T, TProperty> WithGroup<T, TProperty>(
         this IRuleBuilderOptions<T, TProperty> ruleBuilder, KyrolusValidationGroup group)
     {
         return ruleBuilder.WithState(_ => group);
     }
 
+    /// <summary>Associates multiple logical group tags with this FluentValidation rule via CustomState.</summary>
+    public static IRuleBuilderOptions<T, TProperty> WithGroups<T, TProperty>(
+        this IRuleBuilderOptions<T, TProperty> ruleBuilder, params string[] groupNames)
+    {
+        return ruleBuilder.WithState(_ => new KyrolusValidationGroup(groupNames));
+    }
+
+    /// <summary>Associates a collection of logical group tags with this FluentValidation rule via CustomState.</summary>
+    public static IRuleBuilderOptions<T, TProperty> WithGroups<T, TProperty>(
+        this IRuleBuilderOptions<T, TProperty> ruleBuilder, IEnumerable<string> groupNames)
+    {
+        return ruleBuilder.WithState(_ => new KyrolusValidationGroup(groupNames));
+    }
+
+    /// <summary>Maps and sets the severity level on the FluentValidation rule using <see cref="KyrolusValidationSeverity"/>.</summary>
     public static IRuleBuilderOptions<T, TProperty> WithSeverity<T, TProperty>(
         this IRuleBuilderOptions<T, TProperty> ruleBuilder, KyrolusValidationSeverity severity)
     {
@@ -230,24 +224,42 @@ public static class KyrolusFluentValidationExtensions
         return ruleBuilder.WithSeverity(fvSeverity);
     }
 
-    private static string ReturnMemberExpression<T>(Expression<Func<T, object>> expr)
+    private static IRuleBuilderOptions<T, TProperty> ApplyPropertyName<T, TProperty>(
+        this IRuleBuilderOptions<T, TProperty> builder,
+        Expression<Func<T, object>>? expr,
+        string propertyName)
     {
-        MemberExpression? member = null;
+        var prop = ResolvePropertyName(expr, propertyName);
+        return !string.IsNullOrWhiteSpace(prop) ? builder.OverridePropertyName(prop) : builder;
+    }
 
-        if (expr.Body is UnaryExpression unaryExpression)
+    private static string ResolvePropertyName<T>(Expression<Func<T, object>>? expr, string propertyName)
+    {
+        if (!string.IsNullOrWhiteSpace(propertyName))
         {
-            member = unaryExpression.Operand as MemberExpression;
-        }
-        else if (expr.Body is MemberExpression memberExpression)
-        {
-            member = memberExpression;
+            return propertyName;
         }
 
-        if (member is null)
+        if (expr is null)
         {
             return string.Empty;
         }
 
-        return member.Member.Name;
+        return ReturnMemberExpression(expr);
+    }
+
+    private static string ReturnMemberExpression<T>(Expression<Func<T, object>> expr)
+    {
+        if (expr.Body is MemberExpression memberExpression)
+        {
+            return memberExpression.Member.Name;
+        }
+
+        if (expr.Body is UnaryExpression { Operand: MemberExpression operandMember })
+        {
+            return operandMember.Member.Name;
+        }
+
+        return string.Empty;
     }
 }

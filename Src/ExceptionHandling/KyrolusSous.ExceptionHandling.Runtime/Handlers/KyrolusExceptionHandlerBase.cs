@@ -10,7 +10,7 @@ public abstract class KyrolusExceptionHandlerBase<TException>(
     HttpStatusCode statusCode,
     string errorCode,
     string title,
-    IKyrolusErrorLocalizer? localizer = null,
+    IKyrolusLocalizer? localizer = null,
     IKyrolusErrorMetadataSanitizer? sanitizer = null,
     KyrolusHttpErrorContextFactory? contextFactory = null) : IExceptionHandler
     where TException : Exception
@@ -50,7 +50,7 @@ public abstract class KyrolusExceptionHandlerBase<TException>(
             errors,
             sanitizedMetadata);
 
-        var envelope = localizer.Localize(rawEnvelope, errorContext.Culture);
+        var envelope = KyrolusExceptionEnrichmentHelper.LocalizeEnvelope(localizer, rawEnvelope, errorContext.Culture);
 
         await KyrolusExceptionHandlerHelper.WriteEnvelopeAsync(
             logger,

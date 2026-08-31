@@ -8,7 +8,7 @@ public class UnauthorizedException : Exception
 
 public class UnauthorizedExceptionHandler(
     ILogger<UnauthorizedExceptionHandler> logger,
-    IKyrolusErrorLocalizer? localizer = null,
+    IKyrolusLocalizer? localizer = null,
     IKyrolusErrorMetadataSanitizer? sanitizer = null,
     KyrolusHttpErrorContextFactory? contextFactory = null)
     : KyrolusExceptionHandlerBase<UnauthorizedException>(

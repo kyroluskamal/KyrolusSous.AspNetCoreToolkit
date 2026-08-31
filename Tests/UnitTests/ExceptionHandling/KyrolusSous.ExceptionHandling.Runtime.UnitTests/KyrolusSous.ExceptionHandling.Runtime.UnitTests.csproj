@@ -28,6 +28,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\Src\ExceptionHandling\KyrolusSous.ExceptionHandling.Abstractions\KyrolusSous.ExceptionHandling.Abstractions.csproj" />
     <ProjectReference Include="..\..\..\..\Src\ExceptionHandling\KyrolusSous.ExceptionHandling.Runtime\KyrolusSous.ExceptionHandling.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Localization\KyrolusSous.Localization.Abstractions\KyrolusSous.Localization.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

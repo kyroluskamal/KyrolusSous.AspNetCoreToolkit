@@ -380,4 +380,88 @@ public sealed class FluentValidationTests
         invalidResult.Count.ShouldBe(4);
     }
     #endregion
+
+    #region RuleSets and Groups Tests
+    private sealed record ScopedRequest(string Name, string Email, string Password, int Id, string ShippingAddress);
+
+    private sealed class ScopedRequestValidator : KyrolusAbstractValidator<ScopedRequest>
+    {
+        public ScopedRequestValidator()
+        {
+            RuleFor(x => x.Name).NotEmpty();
+
+            RuleSet("Create", () =>
+            {
+                RuleFor(x => x.Password).NotEmpty().WithGroups("Account", "Security");
+            });
+
+            RuleSet("Update", () =>
+            {
+                RuleFor(x => x.Id).Must(id => id > 0, "Id must be positive");
+            });
+
+            Group("Shipping", () =>
+            {
+                RuleFor(x => x.ShippingAddress).NotEmpty().WithGroups("Shipping", "Checkout");
+            });
+
+            RuleFor(x => x.Email).NotEmpty().InRuleSets("Create", "Update").WithGroup("Account");
+        }
+    }
+
+    [Fact(DisplayName = "RuleSet executes only matching rules when specified in context")]
+    public async Task RuleSet_Executes_Only_Matching_Rules()
+    {
+        var validator = new ScopedRequestValidator();
+        var request = new ScopedRequest(Name: "", Email: "", Password: "", Id: 0, ShippingAddress: "");
+
+        // When validating with "Create" RuleSet: Email (InRuleSets: Create), Password (RuleSet: Create) should fail. Id and Name (default) should NOT fail.
+        var createContext = new KyrolusValidationContext(RuleSets: ["Create"]);
+        var createResult = await validator.ValidateAsync(request, createContext);
+
+        createResult.ShouldContain(f => f.PropertyName == "Password" && f.RuleSet == "Create");
+        createResult.ShouldContain(f => f.PropertyName == "Email" && f.RuleSet == "Create");
+        createResult.ShouldNotContain(f => f.PropertyName == "Name");
+        createResult.ShouldNotContain(f => f.PropertyName == "Id");
+
+        // When validating with "Create" + "default" RuleSets: Name (default), Email, Password should fail.
+        var createWithDefaultContext = new KyrolusValidationContext(RuleSets: ["Create", "default"]);
+        var createWithDefaultResult = await validator.ValidateAsync(request, createWithDefaultContext);
+
+        createWithDefaultResult.ShouldContain(f => f.PropertyName == "Name");
+        createWithDefaultResult.ShouldContain(f => f.PropertyName == "Password" && f.RuleSet == "Create");
+        createWithDefaultResult.ShouldContain(f => f.PropertyName == "Email" && f.RuleSet == "Create");
+        createWithDefaultResult.ShouldNotContain(f => f.PropertyName == "Id");
+
+        // When validating with "Update" RuleSet: Email (InRuleSets: Update), Id (RuleSet: Update) should fail. Password should NOT fail.
+        var updateContext = new KyrolusValidationContext(RuleSets: ["Update"]);
+        var updateResult = await validator.ValidateAsync(request, updateContext);
+
+        updateResult.ShouldContain(f => f.PropertyName == "Id" && f.RuleSet == "Update");
+        updateResult.ShouldContain(f => f.PropertyName == "Email" && f.RuleSet == "Update");
+        updateResult.ShouldNotContain(f => f.PropertyName == "Name");
+        updateResult.ShouldNotContain(f => f.PropertyName == "Password");
+    }
+
+    [Fact(DisplayName = "WithGroups multi-group intersection filters correctly")]
+    public async Task WithGroups_MultiGroup_Intersection_Filters_Correctly()
+    {
+        var validator = new ScopedRequestValidator();
+        var request = new ScopedRequest(Name: "John", Email: "john@example.com", Password: "", Id: 1, ShippingAddress: "");
+
+        // Context with Groups ["Security"]: Password has Groups ["Account", "Security"] -> intersects!
+        var securityContext = new KyrolusValidationContext(Groups: ["Security"]);
+        var securityResult = await validator.ValidateAsync(request, securityContext);
+
+        securityResult.ShouldContain(f => f.PropertyName == "Password");
+        securityResult.ShouldNotContain(f => f.PropertyName == "ShippingAddress");
+
+        // Context with Groups ["Checkout"]: ShippingAddress has Groups ["Shipping", "Checkout"] -> intersects!
+        var checkoutContext = new KyrolusValidationContext(Groups: ["Checkout"]);
+        var checkoutResult = await validator.ValidateAsync(request, checkoutContext);
+
+        checkoutResult.ShouldContain(f => f.PropertyName == "ShippingAddress");
+        checkoutResult.ShouldNotContain(f => f.PropertyName == "Password");
+    }
+    #endregion
 }

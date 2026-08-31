@@ -81,29 +81,124 @@ public sealed class KyrolusKlarnaPaymentProvider(
         }
     }
 
-    public Task<KyrolusPaymentResult> CapturePaymentAsync(string transactionId, decimal? amount = null, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(new KyrolusPaymentResult { TransactionId = transactionId, Status = KyrolusPaymentStatus.Succeeded });
-    }
+    private AuthenticationHeaderValue BasicAuthHeader() =>
+        new("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_options.ApiUsername}:{_options.ApiPassword}")));
 
-    public Task<KyrolusPaymentResult> GetPaymentStatusAsync(string transactionId, CancellationToken cancellationToken = default)
+    // Uses transactionId as the Klarna Order Management order id, consistent with how the rest of
+    // this provider treats it. Callers still need to "place" the order via Klarna's checkout flow
+    // before order-management operations below are valid for that id.
+    public async Task<KyrolusPaymentResult> CapturePaymentAsync(string transactionId, decimal? amount = null, CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(new KyrolusPaymentResult { TransactionId = transactionId, Status = KyrolusPaymentStatus.Succeeded });
-    }
-
-    public Task<KyrolusRefundResult> RefundPaymentAsync(KyrolusRefundRequest request, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(new KyrolusRefundResult
+        try
         {
-            RefundId = Guid.NewGuid().ToString("N"),
-            TransactionId = request.TransactionId,
-            Succeeded = true,
-            RefundedAmount = request.Amount
-        });
+            var payload = amount.HasValue
+                ? new { captured_amount = (long)Math.Round(amount.Value * 100, MidpointRounding.AwayFromZero) }
+                : (object)new { };
+
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{_options.BaseUrl}/ordermanagement/v1/orders/{transactionId}/captures")
+            {
+                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+            };
+            httpRequest.Headers.Authorization = BasicAuthHeader();
+
+            var response = await httpClient.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+            if (response.IsSuccessStatusCode)
+            {
+                return new KyrolusPaymentResult { TransactionId = transactionId, Status = KyrolusPaymentStatus.Succeeded };
+            }
+
+            var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            return new KyrolusPaymentResult { TransactionId = transactionId, Status = KyrolusPaymentStatus.Failed, ErrorMessage = content };
+        }
+        catch (Exception ex)
+        {
+            return new KyrolusPaymentResult { TransactionId = transactionId, Status = KyrolusPaymentStatus.Failed, ErrorMessage = ex.Message };
+        }
     }
 
-    public Task<bool> CancelPaymentAsync(string transactionId, CancellationToken cancellationToken = default)
+    public async Task<KyrolusPaymentResult> GetPaymentStatusAsync(string transactionId, CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(true);
+        try
+        {
+            var httpRequest = new HttpRequestMessage(HttpMethod.Get, $"{_options.BaseUrl}/ordermanagement/v1/orders/{transactionId}");
+            httpRequest.Headers.Authorization = BasicAuthHeader();
+
+            var response = await httpClient.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return new KyrolusPaymentResult { TransactionId = transactionId, Status = KyrolusPaymentStatus.Failed };
+            }
+
+            var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(content);
+            var root = doc.RootElement;
+
+            var capturedAmount = root.TryGetProperty("captured_amount", out var ca) ? ca.GetInt64() : 0;
+            var refundedAmount = root.TryGetProperty("refunded_amount", out var ra) ? ra.GetInt64() : 0;
+
+            var status = refundedAmount > 0
+                ? KyrolusPaymentStatus.Refunded
+                : capturedAmount > 0
+                    ? KyrolusPaymentStatus.Succeeded
+                    : KyrolusPaymentStatus.Pending;
+
+            return new KyrolusPaymentResult { TransactionId = transactionId, ProviderTransactionId = transactionId, Status = status };
+        }
+        catch (Exception ex)
+        {
+            return new KyrolusPaymentResult { TransactionId = transactionId, Status = KyrolusPaymentStatus.Failed, ErrorMessage = ex.Message };
+        }
+    }
+
+    public async Task<KyrolusRefundResult> RefundPaymentAsync(KyrolusRefundRequest request, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var payload = new
+            {
+                refunded_amount = (long)Math.Round((request.Amount ?? 0) * 100, MidpointRounding.AwayFromZero),
+                description = request.Reason ?? "Refund request"
+            };
+
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{_options.BaseUrl}/ordermanagement/v1/orders/{request.TransactionId}/refunds")
+            {
+                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+            };
+            httpRequest.Headers.Authorization = BasicAuthHeader();
+
+            var response = await httpClient.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+            if (response.IsSuccessStatusCode)
+            {
+                return new KyrolusRefundResult
+                {
+                    RefundId = Guid.NewGuid().ToString("N"),
+                    TransactionId = request.TransactionId,
+                    Succeeded = true,
+                    RefundedAmount = request.Amount
+                };
+            }
+
+            var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            return new KyrolusRefundResult { RefundId = string.Empty, TransactionId = request.TransactionId, Succeeded = false, ErrorMessage = content };
+        }
+        catch (Exception ex)
+        {
+            return new KyrolusRefundResult { RefundId = string.Empty, TransactionId = request.TransactionId, Succeeded = false, ErrorMessage = ex.Message };
+        }
+    }
+
+    public async Task<bool> CancelPaymentAsync(string transactionId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{_options.BaseUrl}/ordermanagement/v1/orders/{transactionId}/cancel");
+            httpRequest.Headers.Authorization = BasicAuthHeader();
+            var response = await httpClient.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

@@ -6,7 +6,7 @@ namespace KyrolusSous.Payments.Core;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddKyrolusPayments(this IServiceCollection services, bool registerMockProvider = true)
+    public static IServiceCollection AddKyrolusPayments(this IServiceCollection services, bool registerMockProvider = false)
     {
         if (registerMockProvider)
         {

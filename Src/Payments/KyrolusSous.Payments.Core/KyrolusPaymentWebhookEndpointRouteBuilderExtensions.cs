@@ -34,6 +34,13 @@ public static class KyrolusPaymentWebhookEndpointRouteBuilderExtensions
 
             var headers = request.Headers.ToDictionary(h => h.Key, h => h.Value.ToString(), StringComparer.OrdinalIgnoreCase);
 
+            // Some gateways (e.g. Paymob) sign the payload via a query-string parameter rather than
+            // a header. Merge query values in too so ValidateSignatureAsync can see them either way.
+            foreach (var q in request.Query)
+            {
+                headers.TryAdd(q.Key, q.Value.ToString());
+            }
+
             var isValid = await handler.ValidateSignatureAsync(payload, headers);
             if (!isValid)
             {
@@ -45,6 +52,18 @@ public static class KyrolusPaymentWebhookEndpointRouteBuilderExtensions
             if (webhookEvent is null)
             {
                 return Results.BadRequest(new { error = "Unable to parse webhook payload." });
+            }
+
+            var replayProtector = serviceProvider.GetService<IKyrolusWebhookReplayProtector>();
+            if (replayProtector is not null)
+            {
+                var firstSeen = await replayProtector.ValidateAndRecordWebhookAsync(
+                    webhookEvent.EventId, webhookEvent.TimestampUtc, cancellationToken: request.HttpContext.RequestAborted);
+                if (!firstSeen)
+                {
+                    logger.LogWarning("Rejected replayed/duplicate webhook event {EventId} for provider: {Provider}", webhookEvent.EventId, provider);
+                    return Results.Conflict(new { error = "Duplicate or replayed webhook event." });
+                }
             }
 
             // 1. Dispatch to generic IKyrolusPaymentEventHandler<T>

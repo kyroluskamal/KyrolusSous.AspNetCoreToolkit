@@ -25,7 +25,11 @@ public static class ExceptionHandlingExtension
         services.TryAddSingleton<KyrolusHttpErrorContextFactory>();
         services.TryAddSingleton<KyrolusExceptionMappingService>();
 
-        services.TryAddSingleton<IKyrolusErrorLocalizer, KyrolusNullErrorLocalizer>();
+        // No IKyrolusLocalizer is registered by default - every consumer here takes it as an
+        // optional dependency, so leaving it unregistered means "no localization" with zero setup.
+        // Register one via KyrolusSous.Localization.Json's AddKyrolusJsonLocalization /
+        // AddKyrolusDictionaryLocalization, or KyrolusSous.Localization.StringLocalizer's
+        // AddKyrolusStringLocalizerLocalization<TResource> for an ASP.NET Core IStringLocalizer<T>-backed one.
         services.TryAddSingleton<IKyrolusErrorMetadataSanitizer, KyrolusDefaultErrorMetadataSanitizer>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IKyrolusExceptionMapper, KyrolusDomainExceptionMapper>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IKyrolusExceptionMapper, KyrolusFrameworkExceptionMapper>());
@@ -67,50 +71,4 @@ public static class ExceptionHandlingExtension
     /// <returns>The application builder for chaining.</returns>
     public static IApplicationBuilder UseKyrolusExceptionHandling(this IApplicationBuilder app)
         => app.UseMiddleware<ExceptionHandlingMiddleware>();
-
-    /// <summary>
-    /// Configures resource-based localization for error codes using <see cref="IStringLocalizer{TResource}"/>.
-    /// </summary>
-    /// <typeparam name="TResource">The marker resource class.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddKyrolusExceptionHandlingLocalization<TResource>(this IServiceCollection services)
-    {
-        services.AddSingleton<IKyrolusErrorLocalizer>(sp =>
-        {
-            var localizer = sp.GetRequiredService<IStringLocalizer<TResource>>();
-            return new KyrolusStringLocalizerErrorLocalizer(localizer);
-        });
-
-        return services;
-    }
-
-    /// <summary>
-    /// Configures in-memory dictionary-based localization for error codes.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <param name="translations">A dictionary mapping error codes to localized messages.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddKyrolusExceptionHandlingLocalization(this IServiceCollection services, IReadOnlyDictionary<string, string> translations)
-    {
-        services.AddSingleton<IKyrolusErrorLocalizer>(_ => new KyrolusDictionaryErrorLocalizer(translations));
-        return services;
-    }
-
-    /// <summary>
-    /// Configures JSON directory-based error localization, scanning and loading all translation files
-    /// (e.g., "errors.ar.json", "errors.ar-EG.json", "errors.json") into a unified in-memory dictionary.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <param name="directoryPath">Path to the directory containing JSON translation files.</param>
-    /// <param name="searchPattern">File search pattern (default: "*.json").</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddKyrolusJsonErrorLocalizer(
-        this IServiceCollection services,
-        string directoryPath,
-        string searchPattern = "*.json")
-    {
-        services.AddSingleton<IKyrolusErrorLocalizer>(_ => new KyrolusJsonErrorLocalizer(directoryPath, searchPattern));
-        return services;
-    }
 }

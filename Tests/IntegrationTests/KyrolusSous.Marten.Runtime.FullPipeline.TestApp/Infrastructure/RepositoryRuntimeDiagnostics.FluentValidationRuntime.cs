@@ -125,13 +125,13 @@ public static partial class RepositoryRuntimeDiagnostics
         var invalidFailures = await requestValidator.ValidateAsync(invalidRequest, cancellationToken).ConfigureAwait(false);
         if (invalidFailures.Count >= 7 &&
             invalidFailures.Any(failure => failure.PropertyName == nameof(RuntimeFluentValidationProbeRequest.Name) &&
-                                           failure.Group == "api" &&
+                                           failure.Groups is { Count: > 0 } && failure.Groups.Contains("api") &&
                                            failure.Severity == KyrolusValidationSeverity.Warning &&
                                            failure.MessageKey == "name.required") &&
             invalidFailures.Any(failure => failure.PropertyName == nameof(RuntimeFluentValidationProbeRequest.CreatedBy) &&
-                                           failure.Group == "audit") &&
+                                           failure.Groups is { Count: > 0 } && failure.Groups.Contains("audit")) &&
             invalidFailures.Any(failure => failure.PropertyName == nameof(RuntimeFluentValidationProbeRequest.Id) &&
-                                           failure.Group == "identity") &&
+                                           failure.Groups is { Count: > 0 } && failure.Groups.Contains("identity")) &&
             invalidFailures.Any(failure => failure.PropertyName == nameof(RuntimeFluentValidationProbeRequest.Description) &&
                                            failure.Metadata is { Count: > 0 } &&
                                            failure.Metadata.ContainsKey("MaxLength")) &&
@@ -147,7 +147,7 @@ public static partial class RepositoryRuntimeDiagnostics
         if (strictFailures.Count == 1 &&
             strictFailures[0].PropertyName == nameof(RuntimeFluentValidationProbeRequest.StrictUrl) &&
             strictFailures[0].Severity == KyrolusValidationSeverity.Info &&
-            strictFailures[0].Group == "strict-group" &&
+            strictFailures[0].Groups is { Count: > 0 } && strictFailures[0].Groups!.Contains("strict-group") &&
             strictFailures[0].RuleSet == "strict")
         {
             checks++;

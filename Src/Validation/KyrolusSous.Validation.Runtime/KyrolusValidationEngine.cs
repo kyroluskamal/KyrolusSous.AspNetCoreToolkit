@@ -2,14 +2,14 @@ namespace KyrolusSous.Validation.Runtime;
 
 public sealed class KyrolusValidationEngine(
     IServiceProvider serviceProvider,
-    IKyrolusValidationErrorLocalizer? localizer = null,
+    IKyrolusLocalizer? localizer = null,
     IKyrolusValidationCacheStore? cacheStore = null,
     IKyrolusValidationCacheKeyProvider? cacheKeyProvider = null,
     IKyrolusValidationErrorCodeMapper? errorCodeMapper = null,
     IKyrolusValidationFieldPathMapper? fieldPathMapper = null) : IKyrolusValidationEngine
 {
     private readonly IServiceProvider serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
-    private readonly IKyrolusValidationErrorLocalizer? localizer = localizer;
+    private readonly IKyrolusLocalizer? localizer = localizer;
     private readonly IKyrolusValidationCacheStore? cacheStore = cacheStore;
     private readonly IKyrolusValidationCacheKeyProvider? cacheKeyProvider = cacheKeyProvider;
     private readonly IKyrolusValidationErrorCodeMapper? errorCodeMapper = errorCodeMapper;
@@ -37,7 +37,7 @@ public sealed class KyrolusValidationEngine(
         {
             var cachedResult = localizer is null
                 ? cached
-                : [.. cached.Select(failure => failure with { ErrorMessage = localizer.Localize(failure) })];
+                : [.. cached.Select(failure => failure with { ErrorMessage = LocalizeFailure(localizer, failure) })];
 
             await RunAfterHooks(request, effectiveContext, cachedResult, cancellationToken).ConfigureAwait(false);
             return cachedResult;
@@ -91,7 +91,7 @@ public sealed class KyrolusValidationEngine(
         }
 
         var localized = filtered
-            .Select(failure => failure with { ErrorMessage = localizer.Localize(failure) })
+            .Select(failure => failure with { ErrorMessage = LocalizeFailure(localizer, failure) })
             .ToArray();
         await RunAfterHooks(request, effectiveContext, localized, cancellationToken).ConfigureAwait(false);
         return localized;
@@ -271,11 +271,24 @@ public sealed class KyrolusValidationEngine(
             await hook.OnAfterAsync(request, context, failures, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Localizes a failure's error message. The translation key is
+    /// <see cref="KyrolusValidationFailure.MessageKey"/>, falling back to
+    /// <see cref="KyrolusValidationFailure.ErrorCode"/> then <see cref="KyrolusValidationFailure.ErrorMessage"/>.
+    /// The failure itself is passed as the interpolation source, so a template like
+    /// "Value {AttemptedValue} for {PropertyName} is invalid" is filled in automatically.
+    /// </summary>
+    private static string LocalizeFailure(IKyrolusLocalizer localizer, KyrolusValidationFailure failure)
+    {
+        var key = failure.MessageKey ?? failure.ErrorCode ?? failure.ErrorMessage;
+        return localizer.GetStringOrDefault(key, failure, failure.ErrorMessage);
+    }
+
     private static KyrolusValidationFailure NormalizeFailure(KyrolusValidationFailure failure)
     {
         var ruleSet = string.IsNullOrWhiteSpace(failure.RuleSet) ? KyrolusValidationDefaults.DefaultRuleSet : failure.RuleSet;
-        var group = string.IsNullOrWhiteSpace(failure.Group) ? KyrolusValidationDefaults.DefaultGroup : failure.Group;
-        return failure with { RuleSet = ruleSet, Group = group };
+        var groups = failure.Groups is { Count: > 0 } ? failure.Groups : [KyrolusValidationDefaults.DefaultGroup];
+        return failure with { RuleSet = ruleSet, Groups = groups };
     }
 
     private KyrolusValidationFailure[] ApplyMappings(
@@ -356,7 +369,9 @@ public sealed class KyrolusValidationEngine(
             query = query.Where(failure => context.RuleSets.Contains(failure.RuleSet ?? KyrolusValidationDefaults.DefaultRuleSet, StringComparer.OrdinalIgnoreCase));
 
         if (context.Groups is { Count: > 0 })
-            query = query.Where(failure => context.Groups.Contains(failure.Group ?? KyrolusValidationDefaults.DefaultGroup, StringComparer.OrdinalIgnoreCase));
+            query = query.Where(failure =>
+                (failure.Groups is { Count: > 0 } ? failure.Groups : [KyrolusValidationDefaults.DefaultGroup])
+                    .Any(g => context.Groups.Contains(g, StringComparer.OrdinalIgnoreCase)));
 
         return [.. query];
     }

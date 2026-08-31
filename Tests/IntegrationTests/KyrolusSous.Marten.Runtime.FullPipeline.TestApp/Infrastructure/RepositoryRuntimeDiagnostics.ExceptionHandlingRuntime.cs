@@ -33,8 +33,10 @@ using KyrolusSous.ExceptionHandling.Runtime;
 using KyrolusSous.ExceptionHandling.Runtime.Helpers;
 using KyrolusSous.ExceptionHandling.Runtime.Handlers;
 using KyrolusSous.ExceptionHandling.Runtime.Interfaces;
-using KyrolusSous.ExceptionHandling.Runtime.Localizers;
 using KyrolusSous.ExceptionHandling.Runtime.Mapping;
+using KyrolusSous.Localization.Abstractions;
+using KyrolusSous.Localization.Json;
+using KyrolusSous.Localization.StringLocalizer;
 using KyrolusSous.ExceptionHandling.Runtime.Writers;
 using KyrolusSous.Marten.Runtime.FullPipeline.TestApp.Models;
 using KyrolusSous.Repositories.Marten.Abstractions.Authorization;
@@ -95,18 +97,20 @@ public static partial class RepositoryRuntimeDiagnostics
         using var scope = serviceProvider.CreateScope();
         var scoped = scope.ServiceProvider;
 
-        var dictionaryLocalizer = new KyrolusDictionaryErrorLocalizer(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["bad_request"] = "Localized bad request"
-        });
-        if (dictionaryLocalizer.Localize("bad_request", "fallback", CultureInfo.GetCultureInfo("en-US")) == "Localized bad request" &&
-            dictionaryLocalizer.Localize(string.Empty, "fallback", CultureInfo.GetCultureInfo("en-US")) == "fallback")
+        var dictionaryLocalizer = new KyrolusDictionaryLocalizer(
+            new Dictionary<string, IReadOnlyDictionary<string, string>>(),
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["bad_request"] = "Localized bad request"
+            });
+        if (dictionaryLocalizer.GetStringOrDefault("bad_request", "fallback", CultureInfo.GetCultureInfo("en-US")) == "Localized bad request" &&
+            dictionaryLocalizer.GetStringOrDefault(string.Empty, "fallback", CultureInfo.GetCultureInfo("en-US")) == "fallback")
         {
             checks++;
         }
 
-        var nullLocalizer = new KyrolusNullErrorLocalizer();
-        if (nullLocalizer.Localize("code", "fallback", CultureInfo.InvariantCulture) == "fallback")
+        IKyrolusLocalizer? nullLocalizer = null;
+        if (nullLocalizer.GetStringOrDefault("code", "fallback", CultureInfo.InvariantCulture) == "fallback")
         {
             checks++;
         }
@@ -115,9 +119,9 @@ public static partial class RepositoryRuntimeDiagnostics
         {
             ["code.one"] = "Translated one"
         });
-        var stringErrorLocalizer = new KyrolusStringLocalizerErrorLocalizer(stringLocalizer);
-        if (stringErrorLocalizer.Localize("code.one", "fallback", CultureInfo.GetCultureInfo("en-US")) == "Translated one" &&
-            stringErrorLocalizer.Localize("unknown.code", "fallback", CultureInfo.GetCultureInfo("en-US")) == "fallback")
+        var stringErrorLocalizer = new KyrolusStringLocalizerAdapter(stringLocalizer);
+        if (stringErrorLocalizer.GetStringOrDefault("code.one", "fallback", CultureInfo.GetCultureInfo("en-US")) == "Translated one" &&
+            stringErrorLocalizer.GetStringOrDefault("unknown.code", "fallback", CultureInfo.GetCultureInfo("en-US")) == "fallback")
         {
             checks++;
         }
@@ -345,13 +349,15 @@ public static partial class RepositoryRuntimeDiagnostics
         checks++;
 
         using var dictionaryLocalizationProvider = new ServiceCollection()
-            .AddKyrolusExceptionHandlingLocalization(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["localized.code"] = "Localized title"
-            })
+            .AddKyrolusDictionaryLocalization(
+                new Dictionary<string, IReadOnlyDictionary<string, string>>(),
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["localized.code"] = "Localized title"
+                })
             .BuildServiceProvider();
-        if (dictionaryLocalizationProvider.GetRequiredService<IKyrolusErrorLocalizer>()
-            .Localize("localized.code", "fallback", CultureInfo.InvariantCulture) == "Localized title")
+        if (dictionaryLocalizationProvider.GetRequiredService<IKyrolusLocalizer>()
+            .GetStringOrDefault("localized.code", "fallback", CultureInfo.InvariantCulture) == "Localized title")
         {
             checks++;
         }
@@ -362,10 +368,10 @@ public static partial class RepositoryRuntimeDiagnostics
                 {
                     ["typed.code"] = "Typed title"
                 }))
-            .AddKyrolusExceptionHandlingLocalization<RuntimeExceptionResource>()
+            .AddKyrolusStringLocalizerLocalization<RuntimeExceptionResource>()
             .BuildServiceProvider();
-        if (typedLocalizationProvider.GetRequiredService<IKyrolusErrorLocalizer>()
-            .Localize("typed.code", "fallback", CultureInfo.InvariantCulture) == "Typed title")
+        if (typedLocalizationProvider.GetRequiredService<IKyrolusLocalizer>()
+            .GetStringOrDefault("typed.code", "fallback", CultureInfo.InvariantCulture) == "Typed title")
         {
             checks++;
         }
@@ -386,11 +392,13 @@ public static partial class RepositoryRuntimeDiagnostics
 
         var localizedMappingService = new KyrolusExceptionMappingService(
             [new KyrolusFrameworkExceptionMapper()]);
-        var testLocalizer = new KyrolusDictionaryErrorLocalizer(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            [KyrolusErrorCodes.Unauthorized] = "Localized unauthorized",
-            [$"{KyrolusErrorCodes.Unauthorized}.detail"] = "Localized unauthorized detail"
-        });
+        var testLocalizer = new KyrolusDictionaryLocalizer(
+            new Dictionary<string, IReadOnlyDictionary<string, string>>(),
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [KyrolusErrorCodes.Unauthorized] = "Localized unauthorized",
+                [$"{KyrolusErrorCodes.Unauthorized}.detail"] = "Localized unauthorized detail"
+            });
         var testLocalizingTranslator = new KyrolusExceptionTranslator(
             localizedMappingService,
             metadataSanitizer,

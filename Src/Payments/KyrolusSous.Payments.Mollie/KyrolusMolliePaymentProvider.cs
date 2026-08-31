@@ -122,15 +122,25 @@ public sealed class KyrolusMolliePaymentProvider(
     {
         try
         {
-            var payload = new
+            // Mollie treats an omitted `amount` as "refund the full remaining balance" - sending an
+            // explicit 0.00 instead would ask Mollie to refund nothing.
+            object payload;
+            if (request.Amount.HasValue)
             {
-                amount = new
+                payload = new
                 {
-                    currency = (request.Currency ?? "EUR").ToUpperInvariant(),
-                    value = (request.Amount ?? 0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
-                },
-                description = request.Reason ?? "Refund request"
-            };
+                    amount = new
+                    {
+                        currency = (request.Currency ?? "EUR").ToUpperInvariant(),
+                        value = request.Amount.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+                    },
+                    description = request.Reason ?? "Refund request"
+                };
+            }
+            else
+            {
+                payload = new { description = request.Reason ?? "Refund request" };
+            }
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{_options.BaseUrl}/payments/{request.TransactionId}/refunds")
             {

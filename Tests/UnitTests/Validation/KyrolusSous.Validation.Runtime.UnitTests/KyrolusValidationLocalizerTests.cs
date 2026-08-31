@@ -2,122 +2,99 @@ namespace KyrolusSous.Validation.Runtime.UnitTests;
 
 public class KyrolusValidationLocalizerTests
 {
-    private static readonly Dictionary<string, IReadOnlyDictionary<string, string>> CultureMapData = new()
+    private sealed class TestDictionaryLocalizer(IReadOnlyDictionary<string, string> translations) : IKyrolusLocalizer
     {
-        ["ar-EG"] = new Dictionary<string, string>
+        public KyrolusLocalizationResult GetString(string key, CultureInfo? culture = null) =>
+            translations.TryGetValue(key, out var value)
+                ? new KyrolusLocalizationResult(value, ResourceNotFound: false)
+                : new KyrolusLocalizationResult(key, ResourceNotFound: true);
+
+        public KyrolusLocalizationResult GetString(string key, object? arguments, CultureInfo? culture = null)
         {
-            ["ERR_UNDERAGE"] = "عفواً، يجب أن يكون عمرك 18 عاماً على الأقل",
-            ["REQUIRED_FIELD"] = "هذا الحقل مطلوب"
-        },
-        ["en-US"] = new Dictionary<string, string>
-        {
-            ["ERR_UNDERAGE"] = "Sorry, you must be at least 18 years old",
-            ["REQUIRED_FIELD"] = "This field is required"
+            var result = GetString(key, culture);
+            if (result.ResourceNotFound || arguments is null) return result;
+            return result with { Value = Format(result.Value, arguments) };
         }
-    };
-    private static readonly Dictionary<string, string> InvariantMapData = new()
-    {
-        ["ERR_UNDERAGE"] = "Underage error",
-        ["REQUIRED_FIELD"] = "Required field error"
-    };
-    #region KyrolusNullValidationErrorLocalizer
-    [Fact(DisplayName = "KyrolusNullValidationErrorLocalizer should return the errors without translation")]
-    public void KyrolusNullValidationErrorLocalizer_ShouldReturn_Errors_Without_Translations()
-    {
-        var failures = new KyrolusValidationFailure("name", "name is required");
-        var localizer = new KyrolusNullValidationErrorLocalizer();
-        localizer.Localize(failures).ShouldBe("name is required");
-    }
-    #endregion
 
-    #region KyrolusDictionaryValidationErrorLocalizer
-    [Fact(DisplayName = "KyrolusDictionaryValidationErrorLocalizer should throw error if the culterMaps is null")]
-    public void KyrolusDictionaryValidationErrorLocalizer_ShouldThrowErrorIfCultureMapsIsNull(){
-        var exception = Should.Throw<ArgumentNullException>(()=> new KyrolusDictionaryValidationErrorLocalizer(null!));
-        exception.ParamName.ShouldBe("cultureMaps");
-        exception.Message.ShouldContain("You should add at least one culture map");
-    }
-    [Fact(DisplayName = "KyrolusDictionaryValidationErrorLocalizer should return the error translation by messageKey if found")]
-    public void KyrolusDictionaryValidationErrorLocalizer_ShouldReturnErrorTranslationByMessageKey()
-    {
-        var localizer = new KyrolusDictionaryValidationErrorLocalizer(CultureMapData);
-        var failures = new KyrolusValidationFailure("name", "This field is required", MessageKey: "REQUIRED_FIELD");
-
-        var error = localizer.Localize(failures, new CultureInfo("ar-EG"));
-        error.ShouldBe("هذا الحقل مطلوب");
-    }
-    [Fact(DisplayName = "KyrolusDictionaryValidationErrorLocalizer should return the error translation by ErrorCode if found")]
-    public void KyrolusDictionaryValidationErrorLocalizer_ShouldReturnErrorTranslationBy_ErrorCode()
-    {
-        var localizer = new KyrolusDictionaryValidationErrorLocalizer(CultureMapData);
-        var failures = new KyrolusValidationFailure("name", "This field is required", ErrorCode: "REQUIRED_FIELD");
-
-        var error = localizer.Localize(failures, new CultureInfo("ar-EG"));
-        error.ShouldBe("هذا الحقل مطلوب");
-    }
-    [Fact(DisplayName = "KyrolusDictionaryValidationErrorLocalizer should return the error original message if the invariantMap is null and the lang is not found in the culturemap")]
-    public void KyrolusDictionaryValidationErrorLocalizer_ShouldReturnOriginalError_if_InvariantMapIsNUll_and_Lang_doesnot_exist()
-    {
-        var localizer = new KyrolusDictionaryValidationErrorLocalizer(CultureMapData);
-        var failures = new KyrolusValidationFailure("name", "name is required", ErrorCode: "REQUIRED_FIELD");
-
-        var error = localizer.Localize(failures, new CultureInfo("fr-FR"));
-        error.ShouldBe("name is required");
-    }
-    [Fact(DisplayName = "KyrolusDictionaryValidationErrorLocalizer should return the error original message if the key or errorcode is not found")]
-    public void KyrolusDictionaryValidationErrorLocalizer_ShouldReturnOriginalError_if_KeyOrErrorCode_is_Not_Found()
-    {
-        var localizer = new KyrolusDictionaryValidationErrorLocalizer(CultureMapData);
-        var failures = new KyrolusValidationFailure("name", "name is required");
-
-        var error = localizer.Localize(failures, new CultureInfo("fr-FR"));
-        error.ShouldBe("name is required");
-    }
-    [Fact(DisplayName = "KyrolusDictionaryValidationErrorLocalizer should return the error translation from invariantMap if the language ")]
-    public void KyrolusDictionaryValidationErrorLocalizer_ShouldReturnErrorTranslation_FromInvariantMap_IF_LangDoesnot_exist()
-    {
-        var localizer = new KyrolusDictionaryValidationErrorLocalizer(CultureMapData, InvariantMapData);
-        var failures = new KyrolusValidationFailure("name", "This field is required", ErrorCode: "REQUIRED_FIELD");
-
-        var error = localizer.Localize(failures, new CultureInfo("fr-FR"));
-        error.ShouldBe("Required field error");
+        public string Format(string template, object? arguments) => KyrolusLocalizationFormatter.Format(template, arguments);
     }
 
-    [Fact(DisplayName = "KyrolusDictionaryValidationErrorLocalizer should use CurrentUICulture when culture parameter is null")]
-    public void KyrolusDictionaryValidationErrorLocalizer_ShouldUseCurrentUICulture_WhenCultureIsNull()
+    private sealed record ProbeRequest;
+
+    // Assembly-scanning tests elsewhere in this project (AddKyrolusValidationRuntimeScanning) reflect
+    // over every IKyrolusRequestValidator<> in the assembly and construct it via DI, so this needs a
+    // DI-resolvable (default-valued) constructor even though our own tests always pass failures explicitly.
+    private sealed class ProbeValidator(IReadOnlyList<KyrolusValidationFailure>? failures = null) : IKyrolusRequestValidator<ProbeRequest>
     {
-        var originalCulture = CultureInfo.CurrentUICulture;
-        try
+        public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(ProbeRequest request, CancellationToken cancellationToken = default)
+            => ValueTask.FromResult(failures ?? []);
+    }
+
+    private static async Task<KyrolusValidationFailure> RunSingleFailureAsync(
+        KyrolusValidationFailure failure,
+        IKyrolusLocalizer localizer)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IKyrolusRequestValidator<ProbeRequest>>(new ProbeValidator([failure]));
+        using var serviceProvider = services.BuildServiceProvider();
+
+        var engine = new KyrolusValidationEngine(serviceProvider, localizer);
+        var result = await engine.ValidateAsync(new ProbeRequest());
+
+        return result[0];
+    }
+
+    [Fact(DisplayName = "Localization prefers MessageKey over ErrorCode and ErrorMessage")]
+    public async Task Localize_Prefers_MessageKey()
+    {
+        var localizer = new TestDictionaryLocalizer(new Dictionary<string, string>
         {
-            CultureInfo.CurrentUICulture = new CultureInfo("ar-EG");
-            var localizer = new KyrolusDictionaryValidationErrorLocalizer(CultureMapData);
-            var failure = new KyrolusValidationFailure("name", "This field is required", MessageKey: "REQUIRED_FIELD");
+            ["by.key"] = "Localized by key",
+            ["by.code"] = "Localized by code"
+        });
 
-            var error = localizer.Localize(failure);
-            error.ShouldBe("هذا الحقل مطلوب");
-        }
-        finally
-        {
-            CultureInfo.CurrentUICulture = originalCulture;
-        }
+        var failure = new KyrolusValidationFailure("Name", "original message", ErrorCode: "by.code", MessageKey: "by.key");
+        var result = await RunSingleFailureAsync(failure, localizer);
+
+        result.ErrorMessage.ShouldBe("Localized by key");
     }
 
-    [Fact(DisplayName = "KyrolusDictionaryValidationErrorLocalizer should return error translation by ErrorMessage if MessageKey and ErrorCode are null")]
-    public void KyrolusDictionaryValidationErrorLocalizer_ShouldReturnErrorTranslationBy_ErrorMessage()
+    [Fact(DisplayName = "Localization falls back to ErrorCode when MessageKey is absent")]
+    public async Task Localize_FallsBackTo_ErrorCode()
     {
-        var customCultureMap = new Dictionary<string, IReadOnlyDictionary<string, string>>
+        var localizer = new TestDictionaryLocalizer(new Dictionary<string, string>
         {
-            ["ar-EG"] = new Dictionary<string, string>
-            {
-                ["This field is required"] = "هذا الحقل مطلوب"
-            }
-        };
+            ["by.code"] = "Localized by code"
+        });
 
-        var localizer = new KyrolusDictionaryValidationErrorLocalizer(customCultureMap);
-        var failure = new KyrolusValidationFailure("name", "This field is required");
+        var failure = new KyrolusValidationFailure("Name", "original message", ErrorCode: "by.code");
+        var result = await RunSingleFailureAsync(failure, localizer);
 
-        var error = localizer.Localize(failure, new CultureInfo("ar-EG"));
-        error.ShouldBe("هذا الحقل مطلوب");
+        result.ErrorMessage.ShouldBe("Localized by code");
     }
-    #endregion
+
+    [Fact(DisplayName = "Localization falls back to the original ErrorMessage when no MessageKey, ErrorCode, or translation is found")]
+    public async Task Localize_FallsBackTo_OriginalErrorMessage_WhenNoTranslationFound()
+    {
+        var localizer = new TestDictionaryLocalizer(new Dictionary<string, string>());
+
+        var failure = new KyrolusValidationFailure("Name", "original message");
+        var result = await RunSingleFailureAsync(failure, localizer);
+
+        result.ErrorMessage.ShouldBe("original message");
+    }
+
+    [Fact(DisplayName = "Localization interpolates template placeholders from the failure itself")]
+    public async Task Localize_Interpolates_FailureProperties()
+    {
+        var localizer = new TestDictionaryLocalizer(new Dictionary<string, string>
+        {
+            ["min.length"] = "Field {PropertyName} must be at least {AttemptedValue} chars"
+        });
+
+        var failure = new KyrolusValidationFailure("Username", "too short", MessageKey: "min.length", AttemptedValue: "abc");
+        var result = await RunSingleFailureAsync(failure, localizer);
+
+        result.ErrorMessage.ShouldBe("Field Username must be at least abc chars");
+    }
 }

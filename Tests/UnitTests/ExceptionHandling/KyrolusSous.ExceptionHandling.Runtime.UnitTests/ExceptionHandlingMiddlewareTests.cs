@@ -23,7 +23,7 @@ public class ExceptionHandlingMiddlewareTests
         var mappingService = new KyrolusExceptionMappingService(mappers);
         var sanitizer = new KyrolusDefaultErrorMetadataSanitizer(optionsWrapper);
         var environment = new TestHostEnvironment("Development");
-        var translator = new KyrolusExceptionTranslator(mappingService, sanitizer, environment, optionsWrapper, new KyrolusNullErrorLocalizer());
+        var translator = new KyrolusExceptionTranslator(mappingService, sanitizer, environment, optionsWrapper);
         var writer = new KyrolusJsonErrorResponseWriter();
 
         return new KyrolusExceptionHandlingDependencies(

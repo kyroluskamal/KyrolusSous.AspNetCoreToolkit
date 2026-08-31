@@ -25,7 +25,7 @@ public sealed class KyrolusSquarePaymentProvider(
     {
         try
         {
-            var amountCents = (long)Math.Round(request.Amount * 100, MidpointRounding.AwayFromZero);
+            var amountCents = KyrolusCurrencyHelper.ToSmallestUnit(request.Amount, request.Currency);
             var payload = new
             {
                 idempotency_key = Guid.NewGuid().ToString("N"),
@@ -124,7 +124,8 @@ public sealed class KyrolusSquarePaymentProvider(
     {
         try
         {
-            var amountCents = (long)Math.Round((request.Amount ?? 0) * 100);
+            var refundCurrency = request.Currency ?? "USD";
+            var amountCents = KyrolusCurrencyHelper.ToSmallestUnit(request.Amount ?? 0, refundCurrency);
             var payload = new
             {
                 idempotency_key = Guid.NewGuid().ToString("N"),
@@ -132,7 +133,7 @@ public sealed class KyrolusSquarePaymentProvider(
                 amount_money = new
                 {
                     amount = amountCents,
-                    currency = (request.Currency ?? "USD").ToUpperInvariant()
+                    currency = refundCurrency.ToUpperInvariant()
                 },
                 reason = request.Reason ?? "Customer refund"
             };

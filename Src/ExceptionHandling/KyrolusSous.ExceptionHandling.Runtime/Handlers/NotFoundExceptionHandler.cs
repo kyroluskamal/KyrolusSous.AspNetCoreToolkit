@@ -8,7 +8,7 @@ public class NotFoundException : Exception
 
 public class NotFoundExceptionHandler(
     ILogger<NotFoundExceptionHandler> logger,
-    IKyrolusErrorLocalizer? localizer = null,
+    IKyrolusLocalizer? localizer = null,
     IKyrolusErrorMetadataSanitizer? sanitizer = null,
     KyrolusHttpErrorContextFactory? contextFactory = null)
     : KyrolusExceptionHandlerBase<NotFoundException>(

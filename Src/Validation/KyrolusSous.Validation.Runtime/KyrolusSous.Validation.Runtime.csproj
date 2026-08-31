@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\KyrolusSous.Validation.Abstractions\KyrolusSous.Validation.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Localization\KyrolusSous.Localization.Abstractions\KyrolusSous.Localization.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

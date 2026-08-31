@@ -2,7 +2,7 @@ namespace KyrolusSous.ExceptionHandling.Runtime.Handlers;
 
 public class HttpRequestExceptionHandler(
     ILogger<HttpRequestExceptionHandler> logger,
-    IKyrolusErrorLocalizer? localizer = null,
+    IKyrolusLocalizer? localizer = null,
     IKyrolusErrorMetadataSanitizer? sanitizer = null,
     KyrolusHttpErrorContextFactory? contextFactory = null)
     : KyrolusExceptionHandlerBase<HttpRequestException>(

@@ -359,11 +359,19 @@
       "kind": "unit",
       "services": [],
       "ci": true
+    },
+    {
+      "name": "Localization - Unit",
+      "project": "Tests/UnitTests/Localization/KyrolusSous.Localization.UnitTests/KyrolusSous.Localization.UnitTests.csproj",
+      "kind": "unit",
+      "services": [],
+      "ci": true
     }
   ],
 
   "docs": {
     "projectFamilies": [
+      { "prefix": "Localization", "title": "Localization" },
       { "prefix": "Logging", "title": "Logging" },
       { "prefix": "Mediator", "title": "Mediator" },
       { "prefix": "Validation", "title": "Validation" },
