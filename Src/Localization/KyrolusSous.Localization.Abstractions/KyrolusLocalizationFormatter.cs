@@ -1,5 +1,3 @@
-using System.Reflection;
-
 namespace KyrolusSous.Localization.Abstractions;
 
 /// <summary>
@@ -14,37 +12,45 @@ public static class KyrolusLocalizationFormatter
         if (string.IsNullOrEmpty(template) || arguments is null || !template.Contains('{'))
             return template;
 
-        if (arguments is IDictionary<string, object?> dictObj)
+        return arguments switch
         {
-            var result = template;
-            foreach (var (k, v) in dictObj)
-                result = result.Replace($"{{{k}}}", v?.ToString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-            return result;
-        }
+            IEnumerable<KeyValuePair<string, object?>> namedArgs
+                => ReplaceNamed(template, namedArgs),
 
-        if (arguments is IDictionary<string, string> dictStr)
-        {
-            var result = template;
-            foreach (var (k, v) in dictStr)
-                result = result.Replace($"{{{k}}}", v ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-            return result;
-        }
+            IEnumerable<KeyValuePair<string, string>> namedArgs
+                => ReplaceNamed(template, namedArgs),
 
-        if (arguments is object?[] array)
-        {
-            for (var i = 0; i < array.Length; i++)
-                template = template.Replace($"{{{i}}}", array[i]?.ToString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-            return template;
-        }
+            object?[] positionalArgs
+                => ReplacePositional(template, positionalArgs),
 
-        var properties = arguments.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
-        var formattedResult = template;
-        foreach (var prop in properties)
-        {
-            var val = prop.GetValue(arguments)?.ToString() ?? string.Empty;
-            formattedResult = formattedResult.Replace($"{{{prop.Name}}}", val, StringComparison.OrdinalIgnoreCase);
-        }
-
-        return formattedResult;
+            _ => throw new NotSupportedException(
+                $"Cannot format placeholders from an argument of type '{arguments.GetType()}'. " +
+                "Pass an IDictionary<string, object?>, IDictionary<string, string>, " +
+                "another IEnumerable<KeyValuePair<string, object?>>, or an object?[] " +
+                "for positional {{0}}/{{1}}/... placeholders. Arbitrary POCOs/anonymous " +
+                "objects are not read via reflection because GetType().GetProperties() " +
+                "is not trim/Native-AOT safe.")
+        };
     }
+
+    private static string ReplaceNamed<T>(string template, IEnumerable<KeyValuePair<string, T>> arguments)
+    {
+        foreach (var (key, value) in arguments)
+            template = Replace(template, key, value);
+        return template;
+    }
+
+    private static string ReplacePositional(string template, object?[] arguments)
+    {
+        for (var i = 0; i < arguments.Length; i++)
+            template = Replace(template, i, arguments[i]);
+
+        return template;
+    }
+
+    private static string Replace(string template, string key, object? value)
+    => template.Replace($"{{{key}}}", value?.ToString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+    private static string Replace(string template, int index, object? value)
+    => template.Replace($"{{{index}}}", value?.ToString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
 }

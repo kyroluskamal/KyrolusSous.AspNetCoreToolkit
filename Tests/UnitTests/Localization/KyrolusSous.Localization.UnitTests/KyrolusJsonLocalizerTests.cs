@@ -101,7 +101,7 @@ public class KyrolusJsonLocalizerTests
         }
     }
 
-    [Fact(DisplayName = "KyrolusJsonLocalizer formats template parameters using dictionaries and POCOs")]
+    [Fact(DisplayName = "KyrolusJsonLocalizer formats template parameters using dictionaries and KeyValuePair sequences")]
     public void KyrolusJsonLocalizer_FormatsTemplatePlaceholders()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "KyrolusLocFormatTest_" + Guid.NewGuid());
@@ -128,10 +128,15 @@ public class KyrolusJsonLocalizerTests
             res.ResourceNotFound.ShouldBeFalse();
             res.Value.ShouldBe("Field Username must have at least 5 chars, got 'abc'");
 
-            // POCO arguments
-            var pocoArgs = new { PropertyName = "Password", Min = 8, AttemptedValue = "123" };
-            var resPoco = localizer.GetString("ERR_MIN", pocoArgs, new CultureInfo("en-US"));
-            resPoco.Value.ShouldBe("Field Password must have at least 8 chars, got '123'");
+            // KeyValuePair sequence arguments (reflection-free alternative to an anonymous object)
+            KeyValuePair<string, object?>[] namedArgs =
+            [
+                new("PropertyName", "Password"),
+                new("Min", 8),
+                new("AttemptedValue", "123")
+            ];
+            var resNamed = localizer.GetString("ERR_MIN", namedArgs, new CultureInfo("en-US"));
+            resNamed.Value.ShouldBe("Field Password must have at least 8 chars, got '123'");
         }
         finally
         {
@@ -180,9 +185,21 @@ public class KyrolusJsonLocalizerTests
         };
 
         var localizer = new KyrolusDictionaryLocalizer(cultureMap);
-        var res = localizer.GetString("ERR_MAX", new { PropertyName = "العنوان", Max = 100 }, new CultureInfo("ar-EG"));
+        var res = localizer.GetString(
+            "ERR_MAX",
+            new Dictionary<string, object?> { ["PropertyName"] = "العنوان", ["Max"] = 100 },
+            new CultureInfo("ar-EG"));
 
         res.ResourceNotFound.ShouldBeFalse();
         res.Value.ShouldBe("الحقل العنوان تجاوز الحد الأقصى 100");
+    }
+
+    [Fact(DisplayName = "KyrolusLocalizationFormatter rejects POCO/anonymous arguments instead of reading them via reflection")]
+    public void KyrolusLocalizationFormatter_RejectsArbitraryObjects()
+    {
+        var ex = Should.Throw<NotSupportedException>(() =>
+            KyrolusLocalizationFormatter.Format("Field {PropertyName}", new { PropertyName = "Username" }));
+
+        ex.Message.ShouldContain("IDictionary<string, object?>");
     }
 }

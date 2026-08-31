@@ -1,5 +1,3 @@
-using KyrolusSous.Localization.Abstractions;
-
 namespace KyrolusSous.Localization.Json;
 
 /// <summary>

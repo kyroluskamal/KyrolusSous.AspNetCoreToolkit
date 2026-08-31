@@ -66,14 +66,14 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Mediator.Runtime - Unit | unit | 105 | none | yes |
 | Mediator.Generator - Unit | unit | 14 | none | yes |
 | Mediator.Reflection - Unit | unit | 52 | none | yes |
-| Validation.Runtime - Unit | unit | 90 | none | yes |
+| Validation.Runtime - Unit | unit | 82 | none | yes |
 | Validation.Fluent - Unit | unit | 25 | none | yes |
 | Validation.FluentValidation - Unit | unit | 17 | none | yes |
 | Validation.FluentValidation.Scanning - Unit | unit | 2 | none | yes |
 | Validation.Generator - Unit | unit | 6 | none | yes |
 | Validation.DataAnnotations - Unit | unit | 8 | none | yes |
 | Validation.DataAnnotations.Generator - Unit | unit | 1 | none | yes |
-| ExceptionHandling.Runtime - Unit | unit | 148 | none | yes |
+| ExceptionHandling.Runtime - Unit | unit | 136 | none | yes |
 | ExceptionHandling.ProblemDetails - Unit | unit | 5 | none | yes |
 | ExceptionHandling.EntityFramework - Unit | unit | 6 | none | yes |
 | ExceptionHandling.FluentValidation - Unit | unit | 6 | none | yes |
@@ -105,8 +105,8 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | EndpointKit - Unit | unit | 64 | none | yes |
 | DataProtection - Unit | unit | 33 | none | yes |
 | Payments - Unit | unit | 57 | none | yes |
-| Localization - Unit | unit | 5 | none | yes |
-| **Total** | | **2406** | | |
+| Localization - Unit | unit | 10 | none | yes |
+| **Total** | | **2391** | | |
 
 <!-- END:GENERATED:test-suites -->
 

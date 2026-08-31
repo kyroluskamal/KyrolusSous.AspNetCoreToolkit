@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 
 namespace KyrolusSous.Localization.Abstractions;
 
@@ -15,8 +14,7 @@ public static class KyrolusLocalizerExtensions
         string? defaultValue,
         CultureInfo? culture = null)
     {
-        if (localizer is null)
-            return defaultValue;
+        if (localizer is null) return defaultValue;
 
         var result = localizer.GetString(key, culture);
         return result.ResourceNotFound ? defaultValue : result.Value;
@@ -30,8 +28,7 @@ public static class KyrolusLocalizerExtensions
         string? defaultValue,
         CultureInfo? culture = null)
     {
-        if (localizer is null)
-            return defaultValue;
+        if (localizer is null)return defaultValue;
 
         var result = localizer.GetString(key, arguments, culture);
         return result.ResourceNotFound ? defaultValue : result.Value;

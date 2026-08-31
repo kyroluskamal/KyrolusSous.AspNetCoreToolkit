@@ -1,9 +1,3 @@
-using System.Collections.Concurrent;
-using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
-using System.Text.RegularExpressions;
-using KyrolusSous.Localization.Abstractions;
-
 namespace KyrolusSous.Localization.Json;
 
 /// <summary>
@@ -50,10 +44,8 @@ public partial class KyrolusJsonLocalizer : IKyrolusLocalizer
 
         var matchingFiles = new List<string>();
         foreach (var file in candidateFiles)
-        {
             if (IsCategoryMatch(file, _options.RequiredCategory))
                 matchingFiles.Add(file);
-        }
 
         if (matchingFiles.Count == 0)
         {
@@ -61,14 +53,12 @@ public partial class KyrolusJsonLocalizer : IKyrolusLocalizer
             throw new FileNotFoundException($"No JSON localization files{categoryMsg} matching pattern '{_options.FilePattern}' were found in '{_options.DirectoryPath}'.");
         }
 
-        foreach (var file in matchingFiles)
-            LoadFile(file);
+        foreach (var file in matchingFiles) LoadFile(file);
     }
 
     private static bool IsCategoryMatch(string filePath, string? requiredCategory)
     {
-        if (string.IsNullOrWhiteSpace(requiredCategory))
-            return true;
+        if (string.IsNullOrWhiteSpace(requiredCategory)) return true;
 
         var fileName = Path.GetFileName(filePath);
         var segments = fileName.Split('.', StringSplitOptions.RemoveEmptyEntries);
@@ -80,7 +70,7 @@ public partial class KyrolusJsonLocalizer : IKyrolusLocalizer
     {
         var cultureKey = ResolveAndValidateCultureKey(filePath);
         var json = File.ReadAllText(filePath);
-        var translations = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+        var translations = JsonSerializer.Deserialize(json, KyrolusLocalizationJsonContext.Default.DictionaryStringString);
 
         if (translations is null) return;
 
@@ -103,10 +93,8 @@ public partial class KyrolusJsonLocalizer : IKyrolusLocalizer
         var parts = fileName.Split('.');
         string? fileCultureTag = null;
 
-        if (parts.Length > 1)
-        {
-            fileCultureTag = parts[^1];
-        }
+        if (parts.Length > 1) fileCultureTag = parts[^1];
+
         else if (Bcp47CultureRegex().IsMatch(parts[0]))
         {
             // An uncategorized, undotted file (e.g. "messages.json") is only treated as a culture
@@ -116,9 +104,7 @@ public partial class KyrolusJsonLocalizer : IKyrolusLocalizer
 
         if (string.IsNullOrWhiteSpace(fileCultureTag) ||
             string.Equals(fileCultureTag, _options.RequiredCategory, StringComparison.OrdinalIgnoreCase))
-        {
             return string.Empty; // Invariant fallback
-        }
 
         if (_options.StrictBcp47Validation && !Bcp47CultureRegex().IsMatch(fileCultureTag))
             throw new ArgumentException(
@@ -136,13 +122,9 @@ public partial class KyrolusJsonLocalizer : IKyrolusLocalizer
         var targetCulture = culture ?? CultureInfo.CurrentUICulture;
 
         foreach (var cultureCandidate in GetCultureCandidates(targetCulture))
-        {
             if (_cultureTranslations.TryGetValue(cultureCandidate, out var dict) &&
                 dict.TryGetValue(key, out var translation))
-            {
                 return new KyrolusLocalizationResult(translation, ResourceNotFound: false, SearchedLocation: cultureCandidate);
-            }
-        }
 
         return new KyrolusLocalizationResult(key, ResourceNotFound: true);
     }
