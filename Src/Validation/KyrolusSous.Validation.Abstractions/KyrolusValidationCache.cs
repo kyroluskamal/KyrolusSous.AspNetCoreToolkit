@@ -76,11 +76,11 @@ public interface IKyrolusValidationCacheKeyProvider
 /// </summary>
 public interface IKyrolusValidationCacheStore
 {
-    /// <summary>Attempts to retrieve cached validation failures by key.</summary>
-    bool TryGet(string key, out IReadOnlyList<KyrolusValidationFailure> failures);
+    /// <summary>Attempts to retrieve cached validation failures by key. Returns <see langword="null"/> on a cache miss.</summary>
+    ValueTask<IReadOnlyList<KyrolusValidationFailure>?> TryGetAsync(string key, CancellationToken cancellationToken = default);
 
     /// <summary>Stores validation failures in the cache store with specified TTL.</summary>
-    void Set(string key, IReadOnlyList<KyrolusValidationFailure> failures, TimeSpan ttl);
+    ValueTask SetAsync(string key, IReadOnlyList<KyrolusValidationFailure> failures, TimeSpan ttl, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

@@ -291,7 +291,8 @@ public static partial class RepositoryRuntimeDiagnostics
             NegativeCacheTtl = TimeSpan.FromSeconds(1)
         };
         var failuresOnlyFailures = await engine.ValidateAsync(failuresOnlyRequest, cancellationToken).ConfigureAwait(false);
-        if (runtimeCacheStore.TryGet(failuresOnlyRequest.CacheKey!, out var cachedFailuresOnly) &&
+        var cachedFailuresOnly = await runtimeCacheStore.TryGetAsync(failuresOnlyRequest.CacheKey!, cancellationToken).ConfigureAwait(false);
+        if (cachedFailuresOnly is not null &&
             cachedFailuresOnly.Count == failuresOnlyFailures.Count)
         {
             checks++;
@@ -306,7 +307,7 @@ public static partial class RepositoryRuntimeDiagnostics
         };
         var invalidModeFailures = await engine.ValidateAsync(invalidModeRequest, cancellationToken).ConfigureAwait(false);
         if (invalidModeFailures.Count == 0 &&
-            !runtimeCacheStore.TryGet(invalidModeRequest.CacheKey!, out _))
+            await runtimeCacheStore.TryGetAsync(invalidModeRequest.CacheKey!, cancellationToken).ConfigureAwait(false) is null)
         {
             checks++;
         }
@@ -429,15 +430,16 @@ public static partial class RepositoryRuntimeDiagnostics
         }
 
         var directCacheStore = new KyrolusValidationMemoryCacheStore();
-        directCacheStore.Set("validation-cache", firstFailures, TimeSpan.FromMilliseconds(50));
-        if (directCacheStore.TryGet("validation-cache", out var directCacheHit) && directCacheHit.Count == firstFailures.Count)
+        await directCacheStore.SetAsync("validation-cache", firstFailures, TimeSpan.FromMilliseconds(50), cancellationToken).ConfigureAwait(false);
+        var directCacheHit = await directCacheStore.TryGetAsync("validation-cache", cancellationToken).ConfigureAwait(false);
+        if (directCacheHit is not null && directCacheHit.Count == firstFailures.Count)
         {
             checks++;
         }
 
         await Task.Delay(55, cancellationToken).ConfigureAwait(false);
-        if (!directCacheStore.TryGet("validation-cache", out _) &&
-            !directCacheStore.TryGet(string.Empty, out _))
+        if (await directCacheStore.TryGetAsync("validation-cache", cancellationToken).ConfigureAwait(false) is null &&
+            await directCacheStore.TryGetAsync(string.Empty, cancellationToken).ConfigureAwait(false) is null)
         {
             checks++;
         }

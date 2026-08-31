@@ -179,7 +179,7 @@ public class KyrolusValidationEngineTests
         failures1.Count.ShouldBe(1);
         failures1[0].ErrorMessage.ShouldBe("Cached failure message");
 
-        cacheStore.TryGet("user-123-validation", out var cachedFailures).ShouldBeTrue();
+        var cachedFailures = await cacheStore.TryGetAsync("user-123-validation");
         cachedFailures.ShouldNotBeNull();
         cachedFailures.Count.ShouldBe(1);
 
@@ -550,7 +550,7 @@ public class KyrolusValidationEngineTests
         failures.ShouldNotBeNull();
         failures.ShouldBeEmpty();
 
-        cacheStore.TryGet("custom-negative-ttl-key", out var cachedFailures).ShouldBeTrue();
+        var cachedFailures = await cacheStore.TryGetAsync("custom-negative-ttl-key");
         cachedFailures.ShouldNotBeNull();
         cachedFailures.ShouldBeEmpty();
     }
@@ -625,7 +625,7 @@ public class KyrolusValidationEngineTests
 
         // Assert - النتيجة النجاحية اتخزنت في الكاش
         failures.ShouldBeEmpty();
-        cacheStore.TryGet("success-only-key-1", out var cachedFailures).ShouldBeTrue();
+        var cachedFailures = await cacheStore.TryGetAsync("success-only-key-1");
         cachedFailures.ShouldNotBeNull();
         cachedFailures.ShouldBeEmpty();
     }
@@ -651,7 +651,7 @@ public class KyrolusValidationEngineTests
 
         // Assert - قائمة الأخطاء اتخزنت في الكاش بموجب مدة FailuresOnly
         failures.Count.ShouldBe(1);
-        cacheStore.TryGet("failures-only-key-1", out var cachedFailures).ShouldBeTrue();
+        var cachedFailures = await cacheStore.TryGetAsync("failures-only-key-1");
         cachedFailures.ShouldNotBeNull();
         cachedFailures.Count.ShouldBe(1);
     }
@@ -672,7 +672,7 @@ public class KyrolusValidationEngineTests
 
         // Assert - النتيجة لم تتخزن في الكاش لأن CacheMode == None
         failures.ShouldBeEmpty();
-        cacheStore.TryGet("NONEMODECACHEKEY", out _).ShouldBeFalse();
+        (await cacheStore.TryGetAsync("NONEMODECACHEKEY")).ShouldBeNull();
     }
 
     [Fact(DisplayName = "ValidateAsync does not store in cache when CacheTtl is Zero")]
@@ -691,7 +691,7 @@ public class KyrolusValidationEngineTests
 
         // Assert - النتيجة لم تتخزن في الكاش لأن CacheTtl == TimeSpan.Zero
         failures.ShouldBeEmpty();
-        cacheStore.TryGet("ZEROTTLKEY", out _).ShouldBeFalse();
+        (await cacheStore.TryGetAsync("ZEROTTLKEY")).ShouldBeNull();
     }
     #endregion
 

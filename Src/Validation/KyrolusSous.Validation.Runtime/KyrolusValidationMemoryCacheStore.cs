@@ -7,36 +7,29 @@ public sealed class KyrolusValidationMemoryCacheStore : IKyrolusValidationCacheS
 
     private readonly ConcurrentDictionary<string, CacheEntry> entries = new(StringComparer.Ordinal);
 
-    public bool TryGet(string key, out IReadOnlyList<KyrolusValidationFailure> failures)
+    public ValueTask<IReadOnlyList<KyrolusValidationFailure>?> TryGetAsync(string key, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(key))
-        {
-            failures = [];
-            return false;
-        }
+            return ValueTask.FromResult<IReadOnlyList<KyrolusValidationFailure>?>(null);
 
         if (!entries.TryGetValue(key, out var entry))
-        {
-            failures = [];
-            return false;
-        }
+            return ValueTask.FromResult<IReadOnlyList<KyrolusValidationFailure>?>(null);
 
         if (entry.ExpiresAt <= DateTimeOffset.UtcNow)
         {
             entries.TryRemove(key, out _);
-            failures = [];
-            return false;
+            return ValueTask.FromResult<IReadOnlyList<KyrolusValidationFailure>?>(null);
         }
 
-        failures = entry.Failures;
-        return true;
+        return ValueTask.FromResult<IReadOnlyList<KyrolusValidationFailure>?>(entry.Failures);
     }
 
-    public void Set(string key, IReadOnlyList<KyrolusValidationFailure> failures, TimeSpan ttl)
+    public ValueTask SetAsync(string key, IReadOnlyList<KyrolusValidationFailure> failures, TimeSpan ttl, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(key) || ttl <= TimeSpan.Zero) return;
+        if (string.IsNullOrWhiteSpace(key) || ttl <= TimeSpan.Zero) return ValueTask.CompletedTask;
 
         var expiresAt = DateTimeOffset.UtcNow.Add(ttl);
         entries[key] = new CacheEntry(failures, expiresAt);
+        return ValueTask.CompletedTask;
     }
 }

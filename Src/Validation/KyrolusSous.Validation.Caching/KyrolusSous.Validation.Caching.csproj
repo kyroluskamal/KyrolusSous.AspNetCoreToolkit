@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>Bridges IKyrolusValidationCacheStore to IKyrolusCacheProvider so validation result caching can be backed by a distributed cache (e.g. Redis) instead of the in-process default.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KyrolusSous.Validation.Abstractions\KyrolusSous.Validation.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Caching\KyrolusSous.Caching.Abstractions\KyrolusSous.Caching.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
+  </ItemGroup>
+
+</Project>

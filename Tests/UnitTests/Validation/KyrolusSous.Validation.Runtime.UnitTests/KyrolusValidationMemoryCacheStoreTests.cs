@@ -2,79 +2,73 @@ namespace KyrolusSous.Validation.Runtime.UnitTests;
 
 public class KyrolusValidationMemoryCacheStoreTests
 {
-    [Theory(DisplayName = "KyrolusValidationMemoryCacheStore should return false and empty failures array if the key is null or whitespace")]
+    [Theory(DisplayName = "KyrolusValidationMemoryCacheStore should return null if the key is null or whitespace")]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void KyrolusValidationMemoryCacheStore_ShouldReturn_false_EmptyFailures_whenKeyIsNullOrEmptyString(string? value)
+    public async Task KyrolusValidationMemoryCacheStore_ShouldReturn_null_whenKeyIsNullOrEmptyString(string? value)
     {
         var cacheStore = new KyrolusValidationMemoryCacheStore();
-        var result = cacheStore.TryGet(value!, out var failures);
-        result.ShouldBeFalse();
-        failures.ShouldBeEmpty();
+        var result = await cacheStore.TryGetAsync(value!);
+        result.ShouldBeNull();
     }
 
-    [Fact(DisplayName = "TryGet returns false and empty failures when key is not found in cache")]
-    public void TryGet_ReturnsFalse_WhenKeyNotFound()
+    [Fact(DisplayName = "TryGetAsync returns null when key is not found in cache")]
+    public async Task TryGetAsync_ReturnsNull_WhenKeyNotFound()
     {
         var cacheStore = new KyrolusValidationMemoryCacheStore();
-        var result = cacheStore.TryGet("non-existing-key", out var failures);
+        var result = await cacheStore.TryGetAsync("non-existing-key");
 
-        result.ShouldBeFalse();
-        failures.ShouldBeEmpty();
+        result.ShouldBeNull();
     }
 
-    [Fact(DisplayName = "TryGet returns false and removes entry when entry is expired")]
-    public async Task TryGet_ReturnsFalseAndRemovesEntry_WhenExpired()
+    [Fact(DisplayName = "TryGetAsync returns null and removes entry when entry is expired")]
+    public async Task TryGetAsync_ReturnsNullAndRemovesEntry_WhenExpired()
     {
         var cacheStore = new KyrolusValidationMemoryCacheStore();
-        cacheStore.Set("expired-key", [new KyrolusValidationFailure("Prop", "Error")], TimeSpan.FromMilliseconds(10));
+        await cacheStore.SetAsync("expired-key", [new KyrolusValidationFailure("Prop", "Error")], TimeSpan.FromMilliseconds(10));
 
         await Task.Delay(30);
 
-        var result = cacheStore.TryGet("expired-key", out var failures);
-        result.ShouldBeFalse();
-        failures.ShouldBeEmpty();
+        var result = await cacheStore.TryGetAsync("expired-key");
+        result.ShouldBeNull();
     }
 
-    [Fact(DisplayName = "TryGet returns true and cached failures when valid entry exists")]
-    public void TryGet_ReturnsTrue_WhenValidEntryExists()
+    [Fact(DisplayName = "TryGetAsync returns cached failures when valid entry exists")]
+    public async Task TryGetAsync_ReturnsFailures_WhenValidEntryExists()
     {
         var cacheStore = new KyrolusValidationMemoryCacheStore();
         IReadOnlyList<KyrolusValidationFailure> expectedFailures = [new KyrolusValidationFailure("Age", "Invalid age")];
 
-        cacheStore.Set("valid-key", expectedFailures, TimeSpan.FromMinutes(5));
+        await cacheStore.SetAsync("valid-key", expectedFailures, TimeSpan.FromMinutes(5));
 
-        var result = cacheStore.TryGet("valid-key", out var actualFailures);
+        var result = await cacheStore.TryGetAsync("valid-key");
 
-        result.ShouldBeTrue();
-        actualFailures.ShouldNotBeNull();
-        actualFailures.Count.ShouldBe(1);
-        actualFailures[0].PropertyName.ShouldBe("Age");
+        result.ShouldNotBeNull();
+        result.Count.ShouldBe(1);
+        result[0].PropertyName.ShouldBe("Age");
     }
 
-    [Theory(DisplayName = "Set does not store entry when key is null or whitespace")]
+    [Theory(DisplayName = "SetAsync does not store entry when key is null or whitespace")]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void Set_DoesNotStore_WhenKeyIsNullOrEmptyString(string? key)
+    public async Task SetAsync_DoesNotStore_WhenKeyIsNullOrEmptyString(string? key)
     {
         var cacheStore = new KyrolusValidationMemoryCacheStore();
-        cacheStore.Set(key!, [new KyrolusValidationFailure("Prop", "Error")], TimeSpan.FromMinutes(5));
+        await cacheStore.SetAsync(key!, [new KyrolusValidationFailure("Prop", "Error")], TimeSpan.FromMinutes(5));
 
-        var result = cacheStore.TryGet("   ", out _);
-        result.ShouldBeFalse();
+        var result = await cacheStore.TryGetAsync("   ");
+        result.ShouldBeNull();
     }
 
-    [Fact(DisplayName = "Set does not store entry when TTL is zero or negative")]
-    public void Set_DoesNotStore_WhenTtlIsZeroOrNegative()
+    [Fact(DisplayName = "SetAsync does not store entry when TTL is zero or negative")]
+    public async Task SetAsync_DoesNotStore_WhenTtlIsZeroOrNegative()
     {
         var cacheStore = new KyrolusValidationMemoryCacheStore();
-        cacheStore.Set("zero-ttl-key", [new KyrolusValidationFailure("Prop", "Error")], TimeSpan.Zero);
+        await cacheStore.SetAsync("zero-ttl-key", [new KyrolusValidationFailure("Prop", "Error")], TimeSpan.Zero);
 
-        var result = cacheStore.TryGet("zero-ttl-key", out var failures);
-        result.ShouldBeFalse();
-        failures.ShouldBeEmpty();
+        var result = await cacheStore.TryGetAsync("zero-ttl-key");
+        result.ShouldBeNull();
     }
 }
-

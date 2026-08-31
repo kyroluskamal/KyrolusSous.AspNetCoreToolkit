@@ -31,23 +31,25 @@ public sealed class KyrolusValidationEngine(
         await RunBeforeHooks(request, effectiveContext, cancellationToken).ConfigureAwait(false);
 
         var cacheEntry = ResolveCacheEntry(request, effectiveContext);
-        if (cacheEntry is not null
-            && cacheStore is not null
-            && cacheStore.TryGet(cacheEntry.Key, out var cached))
+        if (cacheEntry is not null && cacheStore is not null)
         {
-            var cachedResult = localizer is null
-                ? cached
-                : [.. cached.Select(failure => failure with { ErrorMessage = LocalizeFailure(localizer, failure) })];
+            var cached = await cacheStore.TryGetAsync(cacheEntry.Key, cancellationToken).ConfigureAwait(false);
+            if (cached is not null)
+            {
+                var cachedResult = localizer is null
+                    ? cached
+                    : [.. cached.Select(failure => failure with { ErrorMessage = LocalizeFailure(localizer, failure) })];
 
-            await RunAfterHooks(request, effectiveContext, cachedResult, cancellationToken).ConfigureAwait(false);
-            return cachedResult;
+                await RunAfterHooks(request, effectiveContext, cachedResult, cancellationToken).ConfigureAwait(false);
+                return cachedResult;
+            }
         }
 
         var validators = serviceProvider.GetServices<IKyrolusRequestValidator<TRequest>>().ToArray();
         if (validators.Length == 0)
         {
             var empty = Array.Empty<KyrolusValidationFailure>();
-            TryStoreCache(cacheEntry, empty, ResolveNegativeTtl(request));
+            await TryStoreCache(cacheEntry, empty, cancellationToken, ResolveNegativeTtl(request)).ConfigureAwait(false);
             await RunAfterHooks(request, effectiveContext, empty, cancellationToken).ConfigureAwait(false);
             return empty;
         }
@@ -74,7 +76,7 @@ public sealed class KyrolusValidationEngine(
         if (failures.Count == 0)
         {
             var empty = Array.Empty<KyrolusValidationFailure>();
-            TryStoreCache(cacheEntry, empty, ResolveNegativeTtl(request));
+            await TryStoreCache(cacheEntry, empty, cancellationToken, ResolveNegativeTtl(request)).ConfigureAwait(false);
             await RunAfterHooks(request, effectiveContext, empty, cancellationToken).ConfigureAwait(false);
             return empty;
         }
@@ -82,7 +84,7 @@ public sealed class KyrolusValidationEngine(
         var normalized = failures.Select(NormalizeFailure).ToArray();
         var mapped = ApplyMappings(normalized, effectiveContext);
         var filtered = ApplyFilters(mapped, effectiveContext);
-        TryStoreCache(cacheEntry, filtered);
+        await TryStoreCache(cacheEntry, filtered, cancellationToken).ConfigureAwait(false);
 
         if (localizer is null)
         {
@@ -281,7 +283,18 @@ public sealed class KyrolusValidationEngine(
     private static string LocalizeFailure(IKyrolusLocalizer localizer, KyrolusValidationFailure failure)
     {
         var key = failure.MessageKey ?? failure.ErrorCode ?? failure.ErrorMessage;
-        return localizer.GetStringOrDefault(key, failure, failure.ErrorMessage);
+        var arguments = new Dictionary<string, object?>
+        {
+            [nameof(failure.PropertyName)] = failure.PropertyName,
+            [nameof(failure.ErrorMessage)] = failure.ErrorMessage,
+            [nameof(failure.ErrorCode)] = failure.ErrorCode,
+            [nameof(failure.Severity)] = failure.Severity,
+            [nameof(failure.RuleSet)] = failure.RuleSet,
+            [nameof(failure.MessageKey)] = failure.MessageKey,
+            [nameof(failure.AttemptedValue)] = failure.AttemptedValue,
+            [nameof(failure.FieldPath)] = failure.FieldPath,
+        };
+        return localizer.GetStringOrDefault(key, arguments, failure.ErrorMessage);
     }
 
     private static KyrolusValidationFailure NormalizeFailure(KyrolusValidationFailure failure)
@@ -323,14 +336,15 @@ public sealed class KyrolusValidationEngine(
         return cacheKeyProvider.GetCacheEntry(request!, context);
     }
 
-    private void TryStoreCache(
+    private async ValueTask TryStoreCache(
         KyrolusValidationCacheEntry? cacheEntry,
         IReadOnlyList<KyrolusValidationFailure> failures,
+        CancellationToken cancellationToken,
         TimeSpan? ttlOverride = null)
     {
         if (cacheEntry is null || cacheStore is null || !ShouldCache(cacheEntry.Mode, failures)) return;
         var ttl = ttlOverride ?? cacheEntry.Ttl;
-        cacheStore.Set(cacheEntry.Key, failures, ttl);
+        await cacheStore.SetAsync(cacheEntry.Key, failures, ttl, cancellationToken).ConfigureAwait(false);
     }
 
     private static TimeSpan ResolveNegativeTtl<TRequest>(TRequest request)
