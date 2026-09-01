@@ -120,6 +120,68 @@ public class KyrolusValidationEngineTests
     }
     #endregion
 
+    #region ValidateBatchAsync
+    [Fact(DisplayName = "ValidateBatchAsync prefixes each failure's FieldPath with the originating item's index")]
+    public async Task ValidateBatchAsync_PrefixesFieldPath_WithItemIndex()
+    {
+        var serviceProvider = TestHelper.BuildServiceProviderWithValidationRuntime(services =>
+            services.AddSingleton<IKyrolusRequestValidator<TestRequest>, TestValidator>()
+        );
+        var validationEngine = serviceProvider.GetRequiredService<IKyrolusValidationEngine>();
+
+        var requests = new[]
+        {
+            new TestRequest { Name = "Valid Name", Age = 25 },
+            new TestRequest { Name = "", Age = 30 },
+            new TestRequest { Name = "Also Valid", Age = -1 }
+        };
+
+        var failures = await validationEngine.ValidateBatchAsync(requests);
+
+        failures.Count.ShouldBe(2);
+        failures.ShouldContain(f => f.PropertyName == nameof(TestRequest.Name) && f.FieldPath == "[1].Name");
+        failures.ShouldContain(f => f.PropertyName == nameof(TestRequest.Age) && f.FieldPath == "[2].Age");
+    }
+
+    [Fact(DisplayName = "ValidateBatchAsync returns an empty list when every item in the batch is valid")]
+    public async Task ValidateBatchAsync_ReturnsEmptyList_WhenAllItemsValid()
+    {
+        var serviceProvider = TestHelper.BuildServiceProviderWithValidationRuntime(services =>
+            services.AddSingleton<IKyrolusRequestValidator<TestRequest>, TestValidator>()
+        );
+        var validationEngine = serviceProvider.GetRequiredService<IKyrolusValidationEngine>();
+
+        var requests = new[]
+        {
+            new TestRequest { Name = "Valid", Age = 1 },
+            new TestRequest { Name = "Also Valid", Age = 2 }
+        };
+
+        var failures = await validationEngine.ValidateBatchAsync(requests);
+
+        failures.ShouldBeEmpty();
+    }
+
+    [Fact(DisplayName = "ValidateBatchAsync applies the same context to every item")]
+    public async Task ValidateBatchAsync_AppliesSameContext_ToEveryItem()
+    {
+        var serviceProvider = TestHelper.BuildServiceProviderWithValidationRuntime(services =>
+            services.AddSingleton<IKyrolusRequestValidator<ProfileTestRequest>, ProfileTestValidator>()
+        );
+        var validationEngine = serviceProvider.GetRequiredService<IKyrolusValidationEngine>();
+
+        var requests = new[] { new ProfileTestRequest { Name = "A" }, new ProfileTestRequest { Name = "B" } };
+        var context = new KyrolusValidationContext(RuleSets: ["RuleSetA"]);
+
+        var failures = await validationEngine.ValidateBatchAsync(requests, context);
+
+        // ProfileTestValidator always reports 2 RuleSetA failures (Prop1, Prop2) per item.
+        failures.Count.ShouldBe(4);
+        failures.ShouldContain(f => f.FieldPath == "[0].Prop1");
+        failures.ShouldContain(f => f.FieldPath == "[1].Prop1");
+    }
+    #endregion
+
     #region Hooks
     [Fact(DisplayName = "ValidateAsync should execute both Global and Request-Specific Hooks for Before and After validation")]
     public async Task ValidateAsync_ShouldExecuteGlobalAndRequestSpecificHooks()
@@ -152,6 +214,28 @@ public class KyrolusValidationEngineTests
         requestSpecificHook.OnAfterCalled.ShouldBeTrue();
         requestSpecificHook.PassedRequest.ShouldBe(request);
         requestSpecificHook.PassedContext.ShouldBe(context);
+    }
+
+    [Fact(DisplayName = "ValidateAsync should still run After hooks (and rethrow) when a validator throws")]
+    public async Task ValidateAsync_ShouldRunAfterHooks_WhenValidatorThrows()
+    {
+        var globalHook = new TestGlobalValidationHook();
+        var throwingValidator = new ThrowingTestValidator();
+
+        var serviceProvider = TestHelper.BuildServiceProviderWithValidationRuntime(services =>
+        {
+            services.AddSingleton<IKyrolusValidationHook>(globalHook);
+            services.AddSingleton<IKyrolusRequestValidator<TestRequest>>(throwingValidator);
+        });
+
+        var validationEngine = serviceProvider.GetRequiredService<IKyrolusValidationEngine>();
+        var request = new TestRequest { Name = "x", Age = 1 };
+
+        await Should.ThrowAsync<InvalidOperationException>(async () =>
+            await validationEngine.ValidateAsync(request));
+
+        globalHook.OnBeforeCalled.ShouldBeTrue();
+        globalHook.OnAfterCalled.ShouldBeTrue();
     }
     #endregion
 

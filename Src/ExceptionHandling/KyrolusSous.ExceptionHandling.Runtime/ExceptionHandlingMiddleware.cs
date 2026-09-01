@@ -19,11 +19,7 @@ public sealed class ExceptionHandlingMiddleware(
     KyrolusExceptionHandlingDependencies dependencies)
 {
     private readonly RequestDelegate next = next ?? throw new ArgumentNullException(nameof(next));
-    private readonly KyrolusExceptionTranslator translator = dependencies.Translator;
-    private readonly IKyrolusErrorResponseWriter responseWriter = dependencies.ResponseWriter;
-    private readonly KyrolusHttpErrorContextFactory contextFactory = dependencies.ContextFactory;
-    private readonly KyrolusExceptionHandlingOptions options = dependencies.Options;
-    private readonly ILogger logger = dependencies.Logger;
+    private readonly KyrolusExceptionHandlingDependencies dependencies = dependencies;
 
     /// <summary>
     /// Invokes the middleware to execute the request pipeline with global exception trapping.
@@ -37,42 +33,16 @@ public sealed class ExceptionHandlingMiddleware(
         }
         catch (Exception ex)
         {
-            var errorContext = contextFactory.Create(httpContext);
-            var mapping = translator.TranslateToMapping(ex, errorContext);
-
-            var isIgnoredLogType = options.IgnoredExceptionLogTypes.Count > 0 &&
-                                    options.IgnoredExceptionLogTypes.Any(t => t.IsInstanceOfType(ex));
-
-            if (mapping.ShouldLog && options.LogUnhandledExceptions && !isIgnoredLogType)
-                LogException(mapping, ex, errorContext);
+            var errorContext = dependencies.ContextFactory.Create(httpContext);
+            var mapping = dependencies.TranslateAndLog(ex, errorContext);
 
             if (httpContext.Response.HasStarted)
             {
-                logger.LogWarning("The response has already started, the exception handling middleware cannot write the error response.");
+                dependencies.Logger.LogWarning("The response has already started, the exception handling middleware cannot write the error response.");
                 throw;
             }
 
-            await responseWriter.WriteAsync(httpContext, mapping, errorContext, httpContext.RequestAborted).ConfigureAwait(false);
+            await dependencies.ResponseWriter.WriteAsync(httpContext, mapping, errorContext, httpContext.RequestAborted).ConfigureAwait(false);
         }
-    }
-
-    private void LogException(KyrolusExceptionMapping mapping, Exception exception, KyrolusErrorContext context)
-    {
-        var logLevel = options.LogLevelSelector(mapping, exception);
-
-        if (!logger.IsEnabled(logLevel)) return;
-
-        logger.Log(
-            logLevel,
-            exception,
-            "Unhandled exception mapped to {ErrorCode} ({StatusCode}). TraceId={TraceId}, CorrelationId={CorrelationId}, UserId={UserId}, TenantId={TenantId}, Path={Path}, Method={Method}",
-            mapping.Error.Code,
-            (int)mapping.StatusCode,
-            context.TraceId,
-            context.CorrelationId,
-            context.UserId,
-            context.TenantId,
-            context.Path,
-            context.Method);
     }
 }

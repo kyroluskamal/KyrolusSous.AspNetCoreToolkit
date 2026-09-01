@@ -7,11 +7,13 @@ namespace KyrolusSous.ExceptionHandling.Abstractions.Models;
 /// <param name="StatusCode">The assigned HTTP status code.</param>
 /// <param name="IsTransient">Indicates if the failure is temporary.</param>
 /// <param name="ShouldLog">Indicates if the exception should be logged on the server.</param>
+/// <param name="RetryAfter">The suggested delay before the client should retry, surfaced as the <c>Retry-After</c> HTTP response header.</param>
 public sealed record KyrolusExceptionMapping(
     KyrolusErrorEnvelope Error,
     HttpStatusCode StatusCode,
     bool IsTransient = false,
-    bool ShouldLog = true)
+    bool ShouldLog = true,
+    TimeSpan? RetryAfter = null)
 {
     /// <summary>
     /// Creates a clone with modified transient flag.
@@ -26,6 +28,13 @@ public sealed record KyrolusExceptionMapping(
     /// <param name="shouldLog"><c>true</c> to log; otherwise, <c>false</c>.</param>
     /// <returns>A modified copy of the mapping.</returns>
     public KyrolusExceptionMapping WithLogging(bool shouldLog) => this with { ShouldLog = shouldLog };
+
+    /// <summary>
+    /// Creates a clone with a suggested retry delay, surfaced as the <c>Retry-After</c> HTTP response header.
+    /// </summary>
+    /// <param name="retryAfter">The suggested delay before the client should retry.</param>
+    /// <returns>A modified copy of the mapping.</returns>
+    public KyrolusExceptionMapping WithRetryAfter(TimeSpan? retryAfter) => this with { RetryAfter = retryAfter };
 
     /// <summary>
     /// Creates a clone with logging disabled.

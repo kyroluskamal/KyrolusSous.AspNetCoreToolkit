@@ -22,6 +22,12 @@ public class TestRequest
     public int Age { get; set; }
 }
 
+public class ThrowingTestValidator : IKyrolusRequestValidator<TestRequest>
+{
+    public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(TestRequest request, CancellationToken cancellationToken = default)
+        => throw new InvalidOperationException("Simulated validator failure.");
+}
+
 public class ProfileTestRequest
 {
     public string Name { get; set; } = string.Empty;

@@ -74,6 +74,12 @@ public abstract class KyrolusException : Exception, IKyrolusExceptionWithErrors,
     public bool ShouldLog { get; protected set; }
 
     /// <summary>
+    /// Gets the suggested delay before the client should retry, surfaced as the <c>Retry-After</c> HTTP response
+    /// header (see <see cref="KyrolusRateLimitException"/>). <see langword="null"/> when not applicable.
+    /// </summary>
+    public TimeSpan? RetryAfter { get; protected set; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="KyrolusException"/> class.
     /// </summary>
     /// <param name="statusCode">The HTTP status code.</param>
@@ -207,6 +213,17 @@ public abstract class KyrolusException : Exception, IKyrolusExceptionWithErrors,
     public KyrolusException WithDetail(string detail)
     {
         Detail = detail;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the suggested retry delay, surfaced as the <c>Retry-After</c> HTTP response header.
+    /// </summary>
+    /// <param name="retryAfter">The suggested delay before the client should retry.</param>
+    /// <returns>The current exception instance for fluent chaining.</returns>
+    public KyrolusException WithRetryAfter(TimeSpan retryAfter)
+    {
+        RetryAfter = retryAfter;
         return this;
     }
 }

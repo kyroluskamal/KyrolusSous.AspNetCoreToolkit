@@ -1,21 +1,9 @@
 namespace KyrolusSous.ExceptionHandling.Runtime.Handlers;
 
-public class UnauthorizedException : Exception
-{
-    public UnauthorizedException(string message) : base(message) { }
-    public UnauthorizedException(string message, Exception innerException) : base(message, innerException) { }
-}
-
-public class UnauthorizedExceptionHandler(
-    ILogger<UnauthorizedExceptionHandler> logger,
-    IKyrolusLocalizer? localizer = null,
-    IKyrolusErrorMetadataSanitizer? sanitizer = null,
-    KyrolusHttpErrorContextFactory? contextFactory = null)
-    : KyrolusExceptionHandlerBase<UnauthorizedException>(
-        logger,
-        HttpStatusCode.Unauthorized,
-        KyrolusErrorCodes.Unauthorized,
-        "Unauthorized",
-        localizer,
-        sanitizer,
-        contextFactory);
+/// <summary>
+/// Handles the toolkit's own <see cref="KyrolusUnauthorizedException"/> - the recommended type for authentication
+/// failures (see its own documentation for usage). Native ASP.NET Core <see cref="IExceptionHandler"/> instances
+/// are matched by concrete exception type, so this targets that type directly rather than a generic placeholder.
+/// </summary>
+public class UnauthorizedExceptionHandler(KyrolusExceptionHandlingDependencies dependencies)
+    : KyrolusExceptionHandlerBase<KyrolusUnauthorizedException>(dependencies);

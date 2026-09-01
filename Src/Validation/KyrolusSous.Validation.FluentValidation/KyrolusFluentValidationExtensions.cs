@@ -101,31 +101,19 @@ public static class KyrolusFluentValidationExtensions
             .WithMessage(InvalidUrl);
     }
 
-    /// <summary>Validates an Egyptian 14-digit National Identification Number format.</summary>
+    /// <summary>
+    /// Validates an Egyptian 14-digit National Identification Number, including the century/birth-date,
+    /// governorate code, and Modulo-11 checksum (delegates to <see cref="AdvancedRuleBuilderExtensions.IsNationalIdValid"/>
+    /// so this and the Fluent DSL's <c>.NationalId("EG")</c> can never drift apart in rigor).
+    /// </summary>
     public static IRuleBuilderOptions<T, string> IsEgyptianNationalId<T>(
         this IRuleBuilder<T, string> ruleBuilder,
         Expression<Func<T, object>>? expr = null,
         string propertyName = "",
         bool isNullOrEmpty = false)
     {
-        return ruleBuilder.Must(id =>
-            {
-                if (string.IsNullOrEmpty(id) && isNullOrEmpty)
-                {
-                    return true;
-                }
-
-                if (string.IsNullOrWhiteSpace(id) || id.Length != 14)
-                {
-                    return false;
-                }
-
-                return id[0] switch
-                {
-                    '2' or '3' => id.All(char.IsDigit),
-                    _ => false
-                };
-            })
+        return ruleBuilder
+            .Must(id => (string.IsNullOrEmpty(id) && isNullOrEmpty) || AdvancedRuleBuilderExtensions.IsNationalIdValid(id, "EG"))
             .ApplyPropertyName(expr, propertyName)
             .WithMessage(InvalidEgyptianNationalId);
     }

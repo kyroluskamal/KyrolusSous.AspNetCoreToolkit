@@ -5,6 +5,7 @@ using KyrolusSous.ExceptionHandling.Abstractions.Models;
 using KyrolusSous.ExceptionHandling.EntityFramework;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace KyrolusSous.ExceptionHandling.EntityFramework.UnitTests;
 
@@ -60,7 +61,45 @@ public class KyrolusEfExceptionMapperTests
         mapping.IsTransient.ShouldBeTrue();
         mapping.Error.Code.ShouldBe(KyrolusErrorCodes.DatabaseError);
         mapping.Error.Title.ShouldBe("Database error");
-        mapping.Error.Detail.ShouldBe("Could not update database");
+        mapping.Error.Detail.ShouldBe("A database error occurred while saving changes.");
+    }
+
+    [Fact(DisplayName = "TryMap with DbUpdateException should not leak the raw provider message by default")]
+    public void TryMap_DbUpdateException_Should_Not_LeakRawMessage_ByDefault()
+    {
+        var ex = new DbUpdateException("Cannot insert duplicate key row in object 'dbo.Users' with unique index 'IX_Users_Email'.");
+
+        mapper.TryMap(ex, context, out var mapping);
+
+        mapping.Error.Detail.ShouldNotContain("dbo.Users");
+        mapping.Error.Detail.ShouldNotContain("IX_Users_Email");
+    }
+
+    [Fact(DisplayName = "TryMap with DbUpdateException should expose the raw provider message when explicitly opted in")]
+    public void TryMap_DbUpdateException_Should_ExposeRawMessage_WhenOptedIn()
+    {
+        var optedInOptions = Options.Create(new KyrolusExceptionHandlingOptions { IncludeRawDatabaseErrorDetails = true });
+        var optedInMapper = new KyrolusEfExceptionMapper(optedInOptions);
+        var ex = new DbUpdateException("Cannot insert duplicate key row in object 'dbo.Users'.");
+
+        optedInMapper.TryMap(ex, context, out var mapping);
+
+        mapping.Error.Detail.ShouldBe("Cannot insert duplicate key row in object 'dbo.Users'.");
+    }
+
+    [Fact(DisplayName = "AddKyrolusEntityFrameworkExceptionHandling should apply configured options")]
+    public void AddKyrolusEntityFrameworkExceptionHandling_Should_ApplyConfiguredOptions()
+    {
+        var services = new ServiceCollection();
+        services.AddKyrolusEntityFrameworkExceptionHandling(o => o.IncludeRawDatabaseErrorDetails = true);
+
+        var provider = services.BuildServiceProvider();
+        var mapper = provider.GetServices<IKyrolusExceptionMapper>().OfType<KyrolusEfExceptionMapper>().Single();
+
+        var ex = new DbUpdateException("Cannot insert duplicate key row in object 'dbo.Users'.");
+        mapper.TryMap(ex, context, out var mapping);
+
+        mapping.Error.Detail.ShouldBe("Cannot insert duplicate key row in object 'dbo.Users'.");
     }
 
     [Fact(DisplayName = "TryMap with DbUpdateException and non-transient inner exception should map to non-transient DatabaseError")]

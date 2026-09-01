@@ -52,9 +52,10 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
                 continue;
             }
 
+            var descriptor = validator.CreateDescriptor();
             foreach (var error in result.Errors.Where(error => error is not null))
             {
-                allFailures.Add(MapToFailure(error, context));
+                allFailures.Add(MapToFailure(error, context, descriptor));
             }
         }
 
@@ -81,11 +82,21 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
         });
     }
 
-    private static KyrolusValidationFailure MapToFailure(ValidationFailure error, KyrolusValidationContext context)
+    private static KyrolusValidationFailure MapToFailure(ValidationFailure error, KyrolusValidationContext context, IValidatorDescriptor descriptor)
     {
         var metadata = BuildMetadata(error);
         var groups = ResolveGroups(error);
-        var ruleSet = context.RuleSets is { Count: > 0 } ? context.RuleSets.First() : null;
+
+        // The failure carries no direct link back to the FluentValidation IValidationRule that produced it, only
+        // its PropertyName - so the RuleSet(s) actually declared for that member are looked up via the
+        // descriptor and resolved against the requested context, exactly like the Fluent DSL and the
+        // DataAnnotations validators do. Previously this always stamped context.RuleSets.First() regardless of
+        // which RuleSet the property actually belongs to, mislabeling failures whenever multiple RuleSets were
+        // requested simultaneously.
+        var declaredRuleSets = ResolveDeclaredRuleSets(descriptor, error.PropertyName);
+        var ruleSet = declaredRuleSets.Length > 0
+            ? KyrolusValidationScopeResolver.ResolveActiveRuleSet(declaredRuleSets, context.RuleSets)
+            : null;
 
         return new KyrolusValidationFailure(
             error.PropertyName,
@@ -97,6 +108,18 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
             AttemptedValue: error.AttemptedValue,
             Metadata: metadata,
             Groups: groups.Count > 0 ? groups : null);
+    }
+
+    private static string[] ResolveDeclaredRuleSets(IValidatorDescriptor descriptor, string? propertyName)
+    {
+        if (string.IsNullOrEmpty(propertyName))
+            return [];
+
+        return descriptor.GetRulesForMember(propertyName)
+            .SelectMany(rule => rule.RuleSets ?? [])
+            .Where(ruleSet => !string.IsNullOrWhiteSpace(ruleSet))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static KyrolusValidationSeverity MapSeverity(Severity severity)

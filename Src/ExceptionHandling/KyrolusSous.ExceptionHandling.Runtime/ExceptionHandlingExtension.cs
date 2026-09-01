@@ -13,6 +13,13 @@ public static class ExceptionHandlingExtension
     /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddKyrolusExceptionHandling(this IServiceCollection services, Action<KyrolusExceptionHandlingOptions>? configure = null)
     {
+        // Registers the IOptions<> infrastructure unconditionally. Without this, IOptions<KyrolusExceptionHandlingOptions>
+        // fails to resolve at all (not "resolves to defaults" - throws) whenever this is called with no configure
+        // delegate outside a host builder that already sets Options up (e.g. a bare ServiceCollection in a test or a
+        // non-hosted console app), since services.Configure(...) below - the thing that normally wires this up - was
+        // only ever called when configure was non-null.
+        services.AddOptions();
+
         if (configure is not null)
         {
             var options = new KyrolusExceptionHandlingOptions();
@@ -44,12 +51,17 @@ public static class ExceptionHandlingExtension
     }
 
     /// <summary>
-    /// Registers ASP.NET Core IExceptionHandler implementations for built-in .NET exceptions.
+    /// Registers ASP.NET Core IExceptionHandler implementations for built-in .NET exceptions. Each handler
+    /// delegates to the same translation/sanitization/logging pipeline as <see cref="AddKyrolusExceptionHandling"/>
+    /// (registered here too via idempotent <c>TryAdd*</c> calls if not already done), so both surfaces classify
+    /// and respond to the same exception identically.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddKyrolusBuiltInExceptionHandlers(this IServiceCollection services)
     {
+        services.AddKyrolusExceptionHandling();
+
         services.AddExceptionHandler<CultureNotFoundExceptionHandler>();
         services.AddExceptionHandler<JsonExceptionHandler>();
         services.AddExceptionHandler<ArgumentExceptionHandler>();

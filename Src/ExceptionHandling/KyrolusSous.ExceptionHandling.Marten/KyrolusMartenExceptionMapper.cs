@@ -3,6 +3,7 @@ using KyrolusSous.ExceptionHandling.Abstractions.Helpers;
 using KyrolusSous.ExceptionHandling.Abstractions.Interfaces;
 using KyrolusSous.ExceptionHandling.Abstractions.Models;
 using Marten.Exceptions;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace KyrolusSous.ExceptionHandling.Marten;
@@ -26,8 +27,16 @@ namespace KyrolusSous.ExceptionHandling.Marten;
 /// builder.Services.AddKyrolusMartenExceptionHandling();
 /// </code>
 /// </example>
-public sealed class KyrolusMartenExceptionMapper : IKyrolusExceptionMapper
+/// <param name="options">
+/// Options controlling whether the client-facing detail includes the raw provider error text. See
+/// <see cref="KyrolusExceptionHandlingOptions.IncludeRawDatabaseErrorDetails"/>.
+/// </param>
+public sealed class KyrolusMartenExceptionMapper(IOptions<KyrolusExceptionHandlingOptions>? options = null) : IKyrolusExceptionMapper
 {
+    private const string GenericDatabaseErrorDetail = "A database error occurred.";
+
+    private readonly bool includeRawDatabaseErrorDetails = options?.Value.IncludeRawDatabaseErrorDetails ?? false;
+
     /// <summary>
     /// Gets the mapper order (-50 to execute before general fallback mappers).
     /// </summary>
@@ -112,7 +121,7 @@ public sealed class KyrolusMartenExceptionMapper : IKyrolusExceptionMapper
                     code: KyrolusErrorCodes.Conflict,
                     title: "Unique constraint violation",
                     statusCode: HttpStatusCode.Conflict,
-                    detail: pgEx.MessageText,
+                    detail: includeRawDatabaseErrorDetails ? pgEx.MessageText : "A record with conflicting unique data already exists.",
                     traceId: context?.TraceId,
                     metadata: KyrolusMetadataExtractor.Extract(commandException));
 
@@ -128,7 +137,7 @@ public sealed class KyrolusMartenExceptionMapper : IKyrolusExceptionMapper
                 code: KyrolusErrorCodes.DatabaseError,
                 title: "Marten database error",
                 statusCode: HttpStatusCode.InternalServerError,
-                detail: commandException.Message,
+                detail: includeRawDatabaseErrorDetails ? commandException.Message : GenericDatabaseErrorDetail,
                 traceId: context?.TraceId,
                 errors: (exception as IKyrolusExceptionWithErrors)?.GetErrors(),
                 metadata: KyrolusMetadataExtractor.Extract(commandException))

@@ -8,3 +8,5 @@ global using KyrolusSous.ExceptionHandling.Abstractions.Exceptions;
 global using System.Net.Sockets;
 global using System.Text.Json;
 global using KyrolusSous.ExceptionHandling.Abstractions.Interfaces;
+global using System.Security.Claims;
+global using Microsoft.Extensions.Logging;

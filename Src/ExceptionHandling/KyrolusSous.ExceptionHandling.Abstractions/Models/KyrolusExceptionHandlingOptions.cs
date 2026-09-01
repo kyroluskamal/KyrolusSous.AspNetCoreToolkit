@@ -1,7 +1,8 @@
-namespace KyrolusSous.ExceptionHandling.Runtime;
+namespace KyrolusSous.ExceptionHandling.Abstractions.Models;
 
 /// <summary>
-/// Configuration options for the exception handling middleware and runtime pipeline.
+/// Configuration options for the exception handling pipeline, shared by the runtime middleware and every
+/// exception mapper package (EF Core, Marten, Redis, FluentValidation, ...).
 /// </summary>
 public sealed class KyrolusExceptionHandlingOptions
 {
@@ -36,7 +37,7 @@ public sealed class KyrolusExceptionHandlingOptions
     public bool LogUnhandledExceptions { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets whether to strictly enforce that all domain error codes must be pre-registered in <see cref="Abstractions.Models.KyrolusErrorCodeRegistry"/>.
+    /// Gets or sets whether to strictly enforce that all domain error codes must be pre-registered in <see cref="KyrolusErrorCodeRegistry"/>.
     /// </summary>
     public bool EnforceErrorCodeRegistry { get; set; }
 
@@ -64,21 +65,38 @@ public sealed class KyrolusExceptionHandlingOptions
         "apikey",
         "access_token",
         "refresh_token",
-        "jwt"
+        "jwt",
+        "connectionstring",
+        "connection_string",
+        "client_secret",
+        "clientsecret",
+        "private_key",
+        "privatekey",
+        "ssn",
+        "creditcard",
+        "credit_card",
+        "cvv"
     };
 
     /// <summary>Gets or sets an optional allowlist of permitted metadata keys. If set, only keys in this set are preserved.</summary>
     public HashSet<string>? MetadataAllowList { get; set; }
 
     /// <summary>
-    /// Configures the options to suppress logging for noisy exceptions like <see cref="OperationCanceledException"/> and <see cref="BadHttpRequestException"/>.
+    /// Gets or sets whether exception mappers for third-party data stores (EF Core, Marten, Redis, ...) may include
+    /// the raw provider error text in the client-facing detail. Defaults to <see langword="false"/>, since provider
+    /// messages commonly embed table, column, and constraint names. Enable only in trusted/internal environments.
+    /// </summary>
+    public bool IncludeRawDatabaseErrorDetails { get; set; }
+
+    /// <summary>
+    /// Configures the options to suppress logging for noisy cancellation exceptions
+    /// (<see cref="OperationCanceledException"/> and <see cref="TaskCanceledException"/>).
     /// </summary>
     /// <returns>The current options instance for chaining.</returns>
     public KyrolusExceptionHandlingOptions IgnoreCommonNoisyExceptions()
     {
         IgnoredExceptionLogTypes.Add(typeof(OperationCanceledException));
         IgnoredExceptionLogTypes.Add(typeof(TaskCanceledException));
-        IgnoredExceptionLogTypes.Add(typeof(BadHttpRequestException));
         return this;
     }
 

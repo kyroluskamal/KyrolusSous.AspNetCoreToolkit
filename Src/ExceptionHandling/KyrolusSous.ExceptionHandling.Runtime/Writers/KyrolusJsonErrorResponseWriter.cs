@@ -12,6 +12,9 @@ public sealed class KyrolusJsonErrorResponseWriter : IKyrolusErrorResponseWriter
         httpContext.Response.ContentType = "application/json";
         httpContext.Response.StatusCode = (int)mapping.StatusCode;
 
+        if (mapping.RetryAfter is { } retryAfter)
+            httpContext.Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+
         return JsonSerializer.SerializeAsync(
             httpContext.Response.Body,
             mapping.Error,

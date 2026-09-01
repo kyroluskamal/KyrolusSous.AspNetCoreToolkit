@@ -21,10 +21,7 @@ public enum KyrolusValidationCacheMode
 /// <param name="Key">The unique cache key.</param>
 /// <param name="Mode">The caching condition mode.</param>
 /// <param name="Ttl">The lifespan of this cache entry.</param>
-public sealed record KyrolusValidationCacheEntry(
-    string Key,
-    KyrolusValidationCacheMode Mode,
-    TimeSpan Ttl);
+public sealed record KyrolusValidationCacheEntry(string Key, KyrolusValidationCacheMode Mode, TimeSpan Ttl);
 
 /// <summary>
 /// Marks a request as eligible for validation result caching.

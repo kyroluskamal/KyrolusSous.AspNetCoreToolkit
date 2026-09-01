@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
@@ -10,33 +10,9 @@ namespace KyrolusSous.ExceptionHandling.Runtime.UnitTests;
 public class KyrolusExceptionFilterTests
 {
     private static KyrolusExceptionFilter CreateFilter(
-        TestLogger<KyrolusExceptionFilter> logger,
+        TestLogger<KyrolusExceptionHandlingDependencies> logger,
         Action<KyrolusExceptionHandlingOptions>? configureOptions = null)
-    {
-        var options = new KyrolusExceptionHandlingOptions();
-        configureOptions?.Invoke(options);
-        var optionsWrapper = Options.Create(options);
-
-        var contextFactory = new KyrolusHttpErrorContextFactory(optionsWrapper);
-        var mappers = new IKyrolusExceptionMapper[]
-        {
-            new KyrolusDomainExceptionMapper(),
-            new KyrolusFrameworkExceptionMapper(),
-            new KyrolusDefaultExceptionMapper()
-        };
-        var mappingService = new KyrolusExceptionMappingService(mappers);
-        var sanitizer = new KyrolusDefaultErrorMetadataSanitizer(optionsWrapper);
-        var environment = new TestHostEnvironment("Development");
-        var translator = new KyrolusExceptionTranslator(mappingService, sanitizer, environment, optionsWrapper);
-        var writer = new KyrolusJsonErrorResponseWriter();
-
-        return new KyrolusExceptionFilter(
-            translator,
-            writer,
-            contextFactory,
-            optionsWrapper,
-            logger);
-    }
+        => new(TestExceptionHandlingDependenciesFactory.Create(logger, configureOptions));
 
     private static ExceptionContext CreateExceptionContext(Exception exception, bool exceptionHandled = false)
     {
@@ -54,7 +30,7 @@ public class KyrolusExceptionFilterTests
     [Fact(DisplayName = "Filter should return immediately when ExceptionHandled is already true")]
     public async Task OnExceptionAsync_Should_Return_When_Already_Handled()
     {
-        var logger = new TestLogger<KyrolusExceptionFilter>();
+        var logger = new TestLogger<KyrolusExceptionHandlingDependencies>();
         var filter = CreateFilter(logger);
 
         var context = CreateExceptionContext(new InvalidOperationException("Already handled"), exceptionHandled: true);
@@ -69,7 +45,7 @@ public class KyrolusExceptionFilterTests
     [Fact(DisplayName = "Filter should handle exception, set result, write response and log error")]
     public async Task OnExceptionAsync_Should_Handle_Exception_Write_Response_And_Log()
     {
-        var logger = new TestLogger<KyrolusExceptionFilter>();
+        var logger = new TestLogger<KyrolusExceptionHandlingDependencies>();
         var filter = CreateFilter(logger);
 
         var context = CreateExceptionContext(new InvalidOperationException("Database crashed"));
@@ -94,7 +70,7 @@ public class KyrolusExceptionFilterTests
     [Fact(DisplayName = "Filter should not log when exception mapping has ShouldLog set to false")]
     public async Task OnExceptionAsync_Should_Not_Log_When_ShouldLog_Is_False()
     {
-        var logger = new TestLogger<KyrolusExceptionFilter>();
+        var logger = new TestLogger<KyrolusExceptionHandlingDependencies>();
         var filter = CreateFilter(logger);
 
         var context = CreateExceptionContext(new KyrolusNotFoundException("Order", "999"));
@@ -109,7 +85,7 @@ public class KyrolusExceptionFilterTests
     [Fact(DisplayName = "Filter should not log when LogUnhandledExceptions is disabled in options")]
     public async Task OnExceptionAsync_Should_Not_Log_When_LogUnhandledExceptions_Is_Disabled()
     {
-        var logger = new TestLogger<KyrolusExceptionFilter>();
+        var logger = new TestLogger<KyrolusExceptionHandlingDependencies>();
         var filter = CreateFilter(logger, opts => opts.LogUnhandledExceptions = false);
 
         var context = CreateExceptionContext(new InvalidOperationException("Fatal error"));
@@ -123,7 +99,7 @@ public class KyrolusExceptionFilterTests
     [Fact(DisplayName = "Filter should not log when exception type is in IgnoredExceptionLogTypes")]
     public async Task OnExceptionAsync_Should_Not_Log_When_Exception_Is_Ignored_Type()
     {
-        var logger = new TestLogger<KyrolusExceptionFilter>();
+        var logger = new TestLogger<KyrolusExceptionHandlingDependencies>();
         var filter = CreateFilter(logger, opts => opts.IgnoredExceptionLogTypes.Add(typeof(OperationCanceledException)));
 
         var context = CreateExceptionContext(new OperationCanceledException("Operation was cancelled"));
@@ -137,7 +113,7 @@ public class KyrolusExceptionFilterTests
     [Fact(DisplayName = "Filter should not log when logger.IsEnabled returns false")]
     public async Task OnExceptionAsync_Should_Not_Log_When_Logger_IsNotEnabled()
     {
-        var logger = new TestLogger<KyrolusExceptionFilter> { Enabled = false };
+        var logger = new TestLogger<KyrolusExceptionHandlingDependencies> { Enabled = false };
         var filter = CreateFilter(logger);
 
         var context = CreateExceptionContext(new InvalidOperationException("Some error"));
@@ -151,7 +127,7 @@ public class KyrolusExceptionFilterTests
     [Fact(DisplayName = "Filter should use custom LogLevelSelector from options")]
     public async Task OnExceptionAsync_Should_Use_Custom_LogLevelSelector()
     {
-        var logger = new TestLogger<KyrolusExceptionFilter>();
+        var logger = new TestLogger<KyrolusExceptionHandlingDependencies>();
         var filter = CreateFilter(logger, opts =>
         {
             opts.LogLevelSelector = (_, _) => LogLevel.Warning;

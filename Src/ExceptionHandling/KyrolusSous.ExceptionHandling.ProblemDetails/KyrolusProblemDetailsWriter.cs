@@ -32,6 +32,9 @@ public sealed class KyrolusProblemDetailsWriter : IKyrolusErrorResponseWriter
         context.Response.StatusCode = details.Status ?? (int)mapping.StatusCode;
         context.Response.ContentType = "application/problem+json";
 
+        if (mapping.RetryAfter is { } retryAfter)
+            context.Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
         return JsonSerializer.SerializeAsync(
             context.Response.Body,
             details,

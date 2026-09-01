@@ -1,21 +1,9 @@
 namespace KyrolusSous.ExceptionHandling.Runtime.Handlers;
 
-public class NotFoundException : Exception
-{
-    public NotFoundException(string message) : base(message) { }
-    public NotFoundException(string entityName, string key) : base($"{entityName} with key {key} not found") { }
-}
-
-public class NotFoundExceptionHandler(
-    ILogger<NotFoundExceptionHandler> logger,
-    IKyrolusLocalizer? localizer = null,
-    IKyrolusErrorMetadataSanitizer? sanitizer = null,
-    KyrolusHttpErrorContextFactory? contextFactory = null)
-    : KyrolusExceptionHandlerBase<NotFoundException>(
-        logger,
-        HttpStatusCode.NotFound,
-        KyrolusErrorCodes.NotFound,
-        "Not found",
-        localizer,
-        sanitizer,
-        contextFactory);
+/// <summary>
+/// Handles the toolkit's own <see cref="KyrolusNotFoundException"/> - the recommended type for "not found" errors
+/// (see its own documentation for usage). Native ASP.NET Core <see cref="IExceptionHandler"/> instances are matched
+/// by concrete exception type, so this targets that type directly rather than a generic placeholder.
+/// </summary>
+public class NotFoundExceptionHandler(KyrolusExceptionHandlingDependencies dependencies)
+    : KyrolusExceptionHandlerBase<KyrolusNotFoundException>(dependencies);

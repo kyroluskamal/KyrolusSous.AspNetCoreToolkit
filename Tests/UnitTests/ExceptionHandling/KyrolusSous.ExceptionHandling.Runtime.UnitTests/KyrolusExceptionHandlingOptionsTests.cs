@@ -2,12 +2,23 @@ namespace KyrolusSous.ExceptionHandling.Runtime.UnitTests;
 
 public class KyrolusExceptionHandlingOptionsTests
 {
-    [Fact(DisplayName = "IgnoreCommonNoisyExceptions should add common cancellation and HTTP exceptions")]
+    [Fact(DisplayName = "IgnoreCommonNoisyExceptions should add common cancellation exceptions")]
     public void IgnoreCommonNoisyExceptions_Should_Add_Expected_Types()
     {
         var options = new KyrolusExceptionHandlingOptions();
 
         options.IgnoreCommonNoisyExceptions();
+
+        options.IgnoredExceptionLogTypes.ShouldContain(typeof(OperationCanceledException));
+        options.IgnoredExceptionLogTypes.ShouldContain(typeof(TaskCanceledException));
+    }
+
+    [Fact(DisplayName = "IgnoreCommonAspNetCoreNoisyExceptions should add BadHttpRequestException")]
+    public void IgnoreCommonAspNetCoreNoisyExceptions_Should_Add_Expected_Types()
+    {
+        var options = new KyrolusExceptionHandlingOptions();
+
+        options.IgnoreCommonNoisyExceptions().IgnoreCommonAspNetCoreNoisyExceptions();
 
         options.IgnoredExceptionLogTypes.ShouldContain(typeof(OperationCanceledException));
         options.IgnoredExceptionLogTypes.ShouldContain(typeof(TaskCanceledException));

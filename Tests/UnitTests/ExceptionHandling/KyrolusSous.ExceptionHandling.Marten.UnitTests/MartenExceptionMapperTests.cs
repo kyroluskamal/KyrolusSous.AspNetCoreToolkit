@@ -4,6 +4,7 @@ using KyrolusSous.ExceptionHandling.Abstractions.Models;
 using KyrolusSous.ExceptionHandling.Marten;
 using Marten.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace KyrolusSous.ExceptionHandling.Marten.UnitTests;
 
@@ -73,6 +74,50 @@ public class MartenExceptionMapperTests
         mapping.ShouldNotBeNull();
         mapping.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         mapping.Error.Code.ShouldBe(KyrolusErrorCodes.BadRequest);
+    }
+
+    [Fact(DisplayName = "MartenCommandException should not leak the raw provider message by default")]
+    public void MartenCommandException_Should_Not_LeakRawMessage_ByDefault()
+    {
+        var inner = new InvalidOperationException("relation \"public.mt_doc_user\" column \"email\" violates constraint");
+        var ex = new MartenCommandException(null, inner);
+
+        var mapped = mapper.TryMap(ex, context, out var mapping);
+
+        mapped.ShouldBeTrue();
+        mapping.ShouldNotBeNull();
+        mapping.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        mapping.Error.Code.ShouldBe(KyrolusErrorCodes.DatabaseError);
+        mapping.Error.Detail.ShouldNotContain("mt_doc_user");
+        mapping.Error.Detail.ShouldBe("A database error occurred.");
+    }
+
+    [Fact(DisplayName = "MartenCommandException should expose the raw provider message when explicitly opted in")]
+    public void MartenCommandException_Should_ExposeRawMessage_WhenOptedIn()
+    {
+        var optedInOptions = Options.Create(new KyrolusExceptionHandlingOptions { IncludeRawDatabaseErrorDetails = true });
+        var optedInMapper = new KyrolusMartenExceptionMapper(optedInOptions);
+        var inner = new InvalidOperationException("boom");
+        var ex = new MartenCommandException(null, inner);
+
+        optedInMapper.TryMap(ex, context, out var mapping);
+
+        mapping.Error.Detail.ShouldBe(ex.Message);
+    }
+
+    [Fact(DisplayName = "Add Kyrolus Marten Exception Mapping applies configured options")]
+    public void AddKyrolusMartenExceptionMapping_AppliesConfiguredOptions()
+    {
+        var services = new ServiceCollection();
+        services.AddKyrolusMartenExceptionMapping(o => o.IncludeRawDatabaseErrorDetails = true);
+
+        var provider = services.BuildServiceProvider();
+        var mapper = provider.GetServices<IKyrolusExceptionMapper>().OfType<KyrolusMartenExceptionMapper>().Single();
+
+        var ex = new MartenCommandException(null, new InvalidOperationException("boom"));
+        mapper.TryMap(ex, context, out var mapping);
+
+        mapping.Error.Detail.ShouldBe(ex.Message);
     }
 
     [Fact(DisplayName = "Unrelated Exception Should Return False")]

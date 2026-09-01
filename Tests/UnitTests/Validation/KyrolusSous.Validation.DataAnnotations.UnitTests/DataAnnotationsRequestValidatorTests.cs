@@ -91,6 +91,45 @@ public class DataAnnotationsRequestValidatorTests
         });
     }
 
+    [Fact(DisplayName = "ValidateAsync tags failures with RuleSet/Groups from [KyrolusValidationScope] when the requested scope matches")]
+    public async Task ValidateAsync_TagsFailure_WhenScopeMatchesContext()
+    {
+        var validator = new DataAnnotationsRequestValidator<ScopedTestRequest>();
+        var request = new ScopedTestRequest();
+
+        var result = await validator.ValidateAsync(request, new KyrolusValidationContext(RuleSets: ["Create"]));
+
+        var passwordFailure = result.ShouldHaveSingleItem();
+        passwordFailure.PropertyName.ShouldBe(nameof(ScopedTestRequest.Password));
+        passwordFailure.RuleSet.ShouldBe("Create");
+    }
+
+    [Fact(DisplayName = "ValidateAsync drops a failure whose [KyrolusValidationScope] RuleSet doesn't match the requested context")]
+    public async Task ValidateAsync_DropsFailure_WhenScopeDoesNotMatchContext()
+    {
+        var validator = new DataAnnotationsRequestValidator<ScopedTestRequest>();
+        var request = new ScopedTestRequest { Password = "already-set" };
+
+        var result = await validator.ValidateAsync(request, new KyrolusValidationContext(RuleSets: ["Update"]));
+
+        result.ShouldNotContain(f => f.PropertyName == nameof(ScopedTestRequest.Password));
+        result.ShouldNotContain(f => f.PropertyName == nameof(ScopedTestRequest.Name));
+    }
+
+    [Fact(DisplayName = "ValidateAsync tags a failure with its declared Groups regardless of RuleSet filtering")]
+    public async Task ValidateAsync_TagsFailure_WithDeclaredGroups()
+    {
+        var validator = new DataAnnotationsRequestValidator<ScopedTestRequest>();
+        var request = new ScopedTestRequest { Password = "already-set", Name = "already-set" };
+
+        var result = await validator.ValidateAsync(request, KyrolusValidationContext.Default);
+
+        var createdByFailure = result.ShouldHaveSingleItem();
+        createdByFailure.PropertyName.ShouldBe(nameof(ScopedTestRequest.CreatedBy));
+        createdByFailure.Groups.ShouldNotBeNull();
+        createdByFailure.Groups.ShouldContain("Audit");
+    }
+
     [Fact(DisplayName = "ValidateAsync with null KyrolusValidationContext uses default context")]
     public async Task ValidateAsync_WithNullContext_UsesDefaultContext()
     {

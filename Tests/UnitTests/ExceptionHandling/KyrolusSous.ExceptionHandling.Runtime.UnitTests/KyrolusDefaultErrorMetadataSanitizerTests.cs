@@ -189,4 +189,55 @@ public class KyrolusDefaultErrorMetadataSanitizerTests
         result.ShouldNotContainKey("creditCard");
         result.ShouldNotContainKey("SSN");
     }
+
+    [Fact(DisplayName = "Sanitize should scrub sensitive keys nested inside a dictionary-shaped metadata value too")]
+    public void Sanitize_Should_Scrub_Sensitive_Keys_In_Nested_Dictionary_Value()
+    {
+        var options = Options.Create(new KyrolusExceptionHandlingOptions());
+        var sanitizer = new KyrolusDefaultErrorMetadataSanitizer(options);
+
+        var metadata = new Dictionary<string, object?>
+        {
+            ["requestContext"] = new Dictionary<string, object?>
+            {
+                ["userId"] = "user-1",
+                ["password"] = "P@ssword123"
+            },
+            ["safeKey"] = "safe-value"
+        };
+
+        var result = sanitizer.Sanitize(metadata, TestErrorContext);
+
+        result.ShouldContainKey("safeKey");
+        result.ShouldContainKey("requestContext");
+        var nested = result["requestContext"].ShouldBeOfType<Dictionary<string, object?>>();
+        nested.ShouldContainKey("userId");
+        nested.ShouldNotContainKey("password");
+    }
+
+    [Fact(DisplayName = "Sanitize should scrub sensitive keys nested multiple levels deep")]
+    public void Sanitize_Should_Scrub_Sensitive_Keys_In_Deeply_Nested_Dictionary()
+    {
+        var options = Options.Create(new KyrolusExceptionHandlingOptions());
+        var sanitizer = new KyrolusDefaultErrorMetadataSanitizer(options);
+
+        var metadata = new Dictionary<string, object?>
+        {
+            ["level1"] = new Dictionary<string, object?>
+            {
+                ["level2"] = new Dictionary<string, object?>
+                {
+                    ["apiKey"] = "sk-secret",
+                    ["region"] = "eu-west-1"
+                }
+            }
+        };
+
+        var result = sanitizer.Sanitize(metadata, TestErrorContext);
+
+        var level1 = result["level1"].ShouldBeOfType<Dictionary<string, object?>>();
+        var level2 = level1["level2"].ShouldBeOfType<Dictionary<string, object?>>();
+        level2.ShouldContainKey("region");
+        level2.ShouldNotContainKey("apiKey");
+    }
 }

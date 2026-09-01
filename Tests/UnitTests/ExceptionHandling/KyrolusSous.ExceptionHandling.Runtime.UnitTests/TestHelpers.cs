@@ -86,3 +86,43 @@ public sealed class TestTypedStringLocalizer<TResource>(IReadOnlyDictionary<stri
     public IEnumerable<LocalizedString> GetAllStrings(bool includeParentCultures)
         => translations.Select(t => new LocalizedString(t.Key, t.Value, false));
 }
+
+/// <summary>
+/// Single place to hand-wire a <see cref="KyrolusExceptionHandlingDependencies"/> for tests that want to bypass
+/// the DI container (e.g. to assert on a specific <see cref="TestLogger{T}"/> instance directly). Every test that
+/// exercises the middleware, the MVC filter, or a native <see cref="IExceptionHandler"/> in isolation needs the
+/// exact same mapper/sanitizer/translator/writer wiring, so it lives here once instead of being retyped per file.
+/// </summary>
+public static class TestExceptionHandlingDependenciesFactory
+{
+    public static KyrolusExceptionHandlingDependencies Create(
+        ILogger<KyrolusExceptionHandlingDependencies>? logger = null,
+        Action<KyrolusExceptionHandlingOptions>? configureOptions = null,
+        string environmentName = "Development",
+        IKyrolusLocalizer? localizer = null)
+    {
+        var options = new KyrolusExceptionHandlingOptions();
+        configureOptions?.Invoke(options);
+        var optionsWrapper = Options.Create(options);
+
+        var contextFactory = new KyrolusHttpErrorContextFactory(optionsWrapper);
+        var mappers = new IKyrolusExceptionMapper[]
+        {
+            new KyrolusDomainExceptionMapper(),
+            new KyrolusFrameworkExceptionMapper(),
+            new KyrolusDefaultExceptionMapper()
+        };
+        var mappingService = new KyrolusExceptionMappingService(mappers);
+        var sanitizer = new KyrolusDefaultErrorMetadataSanitizer(optionsWrapper);
+        var environment = new TestHostEnvironment(environmentName);
+        var translator = new KyrolusExceptionTranslator(mappingService, sanitizer, environment, optionsWrapper, localizer);
+        var writer = new KyrolusJsonErrorResponseWriter();
+
+        return new KyrolusExceptionHandlingDependencies(
+            translator,
+            writer,
+            contextFactory,
+            optionsWrapper,
+            logger ?? NullLogger<KyrolusExceptionHandlingDependencies>.Instance);
+    }
+}

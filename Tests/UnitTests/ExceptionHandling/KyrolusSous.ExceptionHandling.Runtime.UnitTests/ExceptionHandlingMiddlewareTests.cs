@@ -8,31 +8,7 @@ public class ExceptionHandlingMiddlewareTests
     private static KyrolusExceptionHandlingDependencies CreateDependencies(
         TestLogger<KyrolusExceptionHandlingDependencies> logger,
         Action<KyrolusExceptionHandlingOptions>? configureOptions = null)
-    {
-        var options = new KyrolusExceptionHandlingOptions();
-        configureOptions?.Invoke(options);
-        var optionsWrapper = Options.Create(options);
-
-        var contextFactory = new KyrolusHttpErrorContextFactory(optionsWrapper);
-        var mappers = new IKyrolusExceptionMapper[]
-        {
-            new KyrolusDomainExceptionMapper(),
-            new KyrolusFrameworkExceptionMapper(),
-            new KyrolusDefaultExceptionMapper()
-        };
-        var mappingService = new KyrolusExceptionMappingService(mappers);
-        var sanitizer = new KyrolusDefaultErrorMetadataSanitizer(optionsWrapper);
-        var environment = new TestHostEnvironment("Development");
-        var translator = new KyrolusExceptionTranslator(mappingService, sanitizer, environment, optionsWrapper);
-        var writer = new KyrolusJsonErrorResponseWriter();
-
-        return new KyrolusExceptionHandlingDependencies(
-            translator,
-            writer,
-            contextFactory,
-            optionsWrapper,
-            logger);
-    }
+        => TestExceptionHandlingDependenciesFactory.Create(logger, configureOptions);
 
     [Fact(DisplayName = "Middleware should pass request through next when no exception is thrown")]
     public async Task Invoke_Should_PassThrough_When_No_Exception()

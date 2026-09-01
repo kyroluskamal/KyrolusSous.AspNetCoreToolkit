@@ -23,6 +23,20 @@ public sealed class ValidatableRequestWithNoMembers : IValidatableObject
     }
 }
 
+public sealed class ScopedTestRequest
+{
+    [Required(ErrorMessage = "Password is required.")]
+    [KyrolusValidationScope(RuleSets = ["Create"])]
+    public string Password { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "CreatedBy is required.")]
+    [KyrolusValidationScope(Groups = ["Audit"])]
+    public string CreatedBy { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Name is required.")]
+    public string Name { get; set; } = string.Empty;
+}
+
 public sealed class ContextCapturingRequest : IValidatableObject
 {
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)

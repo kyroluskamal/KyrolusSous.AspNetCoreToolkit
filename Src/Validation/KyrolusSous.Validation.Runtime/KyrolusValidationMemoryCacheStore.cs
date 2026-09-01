@@ -9,10 +9,7 @@ public sealed class KyrolusValidationMemoryCacheStore : IKyrolusValidationCacheS
 
     public ValueTask<IReadOnlyList<KyrolusValidationFailure>?> TryGetAsync(string key, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(key))
-            return ValueTask.FromResult<IReadOnlyList<KyrolusValidationFailure>?>(null);
-
-        if (!entries.TryGetValue(key, out var entry))
+        if (string.IsNullOrWhiteSpace(key) || !entries.TryGetValue(key, out var entry))
             return ValueTask.FromResult<IReadOnlyList<KyrolusValidationFailure>?>(null);
 
         if (entry.ExpiresAt <= DateTimeOffset.UtcNow)

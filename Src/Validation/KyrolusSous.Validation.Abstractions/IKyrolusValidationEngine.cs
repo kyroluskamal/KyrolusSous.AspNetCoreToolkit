@@ -52,6 +52,35 @@ public interface IKyrolusValidationEngine
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Validates a collection of same-typed request instances in one call using default context settings. Each
+    /// item runs through the full single-item pipeline (caching, hooks, mappings, filters, localization), and
+    /// every resulting failure's <see cref="KyrolusValidationFailure.FieldPath"/> is prefixed with the item's
+    /// zero-based index (e.g. "[2].Email") so failures remain attributable to the item that produced them.
+    /// </summary>
+    /// <typeparam name="TRequest">The type of the request items being validated.</typeparam>
+    /// <param name="requests">The request instances to validate.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>A flat, read-only collection of <see cref="KyrolusValidationFailure"/> across every item.</returns>
+    /// <example>
+    /// <code>
+    /// var failures = await engine.ValidateBatchAsync(orderLines, ct);
+    /// // failures[0].FieldPath == "[3].Quantity" identifies which order line failed.
+    /// </code>
+    /// </example>
+    ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateBatchAsync<TRequest>(
+        IEnumerable<TRequest> requests,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Validates a collection of same-typed request instances in one call using a custom
+    /// <see cref="KyrolusValidationContext"/>, applied identically to every item.
+    /// </summary>
+    ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateBatchAsync<TRequest>(
+        IEnumerable<TRequest> requests,
+        KyrolusValidationContext context,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Validates a composite composed of two distinct models/requests simultaneously.
     /// </summary>
     /// <example>

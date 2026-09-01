@@ -1,63 +1,27 @@
 namespace KyrolusSous.ExceptionHandling.Runtime.Handlers;
 
 /// <summary>
-/// Base class for ASP.NET Core native <see cref="IExceptionHandler"/> implementations with localization,
-/// metadata extraction, and security sanitization.
+/// Base class for ASP.NET Core native <see cref="IExceptionHandler"/> implementations. Delegates classification,
+/// sanitization, localization, and logging entirely to <see cref="KyrolusExceptionHandlingDependencies"/> - the
+/// same pipeline used by <see cref="ExceptionHandlingMiddleware"/> and <see cref="KyrolusExceptionFilter"/> - so
+/// all three surfaces behave identically for the same exception instead of maintaining separate logic.
 /// </summary>
 /// <typeparam name="TException">The specific exception type handled.</typeparam>
-public abstract class KyrolusExceptionHandlerBase<TException>(
-    ILogger logger,
-    HttpStatusCode statusCode,
-    string errorCode,
-    string title,
-    IKyrolusLocalizer? localizer = null,
-    IKyrolusErrorMetadataSanitizer? sanitizer = null,
-    KyrolusHttpErrorContextFactory? contextFactory = null) : IExceptionHandler
+public abstract class KyrolusExceptionHandlerBase<TException>(KyrolusExceptionHandlingDependencies dependencies) : IExceptionHandler
     where TException : Exception
 {
-    protected virtual IReadOnlyList<KyrolusErrorItem>? ExtractErrors(TException exception)
-    {
-        if (exception is KyrolusException kyrolusException)
-            return kyrolusException.Errors;
-
-        if (exception is IKyrolusExceptionWithErrors errorsException)
-            return errorsException.GetErrors();
-
-        return null;
-    }
-
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext,
         Exception exception,
         CancellationToken cancellationToken)
     {
-        if (exception is not TException typedException) return false;
+        if (exception is not TException) return false;
 
-        var errorContext = contextFactory?.Create(httpContext)
-            ?? new KyrolusErrorContext(httpContext.TraceIdentifier, null, null, null, httpContext.Request.Path, httpContext.Request.Method, null);
+        var errorContext = dependencies.ContextFactory.Create(httpContext);
+        var mapping = dependencies.TranslateAndLog(exception, errorContext);
 
-        var rawMetadata = KyrolusMetadataExtractor.Extract(typedException);
-        var sanitizedMetadata = (sanitizer is not null && rawMetadata is { Count: > 0 })
-            ? sanitizer.Sanitize(rawMetadata, errorContext)
-            : rawMetadata;
-
-        var errors = ExtractErrors(typedException);
-        var rawEnvelope = new KyrolusErrorEnvelope(
-            errorCode,
-            title,
-            typedException.Message,
-            errorContext.TraceId ?? httpContext.TraceIdentifier,
-            errors,
-            sanitizedMetadata);
-
-        var envelope = KyrolusExceptionEnrichmentHelper.LocalizeEnvelope(localizer, rawEnvelope, errorContext.Culture);
-
-        await KyrolusExceptionHandlerHelper.WriteEnvelopeAsync(
-            logger,
-            httpContext,
-            statusCode,
-            envelope,
-            cancellationToken).ConfigureAwait(false);
+        if (!httpContext.Response.HasStarted)
+            await dependencies.ResponseWriter.WriteAsync(httpContext, mapping, errorContext, cancellationToken).ConfigureAwait(false);
 
         return true;
     }

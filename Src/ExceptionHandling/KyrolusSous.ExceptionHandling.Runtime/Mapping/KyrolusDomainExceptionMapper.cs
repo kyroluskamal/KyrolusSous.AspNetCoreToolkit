@@ -21,7 +21,8 @@ public sealed class KyrolusDomainExceptionMapper : IKyrolusExceptionMapper
             traceId: context.TraceId,
             metadata: KyrolusMetadataExtractor.Extract(kyEx, kyEx.Metadata))
             .AsTransient(kyEx.IsTransient)
-            .WithLogging(kyEx.ShouldLog);
+            .WithLogging(kyEx.ShouldLog)
+            .WithRetryAfter(kyEx.RetryAfter);
 
         return true;
     }

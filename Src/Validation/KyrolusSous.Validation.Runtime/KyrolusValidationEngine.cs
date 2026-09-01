@@ -30,73 +30,117 @@ public sealed class KyrolusValidationEngine(
 
         await RunBeforeHooks(request, effectiveContext, cancellationToken).ConfigureAwait(false);
 
-        var cacheEntry = ResolveCacheEntry(request, effectiveContext);
-        if (cacheEntry is not null && cacheStore is not null)
+        try
         {
-            var cached = await cacheStore.TryGetAsync(cacheEntry.Key, cancellationToken).ConfigureAwait(false);
-            if (cached is not null)
+            var cacheEntry = ResolveCacheEntry(request, effectiveContext);
+            if (cacheEntry is not null && cacheStore is not null)
             {
-                var cachedResult = localizer is null
-                    ? cached
-                    : [.. cached.Select(failure => failure with { ErrorMessage = LocalizeFailure(localizer, failure) })];
+                var cached = await cacheStore.TryGetAsync(cacheEntry.Key, cancellationToken).ConfigureAwait(false);
+                if (cached is not null)
+                {
+                    var cachedResult = localizer is null
+                        ? cached
+                        : [.. cached.Select(failure => failure with { ErrorMessage = LocalizeFailure(localizer, failure) })];
 
-                await RunAfterHooks(request, effectiveContext, cachedResult, cancellationToken).ConfigureAwait(false);
-                return cachedResult;
+                    await RunAfterHooks(request, effectiveContext, cachedResult, cancellationToken).ConfigureAwait(false);
+                    return cachedResult;
+                }
             }
-        }
 
-        var validators = serviceProvider.GetServices<IKyrolusRequestValidator<TRequest>>().ToArray();
-        if (validators.Length == 0)
+            var validators = serviceProvider.GetServices<IKyrolusRequestValidator<TRequest>>().ToArray();
+            if (validators.Length == 0)
+            {
+                var empty = Array.Empty<KyrolusValidationFailure>();
+                await TryStoreCache(cacheEntry, empty, cancellationToken, ResolveNegativeTtl(request)).ConfigureAwait(false);
+                await RunAfterHooks(request, effectiveContext, empty, cancellationToken).ConfigureAwait(false);
+                return empty;
+            }
+
+            List<KyrolusValidationFailure> failures = [];
+            foreach (var validator in validators)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                IReadOnlyList<KyrolusValidationFailure> result;
+                if (validator is IKyrolusRequestValidatorWithContext<TRequest> contextValidator)
+                {
+                    result = await contextValidator.ValidateAsync(request, effectiveContext, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    result = await validator.ValidateAsync(request, cancellationToken).ConfigureAwait(false);
+                }
+                if (result is not null && result.Count > 0)
+                {
+                    failures.AddRange(result);
+                }
+            }
+
+            if (failures.Count == 0)
+            {
+                var empty = Array.Empty<KyrolusValidationFailure>();
+                await TryStoreCache(cacheEntry, empty, cancellationToken, ResolveNegativeTtl(request)).ConfigureAwait(false);
+                await RunAfterHooks(request, effectiveContext, empty, cancellationToken).ConfigureAwait(false);
+                return empty;
+            }
+
+            var normalized = failures.Select(NormalizeFailure).ToArray();
+            var mapped = ApplyMappings(normalized, effectiveContext);
+            var filtered = ApplyFilters(mapped, effectiveContext);
+            await TryStoreCache(cacheEntry, filtered, cancellationToken).ConfigureAwait(false);
+
+            if (localizer is null)
+            {
+                await RunAfterHooks(request, effectiveContext, filtered, cancellationToken).ConfigureAwait(false);
+                return filtered;
+            }
+
+            var localized = filtered
+                .Select(failure => failure with { ErrorMessage = LocalizeFailure(localizer, failure) })
+                .ToArray();
+            await RunAfterHooks(request, effectiveContext, localized, cancellationToken).ConfigureAwait(false);
+            return localized;
+        }
+        catch (Exception)
         {
-            var empty = Array.Empty<KyrolusValidationFailure>();
-            await TryStoreCache(cacheEntry, empty, cancellationToken, ResolveNegativeTtl(request)).ConfigureAwait(false);
-            await RunAfterHooks(request, effectiveContext, empty, cancellationToken).ConfigureAwait(false);
-            return empty;
+            // A hook's "before" half already ran (e.g. KyrolusValidationTracingHook opened an Activity,
+            // KyrolusValidationMetricsHook started a Stopwatch). Without this, a validator or the cache store
+            // throwing here meant "after" never ran: the Activity leaked un-disposed/never exported, and no
+            // metric was recorded for the very validations most worth observing. IKyrolusValidationHook has no
+            // exception-aware overload, so this reports an empty failures list rather than skipping cleanup.
+            await RunAfterHooks(request, effectiveContext, Array.Empty<KyrolusValidationFailure>(), cancellationToken).ConfigureAwait(false);
+            throw;
         }
+    }
 
-        List<KyrolusValidationFailure> failures = [];
-        foreach (var validator in validators)
+    public async ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateBatchAsync<TRequest>(
+        IEnumerable<TRequest> requests,
+        CancellationToken cancellationToken = default)
+    => await ValidateBatchAsync(requests, KyrolusValidationContext.Default, cancellationToken).ConfigureAwait(false);
+
+    public async ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateBatchAsync<TRequest>(
+        IEnumerable<TRequest> requests,
+        KyrolusValidationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(requests);
+
+        var allFailures = new List<KyrolusValidationFailure>();
+        var index = 0;
+        foreach (var request in requests)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            IReadOnlyList<KyrolusValidationFailure> result;
-            if (validator is IKyrolusRequestValidatorWithContext<TRequest> contextValidator)
+
+            var itemFailures = await ValidateAsync(request, context, cancellationToken).ConfigureAwait(false);
+            foreach (var failure in itemFailures)
             {
-                result = await contextValidator.ValidateAsync(request, effectiveContext, cancellationToken).ConfigureAwait(false);
+                var path = string.IsNullOrWhiteSpace(failure.FieldPath) ? failure.PropertyName : failure.FieldPath;
+                allFailures.Add(failure with { FieldPath = $"[{index}].{path}" });
             }
-            else
-            {
-                result = await validator.ValidateAsync(request, cancellationToken).ConfigureAwait(false);
-            }
-            if (result is not null && result.Count > 0)
-            {
-                failures.AddRange(result);
-            }
+
+            index++;
         }
 
-        if (failures.Count == 0)
-        {
-            var empty = Array.Empty<KyrolusValidationFailure>();
-            await TryStoreCache(cacheEntry, empty, cancellationToken, ResolveNegativeTtl(request)).ConfigureAwait(false);
-            await RunAfterHooks(request, effectiveContext, empty, cancellationToken).ConfigureAwait(false);
-            return empty;
-        }
-
-        var normalized = failures.Select(NormalizeFailure).ToArray();
-        var mapped = ApplyMappings(normalized, effectiveContext);
-        var filtered = ApplyFilters(mapped, effectiveContext);
-        await TryStoreCache(cacheEntry, filtered, cancellationToken).ConfigureAwait(false);
-
-        if (localizer is null)
-        {
-            await RunAfterHooks(request, effectiveContext, filtered, cancellationToken).ConfigureAwait(false);
-            return filtered;
-        }
-
-        var localized = filtered
-            .Select(failure => failure with { ErrorMessage = LocalizeFailure(localizer, failure) })
-            .ToArray();
-        await RunAfterHooks(request, effectiveContext, localized, cancellationToken).ConfigureAwait(false);
-        return localized;
+        return allFailures;
     }
 
     public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateCompositeAsync<TFirst, TSecond>(
@@ -180,16 +224,19 @@ public sealed class KyrolusValidationEngine(
 
     private sealed class ProfileAccumulator
     {
-        private readonly HashSet<string> ruleSets;
-        private readonly HashSet<string> groups;
+        // A List (not a HashSet) preserves the deterministic order in which RuleSets/Groups were first declared -
+        // across the base context and every merged profile - instead of an unspecified HashSet enumeration order.
+        // That order matters because ResolveActiveRuleSet's "no exact match" fallback picks contextRuleSets.First().
+        private readonly List<string> ruleSets;
+        private readonly List<string> groups;
         private readonly bool hasRuleSets;
         private readonly bool hasGroups;
         private KyrolusValidationSeverity? minimumSeverity;
 
         public ProfileAccumulator(KyrolusValidationContext context)
         {
-            ruleSets = CreateSet(context.RuleSets, out hasRuleSets);
-            groups = CreateSet(context.Groups, out hasGroups);
+            ruleSets = CreateOrderedSet(context.RuleSets, out hasRuleSets);
+            groups = CreateOrderedSet(context.Groups, out hasGroups);
             minimumSeverity = context.MinimumSeverity;
         }
 
@@ -210,23 +257,29 @@ public sealed class KyrolusValidationEngine(
             };
         }
 
-        private static HashSet<string> CreateSet(
+        private static List<string> CreateOrderedSet(
             IReadOnlyCollection<string>? values,
             out bool hasValues)
         {
             if (values is { Count: > 0 })
             {
                 hasValues = true;
-                return new HashSet<string>(values, StringComparer.OrdinalIgnoreCase);
+                return values.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             }
 
             hasValues = false;
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return [];
         }
 
-        private static void AddRange(HashSet<string> target, IReadOnlyCollection<string>? values)
+        private static void AddRange(List<string> target, IReadOnlyCollection<string>? values)
         {
-            if (values is { Count: > 0 }) target.UnionWith(values);
+            if (values is not { Count: > 0 }) return;
+
+            foreach (var value in values)
+            {
+                if (!target.Contains(value, StringComparer.OrdinalIgnoreCase))
+                    target.Add(value);
+            }
         }
 
         private static KyrolusValidationSeverity? MaxSeverity(

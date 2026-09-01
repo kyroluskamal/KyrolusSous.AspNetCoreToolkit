@@ -12,7 +12,8 @@ public static class AdvancedRuleBuilderExtensions
 {
     private static readonly Regex MacRegex = new(
         @"^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$|^([0-9A-Fa-f]{12})$",
-        RegexOptions.Compiled);
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(250));
 
     private const string SpanishDniControlLetters = "TRWAGMYFPDXBNJZSQVHLCKE";
     private const string SpanishCifControlLetters = "JABCDEFGHI";
@@ -298,8 +299,18 @@ public static class AdvancedRuleBuilderExtensions
     public static bool IsCoordinatesValid(double latitude, double longitude)
         => latitude >= -90.0 && latitude <= 90.0 && longitude >= -180.0 && longitude <= 180.0;
 
+    private static readonly (int Min, int Max)[] CronFieldRanges =
+    [
+        (0, 59), // minute
+        (0, 23), // hour
+        (1, 31), // day of month
+        (1, 12), // month
+        (0, 7)   // day of week (0 and 7 both mean Sunday)
+    ];
+
     /// <summary>
-    /// Validates 5-part standard cron expressions.
+    /// Validates 5-part standard cron expressions, including that numeric values/ranges/steps fall within each
+    /// field's real bounds (e.g. minutes 0-59) - not just that the characters used look cron-shaped.
     /// </summary>
     public static bool IsCronExpressionValid(string? cron)
     {
@@ -307,7 +318,45 @@ public static class AdvancedRuleBuilderExtensions
         var parts = cron.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length != 5) return false;
 
-        return parts.All(part => part == "*" || part.All(ch => char.IsDigit(ch) || ch == '/' || ch == '-' || ch == ','));
+        for (var i = 0; i < parts.Length; i++)
+            if (!IsCronFieldValid(parts[i], CronFieldRanges[i].Min, CronFieldRanges[i].Max))
+                return false;
+
+        return true;
+    }
+
+    private static bool IsCronFieldValid(string field, int min, int max)
+    {
+        foreach (var listItem in field.Split(','))
+        {
+            if (listItem.Length == 0) return false;
+
+            var slashIndex = listItem.IndexOf('/');
+            var basePart = slashIndex >= 0 ? listItem[..slashIndex] : listItem;
+            var stepPart = slashIndex >= 0 ? listItem[(slashIndex + 1)..] : null;
+
+            if (stepPart is not null && (!int.TryParse(stepPart, out var step) || step <= 0))
+                return false;
+
+            if (basePart == "*")
+                continue;
+
+            var dashIndex = basePart.IndexOf('-');
+            if (dashIndex > 0)
+            {
+                if (!int.TryParse(basePart[..dashIndex], out var start) || !int.TryParse(basePart[(dashIndex + 1)..], out var end))
+                    return false;
+                if (start < min || start > max || end < min || end > max || start > end)
+                    return false;
+            }
+            else
+            {
+                if (!int.TryParse(basePart, out var value) || value < min || value > max)
+                    return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>

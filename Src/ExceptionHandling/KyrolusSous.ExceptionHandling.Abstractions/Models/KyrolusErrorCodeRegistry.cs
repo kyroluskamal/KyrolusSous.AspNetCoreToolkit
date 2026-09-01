@@ -281,7 +281,7 @@ public static partial class KyrolusErrorCodeRegistry
             new KyrolusErrorCodeDefinition(KyrolusErrorCodes.Forbidden, "Forbidden", HttpStatusCode.Forbidden, ShouldLog: false),
             new KyrolusErrorCodeDefinition(KyrolusErrorCodes.Timeout, "Timeout", HttpStatusCode.GatewayTimeout, IsTransient: true, ShouldLog: true),
             new KyrolusErrorCodeDefinition(KyrolusErrorCodes.ExternalService, "External service error", HttpStatusCode.BadGateway, IsTransient: true, ShouldLog: true),
-            new KyrolusErrorCodeDefinition(KyrolusErrorCodes.RateLimit, "Rate limit exceeded", (HttpStatusCode)429, IsTransient: true, ShouldLog: false),
+            new KyrolusErrorCodeDefinition(KyrolusErrorCodes.RateLimit, "Rate limit exceeded", HttpStatusCode.TooManyRequests, IsTransient: true, ShouldLog: false),
             new KyrolusErrorCodeDefinition(KyrolusErrorCodes.BadRequest, "Bad request", HttpStatusCode.BadRequest, ShouldLog: false),
             new KyrolusErrorCodeDefinition(KyrolusErrorCodes.InvalidJson, "Invalid JSON", HttpStatusCode.BadRequest, ShouldLog: false),
             new KyrolusErrorCodeDefinition(KyrolusErrorCodes.DatabaseError, "Database error", HttpStatusCode.InternalServerError, IsTransient: true, ShouldLog: true),

@@ -164,6 +164,9 @@ public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidatorWith
             return;
         }
 
+        // Removed as a slice from the end (not RemoveAll-by-name) so a nested RuleSet(...) call using the same
+        // name doesn't also strip the outer scope's entry - RemoveAll would delete every matching name in the
+        // list, including the enclosing scope's, leaving rules added after the inner block untagged.
         _currentRuleSets.AddRange(names);
         try
         {
@@ -171,7 +174,7 @@ public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidatorWith
         }
         finally
         {
-            _currentRuleSets.RemoveAll(name => names.Contains(name, StringComparer.OrdinalIgnoreCase));
+            _currentRuleSets.RemoveRange(_currentRuleSets.Count - names.Length, names.Length);
         }
     }
 
@@ -201,6 +204,8 @@ public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidatorWith
             return;
         }
 
+        // See the matching comment in RuleSet(...): removed as a slice from the end, not by name, so a nested
+        // Group(...) call reusing the same name doesn't also strip the outer scope's entry.
         _currentGroups.AddRange(names);
         try
         {
@@ -208,7 +213,7 @@ public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidatorWith
         }
         finally
         {
-            _currentGroups.RemoveAll(name => names.Contains(name, StringComparer.OrdinalIgnoreCase));
+            _currentGroups.RemoveRange(_currentGroups.Count - names.Length, names.Length);
         }
     }
 
@@ -272,46 +277,34 @@ public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidatorWith
     }
 
     private static string? ResolveActiveRuleSet(IKyrolusValidationRule<T> rule, KyrolusValidationContext context)
-    {
-        if (context.RuleSets is not { Count: > 0 })
-            return null;
-
-        return rule.RuleSets.FirstOrDefault(r => context.RuleSets.Contains(r, StringComparer.OrdinalIgnoreCase))
-            ?? (context.RuleSets.Contains("*") ? rule.RuleSets.FirstOrDefault() : context.RuleSets.First());
-    }
+        => KyrolusValidationScopeResolver.ResolveActiveRuleSet(rule.RuleSets, context.RuleSets);
 
     private static bool ShouldExecuteRule(IKyrolusValidationRule<T> rule, KyrolusValidationContext context)
-    {
-        if (!ShouldExecuteScope(context.RuleSets, rule.RuleSets, KyrolusValidationDefaults.DefaultRuleSet))
-            return false;
+        => KyrolusValidationScopeResolver.ShouldExecute(context.RuleSets, rule.RuleSets, context.Groups, rule.Groups);
 
-        if (!ShouldExecuteScope(context.Groups, rule.Groups, KyrolusValidationDefaults.DefaultGroup))
-            return false;
-
-        return true;
-    }
-
-    private static bool ShouldExecuteScope(
-        IEnumerable<string>? selectedScopes,
-        IEnumerable<string> ruleScopes,
-        string defaultScope)
-    {
-        if (selectedScopes is null || !selectedScopes.Any() || selectedScopes.Contains("*", StringComparer.OrdinalIgnoreCase))
-            return true;
-        if (!ruleScopes.Any())
-            return selectedScopes.Contains(defaultScope, StringComparer.OrdinalIgnoreCase);
-
-        return ruleScopes.Any(ruleScope => selectedScopes.Contains(ruleScope, StringComparer.OrdinalIgnoreCase));
-    }
-
+    /// <summary>
+    /// Resolves the property name for a rule expression, walking the full member-access chain for a nested
+    /// property (e.g. <c>x => x.Address.City</c> resolves to "Address.City", not just "City") so failures on
+    /// nested properties report an unambiguous, client-facing path.
+    /// </summary>
     private static string GetPropertyName<TProperty>(Expression<Func<T, TProperty>> expression)
     {
-        if (expression.Body is MemberExpression memberExpression)
-            return memberExpression.Member.Name;
+        var body = expression.Body is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary
+            ? unary.Operand
+            : expression.Body;
 
-        if (expression.Body is UnaryExpression { Operand: MemberExpression operandMember })
-            return operandMember.Member.Name;
+        if (body is not MemberExpression memberExpression)
+            return string.Empty;
 
-        return string.Empty;
+        var segments = new List<string>();
+        MemberExpression? current = memberExpression;
+        while (current is not null)
+        {
+            segments.Add(current.Member.Name);
+            current = current.Expression as MemberExpression;
+        }
+
+        segments.Reverse();
+        return string.Join(".", segments);
     }
 }

@@ -4,6 +4,7 @@ global using KyrolusSous.ExceptionHandling.Abstractions.Helpers;
 global using KyrolusSous.ExceptionHandling.Abstractions.Interfaces;
 global using KyrolusSous.ExceptionHandling.Abstractions.Models;
 global using Microsoft.EntityFrameworkCore;
+global using Microsoft.Extensions.Options;
 
 namespace KyrolusSous.ExceptionHandling.EntityFramework;
 
@@ -24,8 +25,16 @@ namespace KyrolusSous.ExceptionHandling.EntityFramework;
 /// builder.Services.AddKyrolusEntityFrameworkExceptionHandling();
 /// </code>
 /// </example>
-public sealed class KyrolusEfExceptionMapper : IKyrolusExceptionMapper
+/// <param name="options">
+/// Options controlling whether the client-facing detail includes the raw provider error text. See
+/// <see cref="KyrolusExceptionHandlingOptions.IncludeRawDatabaseErrorDetails"/>.
+/// </param>
+public sealed class KyrolusEfExceptionMapper(IOptions<KyrolusExceptionHandlingOptions>? options = null) : IKyrolusExceptionMapper
 {
+    private const string GenericDatabaseErrorDetail = "A database error occurred while saving changes.";
+
+    private readonly bool includeRawDatabaseErrorDetails = options?.Value.IncludeRawDatabaseErrorDetails ?? false;
+
     /// <summary>
     /// Gets the mapper order (-50 to execute before general framework mappers).
     /// </summary>
@@ -66,7 +75,7 @@ public sealed class KyrolusEfExceptionMapper : IKyrolusExceptionMapper
                 code: KyrolusErrorCodes.DatabaseError,
                 title: "Database error",
                 statusCode: HttpStatusCode.InternalServerError,
-                detail: updateException.Message,
+                detail: includeRawDatabaseErrorDetails ? updateException.Message : GenericDatabaseErrorDetail,
                 traceId: context?.TraceId,
                 errors: (exception as IKyrolusExceptionWithErrors)?.GetErrors(),
                 metadata: KyrolusMetadataExtractor.Extract(updateException))

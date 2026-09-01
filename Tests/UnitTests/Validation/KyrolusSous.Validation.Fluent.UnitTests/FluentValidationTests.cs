@@ -159,6 +159,38 @@ public sealed class FluentValidationTests
         AdvancedRuleBuilderExtensions.IsCronExpressionValid("invalid cron syntax string").ShouldBeFalse();
     }
 
+    [Theory(DisplayName = "Cron expression validator checks each field is within its real range, not just its character shape")]
+    [InlineData("*/15 * * * *", true)]
+    [InlineData("0 9-17 * * 1-5", true)]
+    [InlineData("0,30 8,20 1,15 1,6,12 0", true)]
+    [InlineData("99 0 * * *", false)] // minute out of range (max 59)
+    [InlineData("0 24 * * *", false)] // hour out of range (max 23)
+    [InlineData("0 0 32 * *", false)] // day of month out of range (max 31)
+    [InlineData("0 0 0 * *", false)]  // day of month out of range (min 1)
+    [InlineData("0 0 * 13 *", false)] // month out of range (max 12)
+    [InlineData("0 0 * * 8", false)]  // day of week out of range (max 7)
+    [InlineData("99 99 99 99 99", false)]
+    [InlineData("5-2 * * * *", false)] // reversed range
+    public void Cron_validator_checks_field_ranges(string cron, bool expected)
+    {
+        AdvancedRuleBuilderExtensions.IsCronExpressionValid(cron).ShouldBe(expected);
+    }
+
+    [Fact(DisplayName = "IsRegexMatch returns false instead of hanging or throwing on a catastrophic-backtracking pattern")]
+    public void IsRegexMatch_Returns_False_On_Timeout_Instead_Of_Hanging()
+    {
+        // (a+)+$ against a string with no trailing match point is a textbook catastrophic-backtracking pattern.
+        const string evilPattern = "(a+)+$";
+        var input = new string('a', 30) + "!";
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var result = RuleBuilderExtensions.IsRegexMatch(input, evilPattern, TimeSpan.FromMilliseconds(100));
+        stopwatch.Stop();
+
+        result.ShouldBeFalse();
+        stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(5));
+    }
+
     [Fact(DisplayName = "MAC Address validator correctly evaluates MAC formats")]
     public void Mac_Address_validator_evaluates_correctly()
     {
@@ -443,6 +475,73 @@ public sealed class FluentValidationTests
         updateResult.ShouldNotContain(f => f.PropertyName == "Password");
     }
 
+    private sealed record NestedScopeRequest(string Outer1, string Inner, string Outer2);
+
+    private sealed class NestedRuleSetValidator : KyrolusAbstractValidator<NestedScopeRequest>
+    {
+        public NestedRuleSetValidator()
+        {
+            RuleSet("Create", () =>
+            {
+                RuleFor(x => x.Outer1).NotEmpty();
+
+                RuleSet("Create", () =>
+                {
+                    RuleFor(x => x.Inner).NotEmpty();
+                });
+
+                // Regression case: after the nested RuleSet("Create", ...) block above exits, rules defined here
+                // must still be tagged "Create" - a RemoveAll-by-name bug used to strip this outer scope's tag
+                // too when the inner block's finally ran.
+                RuleFor(x => x.Outer2).NotEmpty();
+            });
+        }
+    }
+
+    [Fact(DisplayName = "Nested RuleSet blocks with the same name do not strip the outer scope's tag from rules declared after the inner block")]
+    public async Task Nested_RuleSet_With_Same_Name_Does_Not_Leak_Outer_Scope()
+    {
+        var validator = new NestedRuleSetValidator();
+        var request = new NestedScopeRequest(Outer1: "", Inner: "", Outer2: "");
+
+        var result = await validator.ValidateAsync(request, new KyrolusValidationContext(RuleSets: ["Create"]));
+
+        result.ShouldContain(f => f.PropertyName == "Outer1" && f.RuleSet == "Create");
+        result.ShouldContain(f => f.PropertyName == "Inner" && f.RuleSet == "Create");
+        result.ShouldContain(f => f.PropertyName == "Outer2" && f.RuleSet == "Create");
+    }
+
+    private sealed class NestedGroupValidator : KyrolusAbstractValidator<NestedScopeRequest>
+    {
+        public NestedGroupValidator()
+        {
+            Group("Audit", () =>
+            {
+                RuleFor(x => x.Outer1).NotEmpty();
+
+                Group("Audit", () =>
+                {
+                    RuleFor(x => x.Inner).NotEmpty();
+                });
+
+                RuleFor(x => x.Outer2).NotEmpty();
+            });
+        }
+    }
+
+    [Fact(DisplayName = "Nested Group blocks with the same name do not strip the outer scope's tag from rules declared after the inner block")]
+    public async Task Nested_Group_With_Same_Name_Does_Not_Leak_Outer_Scope()
+    {
+        var validator = new NestedGroupValidator();
+        var request = new NestedScopeRequest(Outer1: "", Inner: "", Outer2: "");
+
+        var result = await validator.ValidateAsync(request, new KyrolusValidationContext(Groups: ["Audit"]));
+
+        result.ShouldContain(f => f.PropertyName == "Outer1");
+        result.ShouldContain(f => f.PropertyName == "Inner");
+        result.ShouldContain(f => f.PropertyName == "Outer2");
+    }
+
     [Fact(DisplayName = "WithGroups multi-group intersection filters correctly")]
     public async Task WithGroups_MultiGroup_Intersection_Filters_Correctly()
     {
@@ -462,6 +561,28 @@ public sealed class FluentValidationTests
 
         checkoutResult.ShouldContain(f => f.PropertyName == "ShippingAddress");
         checkoutResult.ShouldNotContain(f => f.PropertyName == "Password");
+    }
+
+    private sealed record Person(Address HomeAddress);
+
+    private sealed class NestedPropertyPathValidator : KyrolusAbstractValidator<Person>
+    {
+        public NestedPropertyPathValidator()
+        {
+            RuleFor(x => x.HomeAddress.City).NotEmpty();
+        }
+    }
+
+    [Fact(DisplayName = "RuleFor on a nested property reports the full dotted path, not just the last member name")]
+    public async Task RuleFor_OnNestedProperty_ReportsFullDottedPath()
+    {
+        var validator = new NestedPropertyPathValidator();
+        var request = new Person(new Address(City: ""));
+
+        var result = await validator.ValidateAsync(request);
+
+        var failure = result.ShouldHaveSingleItem();
+        failure.PropertyName.ShouldBe("HomeAddress.City");
     }
     #endregion
 }

@@ -152,6 +152,38 @@ public class KyrolusDomainExceptionsTests
         mapping.ShouldLog.ShouldBe(expectedShouldLog);
     }
 
+    [Fact(DisplayName = "KyrolusRateLimitException with retryAfter should flow through to the mapping's RetryAfter and the Retry-After response header")]
+    public async Task RateLimitException_With_RetryAfter_Should_Flow_To_Mapping_And_Header()
+    {
+        var exception = new KyrolusRateLimitException("Too many requests", retryAfter: TimeSpan.FromSeconds(30));
+        var mapper = new KyrolusDomainExceptionMapper();
+
+        mapper.TryMap(exception, TestErrorContext, out var mapping).ShouldBeTrue();
+        mapping.RetryAfter.ShouldBe(TimeSpan.FromSeconds(30));
+
+        var context = new DefaultHttpContext { Response = { Body = new MemoryStream() } };
+        var writer = new KyrolusJsonErrorResponseWriter();
+        await writer.WriteAsync(context, mapping, TestErrorContext, CancellationToken.None);
+
+        context.Response.Headers.RetryAfter.ToString().ShouldBe("30");
+    }
+
+    [Fact(DisplayName = "KyrolusRateLimitException without retryAfter should not set the Retry-After response header")]
+    public async Task RateLimitException_Without_RetryAfter_Should_Not_Set_Header()
+    {
+        var exception = new KyrolusRateLimitException("Too many requests");
+        var mapper = new KyrolusDomainExceptionMapper();
+
+        mapper.TryMap(exception, TestErrorContext, out var mapping).ShouldBeTrue();
+        mapping.RetryAfter.ShouldBeNull();
+
+        var context = new DefaultHttpContext { Response = { Body = new MemoryStream() } };
+        var writer = new KyrolusJsonErrorResponseWriter();
+        await writer.WriteAsync(context, mapping, TestErrorContext, CancellationToken.None);
+
+        context.Response.Headers.RetryAfter.ToString().ShouldBeEmpty();
+    }
+
     [Fact(DisplayName = "KyrolusNotFoundException should expose EntityName and Key properties and set metadata")]
     public void NotFoundException_Should_Expose_Properties_And_Metadata()
     {

@@ -44,6 +44,21 @@ public class GroupTestModelValidator : AbstractValidator<GroupTestModel>
         });
     }
 }
+
+public class MultiRuleSetModel
+{
+    public string Password { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+}
+
+public class MultiRuleSetModelValidator : AbstractValidator<MultiRuleSetModel>
+{
+    public MultiRuleSetModelValidator()
+    {
+        RuleSet("Create", () => RuleFor(x => x.Password).NotEmpty());
+        RuleSet("Update", () => RuleFor(x => x.LastName).NotEmpty());
+    }
+}
 #endregion
 
 public class KyrolusValidationFluentValidationTests
@@ -91,7 +106,7 @@ public class KyrolusValidationFluentValidationTests
             Name = "Valid",
             Color = "#FFFFFF",
             Website = "https://example.com",
-            NationalId = "29901011234567",
+            NationalId = "29812250101231",
             CreatedBy = 10,
             Items = ["Item1"]
         };
@@ -143,6 +158,25 @@ public class KyrolusValidationFluentValidationTests
         var failures = await validator.ValidateAsync(new GroupTestModel(), context);
 
         failures.Count.ShouldBe(3);
+    }
+
+    [Fact(DisplayName = "ValidateAsync labels each failure with the RuleSet it actually belongs to, not just the first requested RuleSet")]
+    public async Task ValidateAsync_LabelsEachFailure_WithItsOwnDeclaredRuleSet_WhenMultipleRuleSetsRequested()
+    {
+        var services = new ServiceCollection();
+        services.AddTransient<IValidator<MultiRuleSetModel>, MultiRuleSetModelValidator>();
+        var provider = services.BuildServiceProvider();
+
+        var validator = new FluentValidationRequestValidator<MultiRuleSetModel>(provider);
+        // "Update" is requested first - the old ".First()" implementation would have mislabeled the
+        // Create-only Password failure as belonging to "Update".
+        var context = new KyrolusValidationContext(RuleSets: ["Update", "Create"]);
+
+        var failures = await validator.ValidateAsync(new MultiRuleSetModel(), context);
+
+        failures.Count.ShouldBe(2);
+        failures.Single(f => f.PropertyName == nameof(MultiRuleSetModel.Password)).RuleSet.ShouldBe("Create");
+        failures.Single(f => f.PropertyName == nameof(MultiRuleSetModel.LastName)).RuleSet.ShouldBe("Update");
     }
 
     [Fact(DisplayName = "ValidateAsync maps default Severity.Error to KyrolusValidationSeverity.Error")]
@@ -225,10 +259,15 @@ public class KyrolusValidationFluentValidationTests
         var validator = new InlineValidator<TestSampleModel>();
         validator.RuleFor(x => x.NationalId).IsEgyptianNationalId(x => x.NationalId, isNullOrEmpty: true);
 
-        validator.Validate(new TestSampleModel { NationalId = "29505051234567" }).IsValid.ShouldBeTrue();
-        validator.Validate(new TestSampleModel { NationalId = "30101011234567" }).IsValid.ShouldBeTrue();
+        // Real, checksum-valid Egyptian National IDs (century digit, birth date, governorate code, and the
+        // Modulo-11 check digit all have to agree - see AdvancedRuleBuilderExtensionsTests for how these were derived).
+        validator.Validate(new TestSampleModel { NationalId = "29812250101231" }).IsValid.ShouldBeTrue();
+        validator.Validate(new TestSampleModel { NationalId = "30503150123451" }).IsValid.ShouldBeTrue();
         validator.Validate(new TestSampleModel { NationalId = "" }).IsValid.ShouldBeTrue();
 
+        // Same digits as the first valid ID above but with the trailing check digit altered - now correctly
+        // rejected since this delegates to the real Modulo-11 checksum instead of a length/prefix-only check.
+        validator.Validate(new TestSampleModel { NationalId = "29812250101230" }).IsValid.ShouldBeFalse();
         validator.Validate(new TestSampleModel { NationalId = "19505051234567" }).IsValid.ShouldBeFalse();
         validator.Validate(new TestSampleModel { NationalId = "2950505" }).IsValid.ShouldBeFalse();
         validator.Validate(new TestSampleModel { NationalId = "2950505123456A" }).IsValid.ShouldBeFalse();

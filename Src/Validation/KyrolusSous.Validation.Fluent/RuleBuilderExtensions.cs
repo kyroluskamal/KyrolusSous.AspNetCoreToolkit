@@ -4,9 +4,14 @@ namespace KyrolusSous.Validation.Fluent;
 
 public static partial class RuleBuilderExtensions
 {
+    /// <summary>Default timeout applied to every regex match performed by this class, guarding against
+    /// catastrophic backtracking on attacker-controlled input (ReDoS).</summary>
+    private static readonly TimeSpan DefaultMatchTimeout = TimeSpan.FromMilliseconds(250);
+
     private static readonly Regex EmailRegex = new(
         @"^[^@\s]+@[^@\s]+\.[^@\s]+$",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        RegexOptions.Compiled | RegexOptions.IgnoreCase,
+        DefaultMatchTimeout);
 
     public static bool IsNotEmpty(string? value)
         => !string.IsNullOrWhiteSpace(value);
@@ -82,8 +87,21 @@ public static partial class RuleBuilderExtensions
     public static bool IsEmailAddress(string? value)
         => !string.IsNullOrWhiteSpace(value) && EmailRegex.IsMatch(value);
 
-    public static bool IsRegexMatch(string? value, string pattern)
-        => !string.IsNullOrWhiteSpace(value) && Regex.IsMatch(value, pattern);
+    public static bool IsRegexMatch(string? value, string pattern, TimeSpan? matchTimeout = null)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+
+        try
+        {
+            return Regex.IsMatch(value, pattern, RegexOptions.None, matchTimeout ?? DefaultMatchTimeout);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            // Treat a runaway match (catastrophic backtracking / ReDoS attempt) as "did not match" rather than
+            // letting the exception propagate out of a validation rule.
+            return false;
+        }
+    }
 
     public static bool IsCreditCardValid(string? value)
     {

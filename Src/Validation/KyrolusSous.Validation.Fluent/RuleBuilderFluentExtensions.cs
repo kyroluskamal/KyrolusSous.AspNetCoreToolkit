@@ -85,9 +85,18 @@ public static class RuleBuilderFluentExtensions
     public static IKyrolusRuleBuilder<T, string?> IsEmail<T>(this IKyrolusRuleBuilder<T, string?> builder)
         => builder.EmailAddress();
 
-    /// <summary>Ensures that the string property matches the provided regular expression pattern.</summary>
-    public static IKyrolusRuleBuilder<T, string?> Matches<T>(this IKyrolusRuleBuilder<T, string?> builder, string regexPattern)
-        => builder.Must(val => RuleBuilderExtensions.IsRegexMatch(val, regexPattern), "Format does not match required pattern.");
+    /// <summary>
+    /// Ensures that the string property matches the provided regular expression pattern.
+    /// </summary>
+    /// <param name="builder">The rule builder.</param>
+    /// <param name="regexPattern">The pattern to match.</param>
+    /// <param name="matchTimeout">
+    /// Guards against catastrophic backtracking (ReDoS) if <paramref name="regexPattern"/> isn't fully trusted
+    /// (e.g. it comes from configuration or a multi-tenant setting rather than being hardcoded by the developer).
+    /// Defaults to 250ms.
+    /// </param>
+    public static IKyrolusRuleBuilder<T, string?> Matches<T>(this IKyrolusRuleBuilder<T, string?> builder, string regexPattern, TimeSpan? matchTimeout = null)
+        => builder.Must(val => RuleBuilderExtensions.IsRegexMatch(val, regexPattern, matchTimeout), "Format does not match required pattern.");
 
     /// <summary>Validates that the string property is a valid credit card number (Luhn algorithm check).</summary>
     public static IKyrolusRuleBuilder<T, string?> CreditCard<T>(this IKyrolusRuleBuilder<T, string?> builder)

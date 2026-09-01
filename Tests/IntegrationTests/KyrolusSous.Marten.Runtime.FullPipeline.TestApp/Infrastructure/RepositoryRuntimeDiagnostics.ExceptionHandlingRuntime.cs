@@ -242,12 +242,7 @@ public static partial class RepositoryRuntimeDiagnostics
             "filter-auth"));
 
         accessor.HttpContext = filterContextHttp;
-        var filter = new KyrolusExceptionFilter(
-            scoped.GetRequiredService<KyrolusExceptionTranslator>(),
-            scoped.GetRequiredService<IKyrolusErrorResponseWriter>(),
-            contextFactory,
-            options,
-            scoped.GetRequiredService<ILogger<KyrolusExceptionFilter>>());
+        var filter = new KyrolusExceptionFilter(scoped.GetRequiredService<KyrolusExceptionHandlingDependencies>());
 
         var actionContext = new ActionContext(filterContextHttp, new RouteData(), new ActionDescriptor());
         var exceptionContext = new ExceptionContext(actionContext, [])
@@ -272,8 +267,6 @@ public static partial class RepositoryRuntimeDiagnostics
         {
             checks++;
         }
-
-        using var loggerFactory = LoggerFactory.Create(_ => { });
 
         var registeredServices = new ServiceCollection()
             .AddLogging()
@@ -495,7 +488,8 @@ public static partial class RepositoryRuntimeDiagnostics
                 }
             };
 
-        var authenticationHandler = new SslAuthenticationExceptionHandler(loggerFactory.CreateLogger<SslAuthenticationExceptionHandler>());
+        var handlerDependencies = registeredProvider.GetRequiredService<KyrolusExceptionHandlingDependencies>();
+        var authenticationHandler = new SslAuthenticationExceptionHandler(handlerDependencies);
         var authenticationContext = CreateExceptionHandlerContext();
         if (await authenticationHandler.TryHandleAsync(authenticationContext, new SslAuthenticationException("ssl"), cancellationToken).ConfigureAwait(false) &&
             authenticationContext.Response.StatusCode == StatusCodes.Status502BadGateway &&
@@ -504,18 +498,18 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
-        var unauthorizedHandler = new UnauthorizedExceptionHandler(loggerFactory.CreateLogger<UnauthorizedExceptionHandler>());
+        var unauthorizedHandler = new UnauthorizedExceptionHandler(handlerDependencies);
         var unauthorizedContext = CreateExceptionHandlerContext();
-        if (await unauthorizedHandler.TryHandleAsync(unauthorizedContext, new UnauthorizedException("unauthorized"), cancellationToken).ConfigureAwait(false) &&
+        if (await unauthorizedHandler.TryHandleAsync(unauthorizedContext, new KyrolusUnauthorizedException("unauthorized"), cancellationToken).ConfigureAwait(false) &&
             unauthorizedContext.Response.StatusCode == StatusCodes.Status401Unauthorized &&
             !await unauthorizedHandler.TryHandleAsync(CreateExceptionHandlerContext(), new InvalidOperationException("ignored"), cancellationToken).ConfigureAwait(false))
         {
             checks++;
         }
 
-        var notFoundHandler = new NotFoundExceptionHandler(loggerFactory.CreateLogger<NotFoundExceptionHandler>());
+        var notFoundHandler = new NotFoundExceptionHandler(handlerDependencies);
         var notFoundContext = CreateExceptionHandlerContext();
-        if (await notFoundHandler.TryHandleAsync(notFoundContext, new NotFoundException("missing"), cancellationToken).ConfigureAwait(false) &&
+        if (await notFoundHandler.TryHandleAsync(notFoundContext, new KyrolusNotFoundException("Item", "missing"), cancellationToken).ConfigureAwait(false) &&
             notFoundContext.Response.StatusCode == StatusCodes.Status404NotFound &&
             !await notFoundHandler.TryHandleAsync(CreateExceptionHandlerContext(), new InvalidOperationException("ignored"), cancellationToken).ConfigureAwait(false))
         {
@@ -532,10 +526,10 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
-        var socketHandler = new SocketExceptionHandler(loggerFactory.CreateLogger<SocketExceptionHandler>());
+        var socketHandler = new SocketExceptionHandler(handlerDependencies);
         var socketContext = CreateExceptionHandlerContext();
         if (await socketHandler.TryHandleAsync(socketContext, new SocketException((int)SocketError.HostNotFound), cancellationToken).ConfigureAwait(false) &&
-            socketContext.Response.StatusCode == StatusCodes.Status500InternalServerError &&
+            socketContext.Response.StatusCode == StatusCodes.Status502BadGateway &&
             !await socketHandler.TryHandleAsync(CreateExceptionHandlerContext(), new InvalidOperationException("ignored"), cancellationToken).ConfigureAwait(false))
         {
             checks++;
@@ -548,10 +542,10 @@ public static partial class RepositoryRuntimeDiagnostics
             checks++;
         }
 
-        var generalHandler = new GeneralExceptionHandler(loggerFactory.CreateLogger<GeneralExceptionHandler>());
+        var generalHandler = new GeneralExceptionHandler(handlerDependencies);
         var generalContext = CreateExceptionHandlerContext();
         if (await generalHandler.TryHandleAsync(generalContext, new Exception("general"), cancellationToken).ConfigureAwait(false) &&
-            generalContext.Response.StatusCode == StatusCodes.Status400BadRequest)
+            generalContext.Response.StatusCode == StatusCodes.Status500InternalServerError)
         {
             checks++;
         }

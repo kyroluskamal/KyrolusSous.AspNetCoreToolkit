@@ -5,124 +5,145 @@ namespace KyrolusSous.ExceptionHandling.Runtime.UnitTests.Handlers;
 
 public class KyrolusExceptionHandlersTests
 {
+    private static KyrolusExceptionHandlingDependencies BuildDependencies(
+        Action<KyrolusExceptionHandlingOptions>? configureOptions = null,
+        IKyrolusLocalizer? localizer = null,
+        string environmentName = "Production",
+        Action<IServiceCollection>? configureServices = null,
+        ILogger<KyrolusExceptionHandlingDependencies>? logger = null)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IHostEnvironment>(new TestHostEnvironment(environmentName));
+        services.AddSingleton(logger ?? NullLogger<KyrolusExceptionHandlingDependencies>.Instance);
+        if (localizer is not null)
+            services.AddSingleton(localizer);
+
+        configureServices?.Invoke(services);
+        services.AddKyrolusExceptionHandling(configureOptions);
+
+        return services.BuildServiceProvider().GetRequiredService<KyrolusExceptionHandlingDependencies>();
+    }
+
+    private static readonly KyrolusExceptionHandlingDependencies SharedDependencies = BuildDependencies();
+
     public static TheoryData<IExceptionHandler, Exception, HttpStatusCode, string, string> HandlerTestData =>
         new()
         {
             {
-                new JsonExceptionHandler(NullLogger<JsonExceptionHandler>.Instance),
+                new JsonExceptionHandler(SharedDependencies),
                 new JsonException("Malformed json payload"),
                 HttpStatusCode.BadRequest,
                 KyrolusErrorCodes.InvalidJson,
                 "Invalid JSON payload"
             },
             {
-                new TimeoutExceptionHandler(NullLogger<TimeoutExceptionHandler>.Instance),
+                new TimeoutExceptionHandler(SharedDependencies),
                 new TimeoutException("Operation timed out"),
                 HttpStatusCode.GatewayTimeout,
                 KyrolusErrorCodes.Timeout,
-                "Request timeout"
+                "Operation timeout"
             },
             {
-                new SocketExceptionHandler(NullLogger<SocketExceptionHandler>.Instance),
+                new SocketExceptionHandler(SharedDependencies),
                 new SocketException((int)SocketError.ConnectionRefused),
-                HttpStatusCode.InternalServerError,
+                HttpStatusCode.BadGateway,
                 KyrolusErrorCodes.ExternalService,
-                "Socket error"
+                "Network connection failed"
             },
             {
-                new ArgumentExceptionHandler(NullLogger<ArgumentExceptionHandler>.Instance),
+                new ArgumentExceptionHandler(SharedDependencies),
                 new ArgumentException("Invalid param"),
                 HttpStatusCode.BadRequest,
                 KyrolusErrorCodes.BadRequest,
                 "Invalid argument"
             },
             {
-                new CultureNotFoundExceptionHandler(NullLogger<CultureNotFoundExceptionHandler>.Instance),
+                new CultureNotFoundExceptionHandler(SharedDependencies),
                 new CultureNotFoundException("xx-YY"),
                 HttpStatusCode.BadRequest,
                 KyrolusErrorCodes.BadRequest,
                 "Invalid culture"
             },
             {
-                new NotFoundExceptionHandler(NullLogger<NotFoundExceptionHandler>.Instance),
-                new NotFoundException("Product", "123"),
+                new NotFoundExceptionHandler(SharedDependencies),
+                new KyrolusNotFoundException("Product", "123"),
                 HttpStatusCode.NotFound,
                 KyrolusErrorCodes.NotFound,
-                "Not found"
+                "Product not found"
             },
             {
-                new NotFoundExceptionHandler(NullLogger<NotFoundExceptionHandler>.Instance),
-                new NotFoundException("Item not found"),
+                new NotFoundExceptionHandler(SharedDependencies),
+                new KyrolusNotFoundException("Order", 456),
                 HttpStatusCode.NotFound,
                 KyrolusErrorCodes.NotFound,
-                "Not found"
+                "Order not found"
             },
             {
-                new UnauthorizedExceptionHandler(NullLogger<UnauthorizedExceptionHandler>.Instance),
-                new UnauthorizedException("Access denied"),
+                new UnauthorizedExceptionHandler(SharedDependencies),
+                new KyrolusUnauthorizedException("Access denied"),
                 HttpStatusCode.Unauthorized,
                 KyrolusErrorCodes.Unauthorized,
                 "Unauthorized"
             },
             {
-                new UnauthorizedExceptionHandler(NullLogger<UnauthorizedExceptionHandler>.Instance),
-                new UnauthorizedException("Access denied", new InvalidOperationException("Token expired")),
+                new UnauthorizedExceptionHandler(SharedDependencies),
+                new KyrolusUnauthorizedException("Access denied", new InvalidOperationException("Token expired")),
                 HttpStatusCode.Unauthorized,
                 KyrolusErrorCodes.Unauthorized,
                 "Unauthorized"
             },
             {
-                new HttpRequestExceptionHandler(NullLogger<HttpRequestExceptionHandler>.Instance),
+                new HttpRequestExceptionHandler(SharedDependencies),
                 new HttpRequestException("Remote service failed"),
                 HttpStatusCode.BadGateway,
                 KyrolusErrorCodes.ExternalService,
-                "External service error"
+                "Upstream HTTP service error"
             },
             {
-                new SslAuthenticationExceptionHandler(NullLogger<SslAuthenticationExceptionHandler>.Instance),
+                new SslAuthenticationExceptionHandler(SharedDependencies),
                 new AuthenticationException("Certificate invalid"),
                 HttpStatusCode.BadGateway,
                 KyrolusErrorCodes.ExternalService,
-                "SSL Authentication failed"
+                "SSL authentication failed"
             },
             {
-                new SslAuthenticationExceptionHandler(NullLogger<SslAuthenticationExceptionHandler>.Instance),
+                new SslAuthenticationExceptionHandler(SharedDependencies),
                 new SslAuthenticationException("SSL failed"),
                 HttpStatusCode.BadGateway,
                 KyrolusErrorCodes.ExternalService,
-                "SSL Authentication failed"
+                "SSL authentication failed"
             },
             {
-                new SslAuthenticationExceptionHandler(NullLogger<SslAuthenticationExceptionHandler>.Instance),
+                new SslAuthenticationExceptionHandler(SharedDependencies),
                 new SslAuthenticationException("SSL handshake failed", new InvalidOperationException("Untrusted root")),
                 HttpStatusCode.BadGateway,
                 KyrolusErrorCodes.ExternalService,
-                "SSL Authentication failed"
+                "SSL authentication failed"
             },
             {
-                new GeneralExceptionHandler(NullLogger<GeneralExceptionHandler>.Instance),
+                new GeneralExceptionHandler(SharedDependencies),
                 new Exception("General error"),
-                HttpStatusCode.BadRequest,
-                KyrolusErrorCodes.BadRequest,
-                "Bad request"
+                HttpStatusCode.InternalServerError,
+                KyrolusErrorCodes.InternalError,
+                "Internal server error"
             }
         };
 
     public static TheoryData<IExceptionHandler> HandlersList =>
         new()
         {
-            new JsonExceptionHandler(NullLogger<JsonExceptionHandler>.Instance),
-            new TimeoutExceptionHandler(NullLogger<TimeoutExceptionHandler>.Instance),
-            new SocketExceptionHandler(NullLogger<SocketExceptionHandler>.Instance),
-            new ArgumentExceptionHandler(NullLogger<ArgumentExceptionHandler>.Instance),
-            new CultureNotFoundExceptionHandler(NullLogger<CultureNotFoundExceptionHandler>.Instance),
-            new NotFoundExceptionHandler(NullLogger<NotFoundExceptionHandler>.Instance),
-            new UnauthorizedExceptionHandler(NullLogger<UnauthorizedExceptionHandler>.Instance),
-            new HttpRequestExceptionHandler(NullLogger<HttpRequestExceptionHandler>.Instance),
-            new SslAuthenticationExceptionHandler(NullLogger<SslAuthenticationExceptionHandler>.Instance)
+            new JsonExceptionHandler(SharedDependencies),
+            new TimeoutExceptionHandler(SharedDependencies),
+            new SocketExceptionHandler(SharedDependencies),
+            new ArgumentExceptionHandler(SharedDependencies),
+            new CultureNotFoundExceptionHandler(SharedDependencies),
+            new NotFoundExceptionHandler(SharedDependencies),
+            new UnauthorizedExceptionHandler(SharedDependencies),
+            new HttpRequestExceptionHandler(SharedDependencies),
+            new SslAuthenticationExceptionHandler(SharedDependencies)
         };
 
-    [Theory(DisplayName = "Handlers should handle their matching exception type and write envelope JSON")]
+    [Theory(DisplayName = "Handlers should handle their matching exception type and write envelope JSON, all via the shared translation pipeline")]
     [MemberData(nameof(HandlerTestData))]
     public async Task Handlers_Should_Handle_Matching_Exception_And_Write_Envelope(
         IExceptionHandler handler,
@@ -149,12 +170,15 @@ public class KyrolusExceptionHandlersTests
         json.ShouldContain($"\"{expectedTitle}\"");
     }
 
-    [Fact(DisplayName = "Handlers should log error message and level using provided ILogger")]
+    [Fact(DisplayName = "Handlers should log through the shared logging policy")]
     public async Task Handlers_Should_Log_Error_When_Handling_Exception()
     {
-        var logger = new TestLogger<JsonExceptionHandler>();
-        var handler = new JsonExceptionHandler(logger);
-        var exception = new JsonException("Invalid json syntax at line 5");
+        // TimeoutException maps with ShouldLog: true (per KyrolusFrameworkExceptionMapper) - unlike a routine
+        // JsonException (ShouldLog: false), it's expected to actually produce a log entry.
+        var logger = new TestLogger<KyrolusExceptionHandlingDependencies>();
+        var dependencies = BuildDependencies(logger: logger);
+        var handler = new TimeoutExceptionHandler(dependencies);
+        var exception = new TimeoutException("Operation timed out after 30s");
 
         var context = new DefaultHttpContext();
         context.Request.Path = "/api/data";
@@ -166,9 +190,49 @@ public class KyrolusExceptionHandlersTests
         handled.ShouldBeTrue();
         logger.Logs.Count.ShouldBe(1);
         logger.Logs[0].Level.ShouldBe(LogLevel.Error);
-        logger.Logs[0].Message.ShouldContain("invalid_json");
+        logger.Logs[0].Message.ShouldContain("timeout");
         logger.Logs[0].Message.ShouldContain("/api/data");
-        logger.Logs[0].Message.ShouldContain("Invalid json syntax at line 5");
+    }
+
+    [Fact(DisplayName = "Handlers should not log exceptions the mapper marks as ShouldLog: false")]
+    public async Task Handlers_Should_Not_Log_Routine_Exceptions()
+    {
+        var logger = new TestLogger<KyrolusExceptionHandlingDependencies>();
+        var dependencies = BuildDependencies(logger: logger);
+        var handler = new JsonExceptionHandler(dependencies);
+
+        var context = new DefaultHttpContext();
+        using var responseStream = new MemoryStream();
+        context.Response.Body = responseStream;
+
+        var handled = await handler.TryHandleAsync(context, new JsonException("Invalid json syntax at line 5"), CancellationToken.None);
+
+        handled.ShouldBeTrue();
+        logger.Logs.ShouldBeEmpty();
+    }
+
+    [Theory(DisplayName = "GeneralExceptionHandler never leaks the raw message of an unclassified exception, in any environment")]
+    [InlineData("Production")]
+    [InlineData("Development")]
+    public async Task GeneralExceptionHandler_Should_HideMessage_InAnyEnvironment(string environmentName)
+    {
+        var dependencies = BuildDependencies(environmentName: environmentName);
+        var handler = new GeneralExceptionHandler(dependencies);
+
+        var context = new DefaultHttpContext();
+        using var responseStream = new MemoryStream();
+        context.Response.Body = responseStream;
+
+        var handled = await handler.TryHandleAsync(context, new InvalidOperationException("connection string: secret"), CancellationToken.None);
+
+        handled.ShouldBeTrue();
+        context.Response.StatusCode.ShouldBe((int)HttpStatusCode.InternalServerError);
+
+        responseStream.Seek(0, SeekOrigin.Begin);
+        var json = await new StreamReader(responseStream).ReadToEndAsync();
+
+        json.ShouldContain("An unexpected error occurred.");
+        json.ShouldNotContain("connection string: secret");
     }
 
     [Theory(DisplayName = "Handlers should return false when receiving unmatched exception type")]
@@ -183,11 +247,10 @@ public class KyrolusExceptionHandlersTests
         handled.ShouldBeFalse();
     }
 
-    [Fact(DisplayName = "Handler inheriting from KyrolusExceptionHandlerBase should extract custom errors from IKyrolusExceptionWithErrors")]
+    [Fact(DisplayName = "A custom exception implementing IKyrolusExceptionWithErrors gets its errors extracted automatically")]
     public async Task Handler_Should_Extract_Errors_From_Exception_With_Errors()
     {
-        var logger = new TestLogger();
-        var handler = new TestCustomValidationExceptionHandler(logger);
+        var handler = new TestCustomValidationExceptionHandler(SharedDependencies);
         var exception = new TestValidationException("Validation failed",
         [
             new KyrolusErrorItem("Email", "invalid_email", "Email format is invalid")
@@ -200,7 +263,7 @@ public class KyrolusExceptionHandlersTests
         var handled = await handler.TryHandleAsync(context, exception, CancellationToken.None);
 
         handled.ShouldBeTrue();
-        context.Response.StatusCode.ShouldBe(400);
+        context.Response.StatusCode.ShouldBe(500); // unmapped exception type falls through to the default mapper
 
         responseStream.Seek(0, SeekOrigin.Begin);
         using var reader = new StreamReader(responseStream);
@@ -210,11 +273,10 @@ public class KyrolusExceptionHandlersTests
         json.ShouldContain("Email format is invalid");
     }
 
-    [Fact(DisplayName = "Handler inheriting from KyrolusExceptionHandlerBase should extract errors from KyrolusException")]
+    [Fact(DisplayName = "A KyrolusException's own status/code/title/errors are used automatically regardless of which handler caught it")]
     public async Task Handler_Should_Extract_Errors_From_KyrolusException()
     {
-        var logger = new TestLogger();
-        var handler = new TestKyrolusExceptionHandler(logger);
+        var handler = new GeneralExceptionHandler(SharedDependencies);
         var exception = new KyrolusValidationException(
         [
             new KyrolusErrorItem("Username", "required", "Username is required")
@@ -241,17 +303,16 @@ public class KyrolusExceptionHandlersTests
     [Fact(DisplayName = "Custom exception constructors should initialize message and properties correctly")]
     public void CustomExceptions_Constructors_ShouldInitializeCorrectly()
     {
-        var notFound1 = new NotFoundException("Custom message");
-        notFound1.Message.ShouldBe("Custom message");
+        var notFound1 = new KyrolusNotFoundException("Order", "1001");
+        notFound1.Message.ShouldBe("Order with key '1001' was not found.");
+        notFound1.EntityName.ShouldBe("Order");
+        notFound1.Key.ShouldBe("1001");
 
-        var notFound2 = new NotFoundException("Order", "1001");
-        notFound2.Message.ShouldBe("Order with key 1001 not found");
-
-        var unauthorized1 = new UnauthorizedException("Unauthorized action");
+        var unauthorized1 = new KyrolusUnauthorizedException("Unauthorized action");
         unauthorized1.Message.ShouldBe("Unauthorized action");
 
         var innerUnauth = new InvalidOperationException("Expired");
-        var unauthorized2 = new UnauthorizedException("Unauthorized action", innerUnauth);
+        var unauthorized2 = new KyrolusUnauthorizedException("Unauthorized action", innerUnauth);
         unauthorized2.Message.ShouldBe("Unauthorized action");
         unauthorized2.InnerException.ShouldBeSameAs(innerUnauth);
 
@@ -264,11 +325,12 @@ public class KyrolusExceptionHandlersTests
         ssl2.InnerException.ShouldBeSameAs(innerSsl);
     }
 
-    [Fact(DisplayName = "Handler should handle custom exception with both metadata and errors")]
-    public async Task Handler_Should_Handle_Custom_Exception_With_Both_Metadata_And_Errors()
+    [Fact(DisplayName = "A custom IKyrolusExceptionMapper drives status/code/title for any handler, and its metadata is sanitized by default")]
+    public async Task Handler_Should_Use_Custom_Mapper_And_Sanitize_Metadata_By_Default()
     {
-        var logger = new TestLogger();
-        var handler = new TestPaymentFailedExceptionHandler(logger);
+        var dependencies = BuildDependencies(configureServices: services =>
+            services.AddSingleton<IKyrolusExceptionMapper, TestPaymentFailedExceptionMapper>());
+        var handler = new GeneralExceptionHandler(dependencies);
         var exception = new TestPaymentFailedException("ORD-99", "TX-123", "Account balance is too low");
 
         var context = new DefaultHttpContext();
@@ -292,38 +354,10 @@ public class KyrolusExceptionHandlersTests
         json.ShouldContain("TX-123");
         json.ShouldContain("insufficient_funds");
         json.ShouldContain("Amount");
-
-        logger.Logs.Count.ShouldBe(1);
-        logger.Logs[0].Level.ShouldBe(LogLevel.Error);
-        logger.Logs[0].Message.ShouldContain("payment_failed");
-        logger.Logs[0].Message.ShouldContain("/api/checkout");
+        json.ShouldNotContain("SuperSecretPassword"); // sanitized by the default, always-registered sanitizer
     }
 
-    [Fact(DisplayName = "Handler should use overridden ExtractErrors when provided")]
-    public async Task Handler_Should_Use_Overridden_ExtractErrors()
-    {
-        var logger = new TestLogger();
-        var handler = new TestOverriddenExceptionHandler(logger);
-        var exception = new InvalidOperationException("Operation failed");
-
-        var context = new DefaultHttpContext();
-        using var responseStream = new MemoryStream();
-        context.Response.Body = responseStream;
-
-        var handled = await handler.TryHandleAsync(context, exception, CancellationToken.None);
-
-        handled.ShouldBeTrue();
-        context.Response.StatusCode.ShouldBe(400);
-
-        responseStream.Seek(0, SeekOrigin.Begin);
-        using var reader = new StreamReader(responseStream);
-        var json = await reader.ReadToEndAsync();
-
-        json.ShouldContain("custom_field");
-        json.ShouldContain("custom_code");
-    }
-
-    [Fact(DisplayName = "Handler should apply localization when IKyrolusLocalizer is provided")]
+    [Fact(DisplayName = "Handler should apply localization when IKyrolusLocalizer is registered")]
     public async Task Handler_Should_Apply_Localization_When_Localizer_Is_Provided()
     {
         var translations = new Dictionary<string, string>
@@ -332,9 +366,8 @@ public class KyrolusExceptionHandlersTests
             [$"{KyrolusErrorCodes.BadRequest}.detail"] = "المعامل المرسل غير صالح"
         };
         var localizer = new TestKeyLookupLocalizer(translations);
-
-        var logger = new TestLogger<ArgumentExceptionHandler>();
-        var handler = new ArgumentExceptionHandler(logger, localizer: localizer);
+        var dependencies = BuildDependencies(localizer: localizer);
+        var handler = new ArgumentExceptionHandler(dependencies);
         var exception = new ArgumentException("Invalid param");
 
         var context = new DefaultHttpContext();
@@ -351,33 +384,12 @@ public class KyrolusExceptionHandlersTests
         envelope.Detail.ShouldBe("المعامل المرسل غير صالح");
     }
 
-    [Fact(DisplayName = "Handler should sanitize metadata when IKyrolusErrorMetadataSanitizer is provided")]
-    public async Task Handler_Should_Sanitize_Metadata_When_Sanitizer_Is_Provided()
-    {
-        var sanitizer = new KyrolusDefaultErrorMetadataSanitizer(Options.Create(new KyrolusExceptionHandlingOptions()));
-        var logger = new TestLogger();
-        var handler = new TestPaymentFailedExceptionHandler(logger, sanitizer: sanitizer);
-        var exception = new TestPaymentFailedException("ORD-99", "TX-123", "Account balance is too low");
-
-        var context = new DefaultHttpContext();
-        using var responseStream = new MemoryStream();
-        context.Response.Body = responseStream;
-
-        var handled = await handler.TryHandleAsync(context, exception, CancellationToken.None);
-
-        handled.ShouldBeTrue();
-        responseStream.Seek(0, SeekOrigin.Begin);
-        using var reader = new StreamReader(responseStream);
-        var json = await reader.ReadToEndAsync();
-
-        json.ShouldContain("ORD-99");
-        json.ShouldNotContain("SuperSecretPassword");
-    }
-
-    [Fact(DisplayName = "AddKyrolusBuiltInExceptionHandlers should register all 10 built-in exception handlers in IServiceCollection")]
+    [Fact(DisplayName = "AddKyrolusBuiltInExceptionHandlers should register all 10 built-in exception handlers and the shared translation pipeline")]
     public void AddKyrolusBuiltInExceptionHandlers_Should_Register_All_10_Handlers()
     {
         var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IHostEnvironment>(new TestHostEnvironment());
         services.AddKyrolusBuiltInExceptionHandlers();
 
         var handlerDescriptors = services
@@ -396,6 +408,10 @@ public class KyrolusExceptionHandlersTests
         handlerDescriptors.ShouldContain(typeof(UnauthorizedExceptionHandler));
         handlerDescriptors.ShouldContain(typeof(SslAuthenticationExceptionHandler));
         handlerDescriptors.ShouldContain(typeof(GeneralExceptionHandler));
+
+        var provider = services.BuildServiceProvider();
+        provider.GetRequiredService<KyrolusExceptionHandlingDependencies>().ShouldNotBeNull();
+        provider.GetRequiredService<KyrolusExceptionTranslator>().ShouldNotBeNull();
     }
 
     private sealed class TestKeyLookupLocalizer(IReadOnlyDictionary<string, string> translations) : IKyrolusLocalizer
@@ -408,19 +424,6 @@ public class KyrolusExceptionHandlersTests
         public KyrolusLocalizationResult GetString(string key, object? arguments, CultureInfo? culture = null) => GetString(key, culture);
 
         public string Format(string template, object? arguments) => template;
-    }
-
-    private sealed class TestOverriddenExceptionHandler(ILogger logger)
-        : KyrolusExceptionHandlerBase<InvalidOperationException>(
-            logger,
-            HttpStatusCode.BadRequest,
-            KyrolusErrorCodes.BadRequest,
-            "Operation error")
-    {
-        protected override IReadOnlyList<KyrolusErrorItem>? ExtractErrors(InvalidOperationException exception) =>
-        [
-            new KyrolusErrorItem("custom_field", "custom_code", exception.Message)
-        ];
     }
 
     private sealed class TestPaymentFailedException(string orderId, string transactionId, string reason)
@@ -439,17 +442,29 @@ public class KyrolusExceptionHandlersTests
         ];
     }
 
-    private sealed class TestPaymentFailedExceptionHandler(
-        ILogger logger,
-        IKyrolusLocalizer? localizer = null,
-        IKyrolusErrorMetadataSanitizer? sanitizer = null)
-        : KyrolusExceptionHandlerBase<TestPaymentFailedException>(
-            logger,
-            HttpStatusCode.PaymentRequired,
-            "payment_failed",
-            "Payment Failed",
-            localizer,
-            sanitizer);
+    private sealed class TestPaymentFailedExceptionMapper : IKyrolusExceptionMapper
+    {
+        public int Order => -10;
+
+        public bool TryMap(Exception exception, KyrolusErrorContext context, out KyrolusExceptionMapping mapping)
+        {
+            if (exception is not TestPaymentFailedException paymentFailed)
+            {
+                mapping = null!;
+                return false;
+            }
+
+            mapping = KyrolusExceptionMapping.Create(
+                code: "payment_failed",
+                title: "Payment Failed",
+                statusCode: HttpStatusCode.PaymentRequired,
+                traceId: context.TraceId,
+                errors: paymentFailed.GetErrors(),
+                metadata: KyrolusMetadataExtractor.Extract(paymentFailed));
+
+            return true;
+        }
+    }
 
     private sealed class TestValidationException(string message, IReadOnlyList<KyrolusErrorItem> errors)
         : Exception(message), IKyrolusExceptionWithErrors
@@ -457,17 +472,6 @@ public class KyrolusExceptionHandlersTests
         public IReadOnlyList<KyrolusErrorItem>? GetErrors() => errors;
     }
 
-    private sealed class TestCustomValidationExceptionHandler(ILogger logger)
-        : KyrolusExceptionHandlerBase<TestValidationException>(
-            logger,
-            HttpStatusCode.BadRequest,
-            KyrolusErrorCodes.Validation,
-            "Validation error");
-
-    private sealed class TestKyrolusExceptionHandler(ILogger logger)
-        : KyrolusExceptionHandlerBase<KyrolusValidationException>(
-            logger,
-            HttpStatusCode.BadRequest,
-            KyrolusErrorCodes.Validation,
-            "Validation error");
+    private sealed class TestCustomValidationExceptionHandler(KyrolusExceptionHandlingDependencies dependencies)
+        : KyrolusExceptionHandlerBase<TestValidationException>(dependencies);
 }
