@@ -18,6 +18,7 @@ namespace KyrolusSous.Validation.FluentValidation;
 public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider serviceProvider)
     : IKyrolusRequestValidatorWithContext<TRequest>
 {
+    /// <summary>Every <see cref="IValidator{T}"/> registered for <typeparamref name="TRequest"/>, resolved once at construction. All of them run on every <see cref="ValidateAsync(TRequest, CancellationToken)"/> call.</summary>
     private readonly IReadOnlyList<IValidator<TRequest>> _validators =
         serviceProvider?.GetServices<IValidator<TRequest>>().Where(v => v is not null).ToArray() ?? [];
 
@@ -62,6 +63,13 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
         return allFailures;
     }
 
+    /// <summary>
+    /// Builds a FluentValidation <see cref="ValidationContext{T}"/> for <paramref name="request"/>, translating
+    /// <see cref="KyrolusValidationContext.RuleSets"/> into FluentValidation's own RuleSet execution options -
+    /// <c>IncludeAllRuleSets()</c> for a wildcard <c>"*"</c>, or <c>IncludeRuleSets(...)</c> for a specific list.
+    /// Falls back to FluentValidation's own default execution (no <see cref="ValidationContext{T}.CreateWithOptions"/>)
+    /// when the context requests no specific RuleSets.
+    /// </summary>
     private static ValidationContext<TRequest> CreateValidationContext(TRequest request, KyrolusValidationContext context)
     {
         if (context.RuleSets is not { Count: > 0 })
@@ -82,6 +90,11 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
         });
     }
 
+    /// <summary>
+    /// Translates one FluentValidation <see cref="ValidationFailure"/> into a <see cref="KyrolusValidationFailure"/>,
+    /// resolving its RuleSet via <paramref name="descriptor"/> (see <see cref="ResolveDeclaredRuleSets"/>) and its
+    /// Groups/Metadata from <see cref="ValidationFailure.CustomState"/> (see <see cref="ResolveGroups"/>/<see cref="BuildMetadata"/>).
+    /// </summary>
     private static KyrolusValidationFailure MapToFailure(ValidationFailure error, KyrolusValidationContext context, IValidatorDescriptor descriptor)
     {
         var metadata = BuildMetadata(error);
@@ -110,6 +123,12 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
             Groups: groups.Count > 0 ? groups : null);
     }
 
+    /// <summary>
+    /// Looks up every RuleSet name declared on any FluentValidation rule for <paramref name="propertyName"/>, via
+    /// <see cref="IValidatorDescriptor.GetRulesForMember"/> - the closest available substitute for a direct link
+    /// from the failure back to the specific rule that produced it, since <see cref="ValidationFailure"/> itself
+    /// doesn't carry one.
+    /// </summary>
     private static string[] ResolveDeclaredRuleSets(IValidatorDescriptor descriptor, string? propertyName)
     {
         if (string.IsNullOrEmpty(propertyName))
@@ -122,6 +141,7 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
             .ToArray();
     }
 
+    /// <summary>Maps FluentValidation's <see cref="Severity"/> to <see cref="KyrolusValidationSeverity"/>; anything other than Info/Warning (including FluentValidation's own default) maps to <see cref="KyrolusValidationSeverity.Error"/>.</summary>
     private static KyrolusValidationSeverity MapSeverity(Severity severity)
     {
         return severity switch
@@ -132,6 +152,12 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
         };
     }
 
+    /// <summary>
+    /// Builds the failure's Metadata dictionary from <paramref name="error"/>'s <see cref="ValidationFailure.FormattedMessagePlaceholderValues"/>
+    /// (the named values FluentValidation substituted into the error message) plus its raw <see cref="ValidationFailure.CustomState"/>
+    /// under the <c>"customState"</c> key - unless that state is a <see cref="KyrolusValidationGroup"/>, which is
+    /// Group data handled separately by <see cref="ResolveGroups"/>, not metadata. Returns <see langword="null"/> when there's nothing to report.
+    /// </summary>
     private static IReadOnlyDictionary<string, object?>? BuildMetadata(ValidationFailure error)
     {
         if (error.CustomState is null && error.FormattedMessagePlaceholderValues is not { Count: > 0 })
@@ -157,6 +183,12 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
         return metadata;
     }
 
+    /// <summary>
+    /// Extracts Group tags from <paramref name="error"/>'s <see cref="ValidationFailure.CustomState"/>, supporting
+    /// three shapes set via FluentValidation's <c>.WithState(...)</c>: a <see cref="KyrolusValidationGroup"/>
+    /// instance, a single group name string, or a dictionary (see <see cref="ResolveGroupsFromDictionary"/>).
+    /// Returns an empty list when <see cref="ValidationFailure.CustomState"/> is <see langword="null"/> or none of these shapes match.
+    /// </summary>
     private static IReadOnlyList<string> ResolveGroups(ValidationFailure error)
     {
         if (error.CustomState is KyrolusValidationGroup group)
@@ -177,6 +209,11 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
         return [];
     }
 
+    /// <summary>
+    /// Extracts Group tags from a dictionary-shaped <see cref="ValidationFailure.CustomState"/> - a <c>"groups"</c>
+    /// entry holding either a string collection or a single string, falling back to a singular <c>"group"</c>
+    /// string entry. Returns an empty list when neither key is present in a recognized shape.
+    /// </summary>
     private static IReadOnlyList<string> ResolveGroupsFromDictionary(IDictionary<string, object?> dict)
     {
         if (dict.TryGetValue("groups", out var groupsObj))

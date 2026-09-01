@@ -2,86 +2,140 @@ namespace KyrolusSous.Validation.Fluent;
 
 /// <summary>
 /// Provides high-level fluent validation extension methods for common data types, format validations, and nested validators.
+/// Each one is a thin wrapper over <see cref="IKyrolusRuleBuilder{T, TProperty}.Must(Func{TProperty, bool})"/> and a
+/// default message - the actual pass/fail logic lives in <see cref="RuleBuilderExtensions"/> (for the general-purpose
+/// checks) or <see cref="AdvancedRuleBuilderExtensions"/> (for the domain-specific ones like national ID formats).
 /// </summary>
+/// <example>
+/// <code>
+/// public class CreateUserValidator : KyrolusAbstractValidator&lt;CreateUserRequest&gt;
+/// {
+///     public CreateUserValidator()
+///     {
+///         RuleFor(x =&gt; x.Email).NotEmpty().EmailAddress();
+///         RuleFor(x =&gt; x.Password).StrongPassword();
+///         RuleFor(x =&gt; x.Age).InclusiveBetween(18, 120);
+///         RuleFor(x =&gt; x.Address).SetValidator(new AddressValidator());
+///     }
+/// }
+/// </code>
+/// </example>
 public static class RuleBuilderFluentExtensions
 {
     /// <summary>Ensures that a string property is not null, empty, or whitespace.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
     public static IKyrolusRuleBuilder<T, string?> NotEmpty<T>(this IKyrolusRuleBuilder<T, string?> builder)
         => builder.Must(val => RuleBuilderExtensions.IsNotEmpty(val), "Property must not be empty.");
 
     /// <summary>Ensures that a string property is null, empty, or whitespace.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
     public static IKyrolusRuleBuilder<T, string?> Empty<T>(this IKyrolusRuleBuilder<T, string?> builder)
         => builder.Must(val => RuleBuilderExtensions.IsEmpty(val), "Property must be empty.");
 
     /// <summary>Ensures that a property is not null.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
     public static IKyrolusRuleBuilder<T, TProperty> NotNull<T, TProperty>(this IKyrolusRuleBuilder<T, TProperty> builder)
         => builder.Must(val => RuleBuilderExtensions.IsNotNull(val), "Property must not be null.");
 
     /// <summary>Ensures that a property is null.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
     public static IKyrolusRuleBuilder<T, TProperty> Null<T, TProperty>(this IKyrolusRuleBuilder<T, TProperty> builder)
         => builder.Must(val => RuleBuilderExtensions.IsNull(val), "Property must be null.");
 
     /// <summary>Ensures that a property equals the specified expected value.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="expected">The value the property must equal.</param>
     public static IKyrolusRuleBuilder<T, TProperty> Equal<T, TProperty>(this IKyrolusRuleBuilder<T, TProperty> builder, TProperty expected)
         => builder.Must(val => RuleBuilderExtensions.IsEqual(val, expected), $"Must be equal to {expected}.");
 
     /// <summary>Ensures that a property does not equal the specified value.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="expected">The value the property must not equal.</param>
     public static IKyrolusRuleBuilder<T, TProperty> NotEqual<T, TProperty>(this IKyrolusRuleBuilder<T, TProperty> builder, TProperty expected)
         => builder.Must(val => RuleBuilderExtensions.IsNotEqual(val, expected), $"Must not be equal to {expected}.");
 
     /// <summary>Ensures that a string length is between the specified min and max (inclusive).</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="min">The minimum allowed length, inclusive.</param>
+    /// <param name="max">The maximum allowed length, inclusive.</param>
     public static IKyrolusRuleBuilder<T, string?> Length<T>(this IKyrolusRuleBuilder<T, string?> builder, int min, int max)
         => builder.Must(val => RuleBuilderExtensions.IsLengthValid(val, min, max), $"Length must be between {min} and {max}.");
 
     /// <summary>Ensures that a string length is at least the specified minimum.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="min">The minimum allowed length, inclusive.</param>
     public static IKyrolusRuleBuilder<T, string?> MinLength<T>(this IKyrolusRuleBuilder<T, string?> builder, int min)
         => builder.Must(val => RuleBuilderExtensions.IsMinLengthValid(val, min), $"Length must be at least {min}.");
 
     /// <summary>Ensures that a string length does not exceed the specified maximum.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="max">The maximum allowed length, inclusive.</param>
     public static IKyrolusRuleBuilder<T, string?> MaxLength<T>(this IKyrolusRuleBuilder<T, string?> builder, int max)
         => builder.Must(val => RuleBuilderExtensions.IsMaxLengthValid(val, max), $"Length must be at most {max}.");
 
     /// <summary>Ensures that a string length exactly matches the specified length.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="length">The exact required length.</param>
     public static IKyrolusRuleBuilder<T, string?> ExactLength<T>(this IKyrolusRuleBuilder<T, string?> builder, int length)
         => builder.Must(val => RuleBuilderExtensions.IsExactLengthValid(val, length), $"Length must be exactly {length}.");
 
     /// <summary>Ensures that the enum property value is a defined member of the enum.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
     public static IKyrolusRuleBuilder<T, TEnum> IsInEnum<T, TEnum>(this IKyrolusRuleBuilder<T, TEnum> builder) where TEnum : struct, Enum
         => builder.Must(val => RuleBuilderExtensions.IsInEnumValid(val), "Value is not a valid enum member.");
 
     /// <summary>Ensures that a decimal value has at most precision total digits and scale decimal digits.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="precision">The maximum total number of significant digits.</param>
+    /// <param name="scale">The maximum number of digits after the decimal point.</param>
     public static IKyrolusRuleBuilder<T, decimal> ScalePrecision<T>(this IKyrolusRuleBuilder<T, decimal> builder, int precision, int scale)
         => builder.Must(val => RuleBuilderExtensions.IsScalePrecisionValid(val, precision, scale), $"Precision must not exceed {precision} digits with {scale} decimals.");
 
     /// <summary>Ensures that a comparable value is strictly greater than the limit.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="limit">The exclusive lower bound the value must exceed.</param>
     public static IKyrolusRuleBuilder<T, TProperty> GreaterThan<T, TProperty>(this IKyrolusRuleBuilder<T, TProperty> builder, TProperty limit) where TProperty : IComparable<TProperty>
         => builder.Must(val => RuleBuilderExtensions.IsGreaterThan(val, limit), $"Must be greater than {limit}.");
 
     /// <summary>Ensures that a comparable value is greater than or equal to the limit.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="limit">The inclusive lower bound.</param>
     public static IKyrolusRuleBuilder<T, TProperty> GreaterThanOrEqualTo<T, TProperty>(this IKyrolusRuleBuilder<T, TProperty> builder, TProperty limit) where TProperty : IComparable<TProperty>
         => builder.Must(val => RuleBuilderExtensions.IsGreaterThanOrEqualTo(val, limit), $"Must be greater than or equal to {limit}.");
 
     /// <summary>Ensures that a comparable value is strictly less than the limit.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="limit">The exclusive upper bound the value must be below.</param>
     public static IKyrolusRuleBuilder<T, TProperty> LessThan<T, TProperty>(this IKyrolusRuleBuilder<T, TProperty> builder, TProperty limit) where TProperty : IComparable<TProperty>
         => builder.Must(val => RuleBuilderExtensions.IsLessThan(val, limit), $"Must be less than {limit}.");
 
     /// <summary>Ensures that a comparable value is less than or equal to the limit.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="limit">The inclusive upper bound.</param>
     public static IKyrolusRuleBuilder<T, TProperty> LessThanOrEqualTo<T, TProperty>(this IKyrolusRuleBuilder<T, TProperty> builder, TProperty limit) where TProperty : IComparable<TProperty>
         => builder.Must(val => RuleBuilderExtensions.IsLessThanOrEqualTo(val, limit), $"Must be less than or equal to {limit}.");
 
     /// <summary>Ensures that a comparable value is inclusively between from and to.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="from">The inclusive lower bound.</param>
+    /// <param name="to">The inclusive upper bound.</param>
     public static IKyrolusRuleBuilder<T, TProperty> InclusiveBetween<T, TProperty>(this IKyrolusRuleBuilder<T, TProperty> builder, TProperty from, TProperty to) where TProperty : IComparable<TProperty>
         => builder.Must(val => RuleBuilderExtensions.IsInclusiveBetween(val, from, to), $"Must be between {from} and {to}.");
 
     /// <summary>Ensures that a comparable value is exclusively between from and to.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="from">The exclusive lower bound.</param>
+    /// <param name="to">The exclusive upper bound.</param>
     public static IKyrolusRuleBuilder<T, TProperty> ExclusiveBetween<T, TProperty>(this IKyrolusRuleBuilder<T, TProperty> builder, TProperty from, TProperty to) where TProperty : IComparable<TProperty>
         => builder.Must(val => RuleBuilderExtensions.IsExclusiveBetween(val, from, to), $"Must be exclusively between {from} and {to}.");
 
     /// <summary>Ensures that the string property is a valid email address.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
     public static IKyrolusRuleBuilder<T, string?> EmailAddress<T>(this IKyrolusRuleBuilder<T, string?> builder)
         => builder.Must(val => RuleBuilderExtensions.IsEmailAddress(val), "Invalid email address format.");
 
     /// <summary>Alias for <see cref="EmailAddress{T}"/>.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
     public static IKyrolusRuleBuilder<T, string?> IsEmail<T>(this IKyrolusRuleBuilder<T, string?> builder)
         => builder.EmailAddress();
 
@@ -99,54 +153,70 @@ public static class RuleBuilderFluentExtensions
         => builder.Must(val => RuleBuilderExtensions.IsRegexMatch(val, regexPattern, matchTimeout), "Format does not match required pattern.");
 
     /// <summary>Validates that the string property is a valid credit card number (Luhn algorithm check).</summary>
+    /// <param name="builder">The rule builder to extend.</param>
     public static IKyrolusRuleBuilder<T, string?> CreditCard<T>(this IKyrolusRuleBuilder<T, string?> builder)
         => builder.Must(val => RuleBuilderExtensions.IsCreditCardValid(val), "Invalid credit card number.");
 
     /// <summary>Validates that the string property is a valid National ID for the specified country (default: "EG").</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="countryCode">Which country's rules to apply; see <see cref="AdvancedRuleBuilderExtensions.IsNationalIdValid"/> for the supported codes.</param>
     public static IKyrolusRuleBuilder<T, string?> NationalId<T>(this IKyrolusRuleBuilder<T, string?> builder, string countryCode = "EG")
         => builder.Must(val => AdvancedRuleBuilderExtensions.IsNationalIdValid(val, countryCode), "Invalid National ID.");
 
     /// <summary>Validates that the string property is a valid Spanish DNI.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
     public static IKyrolusRuleBuilder<T, string?> SpanishDni<T>(this IKyrolusRuleBuilder<T, string?> builder)
         => builder.Must(val => AdvancedRuleBuilderExtensions.IsSpanishDniValid(val), "Invalid Spanish DNI.");
 
     /// <summary>Validates that the string property is a valid Spanish NIE.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
     public static IKyrolusRuleBuilder<T, string?> SpanishNie<T>(this IKyrolusRuleBuilder<T, string?> builder)
         => builder.Must(val => AdvancedRuleBuilderExtensions.IsSpanishNieValid(val), "Invalid Spanish NIE.");
 
     /// <summary>Validates that the string property is a valid Spanish CIF.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
     public static IKyrolusRuleBuilder<T, string?> SpanishCif<T>(this IKyrolusRuleBuilder<T, string?> builder)
         => builder.Must(val => AdvancedRuleBuilderExtensions.IsSpanishCifValid(val), "Invalid Spanish CIF.");
 
     /// <summary>Validates that the string property is a valid Spanish NIF.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
     public static IKyrolusRuleBuilder<T, string?> SpanishNif<T>(this IKyrolusRuleBuilder<T, string?> builder)
         => builder.Must(val => AdvancedRuleBuilderExtensions.IsSpanishNifValid(val), "Invalid Spanish NIF.");
 
     /// <summary>Validates that the string property is a valid IBAN number.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
     public static IKyrolusRuleBuilder<T, string?> IbanValid<T>(this IKyrolusRuleBuilder<T, string?> builder)
         => builder.Must(val => AdvancedRuleBuilderExtensions.IsIbanValid(val), "Invalid IBAN number.");
 
     /// <summary>Validates that the string property meets strong password complexity criteria.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="options">The complexity requirements to enforce; defaults to <see cref="KyrolusPasswordOptions"/>'s defaults (all requirements on) when omitted.</param>
     public static IKyrolusRuleBuilder<T, string?> StrongPassword<T>(this IKyrolusRuleBuilder<T, string?> builder, KyrolusPasswordOptions? options = null)
         => builder.Must(val => AdvancedRuleBuilderExtensions.IsStrongPasswordValid(val, options), "Password does not meet complexity requirements.");
 
     /// <summary>Validates that the string property contains syntactically valid JSON.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
     public static IKyrolusRuleBuilder<T, string?> JsonValid<T>(this IKyrolusRuleBuilder<T, string?> builder)
         => builder.Must(val => AdvancedRuleBuilderExtensions.IsJsonValid(val), "Invalid JSON format.");
 
     /// <summary>Validates that the string property contains valid Base64 encoded data.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
     public static IKyrolusRuleBuilder<T, string?> Base64Valid<T>(this IKyrolusRuleBuilder<T, string?> builder)
         => builder.Must(val => AdvancedRuleBuilderExtensions.IsBase64Valid(val), "Invalid Base64 format.");
 
     /// <summary>Validates that the string property contains a valid Cron expression.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
     public static IKyrolusRuleBuilder<T, string?> CronExpressionValid<T>(this IKyrolusRuleBuilder<T, string?> builder)
         => builder.Must(val => AdvancedRuleBuilderExtensions.IsCronExpressionValid(val), "Invalid Cron expression.");
 
     /// <summary>Validates that the string property contains a valid MAC Address.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
     public static IKyrolusRuleBuilder<T, string?> MacAddressValid<T>(this IKyrolusRuleBuilder<T, string?> builder)
         => builder.Must(val => AdvancedRuleBuilderExtensions.IsMacAddressValid(val), "Invalid MAC Address.");
 
     /// <summary>Executes a child validator asynchronously against a nested complex property object.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="childValidator">The validator to run against the property value; skipped (treated as valid) when the value itself is <see langword="null"/>.</param>
     public static IKyrolusRuleBuilder<T, TProperty> SetValidator<T, TProperty>(
         this IKyrolusRuleBuilder<T, TProperty> builder,
         IKyrolusRequestValidator<TProperty> childValidator)
@@ -161,6 +231,9 @@ public static class RuleBuilderFluentExtensions
     }
 
     /// <summary>Adds a synchronous predicate with an explicit custom failure message.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="predicate">Returns <see langword="true"/> when the property value is valid.</param>
+    /// <param name="message">The error message used when <paramref name="predicate"/> returns <see langword="false"/>.</param>
     public static IKyrolusRuleBuilder<T, TProperty> Must<T, TProperty>(
         this IKyrolusRuleBuilder<T, TProperty> builder,
         Func<TProperty, bool> predicate,
@@ -172,6 +245,9 @@ public static class RuleBuilderFluentExtensions
     }
 
     /// <summary>Adds a synchronous predicate taking model and property with an explicit custom failure message.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="predicate">Returns <see langword="true"/> when the property value is valid, given the property value and the root model instance.</param>
+    /// <param name="message">The error message used when <paramref name="predicate"/> returns <see langword="false"/>.</param>
     public static IKyrolusRuleBuilder<T, TProperty> Must<T, TProperty>(
         this IKyrolusRuleBuilder<T, TProperty> builder,
         Func<TProperty, T, bool> predicate,
@@ -183,6 +259,9 @@ public static class RuleBuilderFluentExtensions
     }
 
     /// <summary>Adds an asynchronous predicate with an explicit custom failure message.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="predicate">Returns <see langword="true"/> when the property value is valid.</param>
+    /// <param name="message">The error message used when <paramref name="predicate"/> returns <see langword="false"/>.</param>
     public static IKyrolusRuleBuilder<T, TProperty> MustAsync<T, TProperty>(
         this IKyrolusRuleBuilder<T, TProperty> builder,
         Func<TProperty, CancellationToken, ValueTask<bool>> predicate,
@@ -194,6 +273,9 @@ public static class RuleBuilderFluentExtensions
     }
 
     /// <summary>Adds an asynchronous predicate taking model and property with an explicit custom failure message.</summary>
+    /// <param name="builder">The rule builder to extend.</param>
+    /// <param name="predicate">Returns <see langword="true"/> when the property value is valid, given the property value, the root model instance, and a cancellation token.</param>
+    /// <param name="message">The error message used when <paramref name="predicate"/> returns <see langword="false"/>.</param>
     public static IKyrolusRuleBuilder<T, TProperty> MustAsync<T, TProperty>(
         this IKyrolusRuleBuilder<T, TProperty> builder,
         Func<TProperty, T, CancellationToken, ValueTask<bool>> predicate,

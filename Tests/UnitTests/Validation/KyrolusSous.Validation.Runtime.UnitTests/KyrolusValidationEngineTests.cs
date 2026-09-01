@@ -638,6 +638,48 @@ public class KyrolusValidationEngineTests
         cachedFailures.ShouldNotBeNull();
         cachedFailures.ShouldBeEmpty();
     }
+
+    [Fact(DisplayName = "ValidateAsync caches a passing (zero-failure) result under the request's normal CacheTtl, not NegativeCacheTtl")]
+    public async Task ValidateAsync_CachesPassingResult_UnderNormalCacheTtl()
+    {
+        // Arrange: no validator registered for NegativeCacheableTestRequest, so ValidateAsync always returns
+        // an empty (passing) result for it.
+        var spyCacheStore = new SpyValidationCacheStore();
+        var serviceProvider = TestHelper.BuildServiceProviderWithValidationRuntime(services =>
+            services.AddSingleton<IKyrolusValidationCacheStore>(spyCacheStore));
+        var validationEngine = serviceProvider.GetRequiredService<IKyrolusValidationEngine>();
+
+        var request = new NegativeCacheableTestRequest();
+
+        var failures = await validationEngine.ValidateAsync(request);
+
+        failures.ShouldBeEmpty();
+        spyCacheStore.LastFailures.ShouldBeEmpty();
+        spyCacheStore.LastTtl.ShouldBe(request.CacheTtl);
+        spyCacheStore.LastTtl.ShouldNotBe(request.NegativeCacheTtl);
+    }
+
+    [Fact(DisplayName = "ValidateAsync caches a failing result under NegativeCacheTtl, not the request's normal CacheTtl")]
+    public async Task ValidateAsync_CachesFailingResult_UnderNegativeCacheTtl()
+    {
+        // Arrange: a validator IS registered here, and it always fails.
+        var spyCacheStore = new SpyValidationCacheStore();
+        var serviceProvider = TestHelper.BuildServiceProviderWithValidationRuntime(services =>
+        {
+            services.AddSingleton<IKyrolusValidationCacheStore>(spyCacheStore);
+            services.AddSingleton<IKyrolusRequestValidator<NegativeCacheableTestRequest>, NegativeCacheableFailingTestValidator>();
+        });
+        var validationEngine = serviceProvider.GetRequiredService<IKyrolusValidationEngine>();
+
+        var request = new NegativeCacheableTestRequest();
+
+        var failures = await validationEngine.ValidateAsync(request);
+
+        failures.ShouldNotBeEmpty();
+        spyCacheStore.LastFailures.ShouldNotBeEmpty();
+        spyCacheStore.LastTtl.ShouldBe(request.NegativeCacheTtl);
+        spyCacheStore.LastTtl.ShouldNotBe(request.CacheTtl);
+    }
     #endregion
 
     #region CancellationToken

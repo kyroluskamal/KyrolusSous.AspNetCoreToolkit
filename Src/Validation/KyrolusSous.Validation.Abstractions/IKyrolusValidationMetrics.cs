@@ -38,6 +38,8 @@ public interface IKyrolusValidationMetrics
     /// <summary>
     /// Records validation execution metrics asynchronously.
     /// </summary>
+    /// <param name="context">The completed run's request type, context, failures, and elapsed duration.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     ValueTask RecordAsync(
         KyrolusValidationMetricsContext context,
         CancellationToken cancellationToken = default);

@@ -95,7 +95,7 @@ public static partial class RepositoryRuntimeDiagnostics
         checks++;
 
         var scanningOnlyServices = new ServiceCollection();
-        scanningOnlyServices.AddKyrolusValidationRuntimeScanning();
+        scanningOnlyServices.AddKyrolusScannedValidators();
         checks++;
 
         var services = new ServiceCollection();
@@ -111,7 +111,7 @@ public static partial class RepositoryRuntimeDiagnostics
             new KyrolusValidationContext(
                 RuleSets: ["default"],
                 Groups: ["default"])));
-        services.AddKyrolusValidationRuntimeScanning(typeof(RuntimeScannedValidationRequestValidator).Assembly);
+        services.AddKyrolusScannedValidators(typeof(RuntimeScannedValidationRequestValidator).Assembly);
 
         services.AddSingleton<IKyrolusLocalizer>(new KyrolusDictionaryLocalizer(
             new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.OrdinalIgnoreCase)

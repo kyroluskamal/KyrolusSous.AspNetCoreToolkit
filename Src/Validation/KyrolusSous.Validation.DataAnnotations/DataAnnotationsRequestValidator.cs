@@ -5,18 +5,57 @@ using KyrolusSous.Validation.Abstractions;
 
 namespace KyrolusSous.Validation.DataAnnotations;
 
+/// <summary>
+/// <see cref="IKyrolusRequestValidator{TRequest}"/> that validates <typeparamref name="TRequest"/> using the
+/// standard <see cref="System.ComponentModel.DataAnnotations"/> attributes (<see cref="RequiredAttribute"/>,
+/// <see cref="StringLengthAttribute"/>, <see cref="RangeAttribute"/>, a custom <see cref="ValidationAttribute"/>,
+/// or <see cref="IValidatableObject"/>) via reflection at request time.
+/// </summary>
+/// <remarks>
+/// Uses <see cref="Validator.TryValidateObject(object, ValidationContext, ICollection{ValidationResult}?, bool)"/>, so it supports every DataAnnotations feature .NET itself
+/// supports - including attributes this library's source-generated alternative
+/// (<c>KyrolusSous.Validation.DataAnnotations.Generator</c>) doesn't translate (see its <c>KYVALGEN001</c>
+/// diagnostic). The trade-off is reflection at every call and no Native AOT/trimming support; prefer the
+/// generator when startup/throughput or AOT matters more than attribute coverage.
+/// <para>
+/// A property tagged with <see cref="KyrolusValidationScopeAttribute"/> participates in
+/// <see cref="KyrolusValidationContext"/> RuleSet/Group filtering the same way a Fluent DSL rule scoped via
+/// <c>RuleSet(...)</c>/<c>Group(...)</c> does; an untagged property only runs for the default scope.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// public class CreateUserRequest
+/// {
+///     [Required, EmailAddress]
+///     public string Email { get; set; } = string.Empty;
+///
+///     [Required, MinLength(8)]
+///     [KyrolusValidationScope(RuleSets = ["Create"])]
+///     public string Password { get; set; } = string.Empty;
+/// }
+///
+/// services.AddScoped&lt;IKyrolusRequestValidator&lt;CreateUserRequest&gt;, DataAnnotationsRequestValidator&lt;CreateUserRequest&gt;&gt;();
+/// </code>
+/// </example>
 public sealed class DataAnnotationsRequestValidator<TRequest>(IServiceProvider? serviceProvider = null)
     : IKyrolusRequestValidatorWithContext<TRequest>
 {
-    // Property-level [KyrolusValidationScope] lookups are cached per (declaring member) since the metadata is
-    // static for the process lifetime and TryValidateObject already reflects over the same members every call.
+    /// <summary>
+    /// Property-level <see cref="KyrolusValidationScopeAttribute"/> lookups, cached per declaring member since
+    /// the metadata is static for the process lifetime and <see cref="Validator.TryValidateObject(object, ValidationContext, ICollection{ValidationResult}?, bool)"/>
+    /// already reflects over the same members every call.
+    /// </summary>
     private static readonly ConcurrentDictionary<MemberInfo, KyrolusValidationScopeAttribute?> ScopeCache = new();
 
+    /// <summary>Forwarded to <see cref="ValidationContext"/> so DataAnnotations attributes can resolve services (e.g. via <see cref="IValidatableObject"/> implementations that need dependency injection).</summary>
     private readonly IServiceProvider? _serviceProvider = serviceProvider;
 
+    /// <inheritdoc />
     public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(
         TRequest request, CancellationToken cancellationToken = default) => ValidateAsync(request, KyrolusValidationContext.Default, cancellationToken);
 
+    /// <inheritdoc />
     public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(
         TRequest request,
         KyrolusValidationContext context,
@@ -81,6 +120,7 @@ public sealed class DataAnnotationsRequestValidator<TRequest>(IServiceProvider? 
         return new KyrolusValidationFailure(member, error, RuleSet: ruleSet, Groups: groupsResult);
     }
 
+    /// <summary>Looks up the public instance property named <paramref name="member"/> on <typeparamref name="TRequest"/> and returns its <see cref="KyrolusValidationScopeAttribute"/>, if any (cached after the first lookup).</summary>
     private static KyrolusValidationScopeAttribute? ResolveScope(string member)
     {
         var property = typeof(TRequest).GetProperty(member, BindingFlags.Public | BindingFlags.Instance);

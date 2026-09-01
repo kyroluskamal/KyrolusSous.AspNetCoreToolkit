@@ -1,11 +1,19 @@
 namespace KyrolusSous.Validation.Runtime;
 
+/// <summary>
+/// The default <see cref="IKyrolusValidationTracer"/>: starts no span and records nothing. Registered by
+/// <see cref="ServiceCollectionExtensions.AddKyrolusValidationRuntime"/> via <c>TryAddSingleton</c>, so
+/// registering <see cref="KyrolusValidationActivityTracer"/> (or your own tracer) before that call replaces it.
+/// </summary>
 public sealed class KyrolusNoopValidationTracer : IKyrolusValidationTracer
 {
+    /// <summary>A shared, reusable instance, since this implementation has no state.</summary>
     public static readonly IKyrolusValidationTracer Instance = new KyrolusNoopValidationTracer();
 
+    /// <inheritdoc />
     public object? Start(KyrolusValidationTraceContext context) => null;
 
+    /// <inheritdoc />
     public ValueTask StopAsync(
         KyrolusValidationTraceContext context,
         object? state,
@@ -15,11 +23,19 @@ public sealed class KyrolusNoopValidationTracer : IKyrolusValidationTracer
         => ValueTask.CompletedTask;
 }
 
+/// <summary>
+/// <see cref="IKyrolusValidationTracer"/> backed by <see cref="System.Diagnostics.ActivitySource"/> - the
+/// standard .NET tracing primitive. Any OpenTelemetry-configured app picks up its spans automatically by
+/// listening for <paramref name="sourceName"/>, without this package needing a direct reference to any
+/// OpenTelemetry package. Not registered by default; opt in explicitly (see <see cref="KyrolusNoopValidationTracer"/>).
+/// </summary>
+/// <param name="sourceName">The <see cref="ActivitySource"/> name OpenTelemetry (or another listener) should subscribe to.</param>
 public sealed class KyrolusValidationActivityTracer(string sourceName = "Kyrolus.Validation")
     : IKyrolusValidationTracer
 {
     private readonly ActivitySource source = new(sourceName);
 
+    /// <inheritdoc />
     public object? Start(KyrolusValidationTraceContext context)
     {
         var activity = source.StartActivity("Validation", ActivityKind.Internal);
@@ -37,6 +53,7 @@ public sealed class KyrolusValidationActivityTracer(string sourceName = "Kyrolus
         return activity;
     }
 
+    /// <inheritdoc />
     public ValueTask StopAsync(
         KyrolusValidationTraceContext context,
         object? state,

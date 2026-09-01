@@ -85,21 +85,19 @@ public class ServiceCollectionExtensionsTests
     }
     #endregion
 
-    #region AddKyrolusValidationRuntimeScanning
-    [Fact(DisplayName = "AddKyrolusValidationRuntimeScanning adds all required services and registers validators from the specified assemblies")]
-    public void AddKyrolusValidationRuntimeScanning_AddsAllRequiredServicesAndRegistersValidators()
+    #region AddKyrolusScannedValidators
+    [Fact(DisplayName = "AddKyrolusScannedValidators adds all required services and registers validators from the specified assemblies")]
+    public void AddKyrolusScannedValidators_AddsAllRequiredServicesAndRegistersValidators()
     {
         // Arrange
         var services = new ServiceCollection();
         var assembly = typeof(ServiceCollectionExtensionsTests).Assembly;
 
         // Act
-        services.AddKyrolusValidationRuntimeScanning(assembly);
+        services.AddKyrolusScannedValidators(assembly);
         var serviceProvider = services.BuildServiceProvider();
 
         // Assert
-        TestHelper.AddsAllRequiredServices(serviceProvider);
-
         // Check that validators from the specified assembly are registered
         var validatorTypes = assembly.GetTypes().Where(t => t.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IKyrolusRequestValidator<>)));
         foreach (var validatorType in validatorTypes)

@@ -8,6 +8,7 @@ public sealed class KyrolusValidationDistributedCacheStore(IKyrolusCacheProvider
 {
     private readonly IKyrolusCacheProvider cacheProvider = cacheProvider ?? throw new ArgumentNullException(nameof(cacheProvider));
 
+    /// <inheritdoc />
     public async ValueTask<IReadOnlyList<KyrolusValidationFailure>?> TryGetAsync(string key, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(key)) return null;
@@ -15,6 +16,7 @@ public sealed class KyrolusValidationDistributedCacheStore(IKyrolusCacheProvider
         return await cacheProvider.GetAsync<IReadOnlyList<KyrolusValidationFailure>>(key, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async ValueTask SetAsync(string key, IReadOnlyList<KyrolusValidationFailure> failures, TimeSpan ttl, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(key) || ttl <= TimeSpan.Zero) return;

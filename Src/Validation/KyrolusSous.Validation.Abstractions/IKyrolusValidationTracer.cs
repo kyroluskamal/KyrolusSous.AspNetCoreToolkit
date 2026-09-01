@@ -54,6 +54,11 @@ public interface IKyrolusValidationTracer
     /// <summary>
     /// Completes the tracing span after validation finishes.
     /// </summary>
+    /// <param name="context">The same tracing context passed to <see cref="Start"/>.</param>
+    /// <param name="state">The opaque state object <see cref="Start"/> returned, or <see langword="null"/> if it returned none.</param>
+    /// <param name="failures">The failures produced by validation (empty when it passed).</param>
+    /// <param name="exception">The exception that terminated validation, if any; <see langword="null"/> on a normal completion.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     ValueTask StopAsync(
         KyrolusValidationTraceContext context,
         object? state,

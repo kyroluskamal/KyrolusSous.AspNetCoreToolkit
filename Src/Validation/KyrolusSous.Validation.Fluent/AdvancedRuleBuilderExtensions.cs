@@ -1,5 +1,21 @@
 namespace KyrolusSous.Validation.Fluent;
 
+/// <summary>
+/// Password complexity requirements checked by <see cref="AdvancedRuleBuilderExtensions.IsStrongPasswordValid"/>
+/// and the Fluent DSL's <c>.StrongPassword()</c>. All requirements default to on; construct with named
+/// parameters to relax the ones that don't apply.
+/// </summary>
+/// <param name="MinLength">Minimum allowed password length.</param>
+/// <param name="MaxLength">Maximum allowed password length.</param>
+/// <param name="RequireUppercase">Whether at least one uppercase letter is required.</param>
+/// <param name="RequireLowercase">Whether at least one lowercase letter is required.</param>
+/// <param name="RequireDigit">Whether at least one digit is required.</param>
+/// <param name="RequireSpecialChar">Whether at least one non-alphanumeric character is required.</param>
+/// <example>
+/// <code>
+/// RuleFor(x => x.Password).StrongPassword(new KyrolusPasswordOptions(MinLength: 12, RequireSpecialChar: false));
+/// </code>
+/// </example>
 public sealed record KyrolusPasswordOptions(
     int MinLength = 8,
     int MaxLength = 128,
@@ -8,14 +24,24 @@ public sealed record KyrolusPasswordOptions(
     bool RequireDigit = true,
     bool RequireSpecialChar = true);
 
+/// <summary>
+/// Domain-specific format checks (national IDs, IBAN, passwords, JSON/Base64, Cron, MAC addresses) that back the
+/// matching Fluent DSL extensions in <see cref="RuleBuilderFluentExtensions"/> (e.g. <c>.NationalId()</c>,
+/// <c>.IbanValid()</c>). Like <see cref="RuleBuilderExtensions"/>, every check here is also callable directly
+/// outside the Fluent DSL - useful in a hand-written validator or a unit test.
+/// </summary>
 public static class AdvancedRuleBuilderExtensions
 {
+    /// <summary>Matches a MAC address in colon/hyphen-separated (<c>AA:BB:CC:DD:EE:FF</c>) or bare 12-hex-digit form. Carries a match timeout to guard against ReDoS.</summary>
     private static readonly Regex MacRegex = new(
         @"^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$|^([0-9A-Fa-f]{12})$",
         RegexOptions.Compiled,
         TimeSpan.FromMilliseconds(250));
 
+    /// <summary>The 23-letter control-letter alphabet used by both Spanish DNI and NIE checksums (indexed by <c>number mod 23</c>).</summary>
     private const string SpanishDniControlLetters = "TRWAGMYFPDXBNJZSQVHLCKE";
+
+    /// <summary>The 10-letter control-letter alphabet used by the Spanish CIF checksum (indexed by the computed control digit).</summary>
     private const string SpanishCifControlLetters = "JABCDEFGHI";
 
     /// <summary>
@@ -23,6 +49,19 @@ public static class AdvancedRuleBuilderExtensions
     /// including century, valid birth date YYMMDD, governorate code, and checksum.
     /// Supports "ES", "ES-DNI", "ES-NIE", "ES-CIF" for Spanish identification numbers.
     /// </summary>
+    /// <param name="nationalId">The national ID string to validate.</param>
+    /// <param name="countryCode">
+    /// Which country's rules to apply (case-insensitive). "EG"/"EGYPT" for Egypt (default); "ES"/"ES-NIF"/"SPAIN"
+    /// for any Spanish NIF (DNI, NIE, or CIF); "ES-DNI", "ES-NIE", "ES-CIF" to require one specific Spanish
+    /// document type. Any other value falls back to a generic length/alphanumeric check.
+    /// </param>
+    /// <example>
+    /// <code>
+    /// AdvancedRuleBuilderExtensions.IsNationalIdValid("29812250101231");             // Egyptian, default
+    /// AdvancedRuleBuilderExtensions.IsNationalIdValid("12345678Z", "ES-DNI");         // Spanish DNI specifically
+    /// RuleFor(x => x.NationalId).NationalId(countryCode: "ES");                      // via the Fluent DSL
+    /// </code>
+    /// </example>
     public static bool IsNationalIdValid(string? nationalId, string countryCode = "EG")
     {
         if (string.IsNullOrWhiteSpace(nationalId)) return false;
@@ -39,6 +78,11 @@ public static class AdvancedRuleBuilderExtensions
         };
     }
 
+    /// <summary>
+    /// The Egyptian 14-digit National ID algorithm: century digit (2 or 3) + 2-digit year, 2-digit month,
+    /// 2-digit day forming a real calendar date, a governorate code in 01-88, then a Modulo-11 checksum digit
+    /// (weights 2,7,6,5,4,3,2,7,6,5,4,3,2 applied to the first 13 digits) matching the 14th digit.
+    /// </summary>
     private static bool IsEgyptianNationalIdValid(string sanitized)
     {
         if (sanitized.Length != 14 || !sanitized.All(char.IsDigit)) return false;
@@ -76,6 +120,7 @@ public static class AdvancedRuleBuilderExtensions
     /// <summary>
     /// Validates Spanish DNI (Documento Nacional de Identidad) for Spanish individuals (8 digits + 1 control letter).
     /// </summary>
+    /// <param name="dni">The DNI string to validate (spaces/hyphens are stripped before checking).</param>
     public static bool IsSpanishDniValid(string? dni)
     {
         if (string.IsNullOrWhiteSpace(dni)) return false;
@@ -95,6 +140,7 @@ public static class AdvancedRuleBuilderExtensions
     /// <summary>
     /// Validates Spanish NIE (Número de Identidad de Extranjero) for resident foreigners (X, Y, or Z + 7 digits + 1 control letter).
     /// </summary>
+    /// <param name="nie">The NIE string to validate (spaces/hyphens are stripped before checking).</param>
     public static bool IsSpanishNieValid(string? nie)
     {
         if (string.IsNullOrWhiteSpace(nie)) return false;
@@ -125,6 +171,7 @@ public static class AdvancedRuleBuilderExtensions
     /// <summary>
     /// Validates Spanish CIF (Código de Identificación Fiscal) for legal entities and corporations (1 letter + 7 digits + 1 control digit/letter).
     /// </summary>
+    /// <param name="cif">The CIF string to validate (spaces/hyphens are stripped before checking).</param>
     public static bool IsSpanishCifValid(string? cif)
     {
         if (string.IsNullOrWhiteSpace(cif)) return false;
@@ -184,6 +231,7 @@ public static class AdvancedRuleBuilderExtensions
     /// <summary>
     /// Validates Spanish NIF (Número de Identificación Fiscal) which encompasses DNI (individuals), NIE (foreigners), and CIF (companies).
     /// </summary>
+    /// <param name="nif">The document string to validate against all three Spanish document formats.</param>
     public static bool IsSpanishNifValid(string? nif)
     {
         if (string.IsNullOrWhiteSpace(nif)) return false;
@@ -193,6 +241,7 @@ public static class AdvancedRuleBuilderExtensions
     /// <summary>
     /// Validates International Bank Account Number (IBAN) using ISO 7064 Modulo 97.
     /// </summary>
+    /// <param name="iban">The IBAN string to validate (spaces/hyphens are stripped before checking).</param>
     public static bool IsIbanValid(string? iban)
     {
         if (string.IsNullOrWhiteSpace(iban)) return false;
@@ -229,6 +278,8 @@ public static class AdvancedRuleBuilderExtensions
     /// <summary>
     /// Validates Password Strength (Min/Max length, Uppercase, Lowercase, Digit, Special Characters).
     /// </summary>
+    /// <param name="password">The password string to validate.</param>
+    /// <param name="options">The complexity requirements to enforce; defaults to a new <see cref="KyrolusPasswordOptions"/> (all requirements on) when omitted.</param>
     public static bool IsStrongPasswordValid(string? password, KyrolusPasswordOptions? options = null)
     {
         if (string.IsNullOrEmpty(password)) return false;
@@ -246,6 +297,7 @@ public static class AdvancedRuleBuilderExtensions
     /// <summary>
     /// Validates structural JSON strings without allocations using Utf8JsonReader.
     /// </summary>
+    /// <param name="json">The JSON text to check for well-formedness (syntax only - this does not validate against a schema).</param>
     public static bool IsJsonValid(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return false;
@@ -269,6 +321,7 @@ public static class AdvancedRuleBuilderExtensions
     /// <summary>
     /// Validates Base64 encoded strings safely without risking StackOverflowException on large inputs.
     /// </summary>
+    /// <param name="base64">The string to check. Whitespace is trimmed first; internal whitespace is not permitted.</param>
     public static bool IsBase64Valid(string? base64)
     {
         if (string.IsNullOrWhiteSpace(base64)) return false;
@@ -296,9 +349,12 @@ public static class AdvancedRuleBuilderExtensions
     /// <summary>
     /// Validates Geographical Coordinates (Latitude between -90 and 90, Longitude between -180 and 180).
     /// </summary>
+    /// <param name="latitude">The latitude value, in degrees.</param>
+    /// <param name="longitude">The longitude value, in degrees.</param>
     public static bool IsCoordinatesValid(double latitude, double longitude)
         => latitude >= -90.0 && latitude <= 90.0 && longitude >= -180.0 && longitude <= 180.0;
 
+    /// <summary>The valid (Min, Max) numeric range for each of the 5 standard cron fields, in order: minute, hour, day-of-month, month, day-of-week.</summary>
     private static readonly (int Min, int Max)[] CronFieldRanges =
     [
         (0, 59), // minute
@@ -312,6 +368,7 @@ public static class AdvancedRuleBuilderExtensions
     /// Validates 5-part standard cron expressions, including that numeric values/ranges/steps fall within each
     /// field's real bounds (e.g. minutes 0-59) - not just that the characters used look cron-shaped.
     /// </summary>
+    /// <param name="cron">The 5-field cron expression (minute hour day-of-month month day-of-week) to validate.</param>
     public static bool IsCronExpressionValid(string? cron)
     {
         if (string.IsNullOrWhiteSpace(cron)) return false;
@@ -325,6 +382,11 @@ public static class AdvancedRuleBuilderExtensions
         return true;
     }
 
+    /// <summary>
+    /// Validates one cron field against <paramref name="min"/>/<paramref name="max"/>, supporting comma-separated
+    /// lists, <c>*</c>, ranges (<c>a-b</c>), and step syntax (<c>.../n</c> on a <c>*</c> or a range) - checking that
+    /// every numeric value named actually falls within bounds, not just that the syntax looks well-formed.
+    /// </summary>
     private static bool IsCronFieldValid(string field, int min, int max)
     {
         foreach (var listItem in field.Split(','))
@@ -362,6 +424,7 @@ public static class AdvancedRuleBuilderExtensions
     /// <summary>
     /// Validates MAC Address formats.
     /// </summary>
+    /// <param name="mac">The MAC address string, in colon/hyphen-separated (<c>AA:BB:CC:DD:EE:FF</c>) or bare 12-hex-digit form.</param>
     public static bool IsMacAddressValid(string? mac)
         => !string.IsNullOrWhiteSpace(mac) && MacRegex.IsMatch(mac.Trim());
 }

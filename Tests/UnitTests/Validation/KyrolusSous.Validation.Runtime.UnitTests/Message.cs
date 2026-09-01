@@ -203,6 +203,35 @@ public class NegativeCacheableTestRequest : IKyrolusValidationCacheable, IKyrolu
     public TimeSpan? NegativeCacheTtl => TimeSpan.FromMinutes(2);
 }
 
+public class NegativeCacheableFailingTestValidator : IKyrolusRequestValidator<NegativeCacheableTestRequest>
+{
+    public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(NegativeCacheableTestRequest request, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<KyrolusValidationFailure> failures = [new("Prop", "Always fails")];
+        return ValueTask.FromResult(failures);
+    }
+}
+
+/// <summary>
+/// Records the arguments of the last <see cref="SetAsync"/> call, so a test can assert exactly which TTL the
+/// engine chose for a given outcome (positive vs. negative caching) without depending on real elapsed time.
+/// </summary>
+public sealed class SpyValidationCacheStore : IKyrolusValidationCacheStore
+{
+    public TimeSpan? LastTtl { get; private set; }
+    public IReadOnlyList<KyrolusValidationFailure>? LastFailures { get; private set; }
+
+    public ValueTask<IReadOnlyList<KyrolusValidationFailure>?> TryGetAsync(string key, CancellationToken cancellationToken = default)
+        => ValueTask.FromResult<IReadOnlyList<KyrolusValidationFailure>?>(null);
+
+    public ValueTask SetAsync(string key, IReadOnlyList<KyrolusValidationFailure> failures, TimeSpan ttl, CancellationToken cancellationToken = default)
+    {
+        LastTtl = ttl;
+        LastFailures = failures;
+        return ValueTask.CompletedTask;
+    }
+}
+
 public class CancellationTokenTestRequest
 {
     public string Data { get; set; } = string.Empty;

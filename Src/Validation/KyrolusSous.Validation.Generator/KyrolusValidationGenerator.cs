@@ -5,9 +5,38 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace KyrolusSous.Validation.Generator;
 
+/// <summary>
+/// Roslyn incremental source generator that auto-registers <em>every</em> <c>IKyrolusRequestValidator&lt;T&gt;</c>
+/// implementation found in the compiling project into the DI container - regardless of how each one was written
+/// (hand-written, Fluent DSL, FluentValidation adapter, or even the DataAnnotations source generator's own
+/// output). This is a registration-only generator: it does not generate any validator logic itself, and is the
+/// AOT-friendly alternative to <c>KyrolusSous.Validation.Runtime</c>'s reflection-based
+/// <c>AddKyrolusValidationRuntimeScanning(...)</c>/<c>AddKyrolusScannedValidators(...)</c>.
+/// </summary>
+/// <remarks>
+/// Emits a single <c>KyrolusValidationGeneratedServiceCollectionExtensions</c> class with:
+/// <list type="bullet">
+/// <item><description><c>AddKyrolusGeneratedValidators()</c> - registers every discovered validator, if any were found.</description></item>
+/// <item><description><c>AddKyrolusGeneratedValidationProfiles()</c> - registers the four built-in
+/// <c>KyrolusValidationProfiles</c> (Create, Update, UiHints, BackgroundJobs), emitted only when the compiling
+/// project references <c>KyrolusSous.Validation.Abstractions</c> (so this generator itself has no hard
+/// dependency on that package).</description></item>
+/// </list>
+/// Nothing is emitted at all when neither condition applies, so referencing this generator in a project with no
+/// validators yet is harmless.
+/// </remarks>
+/// <example>
+/// <code>
+/// // Program.cs - no manual services.AddScoped&lt;IKyrolusRequestValidator&lt;T&gt;, ...&gt;() calls needed:
+/// builder.Services.AddKyrolusValidationRuntime();
+/// builder.Services.AddKyrolusGeneratedValidators();
+/// builder.Services.AddKyrolusGeneratedValidationProfiles();
+/// </code>
+/// </example>
 [Generator]
 public sealed class KyrolusValidationGenerator : IIncrementalGenerator
 {
+    /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var candidates = context.SyntaxProvider.CreateSyntaxProvider(
@@ -23,6 +52,12 @@ public sealed class KyrolusValidationGenerator : IIncrementalGenerator
         });
     }
 
+    /// <summary>
+    /// Filters <paramref name="candidates"/> down to concrete, non-generic classes that close
+    /// <c>IKyrolusRequestValidator&lt;T&gt;</c>, deduplicates (service type, implementation type) pairs via the
+    /// <see cref="HashSet{T}"/>, and emits the DI registration extension class described on
+    /// <see cref="KyrolusValidationGenerator"/>.
+    /// </summary>
     private static void Emit(
         SourceProductionContext context,
         Compilation compilation,

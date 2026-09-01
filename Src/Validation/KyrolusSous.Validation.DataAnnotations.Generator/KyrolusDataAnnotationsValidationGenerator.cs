@@ -6,6 +6,37 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace KyrolusSous.Validation.DataAnnotations.Generator;
 
+/// <summary>
+/// Roslyn incremental source generator that emits an <c>IKyrolusRequestValidator&lt;T&gt;</c> implementation at
+/// compile time for every class decorated with a recognized <c>System.ComponentModel.DataAnnotations</c>
+/// attribute - the AOT/trimming-friendly alternative to the reflection-based
+/// <c>KyrolusSous.Validation.DataAnnotations</c> package's <c>DataAnnotationsRequestValidator&lt;T&gt;</c>. Attach
+/// this package as an <c>Analyzer</c> reference and no other setup is required: matching classes are discovered
+/// automatically, and each gets a generated <c>{ClassName}GeneratedDataAnnotationsValidator</c> in the
+/// <c>KyrolusSous.Validation.Generated</c> namespace, plus a
+/// <c>KyrolusDataAnnotationsGeneratedServiceCollectionExtensions.AddKyrolusGeneratedDataAnnotationsValidators()</c>
+/// extension that registers all of them in one call.
+/// </summary>
+/// <remarks>
+/// Only the attributes in <see cref="KnownAttributeNames"/> are translated into real checks; anything else
+/// (a custom <c>System.ComponentModel.DataAnnotations.ValidationAttribute</c> subclass, or a BCL one not yet
+/// supported) is reported via the <c>KYVALGEN001</c> compiler warning
+/// (<see cref="UnsupportedAttributeDiagnostic"/>) rather than being silently skipped. A property tagged with
+/// <c>[KyrolusValidationScope]</c> gets its RuleSets/Groups baked into the generated check, resolved against the
+/// caller's <c>KyrolusValidationContext</c> at runtime the same way the reflection-based validator does.
+/// </remarks>
+/// <example>
+/// <code>
+/// public class CreateUserRequest
+/// {
+///     [Required, EmailAddress]
+///     public string Email { get; set; } = string.Empty;
+/// }
+///
+/// // Program.cs - no manual registration of CreateUserRequest needed:
+/// builder.Services.AddKyrolusGeneratedDataAnnotationsValidators();
+/// </code>
+/// </example>
 [Generator]
 public sealed class KyrolusDataAnnotationsValidationGenerator : IIncrementalGenerator
 {
@@ -36,6 +67,7 @@ public sealed class KyrolusDataAnnotationsValidationGenerator : IIncrementalGene
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
+    /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var candidateClasses = context.SyntaxProvider.CreateSyntaxProvider(
@@ -82,6 +114,7 @@ public sealed class KyrolusDataAnnotationsValidationGenerator : IIncrementalGene
         });
     }
 
+    /// <summary>True when <paramref name="symbol"/>'s inheritance chain reaches <c>System.ComponentModel.DataAnnotations.ValidationAttribute</c> - catching custom validation attribute subclasses that aren't in <see cref="KnownAttributeNames"/> by name.</summary>
     private static bool IsValidationAttribute(INamedTypeSymbol symbol)
     {
         var current = symbol.BaseType;
@@ -96,6 +129,11 @@ public sealed class KyrolusDataAnnotationsValidationGenerator : IIncrementalGene
         return false;
     }
 
+    /// <summary>
+    /// Generates one validator class per candidate (via <see cref="GenerateValidatorClass"/>), then - if any were
+    /// actually emitted - one shared DI registration extension (via <see cref="GenerateDiExtensions"/>) covering
+    /// all of them.
+    /// </summary>
     private static void Emit(
         SourceProductionContext context,
         Compilation compilation,
@@ -126,6 +164,18 @@ public sealed class KyrolusDataAnnotationsValidationGenerator : IIncrementalGene
         }
     }
 
+    /// <summary>
+    /// Emits the full source text of one generated <c>IKyrolusRequestValidator&lt;T&gt;</c>/<c>IKyrolusRequestValidatorWithContext&lt;T&gt;</c>
+    /// implementation for <paramref name="classSymbol"/>: one check per recognized attribute on each of its
+    /// annotated properties, plus the shared <c>AddFailure</c>/<c>IsValidCreditCardNumber</c> helpers. Returns
+    /// <see langword="null"/> (and reports nothing) when <paramref name="classSymbol"/> has no annotated
+    /// properties at all - it was only a syntactic candidate, not an actual match.
+    /// </summary>
+    /// <param name="classSymbol">The candidate class to generate a validator for.</param>
+    /// <param name="context">Used to report the <c>KYVALGEN001</c> diagnostic for any unsupported attribute found.</param>
+    /// <param name="validatorClassName">Receives the generated class's simple name (<c>{ClassName}GeneratedDataAnnotationsValidator</c>).</param>
+    /// <param name="fullValidatorName">Receives the generated class's fully-qualified name, for use in the DI registration source.</param>
+    /// <returns>The generated C# source text, or <see langword="null"/> if nothing was generated.</returns>
     private static string? GenerateValidatorClass(
         INamedTypeSymbol classSymbol,
         SourceProductionContext context,
@@ -418,6 +468,7 @@ public sealed class KyrolusDataAnnotationsValidationGenerator : IIncrementalGene
     private static string BuildStringArrayLiteral(string[] values) =>
         values.Length == 0 ? "Array.Empty<string>()" : $"new[] {{ {string.Join(", ", values.Select(ToLiteral))} }}";
 
+    /// <summary>Reads the <c>ErrorMessage</c> named argument off a DataAnnotations attribute application, if the developer supplied one; returns <see langword="null"/> to fall back to the generator's own default message.</summary>
     private static string? GetCustomErrorMessage(AttributeData attr)
     {
         foreach (var arg in attr.NamedArguments)
@@ -430,6 +481,11 @@ public sealed class KyrolusDataAnnotationsValidationGenerator : IIncrementalGene
         return null;
     }
 
+    /// <summary>
+    /// Emits <c>KyrolusDataAnnotationsGeneratedServiceCollectionExtensions.AddKyrolusGeneratedDataAnnotationsValidators()</c>,
+    /// registering every generated validator (sorted by class name for deterministic output) via <c>TryAddEnumerable</c>.
+    /// </summary>
+    /// <param name="validators">Every validator class successfully generated by <see cref="GenerateValidatorClass"/> in this compilation.</param>
     private static string GenerateDiExtensions(List<(string TargetType, string ValidatorClassName, string FullValidatorName)> validators)
     {
         var sb = new StringBuilder();

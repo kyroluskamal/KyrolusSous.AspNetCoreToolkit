@@ -71,8 +71,8 @@ public class KyrolusEfExceptionMapperTests
 
         mapper.TryMap(ex, context, out var mapping);
 
-        mapping.Error.Detail.ShouldNotContain("dbo.Users");
-        mapping.Error.Detail.ShouldNotContain("IX_Users_Email");
+        mapping.Error.Detail?.ShouldNotContain("dbo.Users");
+        mapping.Error.Detail?.ShouldNotContain("IX_Users_Email");
     }
 
     [Fact(DisplayName = "TryMap with DbUpdateException should expose the raw provider message when explicitly opted in")]

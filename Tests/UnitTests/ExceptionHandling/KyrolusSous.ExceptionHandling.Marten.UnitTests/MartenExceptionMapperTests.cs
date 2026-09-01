@@ -88,7 +88,7 @@ public class MartenExceptionMapperTests
         mapping.ShouldNotBeNull();
         mapping.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
         mapping.Error.Code.ShouldBe(KyrolusErrorCodes.DatabaseError);
-        mapping.Error.Detail.ShouldNotContain("mt_doc_user");
+        mapping.Error.Detail?.ShouldNotContain("mt_doc_user");
         mapping.Error.Detail.ShouldBe("A database error occurred.");
     }
 

@@ -51,11 +51,17 @@ public interface IKyrolusValidationCacheable
 }
 
 /// <summary>
-/// Configures negative caching (caching failures with a shorter lifespan).
+/// Configures "negative caching": a shorter TTL specifically for caching a <em>failed</em> validation outcome,
+/// kept separate from the request's normal <see cref="IKyrolusValidationCacheable.CacheTtl"/> (used for a
+/// passing result). This mirrors the standard negative-caching pattern used elsewhere in networking/caching
+/// (e.g. DNS caching an NXDOMAIN response, or a lookup caching "not found") for the same reason: whatever caused
+/// the failure - a uniqueness conflict, a missing referenced entity, a temporarily-locked resource - is more
+/// likely to be resolved soon than a "this is valid" result is to become invalid, so caching the failure for too
+/// long risks telling a retrying caller their now-valid input is still rejected.
 /// </summary>
 public interface IKyrolusValidationNegativeCacheable
 {
-    /// <summary>Gets the TTL duration for caching failed validation outcomes.</summary>
+    /// <summary>Gets the TTL duration for caching a failed validation outcome.</summary>
     TimeSpan? NegativeCacheTtl { get; }
 }
 

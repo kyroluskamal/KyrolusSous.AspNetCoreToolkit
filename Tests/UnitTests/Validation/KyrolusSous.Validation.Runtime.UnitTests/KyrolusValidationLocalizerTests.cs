@@ -21,7 +21,7 @@ public class KyrolusValidationLocalizerTests
 
     private sealed record ProbeRequest;
 
-    // Assembly-scanning tests elsewhere in this project (AddKyrolusValidationRuntimeScanning) reflect
+    // Assembly-scanning tests elsewhere in this project (AddKyrolusScannedValidators) reflect
     // over every IKyrolusRequestValidator<> in the assembly and construct it via DI, so this needs a
     // DI-resolvable (default-valued) constructor even though our own tests always pass failures explicitly.
     private sealed class ProbeValidator(IReadOnlyList<KyrolusValidationFailure>? failures = null) : IKyrolusRequestValidator<ProbeRequest>

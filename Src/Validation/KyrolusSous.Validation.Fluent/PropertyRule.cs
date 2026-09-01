@@ -147,20 +147,23 @@ public class KyrolusPropertyRule<T, TProperty>(string propertyName, Func<T, TPro
         return this;
     }
 
+    /// <summary>Attaches the enclosing <c>RuleSet(...)</c> scope's names, set by <see cref="KyrolusAbstractValidator{T}"/> when this rule is created inside one.</summary>
     internal void AttachRuleSets(IEnumerable<string> ruleSets)
     {
         InRuleSets(ruleSets);
     }
 
+    /// <summary>Attaches the enclosing <c>Group(...)</c> scope's names, set by <see cref="KyrolusAbstractValidator{T}"/> when this rule is created inside one.</summary>
     internal void AttachGroups(IEnumerable<string> groups)
     {
         WithGroups(groups);
     }
 
+    /// <summary>True when <paramref name="request"/> is null, or a <see cref="WhenPredicate"/>/<see cref="UnlessPredicate"/> condition excludes this rule for it.</summary>
     private bool ShouldSkipValidation(T request)
         => request is null || (WhenPredicate is not null && !WhenPredicate(request)) || (UnlessPredicate is not null && UnlessPredicate(request));
 
-
+    /// <summary>Builds the failure for a failed <paramref name="step"/>, falling back to a generic message when none was set via <see cref="WithMessage"/>.</summary>
     private KyrolusValidationFailure CreateFailure(TProperty propValue, RuleStep step)
     {
         var message = step.CustomMessage

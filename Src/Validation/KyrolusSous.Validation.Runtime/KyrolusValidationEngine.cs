@@ -1,5 +1,23 @@
 namespace KyrolusSous.Validation.Runtime;
 
+/// <summary>
+/// Default <see cref="IKyrolusValidationEngine"/> implementation. Coordinates every registered
+/// <see cref="IKyrolusRequestValidator{TRequest}"/> for a request type and, around that, applies profiles, result
+/// caching, RuleSet/Group/Severity filtering, error-code and field-path mapping, localization, and before/after
+/// hooks - in that order - so every validator kind (Fluent, DataAnnotations, FluentValidation, hand-written)
+/// gets identical cross-cutting behavior regardless of how its rules were authored.
+/// </summary>
+/// <remarks>
+/// Registered via <see cref="ServiceCollectionExtensions.AddKyrolusValidationRuntime"/>. All constructor
+/// dependencies besides <paramref name="serviceProvider"/> are optional: a caching, localization, or mapping
+/// dependency left unregistered simply disables that pipeline step rather than causing a failure.
+/// </remarks>
+/// <param name="serviceProvider">Used to resolve the <see cref="IKyrolusRequestValidator{TRequest}"/> instances and hooks registered for the request type being validated.</param>
+/// <param name="localizer">Optional localizer used to translate each failure's <see cref="KyrolusValidationFailure.ErrorMessage"/>. When <see langword="null"/>, messages are returned as-authored.</param>
+/// <param name="cacheStore">Optional cache store. When <see langword="null"/>, result caching is skipped even for requests implementing <see cref="IKyrolusValidationCacheable"/>.</param>
+/// <param name="cacheKeyProvider">Optional cache key provider. Required (alongside <paramref name="cacheStore"/>) for caching to take effect.</param>
+/// <param name="errorCodeMapper">Optional hook to rewrite each failure's <see cref="KyrolusValidationFailure.ErrorCode"/> before it's returned.</param>
+/// <param name="fieldPathMapper">Optional hook to rewrite each failure's <see cref="KyrolusValidationFailure.FieldPath"/> before it's returned.</param>
 public sealed class KyrolusValidationEngine(
     IServiceProvider serviceProvider,
     IKyrolusLocalizer? localizer = null,
@@ -15,11 +33,13 @@ public sealed class KyrolusValidationEngine(
     private readonly IKyrolusValidationErrorCodeMapper? errorCodeMapper = errorCodeMapper;
     private readonly IKyrolusValidationFieldPathMapper? fieldPathMapper = fieldPathMapper;
 
+    /// <inheritdoc />
     public async ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync<TRequest>(
         TRequest request,
         CancellationToken cancellationToken = default)
     => await ValidateAsync(request, KyrolusValidationContext.Default, cancellationToken).ConfigureAwait(false);
 
+    /// <inheritdoc />
     public async ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync<TRequest>(
         TRequest request,
         KyrolusValidationContext context,
@@ -51,7 +71,7 @@ public sealed class KyrolusValidationEngine(
             if (validators.Length == 0)
             {
                 var empty = Array.Empty<KyrolusValidationFailure>();
-                await TryStoreCache(cacheEntry, empty, cancellationToken, ResolveNegativeTtl(request)).ConfigureAwait(false);
+                await TryStoreCache(cacheEntry, empty, cancellationToken).ConfigureAwait(false);
                 await RunAfterHooks(request, effectiveContext, empty, cancellationToken).ConfigureAwait(false);
                 return empty;
             }
@@ -78,7 +98,7 @@ public sealed class KyrolusValidationEngine(
             if (failures.Count == 0)
             {
                 var empty = Array.Empty<KyrolusValidationFailure>();
-                await TryStoreCache(cacheEntry, empty, cancellationToken, ResolveNegativeTtl(request)).ConfigureAwait(false);
+                await TryStoreCache(cacheEntry, empty, cancellationToken).ConfigureAwait(false);
                 await RunAfterHooks(request, effectiveContext, empty, cancellationToken).ConfigureAwait(false);
                 return empty;
             }
@@ -86,7 +106,11 @@ public sealed class KyrolusValidationEngine(
             var normalized = failures.Select(NormalizeFailure).ToArray();
             var mapped = ApplyMappings(normalized, effectiveContext);
             var filtered = ApplyFilters(mapped, effectiveContext);
-            await TryStoreCache(cacheEntry, filtered, cancellationToken).ConfigureAwait(false);
+            // Only a populated result is "negative" (a failure) in the caching sense - RuleSet/Group/Severity
+            // filtering can still bring filtered.Count back down to zero even though raw failures existed, and
+            // that outcome is a pass as far as the caller is concerned, so it gets the normal (longer) TTL too.
+            TimeSpan? cacheTtlOverride = filtered.Count > 0 ? ResolveNegativeTtl(request) : null;
+            await TryStoreCache(cacheEntry, filtered, cancellationToken, cacheTtlOverride).ConfigureAwait(false);
 
             if (localizer is null)
             {
@@ -112,11 +136,13 @@ public sealed class KyrolusValidationEngine(
         }
     }
 
+    /// <inheritdoc />
     public async ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateBatchAsync<TRequest>(
         IEnumerable<TRequest> requests,
         CancellationToken cancellationToken = default)
     => await ValidateBatchAsync(requests, KyrolusValidationContext.Default, cancellationToken).ConfigureAwait(false);
 
+    /// <inheritdoc />
     public async ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateBatchAsync<TRequest>(
         IEnumerable<TRequest> requests,
         KyrolusValidationContext context,
@@ -143,6 +169,7 @@ public sealed class KyrolusValidationEngine(
         return allFailures;
     }
 
+    /// <inheritdoc />
     public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateCompositeAsync<TFirst, TSecond>(
         TFirst first,
         TSecond second,
@@ -152,6 +179,7 @@ public sealed class KyrolusValidationEngine(
         return ValidateAsync(composite, KyrolusValidationContext.Default, cancellationToken);
     }
 
+    /// <inheritdoc />
     public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateCompositeAsync<TFirst, TSecond>(
         TFirst first,
         TSecond second,
@@ -162,6 +190,7 @@ public sealed class KyrolusValidationEngine(
         return ValidateAsync(composite, context, cancellationToken);
     }
 
+    /// <inheritdoc />
     public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateCompositeAsync<TFirst, TSecond, TThird>(
         TFirst first,
         TSecond second,
@@ -172,6 +201,7 @@ public sealed class KyrolusValidationEngine(
         return ValidateAsync(composite, KyrolusValidationContext.Default, cancellationToken);
     }
 
+    /// <inheritdoc />
     public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateCompositeAsync<TFirst, TSecond, TThird>(
         TFirst first,
         TSecond second,
@@ -183,6 +213,7 @@ public sealed class KyrolusValidationEngine(
         return ValidateAsync(composite, context, cancellationToken);
     }
 
+    /// <inheritdoc />
     public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateCompositeAsync<TFirst, TSecond, TThird, TFourth>(
         TFirst first,
         TSecond second,
@@ -194,6 +225,7 @@ public sealed class KyrolusValidationEngine(
         return ValidateAsync(composite, KyrolusValidationContext.Default, cancellationToken);
     }
 
+    /// <inheritdoc />
     public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateCompositeAsync<TFirst, TSecond, TThird, TFourth>(
         TFirst first,
         TSecond second,
@@ -206,6 +238,12 @@ public sealed class KyrolusValidationEngine(
         return ValidateAsync(composite, context, cancellationToken);
     }
 
+    /// <summary>
+    /// Resolves each name in <see cref="KyrolusValidationContext.Profiles"/> via the registered
+    /// <see cref="IKyrolusValidationProfileProvider"/> and merges their RuleSets, Groups, and MinimumSeverity into
+    /// <paramref name="context"/> (union for RuleSets/Groups, the strictest value for MinimumSeverity). Returns
+    /// <paramref name="context"/> unchanged when no profiles are requested or no provider is registered.
+    /// </summary>
     private KyrolusValidationContext ApplyProfiles(KyrolusValidationContext context)
     {
         if (context.Profiles is not { Count: > 0 }) return context;
@@ -264,7 +302,7 @@ public sealed class KyrolusValidationEngine(
             if (values is { Count: > 0 })
             {
                 hasValues = true;
-                return values.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                return [.. values.Distinct(StringComparer.OrdinalIgnoreCase)];
             }
 
             hasValues = false;
@@ -293,6 +331,10 @@ public sealed class KyrolusValidationEngine(
         }
     }
 
+    /// <summary>
+    /// Invokes <see cref="IKyrolusValidationHook.OnBeforeAsync"/> for every registered global hook, then every
+    /// <see cref="IKyrolusValidationHook{TRequest}"/> registered specifically for <typeparamref name="TRequest"/>.
+    /// </summary>
     private async ValueTask RunBeforeHooks<TRequest>(
         TRequest request,
         KyrolusValidationContext context,
@@ -313,6 +355,12 @@ public sealed class KyrolusValidationEngine(
         }
     }
 
+    /// <summary>
+    /// Invokes <see cref="IKyrolusValidationHook.OnAfterAsync"/> for every registered global hook, then every
+    /// <see cref="IKyrolusValidationHook{TRequest}"/> registered specifically for <typeparamref name="TRequest"/>.
+    /// Runs even when validation threw, so hooks that opened a resource in <c>OnBeforeAsync</c> (a tracing
+    /// <c>Activity</c>, a metrics <c>Stopwatch</c>) always get to close it.
+    /// </summary>
     private async ValueTask RunAfterHooks<TRequest>(
         TRequest request,
         KyrolusValidationContext context,
@@ -350,6 +398,11 @@ public sealed class KyrolusValidationEngine(
         return localizer.GetStringOrDefault(key, arguments, failure.ErrorMessage);
     }
 
+    /// <summary>
+    /// Fills in <see cref="KyrolusValidationDefaults.DefaultRuleSet"/>/<see cref="KyrolusValidationDefaults.DefaultGroup"/>
+    /// for a failure with no explicit RuleSet/Groups, so an untagged rule participates in RuleSet/Group filtering
+    /// (<see cref="ApplyFilters"/>) the same way an explicitly-scoped one does.
+    /// </summary>
     private static KyrolusValidationFailure NormalizeFailure(KyrolusValidationFailure failure)
     {
         var ruleSet = string.IsNullOrWhiteSpace(failure.RuleSet) ? KyrolusValidationDefaults.DefaultRuleSet : failure.RuleSet;
@@ -357,6 +410,11 @@ public sealed class KyrolusValidationEngine(
         return failure with { RuleSet = ruleSet, Groups = groups };
     }
 
+    /// <summary>
+    /// Applies the optional <see cref="IKyrolusValidationErrorCodeMapper"/>/<see cref="IKyrolusValidationFieldPathMapper"/>
+    /// to each failure's <see cref="KyrolusValidationFailure.ErrorCode"/>/<see cref="KyrolusValidationFailure.FieldPath"/>.
+    /// A mapper returning a blank value leaves the original value in place rather than blanking it out.
+    /// </summary>
     private KyrolusValidationFailure[] ApplyMappings(
         KyrolusValidationFailure[] failures,
         KyrolusValidationContext context)
@@ -380,6 +438,12 @@ public sealed class KyrolusValidationEngine(
         return mapped;
     }
 
+    /// <summary>
+    /// Resolves the cache entry (key, mode, TTL) for <paramref name="request"/> via the registered
+    /// <see cref="IKyrolusValidationCacheKeyProvider"/>. Returns <see langword="null"/> - meaning "don't cache
+    /// this call" - when no provider is registered, the request is <see langword="null"/>, or the provider
+    /// declines it (e.g. it doesn't implement <see cref="IKyrolusValidationCacheable"/>).
+    /// </summary>
     private KyrolusValidationCacheEntry? ResolveCacheEntry<TRequest>(
         TRequest request,
         KyrolusValidationContext context)
@@ -389,6 +453,11 @@ public sealed class KyrolusValidationEngine(
         return cacheKeyProvider.GetCacheEntry(request!, context);
     }
 
+    /// <summary>
+    /// Stores <paramref name="failures"/> under <paramref name="cacheEntry"/>'s key when its
+    /// <see cref="KyrolusValidationCacheMode"/> permits caching this outcome (success vs. failure). A no-op when
+    /// <paramref name="cacheEntry"/> or the cache store is <see langword="null"/>.
+    /// </summary>
     private async ValueTask TryStoreCache(
         KyrolusValidationCacheEntry? cacheEntry,
         IReadOnlyList<KyrolusValidationFailure> failures,
@@ -400,6 +469,14 @@ public sealed class KyrolusValidationEngine(
         await cacheStore.SetAsync(cacheEntry.Key, failures, ttl, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Resolves the TTL used to cache a <em>failed</em> (negative) validation result: <paramref name="request"/>'s
+    /// own <see cref="IKyrolusValidationNegativeCacheable.NegativeCacheTtl"/> when it opts in, otherwise the
+    /// shorter <see cref="KyrolusValidationCacheDefaults.NegativeTtl"/> (30s vs. the 5-minute default used for a
+    /// passing result). Standard "negative caching" reasoning (as in DNS NXDOMAIN or HTTP 404 caching): a failure
+    /// is cached for less time than a success because whatever caused it (a uniqueness conflict, a missing
+    /// referenced entity, ...) is more likely to be resolved soon than a "this is valid" result is to become invalid.
+    /// </summary>
     private static TimeSpan ResolveNegativeTtl<TRequest>(TRequest request)
     {
         if (request is IKyrolusValidationNegativeCacheable negative

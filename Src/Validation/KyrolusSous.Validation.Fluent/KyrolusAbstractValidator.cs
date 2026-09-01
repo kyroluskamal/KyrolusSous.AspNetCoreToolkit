@@ -43,8 +43,13 @@ namespace KyrolusSous.Validation.Fluent;
 /// </example>
 public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidatorWithContext<T>
 {
+    /// <summary>Every rule registered so far via <see cref="RuleFor{TProperty}(Expression{Func{T, TProperty}})"/> or <see cref="AddCustomRule"/>, in declaration order.</summary>
     private readonly List<IKyrolusValidationRule<T>> _rules = [];
+
+    /// <summary>The stack of RuleSet names from any <see cref="RuleSet(string, Action)"/> scopes currently being built (supports nesting).</summary>
     private readonly List<string> _currentRuleSets = [];
+
+    /// <summary>The stack of Group names from any <see cref="Group(string, Action)"/> scopes currently being built (supports nesting).</summary>
     private readonly List<string> _currentGroups = [];
 
     /// <summary>
@@ -89,6 +94,8 @@ public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidatorWith
     /// <summary>
     /// Defines a validation rule with an inline predicate condition.
     /// </summary>
+    /// <param name="expression">The expression selecting the property to validate.</param>
+    /// <param name="predicate">Returns <see langword="true"/> when the property value is valid.</param>
     protected IKyrolusRuleBuilder<T, TProperty> RuleFor<TProperty>(
         Expression<Func<T, TProperty>> expression,
         Func<TProperty, bool> predicate)
@@ -101,6 +108,9 @@ public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidatorWith
     /// <summary>
     /// Defines a validation rule with an inline predicate condition and custom error message.
     /// </summary>
+    /// <param name="expression">The expression selecting the property to validate.</param>
+    /// <param name="predicate">Returns <see langword="true"/> when the property value is valid.</param>
+    /// <param name="defaultMessage">The error message used when <paramref name="predicate"/> returns <see langword="false"/>.</param>
     protected IKyrolusRuleBuilder<T, TProperty> RuleFor<TProperty>(
         Expression<Func<T, TProperty>> expression,
         Func<TProperty, bool> predicate,
@@ -114,6 +124,9 @@ public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidatorWith
     /// <summary>
     /// Defines a validation rule using a selector delegate, explicit property name, and inline predicate.
     /// </summary>
+    /// <param name="selector">The delegate extracting the property value.</param>
+    /// <param name="propertyName">The name of the property for error reporting.</param>
+    /// <param name="predicate">Returns <see langword="true"/> when the property value is valid.</param>
     protected IKyrolusRuleBuilder<T, TProperty> RuleFor<TProperty>(
         Func<T, TProperty> selector,
         string propertyName,
@@ -127,6 +140,10 @@ public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidatorWith
     /// <summary>
     /// Defines a validation rule using a selector delegate, explicit property name, inline predicate, and custom error message.
     /// </summary>
+    /// <param name="selector">The delegate extracting the property value.</param>
+    /// <param name="propertyName">The name of the property for error reporting.</param>
+    /// <param name="predicate">Returns <see langword="true"/> when the property value is valid.</param>
+    /// <param name="defaultMessage">The error message used when <paramref name="predicate"/> returns <see langword="false"/>.</param>
     protected IKyrolusRuleBuilder<T, TProperty> RuleFor<TProperty>(
         Func<T, TProperty> selector,
         string propertyName,
@@ -220,12 +237,14 @@ public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidatorWith
     /// <summary>
     /// Adds a custom validation rule directly to this validator.
     /// </summary>
+    /// <param name="rule">A rule implemented outside the <see cref="RuleFor{TProperty}(Expression{Func{T, TProperty}})"/> builder (e.g. a cross-property or whole-object check).</param>
     protected void AddCustomRule(IKyrolusValidationRule<T> rule)
     {
         ArgumentNullException.ThrowIfNull(rule);
         _rules.Add(rule);
     }
 
+    /// <summary>Tags a newly-created <paramref name="rule"/> with whatever <see cref="RuleSet(string, Action)"/>/<see cref="Group(string, Action)"/> scopes are currently active, if any.</summary>
     private void AttachCurrentScopes<TProperty>(KyrolusPropertyRule<T, TProperty> rule)
     {
         if (_currentRuleSets.Count > 0)
@@ -237,6 +256,8 @@ public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidatorWith
     /// <summary>
     /// Validates the request using default context settings.
     /// </summary>
+    /// <param name="request">The instance to validate.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(
         T request, CancellationToken cancellationToken = default)
         => ValidateAsync(request, KyrolusValidationContext.Default, cancellationToken);
@@ -244,6 +265,9 @@ public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidatorWith
     /// <summary>
     /// Validates the request using custom context settings (filtering by RuleSets and Groups).
     /// </summary>
+    /// <param name="request">The instance to validate. A <see langword="null"/> request short-circuits to a single generic failure.</param>
+    /// <param name="context">Controls which RuleSets/Groups execute; see <see cref="KyrolusValidationScopeResolver"/> for the exact matching rules.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     public async ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(
         T request,
         KyrolusValidationContext context,
@@ -276,9 +300,11 @@ public abstract class KyrolusAbstractValidator<T> : IKyrolusRequestValidatorWith
         return failures;
     }
 
+    /// <summary>Picks the single RuleSet name to stamp on <paramref name="rule"/>'s failures for this <paramref name="context"/>; see <see cref="KyrolusValidationScopeResolver.ResolveActiveRuleSet"/>.</summary>
     private static string? ResolveActiveRuleSet(IKyrolusValidationRule<T> rule, KyrolusValidationContext context)
         => KyrolusValidationScopeResolver.ResolveActiveRuleSet(rule.RuleSets, context.RuleSets);
 
+    /// <summary>True when <paramref name="rule"/>'s RuleSets/Groups match what <paramref name="context"/> requests; see <see cref="KyrolusValidationScopeResolver.ShouldExecute"/>.</summary>
     private static bool ShouldExecuteRule(IKyrolusValidationRule<T> rule, KyrolusValidationContext context)
         => KyrolusValidationScopeResolver.ShouldExecute(context.RuleSets, rule.RuleSets, context.Groups, rule.Groups);
 

@@ -212,6 +212,7 @@ public static class KyrolusFluentValidationExtensions
         return ruleBuilder.WithSeverity(fvSeverity);
     }
 
+    /// <summary>Overrides <paramref name="builder"/>'s reported property name when <see cref="ResolvePropertyName{T}"/> resolves a non-blank one from <paramref name="expr"/>/<paramref name="propertyName"/>; otherwise leaves the builder untouched.</summary>
     private static IRuleBuilderOptions<T, TProperty> ApplyPropertyName<T, TProperty>(
         this IRuleBuilderOptions<T, TProperty> builder,
         Expression<Func<T, object>>? expr,
@@ -221,6 +222,7 @@ public static class KyrolusFluentValidationExtensions
         return !string.IsNullOrWhiteSpace(prop) ? builder.OverridePropertyName(prop) : builder;
     }
 
+    /// <summary>Prefers an explicit <paramref name="propertyName"/> override; otherwise extracts the member name from <paramref name="expr"/> via <see cref="ReturnMemberExpression{T}"/>; returns empty when neither is available.</summary>
     private static string ResolvePropertyName<T>(Expression<Func<T, object>>? expr, string propertyName)
     {
         if (!string.IsNullOrWhiteSpace(propertyName))
@@ -236,6 +238,7 @@ public static class KyrolusFluentValidationExtensions
         return ReturnMemberExpression(expr);
     }
 
+    /// <summary>Extracts the accessed member's name from a property-selector expression, unwrapping the boxing <see cref="UnaryExpression"/> a value-type property gets when selected as <c>object</c> (as these extensions' <c>Expression&lt;Func&lt;T, object&gt;&gt;</c> parameters require).</summary>
     private static string ReturnMemberExpression<T>(Expression<Func<T, object>> expr)
     {
         if (expr.Body is MemberExpression memberExpression)
