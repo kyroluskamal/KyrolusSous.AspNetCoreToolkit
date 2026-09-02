@@ -99,6 +99,41 @@ public class TestRequestSpecificValidationHook : IKyrolusValidationHook<HookTest
     }
 }
 
+/// <summary>Records "{Name}:Before"/"{Name}:After" into a shared log so tests can assert relative hook order.</summary>
+public class OrderedTestHook(string name, List<string> executionLog, int order = 0) : IKyrolusValidationHook
+{
+    protected readonly string Name = name;
+    protected readonly List<string> ExecutionLog = executionLog;
+
+    public int Order { get; } = order;
+
+    public virtual ValueTask OnBeforeAsync(object? request, KyrolusValidationContext context, CancellationToken cancellationToken = default)
+    {
+        ExecutionLog.Add($"{Name}:Before");
+        return ValueTask.CompletedTask;
+    }
+
+    public virtual ValueTask OnAfterAsync(object? request, KyrolusValidationContext context, IReadOnlyList<KyrolusValidationFailure> failures, CancellationToken cancellationToken = default)
+    {
+        ExecutionLog.Add($"{Name}:After");
+        return ValueTask.CompletedTask;
+    }
+}
+
+/// <summary>
+/// A distinct type from <see cref="OrderedTestHook"/> so a test can target it specifically via an
+/// <see cref="IKyrolusValidationHookOrderLookup"/> keyed by concrete type - the lookup can't distinguish between
+/// two instances of the same class.
+/// </summary>
+public sealed class AnotherOrderedTestHook(string name, List<string> executionLog, int order = 0)
+    : OrderedTestHook(name, executionLog, order);
+
+/// <summary>A fixed <c>Type -&gt; order</c> map, standing in for generated hook-order lookups in tests.</summary>
+public sealed class StubHookOrderLookup(IReadOnlyDictionary<Type, int> orders) : IKyrolusValidationHookOrderLookup
+{
+    public int? TryGetOrder(Type hookType) => orders.TryGetValue(hookType, out var order) ? order : null;
+}
+
 public class CacheableTestRequest : IKyrolusValidationCacheable
 {
     public string CacheKey { get; set; } = "test-cache-key-1";

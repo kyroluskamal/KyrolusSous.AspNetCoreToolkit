@@ -237,6 +237,68 @@ public class KyrolusValidationEngineTests
         globalHook.OnBeforeCalled.ShouldBeTrue();
         globalHook.OnAfterCalled.ShouldBeTrue();
     }
+
+    [Fact(DisplayName = "ValidateAsync should run global hooks in ascending Order for both Before and After (not a LIFO unwind)")]
+    public async Task ValidateAsync_ShouldRunHooksInAscendingOrder_ForBeforeAndAfter()
+    {
+        var log = new List<string>();
+        // Registered out of Order deliberately, to prove Order - not registration order - drives execution.
+        var hookB = new OrderedTestHook("B", log, order: 2);
+        var hookA = new OrderedTestHook("A", log, order: 1);
+
+        var serviceProvider = TestHelper.BuildServiceProviderWithValidationRuntime(services =>
+        {
+            services.AddSingleton<IKyrolusValidationHook>(hookB);
+            services.AddSingleton<IKyrolusValidationHook>(hookA);
+        });
+        var validationEngine = serviceProvider.GetRequiredService<IKyrolusValidationEngine>();
+
+        await validationEngine.ValidateAsync(new TestRequest { Name = "Valid", Age = 1 });
+
+        log.ShouldBe(["A:Before", "B:Before", "A:After", "B:After"]);
+    }
+
+    [Fact(DisplayName = "ValidateAsync should preserve registration order among hooks that share the same Order")]
+    public async Task ValidateAsync_ShouldPreserveRegistrationOrder_WhenHooksShareTheSameOrder()
+    {
+        var log = new List<string>();
+        var first = new OrderedTestHook("First", log);
+        var second = new OrderedTestHook("Second", log);
+
+        var serviceProvider = TestHelper.BuildServiceProviderWithValidationRuntime(services =>
+        {
+            services.AddSingleton<IKyrolusValidationHook>(first);
+            services.AddSingleton<IKyrolusValidationHook>(second);
+        });
+        var validationEngine = serviceProvider.GetRequiredService<IKyrolusValidationEngine>();
+
+        await validationEngine.ValidateAsync(new TestRequest { Name = "Valid", Age = 1 });
+
+        log.ShouldBe(["First:Before", "Second:Before", "First:After", "Second:After"]);
+    }
+
+    [Fact(DisplayName = "ValidateAsync should let a registered IKyrolusValidationHookOrderLookup override a hook's Order property")]
+    public async Task ValidateAsync_ShouldPreferHookOrderLookup_OverOrderProperty()
+    {
+        var log = new List<string>();
+        var propertyOrdered = new OrderedTestHook("Property", log, order: 2);
+        // Declares Order 5 via the property, but the lookup below maps its type to 1 - lower than Property's 2 -
+        // so it must run first despite 5 > 2.
+        var lookupOverridden = new AnotherOrderedTestHook("Lookup", log, order: 5);
+        var lookup = new StubHookOrderLookup(new Dictionary<Type, int> { [typeof(AnotherOrderedTestHook)] = 1 });
+
+        var serviceProvider = TestHelper.BuildServiceProviderWithValidationRuntime(services =>
+        {
+            services.AddSingleton<IKyrolusValidationHook>(propertyOrdered);
+            services.AddSingleton<IKyrolusValidationHook>(lookupOverridden);
+            services.AddSingleton<IKyrolusValidationHookOrderLookup>(lookup);
+        });
+        var validationEngine = serviceProvider.GetRequiredService<IKyrolusValidationEngine>();
+
+        await validationEngine.ValidateAsync(new TestRequest { Name = "Valid", Age = 1 });
+
+        log.ShouldBe(["Lookup:Before", "Property:Before", "Lookup:After", "Property:After"]);
+    }
     #endregion
 
     #region Caching

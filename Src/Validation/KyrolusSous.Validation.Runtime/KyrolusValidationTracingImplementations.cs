@@ -24,7 +24,7 @@ public sealed class KyrolusNoopValidationTracer : IKyrolusValidationTracer
 }
 
 /// <summary>
-/// <see cref="IKyrolusValidationTracer"/> backed by <see cref="System.Diagnostics.ActivitySource"/> - the
+/// <see cref="IKyrolusValidationTracer"/> backed by <see cref="ActivitySource"/> - the
 /// standard .NET tracing primitive. Any OpenTelemetry-configured app picks up its spans automatically by
 /// listening for <paramref name="sourceName"/>, without this package needing a direct reference to any
 /// OpenTelemetry package. Not registered by default; opt in explicitly (see <see cref="KyrolusNoopValidationTracer"/>).

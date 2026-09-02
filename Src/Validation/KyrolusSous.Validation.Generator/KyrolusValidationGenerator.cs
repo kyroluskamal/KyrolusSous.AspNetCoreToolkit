@@ -21,9 +21,14 @@ namespace KyrolusSous.Validation.Generator;
 /// <c>KyrolusValidationProfiles</c> (Create, Update, UiHints, BackgroundJobs), emitted only when the compiling
 /// project references <c>KyrolusSous.Validation.Abstractions</c> (so this generator itself has no hard
 /// dependency on that package).</description></item>
+/// <item><description><c>AddKyrolusGeneratedValidationHookOrder()</c> - registers a generated
+/// <c>IKyrolusValidationHookOrderLookup</c> mapping each <c>IKyrolusValidationHook</c>/<c>IKyrolusValidationHook&lt;T&gt;</c>
+/// implementation decorated with <c>[KyrolusValidationHookOrder(n)]</c> to its declared order, emitted only when
+/// at least one such hook was found. This is the AOT-safe alternative to reading the attribute via runtime
+/// reflection: the mapping is resolved once, here, at compile time.</description></item>
 /// </list>
-/// Nothing is emitted at all when neither condition applies, so referencing this generator in a project with no
-/// validators yet is harmless.
+/// Nothing is emitted at all when none of these conditions apply, so referencing this generator in a project with
+/// no validators or ordered hooks yet is harmless.
 /// </remarks>
 /// <example>
 /// <code>
@@ -54,9 +59,10 @@ public sealed class KyrolusValidationGenerator : IIncrementalGenerator
 
     /// <summary>
     /// Filters <paramref name="candidates"/> down to concrete, non-generic classes that close
-    /// <c>IKyrolusRequestValidator&lt;T&gt;</c>, deduplicates (service type, implementation type) pairs via the
-    /// <see cref="HashSet{T}"/>, and emits the DI registration extension class described on
-    /// <see cref="KyrolusValidationGenerator"/>.
+    /// <c>IKyrolusRequestValidator&lt;T&gt;</c> (deduplicating (service type, implementation type) pairs via the
+    /// <see cref="HashSet{T}"/>) and, separately, down to ones carrying <c>[KyrolusValidationHookOrder(n)]</c> that
+    /// implement <c>IKyrolusValidationHook</c>/<c>IKyrolusValidationHook&lt;T&gt;</c>, then emits the extension
+    /// class(es) described on <see cref="KyrolusValidationGenerator"/>.
     /// </summary>
     private static void Emit(
         SourceProductionContext context,
@@ -73,7 +79,15 @@ public sealed class KyrolusValidationGenerator : IIncrementalGenerator
         var profilesType = compilation.GetTypeByMetadataName("KyrolusSous.Validation.Abstractions.KyrolusValidationProfiles");
         var emitProfiles = profileType is not null && profilesType is not null;
 
+        var hookInterface = compilation.GetTypeByMetadataName("KyrolusSous.Validation.Abstractions.IKyrolusValidationHook");
+        var hookGenericInterface = compilation.GetTypeByMetadataName("KyrolusSous.Validation.Abstractions.IKyrolusValidationHook`1");
+        var hookOrderAttributeType = compilation.GetTypeByMetadataName("KyrolusSous.Validation.Abstractions.KyrolusValidationHookOrderAttribute");
+        var hookOrderLookupType = compilation.GetTypeByMetadataName("KyrolusSous.Validation.Abstractions.IKyrolusValidationHookOrderLookup");
+        var canEmitHookOrder = hookOrderAttributeType is not null && hookOrderLookupType is not null
+            && (hookInterface is not null || hookGenericInterface is not null);
+
         var registrations = new HashSet<(string ServiceType, string ImplementationType)>();
+        var hookOrders = new SortedDictionary<string, int>(StringComparer.Ordinal);
 
         foreach (var candidate in candidates)
         {
@@ -93,9 +107,35 @@ public sealed class KyrolusValidationGenerator : IIncrementalGenerator
                 var implType = candidate.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                 registrations.Add((serviceType, implType));
             }
+
+            if (!canEmitHookOrder)
+            {
+                continue;
+            }
+
+            var orderAttribute = candidate.GetAttributes()
+                .FirstOrDefault(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, hookOrderAttributeType));
+            if (orderAttribute is null
+                || orderAttribute.ConstructorArguments.Length == 0
+                || orderAttribute.ConstructorArguments[0].Value is not int order)
+            {
+                continue;
+            }
+
+            var implementsHook = candidate.AllInterfaces.Any(iface =>
+                SymbolEqualityComparer.Default.Equals(iface, hookInterface)
+                || SymbolEqualityComparer.Default.Equals(iface.OriginalDefinition, hookGenericInterface));
+            if (!implementsHook)
+            {
+                continue;
+            }
+
+            hookOrders[candidate.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)] = order;
         }
 
-        if (registrations.Count == 0 && !emitProfiles)
+        var emitHookOrder = hookOrders.Count > 0;
+
+        if (registrations.Count == 0 && !emitProfiles && !emitHookOrder)
         {
             return;
         }
@@ -103,7 +143,7 @@ public sealed class KyrolusValidationGenerator : IIncrementalGenerator
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated />");
         sb.AppendLine("#nullable enable");
-        if (emitProfiles)
+        if (emitProfiles || emitHookOrder)
         {
             sb.AppendLine("using KyrolusSous.Validation.Abstractions;");
         }
@@ -141,6 +181,31 @@ public sealed class KyrolusValidationGenerator : IIncrementalGenerator
             sb.AppendLine("    }");
         }
         sb.AppendLine("}");
+
+        if (emitHookOrder)
+        {
+            sb.AppendLine();
+            sb.AppendLine("public sealed class KyrolusGeneratedValidationHookOrderLookup : IKyrolusValidationHookOrderLookup");
+            sb.AppendLine("{");
+            sb.AppendLine("    public int? TryGetOrder(global::System.Type hookType)");
+            sb.AppendLine("    {");
+            foreach (var entry in hookOrders)
+            {
+                sb.AppendLine($"        if (hookType == typeof({entry.Key})) return {entry.Value};");
+            }
+            sb.AppendLine("        return null;");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            sb.AppendLine();
+            sb.AppendLine("public static class KyrolusValidationGeneratedHookOrderServiceCollectionExtensions");
+            sb.AppendLine("{");
+            sb.AppendLine("    public static IServiceCollection AddKyrolusGeneratedValidationHookOrder(this IServiceCollection services)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        services.TryAddSingleton<IKyrolusValidationHookOrderLookup, KyrolusGeneratedValidationHookOrderLookup>();");
+            sb.AppendLine("        return services;");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+        }
 
         context.AddSource("KyrolusValidationGeneratedServiceCollectionExtensions.g.cs", sb.ToString());
     }

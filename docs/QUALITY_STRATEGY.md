@@ -66,11 +66,11 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Mediator.Runtime - Unit | unit | 105 | none | yes |
 | Mediator.Generator - Unit | unit | 14 | none | yes |
 | Mediator.Reflection - Unit | unit | 52 | none | yes |
-| Validation.Runtime - Unit | unit | 88 | none | yes |
+| Validation.Runtime - Unit | unit | 96 | none | yes |
 | Validation.Fluent - Unit | unit | 30 | none | yes |
 | Validation.FluentValidation - Unit | unit | 18 | none | yes |
 | Validation.FluentValidation.Scanning - Unit | unit | 2 | none | yes |
-| Validation.Generator - Unit | unit | 6 | none | yes |
+| Validation.Generator - Unit | unit | 10 | none | yes |
 | Validation.DataAnnotations - Unit | unit | 11 | none | yes |
 | Validation.DataAnnotations.Generator - Unit | unit | 6 | none | yes |
 | ExceptionHandling.Runtime - Unit | unit | 140 | none | yes |
@@ -106,7 +106,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | DataProtection - Unit | unit | 33 | none | yes |
 | Payments - Unit | unit | 57 | none | yes |
 | Localization - Unit | unit | 10 | none | yes |
-| **Total** | | **2421** | | |
+| **Total** | | **2433** | | |
 
 <!-- END:GENERATED:test-suites -->
 

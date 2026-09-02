@@ -18,13 +18,15 @@ namespace KyrolusSous.Validation.Runtime;
 /// <param name="cacheKeyProvider">Optional cache key provider. Required (alongside <paramref name="cacheStore"/>) for caching to take effect.</param>
 /// <param name="errorCodeMapper">Optional hook to rewrite each failure's <see cref="KyrolusValidationFailure.ErrorCode"/> before it's returned.</param>
 /// <param name="fieldPathMapper">Optional hook to rewrite each failure's <see cref="KyrolusValidationFailure.FieldPath"/> before it's returned.</param>
+/// <param name="hookOrderLookup">Optional resolver for <see cref="KyrolusValidationHookOrderAttribute"/>-declared hook order, normally the generated implementation from <c>KyrolusSous.Validation.Generator</c>. When <see langword="null"/>, or when it has no entry for a given hook's type, ordering falls back to <see cref="IKyrolusValidationHook.Order"/>.</param>
 public sealed class KyrolusValidationEngine(
     IServiceProvider serviceProvider,
     IKyrolusLocalizer? localizer = null,
     IKyrolusValidationCacheStore? cacheStore = null,
     IKyrolusValidationCacheKeyProvider? cacheKeyProvider = null,
     IKyrolusValidationErrorCodeMapper? errorCodeMapper = null,
-    IKyrolusValidationFieldPathMapper? fieldPathMapper = null) : IKyrolusValidationEngine
+    IKyrolusValidationFieldPathMapper? fieldPathMapper = null,
+    IKyrolusValidationHookOrderLookup? hookOrderLookup = null) : IKyrolusValidationEngine
 {
     private readonly IServiceProvider serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
     private readonly IKyrolusLocalizer? localizer = localizer;
@@ -32,6 +34,7 @@ public sealed class KyrolusValidationEngine(
     private readonly IKyrolusValidationCacheKeyProvider? cacheKeyProvider = cacheKeyProvider;
     private readonly IKyrolusValidationErrorCodeMapper? errorCodeMapper = errorCodeMapper;
     private readonly IKyrolusValidationFieldPathMapper? fieldPathMapper = fieldPathMapper;
+    private readonly IKyrolusValidationHookOrderLookup? hookOrderLookup = hookOrderLookup;
 
     /// <inheritdoc />
     public async ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync<TRequest>(
@@ -273,8 +276,8 @@ public sealed class KyrolusValidationEngine(
 
         public ProfileAccumulator(KyrolusValidationContext context)
         {
-            ruleSets = CreateOrderedSet(context.RuleSets, out hasRuleSets);
-            groups = CreateOrderedSet(context.Groups, out hasGroups);
+            ruleSets = CreateOrderPreservingSet(context.RuleSets, out hasRuleSets);
+            groups = CreateOrderPreservingSet(context.Groups, out hasGroups);
             minimumSeverity = context.MinimumSeverity;
         }
 
@@ -286,16 +289,15 @@ public sealed class KyrolusValidationEngine(
         }
 
         public KyrolusValidationContext Build(KyrolusValidationContext baseContext)
-        {
-            return baseContext with
+            => baseContext with
             {
                 RuleSets = ruleSets.Count > 0 || hasRuleSets ? [.. ruleSets] : baseContext.RuleSets,
                 Groups = groups.Count > 0 || hasGroups ? [.. groups] : baseContext.Groups,
                 MinimumSeverity = minimumSeverity
             };
-        }
 
-        private static List<string> CreateOrderedSet(
+
+        private static List<string> CreateOrderPreservingSet(
             IReadOnlyCollection<string>? values,
             out bool hasValues)
         {
@@ -314,10 +316,8 @@ public sealed class KyrolusValidationEngine(
             if (values is not { Count: > 0 }) return;
 
             foreach (var value in values)
-            {
                 if (!target.Contains(value, StringComparer.OrdinalIgnoreCase))
                     target.Add(value);
-            }
         }
 
         private static KyrolusValidationSeverity? MaxSeverity(
@@ -334,6 +334,8 @@ public sealed class KyrolusValidationEngine(
     /// <summary>
     /// Invokes <see cref="IKyrolusValidationHook.OnBeforeAsync"/> for every registered global hook, then every
     /// <see cref="IKyrolusValidationHook{TRequest}"/> registered specifically for <typeparamref name="TRequest"/>.
+    /// Within each group, hooks run in ascending order (see <see cref="ResolveHookOrder(object, int)"/>); LINQ's
+    /// <c>OrderBy</c> is a stable sort, so hooks that tie (the default for both) keep their registration order.
     /// </summary>
     private async ValueTask RunBeforeHooks<TRequest>(
         TRequest request,
@@ -342,13 +344,17 @@ public sealed class KyrolusValidationEngine(
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        foreach (var hook in serviceProvider.GetServices<IKyrolusValidationHook>())
+        var globalHooks = serviceProvider.GetServices<IKyrolusValidationHook>()
+            .OrderBy(hook => ResolveHookOrder(hook, hook.Order));
+        foreach (var hook in globalHooks)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await hook.OnBeforeAsync(request, context, cancellationToken).ConfigureAwait(false);
         }
 
-        foreach (var hook in serviceProvider.GetServices<IKyrolusValidationHook<TRequest>>())
+        var requestHooks = serviceProvider.GetServices<IKyrolusValidationHook<TRequest>>()
+            .OrderBy(hook => ResolveHookOrder(hook, hook.Order));
+        foreach (var hook in requestHooks)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await hook.OnBeforeAsync(request, context, cancellationToken).ConfigureAwait(false);
@@ -357,9 +363,10 @@ public sealed class KyrolusValidationEngine(
 
     /// <summary>
     /// Invokes <see cref="IKyrolusValidationHook.OnAfterAsync"/> for every registered global hook, then every
-    /// <see cref="IKyrolusValidationHook{TRequest}"/> registered specifically for <typeparamref name="TRequest"/>.
-    /// Runs even when validation threw, so hooks that opened a resource in <c>OnBeforeAsync</c> (a tracing
-    /// <c>Activity</c>, a metrics <c>Stopwatch</c>) always get to close it.
+    /// <see cref="IKyrolusValidationHook{TRequest}"/> registered specifically for <typeparamref name="TRequest"/>,
+    /// in the same relative order as <see cref="RunBeforeHooks"/> (this is not a LIFO unwind). Runs even when
+    /// validation threw, so hooks that opened a resource in <c>OnBeforeAsync</c> (a tracing <c>Activity</c>, a
+    /// metrics <c>Stopwatch</c>) always get to close it.
     /// </summary>
     private async ValueTask RunAfterHooks<TRequest>(
         TRequest request,
@@ -367,12 +374,25 @@ public sealed class KyrolusValidationEngine(
         IReadOnlyList<KyrolusValidationFailure> failures,
         CancellationToken cancellationToken)
     {
-        foreach (var hook in serviceProvider.GetServices<IKyrolusValidationHook>())
+        var globalHooks = serviceProvider.GetServices<IKyrolusValidationHook>()
+            .OrderBy(hook => ResolveHookOrder(hook, hook.Order));
+        foreach (var hook in globalHooks)
             await hook.OnAfterAsync(request, context, failures, cancellationToken).ConfigureAwait(false);
 
-        foreach (var hook in serviceProvider.GetServices<IKyrolusValidationHook<TRequest>>())
+        var requestHooks = serviceProvider.GetServices<IKyrolusValidationHook<TRequest>>()
+            .OrderBy(hook => ResolveHookOrder(hook, hook.Order));
+        foreach (var hook in requestHooks)
             await hook.OnAfterAsync(request, context, failures, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// A <see cref="KyrolusValidationHookOrderAttribute"/> resolved via <see cref="hookOrderLookup"/> (when one
+    /// is registered) takes precedence over <paramref name="declaredOrder"/> - the hook's own
+    /// <see cref="IKyrolusValidationHook.Order"/>/<see cref="IKyrolusValidationHook{TRequest}.Order"/> - so a
+    /// consuming project can decorate a hook with the attribute instead of overriding the property.
+    /// </summary>
+    private int ResolveHookOrder(object hook, int declaredOrder) =>
+        hookOrderLookup?.TryGetOrder(hook.GetType()) ?? declaredOrder;
 
     /// <summary>
     /// Localizes a failure's error message. The translation key is
@@ -448,9 +468,9 @@ public sealed class KyrolusValidationEngine(
         TRequest request,
         KyrolusValidationContext context)
     {
-        if (cacheKeyProvider is null|| request is null) return null;
+        if (cacheKeyProvider is null || request is null) return null;
 
-        return cacheKeyProvider.GetCacheEntry(request!, context);
+        return cacheKeyProvider.GetCacheEntry(request, context);
     }
 
     /// <summary>

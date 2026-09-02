@@ -27,6 +27,16 @@ namespace KyrolusSous.Validation.Abstractions;
 public interface IKyrolusValidationHook
 {
     /// <summary>
+    /// Where this hook runs relative to other global hooks: lower values run first for
+    /// <see cref="OnBeforeAsync"/> and, since <c>OnAfterAsync</c> is invoked in the same relative order (it is
+    /// not a LIFO unwind), also first for <see cref="OnAfterAsync"/>. Hooks that don't override this share the
+    /// default of <c>0</c> and then run in registration order, so most hooks never need to set it. A
+    /// <see cref="KyrolusValidationHookOrderAttribute"/> read by <c>KyrolusSous.Validation.Generator</c>, when
+    /// present, takes precedence over this property without requiring a source change.
+    /// </summary>
+    int Order => 0;
+
+    /// <summary>
     /// Invoked before validation rules are executed.
     /// </summary>
     /// <param name="request">The request being validated.</param>
@@ -74,6 +84,12 @@ public interface IKyrolusValidationHook
 /// </example>
 public interface IKyrolusValidationHook<in TRequest>
 {
+    /// <summary>
+    /// Where this hook runs relative to other hooks registered for <typeparamref name="TRequest"/>. See
+    /// <see cref="IKyrolusValidationHook.Order"/> for the full semantics - they're identical here.
+    /// </summary>
+    int Order => 0;
+
     /// <summary>
     /// Invoked before validation rules are executed for the specific request type.
     /// </summary>
