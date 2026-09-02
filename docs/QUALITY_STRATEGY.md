@@ -105,8 +105,8 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | EndpointKit - Unit | unit | 64 | none | yes |
 | DataProtection - Unit | unit | 33 | none | yes |
 | Payments - Unit | unit | 57 | none | yes |
-| Localization - Unit | unit | 10 | none | yes |
-| **Total** | | **2433** | | |
+| Localization - Unit | unit | 53 | none | yes |
+| **Total** | | **2476** | | |
 
 <!-- END:GENERATED:test-suites -->
 

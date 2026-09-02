@@ -90,4 +90,38 @@ public class KyrolusStringLocalizerAdapterTests
         localizer.ShouldBeOfType<KyrolusStringLocalizerAdapter>();
         localizer.GetString("forbidden").Value.ShouldBe("Accès refusé");
     }
+
+    [Fact(DisplayName = "AddKyrolusStringLocalizerLocalization should also register a strongly-typed IKyrolusLocalizer<TResource>")]
+    public void AddKyrolusStringLocalizerLocalization_Should_Register_TypedLocalizer()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IStringLocalizer<ITestResource>>(new TestTypedStringLocalizer<ITestResource>(
+            new Dictionary<string, string> { ["forbidden"] = "Accès refusé" }));
+
+        services.AddKyrolusStringLocalizerLocalization<ITestResource>();
+
+        var provider = services.BuildServiceProvider();
+        var localizer = provider.GetService<IKyrolusLocalizer<ITestResource>>();
+
+        localizer.ShouldNotBeNull();
+        localizer.GetString("forbidden").Value.ShouldBe("Accès refusé");
+    }
+
+    [Fact(DisplayName = "KyrolusStringLocalizerAdapter.GetAllKeys returns every key from the underlying IStringLocalizer and restores the ambient culture")]
+    public void GetAllKeys_ReturnsUnderlyingKeys_AndRestoresCulture()
+    {
+        var mockLocalizer = new TestStringLocalizer(new Dictionary<string, string>
+        {
+            ["a"] = "1",
+            ["b"] = "2"
+        });
+        var localizer = new KyrolusStringLocalizerAdapter(mockLocalizer);
+        var originalCulture = CultureInfo.CurrentUICulture;
+
+        var keys = localizer.GetAllKeys(new CultureInfo("fr-FR")).ToList();
+
+        keys.ShouldContain("a");
+        keys.ShouldContain("b");
+        CultureInfo.CurrentUICulture.ShouldBe(originalCulture);
+    }
 }

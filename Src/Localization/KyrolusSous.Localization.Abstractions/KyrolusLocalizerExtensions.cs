@@ -33,4 +33,20 @@ public static class KyrolusLocalizerExtensions
         var result = localizer.GetString(key, arguments, culture);
         return result.ResourceNotFound ? defaultValue : result.Value;
     }
+
+    /// <summary>Resolves a pluralized translation via <see cref="IKyrolusLocalizer.GetPlural"/>, falling back to <paramref name="defaultValue"/> when the localizer is unset or has no translation.</summary>
+    [return: NotNullIfNotNull(nameof(defaultValue))]
+    public static string? GetPluralOrDefault(
+        this IKyrolusLocalizer? localizer,
+        string key,
+        long count,
+        string? defaultValue,
+        object? arguments = null,
+        CultureInfo? culture = null)
+    {
+        if (localizer is null) return defaultValue;
+
+        var result = localizer.GetPlural(key, count, arguments, culture);
+        return result.ResourceNotFound ? defaultValue : result.Value;
+    }
 }
