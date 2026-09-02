@@ -72,12 +72,7 @@ public sealed class KyrolusValidationEngine(
 
             var validators = serviceProvider.GetServices<IKyrolusRequestValidator<TRequest>>().ToArray();
             if (validators.Length == 0)
-            {
-                var empty = Array.Empty<KyrolusValidationFailure>();
-                await TryStoreCache(cacheEntry, empty, cancellationToken).ConfigureAwait(false);
-                await RunAfterHooks(request, effectiveContext, empty, cancellationToken).ConfigureAwait(false);
-                return empty;
-            }
+                return await ReturnEmptyResultAsync(request, effectiveContext, cacheEntry, cancellationToken).ConfigureAwait(false);
 
             List<KyrolusValidationFailure> failures = [];
             foreach (var validator in validators)
@@ -99,12 +94,7 @@ public sealed class KyrolusValidationEngine(
             }
 
             if (failures.Count == 0)
-            {
-                var empty = Array.Empty<KyrolusValidationFailure>();
-                await TryStoreCache(cacheEntry, empty, cancellationToken).ConfigureAwait(false);
-                await RunAfterHooks(request, effectiveContext, empty, cancellationToken).ConfigureAwait(false);
-                return empty;
-            }
+                return await ReturnEmptyResultAsync(request, effectiveContext, cacheEntry, cancellationToken).ConfigureAwait(false);
 
             var normalized = failures.Select(NormalizeFailure).ToArray();
             var mapped = ApplyMappings(normalized, effectiveContext);
@@ -134,7 +124,7 @@ public sealed class KyrolusValidationEngine(
             // throwing here meant "after" never ran: the Activity leaked un-disposed/never exported, and no
             // metric was recorded for the very validations most worth observing. IKyrolusValidationHook has no
             // exception-aware overload, so this reports an empty failures list rather than skipping cleanup.
-            await RunAfterHooks(request, effectiveContext, Array.Empty<KyrolusValidationFailure>(), cancellationToken).ConfigureAwait(false);
+            await RunAfterHooks(request, effectiveContext, [], cancellationToken).ConfigureAwait(false);
             throw;
         }
     }
@@ -471,6 +461,23 @@ public sealed class KyrolusValidationEngine(
         if (cacheKeyProvider is null || request is null) return null;
 
         return cacheKeyProvider.GetCacheEntry(request, context);
+    }
+
+    /// <summary>
+    /// The shared tail of the "no validators registered" and "every validator passed" branches in
+    /// <see cref="ValidateAsync{TRequest}(TRequest, KyrolusValidationContext, CancellationToken)"/> - both mean
+    /// the same outcome (an empty failure list), so both cache it and run the After hooks the same way.
+    /// </summary>
+    private async ValueTask<IReadOnlyList<KyrolusValidationFailure>> ReturnEmptyResultAsync<TRequest>(
+        TRequest request,
+        KyrolusValidationContext effectiveContext,
+        KyrolusValidationCacheEntry? cacheEntry,
+        CancellationToken cancellationToken)
+    {
+        var empty = Array.Empty<KyrolusValidationFailure>();
+        await TryStoreCache(cacheEntry, empty, cancellationToken).ConfigureAwait(false);
+        await RunAfterHooks(request, effectiveContext, empty, cancellationToken).ConfigureAwait(false);
+        return empty;
     }
 
     /// <summary>

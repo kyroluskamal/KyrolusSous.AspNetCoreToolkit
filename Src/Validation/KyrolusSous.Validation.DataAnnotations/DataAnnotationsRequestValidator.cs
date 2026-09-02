@@ -53,7 +53,8 @@ public sealed class DataAnnotationsRequestValidator<TRequest>(IServiceProvider? 
 
     /// <inheritdoc />
     public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(
-        TRequest request, CancellationToken cancellationToken = default) => ValidateAsync(request, KyrolusValidationContext.Default, cancellationToken);
+        TRequest request, CancellationToken cancellationToken = default) 
+        => ValidateAsync(request, KyrolusValidationContext.Default, cancellationToken);
 
     /// <inheritdoc />
     public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(

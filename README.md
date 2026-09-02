@@ -1477,6 +1477,28 @@ builder.Services.AddSingleton<IKyrolusValidationFieldPathMapper>(
     }));
 ```
 
+### Live-reloadable mapping (edit JSON in production, no rebuild)
+The dictionary mappers above take a plain `IReadOnlyDictionary<string, string>` - built from anywhere, including
+`IConfiguration`. For a table an operator can edit on disk with the app still running, combine
+`IOptionsMonitor<T>` (which already watches `appsettings.json` for changes when `reloadOnChange: true`, the
+default in most templates) with the *delegate* mapper instead of the dictionary one, so each lookup reads the
+live value:
+```csharp
+// appsettings.json
+// { "ErrorCodeMapping": { "CustomerId": "customer_id_required" } }
+
+builder.Services.Configure<Dictionary<string, string>>(builder.Configuration.GetSection("ErrorCodeMapping"));
+builder.Services.AddSingleton<IKyrolusValidationErrorCodeMapper>(sp =>
+{
+    var options = sp.GetRequiredService<IOptionsMonitor<Dictionary<string, string>>>();
+    return new KyrolusDelegateValidationErrorCodeMapper((failure, context) =>
+        options.CurrentValue.TryGetValue(failure.ErrorCode ?? failure.PropertyName, out var mapped) ? mapped : null);
+});
+```
+No dedicated "JSON mapper" is shipped for this: `IOptionsMonitor` already solves file-watching, partial-write,
+and debounce edge cases, so wrapping it behind the existing delegate mapper covers the scenario without the
+library owning any file I/O.
+
 ### Async validation hooks (before/after)
 ```csharp
 public sealed class AuditValidationHook : IKyrolusValidationHook<CreateOrder>

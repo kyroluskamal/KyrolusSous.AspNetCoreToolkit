@@ -24,11 +24,8 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
 
     /// <inheritdoc />
     public ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(
-        TRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        return ValidateAsync(request, KyrolusValidationContext.Default, cancellationToken);
-    }
+        TRequest request, CancellationToken cancellationToken = default)
+            => ValidateAsync(request, KyrolusValidationContext.Default, cancellationToken);
 
     /// <inheritdoc />
     public async ValueTask<IReadOnlyList<KyrolusValidationFailure>> ValidateAsync(
@@ -37,9 +34,7 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
         CancellationToken cancellationToken = default)
     {
         if (_validators.Count == 0)
-        {
             return [];
-        }
 
         var validationContext = CreateValidationContext(request, context);
         var allFailures = new List<KyrolusValidationFailure>();
@@ -49,15 +44,11 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
             cancellationToken.ThrowIfCancellationRequested();
             var result = await validator.ValidateAsync(validationContext, cancellationToken).ConfigureAwait(false);
             if (result is null || result.IsValid)
-            {
                 continue;
-            }
 
             var descriptor = validator.CreateDescriptor();
             foreach (var error in result.Errors.Where(error => error is not null))
-            {
                 allFailures.Add(MapToFailure(error, context, descriptor));
-            }
         }
 
         return allFailures;
@@ -73,20 +64,14 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
     private static ValidationContext<TRequest> CreateValidationContext(TRequest request, KyrolusValidationContext context)
     {
         if (context.RuleSets is not { Count: > 0 })
-        {
             return new ValidationContext<TRequest>(request);
-        }
 
         return ValidationContext<TRequest>.CreateWithOptions(request, options =>
         {
             if (context.RuleSets.Contains("*"))
-            {
                 options.IncludeAllRuleSets();
-            }
             else
-            {
-                options.IncludeRuleSets(context.RuleSets.ToArray());
-            }
+                options.IncludeRuleSets([.. context.RuleSets]);
         });
     }
 
@@ -143,14 +128,12 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
 
     /// <summary>Maps FluentValidation's <see cref="Severity"/> to <see cref="KyrolusValidationSeverity"/>; anything other than Info/Warning (including FluentValidation's own default) maps to <see cref="KyrolusValidationSeverity.Error"/>.</summary>
     private static KyrolusValidationSeverity MapSeverity(Severity severity)
+    => severity switch
     {
-        return severity switch
-        {
-            Severity.Info => KyrolusValidationSeverity.Info,
-            Severity.Warning => KyrolusValidationSeverity.Warning,
-            _ => KyrolusValidationSeverity.Error
-        };
-    }
+        Severity.Info => KyrolusValidationSeverity.Info,
+        Severity.Warning => KyrolusValidationSeverity.Warning,
+        _ => KyrolusValidationSeverity.Error
+    };
 
     /// <summary>
     /// Builds the failure's Metadata dictionary from <paramref name="error"/>'s <see cref="ValidationFailure.FormattedMessagePlaceholderValues"/>
@@ -161,25 +144,15 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
     private static IReadOnlyDictionary<string, object?>? BuildMetadata(ValidationFailure error)
     {
         if (error.CustomState is null && error.FormattedMessagePlaceholderValues is not { Count: > 0 })
-        {
             return null;
-        }
 
         var metadata = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
         if (error.FormattedMessagePlaceholderValues is { Count: > 0 })
-        {
             foreach (var (k, v) in error.FormattedMessagePlaceholderValues)
-            {
                 metadata[k] = v;
-            }
-        }
-
         if (error.CustomState is not null and not KyrolusValidationGroup)
-        {
             metadata["customState"] = error.CustomState;
-        }
-
         return metadata;
     }
 
@@ -192,19 +165,13 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
     private static IReadOnlyList<string> ResolveGroups(ValidationFailure error)
     {
         if (error.CustomState is KyrolusValidationGroup group)
-        {
             return group.Names;
-        }
 
         if (error.CustomState is string groupName && !string.IsNullOrWhiteSpace(groupName))
-        {
             return [groupName];
-        }
 
         if (error.CustomState is IDictionary<string, object?> dict)
-        {
             return ResolveGroupsFromDictionary(dict);
-        }
 
         return [];
     }
@@ -219,22 +186,15 @@ public sealed class FluentValidationRequestValidator<TRequest>(IServiceProvider 
         if (dict.TryGetValue("groups", out var groupsObj))
         {
             if (groupsObj is IEnumerable<string> stringEnum)
-            {
-                return stringEnum.Where(g => !string.IsNullOrWhiteSpace(g)).ToArray();
-            }
+                return [.. stringEnum.Where(g => !string.IsNullOrWhiteSpace(g))];
 
             if (groupsObj is string singleGroup && !string.IsNullOrWhiteSpace(singleGroup))
-            {
                 return [singleGroup];
-            }
         }
 
         if (dict.TryGetValue("group", out var singleGroupObj) &&
-            singleGroupObj is string gName &&
-            !string.IsNullOrWhiteSpace(gName))
-        {
+            singleGroupObj is string gName && !string.IsNullOrWhiteSpace(gName))
             return [gName];
-        }
 
         return [];
     }
