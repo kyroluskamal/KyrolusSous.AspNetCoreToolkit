@@ -3,7 +3,7 @@ namespace KyrolusSous.CQRS.Abstractions.Interfaces;
 /// <summary>
 /// Marks a CQRS command or request as auditable, triggering an immutable audit trail emission upon execution.
 /// </summary>
-public interface IAuditableCommand
+public interface IKyrolusAuditableCommand
 {
     /// <summary>
     /// Gets the human-readable action name for this audit event (e.g. "CreateOrder", "RefundPayment").

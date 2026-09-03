@@ -5,7 +5,7 @@ namespace KyrolusSous.CQRS.Abstractions.Interfaces;
 /// </summary>
 /// <typeparam name="TEntity">The target entity type.</typeparam>
 /// <typeparam name="TResult">The returned projection or entity type.</typeparam>
-public interface ISpecificationQuery<TEntity, TResult> : IKyrolusQuery<IReadOnlyList<TResult>>
+public interface IKyrolusSpecificationQuery<TEntity, TResult> : IKyrolusQuery<IReadOnlyList<TResult>>
 {
 }
 
@@ -14,7 +14,7 @@ public interface ISpecificationQuery<TEntity, TResult> : IKyrolusQuery<IReadOnly
 /// </summary>
 /// <typeparam name="TEntity">The target entity type.</typeparam>
 /// <typeparam name="TResult">The returned projection or entity type.</typeparam>
-public interface ISpecificationPagedQuery<TEntity, TResult> : IKyrolusQuery<Models.KyrolusPagedResult<TResult>>
+public interface IKyrolusSpecificationPagedQuery<TEntity, TResult> : IKyrolusQuery<Models.KyrolusPagedResult<TResult>>
 {
     int PageNumber { get; }
     int PageSize { get; }

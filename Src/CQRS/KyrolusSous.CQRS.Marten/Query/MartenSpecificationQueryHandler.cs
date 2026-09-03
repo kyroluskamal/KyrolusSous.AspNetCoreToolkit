@@ -1,8 +1,3 @@
-using KyrolusSous.Mediator.Abstractions.Interfaces;
-using KyrolusSous.Repositories.Marten.Abstractions.Interfaces;
-using KyrolusSous.Repositories.Marten.Abstractions.Records;
-using Marten;
-
 namespace KyrolusSous.CQRS.Marten.Query;
 
 /// <summary>

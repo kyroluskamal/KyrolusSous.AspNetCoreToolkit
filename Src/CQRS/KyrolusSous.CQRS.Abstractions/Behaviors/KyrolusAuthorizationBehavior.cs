@@ -26,7 +26,7 @@ public sealed class KyrolusAuthorizationBehavior<TRequest, TResponse>(
             typeof(TRequest),
             static type => type.GetCustomAttributes<KyrolusAuthorizeAttribute>(inherit: true).ToArray());
 
-        var isProgrammatic = request is IAuthorizedRequest;
+        var isProgrammatic = request is IKyrolusAuthorizedRequest;
 
         if (authorizeAttributes.Count == 0 && !isProgrammatic)
         {
@@ -37,7 +37,7 @@ public sealed class KyrolusAuthorizationBehavior<TRequest, TResponse>(
         ValidateAuthentication(context);
         await ValidateAttributeAuthorizationAsync(authorizeAttributes, context, request!, cancellationToken).ConfigureAwait(false);
 
-        if (request is IAuthorizedRequest authorizedRequest)
+        if (request is IKyrolusAuthorizedRequest authorizedRequest)
         {
             await ValidateProgrammaticAuthorizationAsync(authorizedRequest, context, request, cancellationToken).ConfigureAwait(false);
         }
@@ -144,7 +144,7 @@ public sealed class KyrolusAuthorizationBehavior<TRequest, TResponse>(
     }
 
     private async Task ValidateProgrammaticAuthorizationAsync(
-        IAuthorizedRequest request,
+        IKyrolusAuthorizedRequest request,
         IKyrolusCurrentUserContext context,
         object rawRequest,
         CancellationToken cancellationToken)

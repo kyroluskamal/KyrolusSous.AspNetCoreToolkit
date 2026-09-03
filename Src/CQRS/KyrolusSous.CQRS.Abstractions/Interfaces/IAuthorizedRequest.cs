@@ -3,7 +3,7 @@ namespace KyrolusSous.CQRS.Abstractions.Interfaces;
 /// <summary>
 /// Defines programmatic authorization requirements for a CQRS request.
 /// </summary>
-public interface IAuthorizedRequest
+public interface IKyrolusAuthorizedRequest
 {
     /// <summary>
     /// Gets the list of roles required to execute the request.

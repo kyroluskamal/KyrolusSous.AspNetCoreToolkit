@@ -117,7 +117,7 @@ public static class ServiceCollectionExtensions
 
     /// <summary>
     /// Registers the CQRS Multi-Tenancy guard, which rejects a request implementing
-    /// <see cref="Interfaces.ITenantScopedRequest"/> whose <c>TenantId</c> does not match the current
+    /// <see cref="Interfaces.IKyrolusTenantScopedRequest"/> whose <c>TenantId</c> does not match the current
     /// user's tenant.
     /// </summary>
     public static IServiceCollection AddKyrolusCqrsTenantScoping(this IServiceCollection services)

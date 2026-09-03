@@ -94,7 +94,7 @@ public sealed class KyrolusCqrsBehaviorsIntegrationTests
     }
 
     [KyrolusAuthorize(Roles = "Admin")]
-    public sealed record AuditedAdminCommand(string Payload) : IKyrolusCommand<string>, IAuditableCommand
+    public sealed record AuditedAdminCommand(string Payload) : IKyrolusCommand<string>, IKyrolusAuditableCommand
     {
         public string? AuditAction => "AdminAction";
         public string? AuditCategory => "Security";
@@ -139,7 +139,7 @@ public sealed class KyrolusCqrsBehaviorsIntegrationTests
         entry.Action.ShouldBe("AdminAction");
     }
 
-    public sealed record ValidatedIdempotentCommand(string Name, string IdempotencyKey) : IIdempotentCommand<string>
+    public sealed record ValidatedIdempotentCommand(string Name, string IdempotencyKey) : IKyrolusIdempotentCommand<string>
     {
         public TimeSpan? IdempotencyTtl => TimeSpan.FromMinutes(30);
     }
@@ -272,7 +272,7 @@ public sealed class KyrolusCqrsBehaviorsIntegrationTests
         result.ShouldBe("MappedErrorResponse");
     }
 
-    public sealed class CachedQuery : ICacheableRequest, IKyrolusQuery<string>
+    public sealed class CachedQuery : IKyrolusCacheableRequest, IKyrolusQuery<string>
     {
         public CachedQuery(string id) => Id = id;
         public string Id { get; set; }

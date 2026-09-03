@@ -12,7 +12,7 @@ namespace KyrolusSous.CQRS.UnitTests;
 public class KyrolusAuditBehaviorTests
 {
     public sealed record AuditedTransferCommand(string From, string To, decimal Amount)
-        : IKyrolusCommand<string>, IAuditableCommand
+        : IKyrolusCommand<string>, IKyrolusAuditableCommand
     {
         public string? AuditAction => "FundsTransfer";
         public string? AuditCategory => "Banking";
@@ -22,7 +22,7 @@ public class KyrolusAuditBehaviorTests
 
     public sealed record PaymentDetails(string CardNumber, string Holder);
     public sealed record CheckoutCommand(string OrderId, PaymentDetails Payment, List<PaymentDetails> BackupCards)
-        : IKyrolusCommand<string>, IAuditableCommand;
+        : IKyrolusCommand<string>, IKyrolusAuditableCommand;
 
     [Fact(DisplayName = "Audit redaction recurses into nested objects and collections, not just top-level properties")]
     public async Task Audit_redaction_recurses_into_nested_properties()

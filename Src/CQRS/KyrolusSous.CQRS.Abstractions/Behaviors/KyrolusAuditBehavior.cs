@@ -35,7 +35,7 @@ public sealed class KyrolusAuditBehavior<TRequest, TResponse>(
     {
         ArgumentNullException.ThrowIfNull(next);
 
-        if (request is not IAuditableCommand auditable || _auditSink is null)
+        if (request is not IKyrolusAuditableCommand auditable || _auditSink is null)
             return await next(cancellationToken).ConfigureAwait(false);
 
 

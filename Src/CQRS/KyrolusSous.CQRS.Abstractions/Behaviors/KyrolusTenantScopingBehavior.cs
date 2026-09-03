@@ -4,13 +4,13 @@ namespace KyrolusSous.CQRS.Abstractions.Behaviors;
 /// Pipeline behavior rejecting a request that names a tenant other than the current user's.
 /// </summary>
 /// <remarks>
-/// Opt-in via <see cref="ITenantScopedRequest"/>: a request that does not implement it is untouched by
+/// Opt-in via <see cref="IKyrolusTenantScopedRequest"/>: a request that does not implement it is untouched by
 /// this behavior. This is deliberately a guard, not a filter - it does not scope queries or stamp a
 /// tenant onto anything by itself, because doing that generically at the pipeline level would mean
 /// reaching into EF/Marten query construction from a package that knows nothing about either. What it
 /// does is close the specific, common hole where a tenant id travels as plain request data: without
 /// this check, nothing stops an authenticated user of tenant A from sending a request whose
-/// <see cref="ITenantScopedRequest.TenantId"/> names tenant B and having the handler act on it,
+/// <see cref="IKyrolusTenantScopedRequest.TenantId"/> names tenant B and having the handler act on it,
 /// because most handlers trust the request's own field rather than re-deriving the tenant from the
 /// caller's identity on every call.
 /// </remarks>
@@ -30,7 +30,7 @@ public sealed class KyrolusTenantScopingBehavior<TRequest, TResponse>(
     {
         ArgumentNullException.ThrowIfNull(next);
 
-        if (request is ITenantScopedRequest { TenantId: { Length: > 0 } requestedTenant })
+        if (request is IKyrolusTenantScopedRequest { TenantId: { Length: > 0 } requestedTenant })
         {
             var currentTenant = _userContext?.TenantId;
 

@@ -21,7 +21,7 @@ public sealed class KyrolusReadModelProjectionBehavior<TRequest, TResponse>(
 
         var response = await next(cancellationToken).ConfigureAwait(false);
 
-        // Check if request or response implements IProjectableCommand
+        // Check if request or response implements IKyrolusProjectableCommand
         if (request is not null)
             await TryProjectAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -48,12 +48,12 @@ public sealed class KyrolusReadModelProjectionBehavior<TRequest, TResponse>(
 
         static bool IsProjectableCommandInterface(Type iface) =>
             iface.IsGenericType &&
-            iface.GetGenericTypeDefinition() == typeof(IProjectableCommand<>);
+            iface.GetGenericTypeDefinition() == typeof(IKyrolusProjectableCommand<>);
     }
 
     private static object? GetReadModel(object request, Type projectableInterface)
     {
-        var toReadModelMethod = projectableInterface.GetMethod(nameof(IProjectableCommand<object>.ToReadModel));
+        var toReadModelMethod = projectableInterface.GetMethod(nameof(IKyrolusProjectableCommand<object>.ToReadModel));
         if (toReadModelMethod is null)
             return null;
 

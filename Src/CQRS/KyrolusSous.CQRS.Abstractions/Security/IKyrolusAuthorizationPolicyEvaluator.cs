@@ -2,7 +2,7 @@ namespace KyrolusSous.CQRS.Abstractions.Security;
 
 /// <summary>
 /// Evaluates a named authorization policy (<see cref="Attributes.KyrolusAuthorizeAttribute.Policy"/> /
-/// <see cref="Interfaces.IAuthorizedRequest.RequiredPolicy"/>) against the current user and request.
+/// <see cref="Interfaces.IKyrolusAuthorizedRequest.RequiredPolicy"/>) against the current user and request.
 /// </summary>
 /// <remarks>
 /// Implement this to bridge into whatever policy engine the host application already has - most

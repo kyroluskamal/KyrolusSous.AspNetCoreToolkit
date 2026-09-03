@@ -18,7 +18,7 @@ public class KyrolusAuthorizationBehaviorTests
     public sealed record CreateOrderCommand(int Amount) : IKyrolusCommand<int>;
 
     public sealed record CustomAuthorizedRequest(string Data, IReadOnlyCollection<string>? RequiredRoles, IReadOnlyCollection<string>? RequiredPermissions)
-        : IKyrolusRequest<string>, IAuthorizedRequest;
+        : IKyrolusRequest<string>, IKyrolusAuthorizedRequest;
 
     public sealed record PublicQuery(string Query) : IKyrolusQuery<string>;
 

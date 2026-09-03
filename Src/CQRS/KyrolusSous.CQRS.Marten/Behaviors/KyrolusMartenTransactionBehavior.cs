@@ -1,7 +1,4 @@
-using KyrolusSous.CQRS.Abstractions.Interfaces;
 using KyrolusSous.Mediator.Abstractions.Attributes;
-using KyrolusSous.Mediator.Abstractions.Interfaces;
-using Marten;
 using Microsoft.Extensions.Logging;
 
 namespace KyrolusSous.CQRS.Marten.Behaviors;
@@ -39,13 +36,24 @@ public sealed class KyrolusMartenTransactionBehavior<TRequest, TResponse>(
             return await next(cancellationToken).ConfigureAwait(false);
         }
 
-        if (request is ITransactionalCommand { DisableAutoTransaction: true })
+        if (request is IKyrolusTransactionalCommand { DisableAutoTransaction: true })
         {
             return await next(cancellationToken).ConfigureAwait(false);
         }
 
-        var response = await next(cancellationToken).ConfigureAwait(false);
-        await _session.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return response;
+        try
+        {
+            var response = await next(cancellationToken).ConfigureAwait(false);
+            await _session.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            _logger?.LogDebug("[Kyrolus CQRS Marten] Saved changes for command '{CommandType}'", typeof(TRequest).Name);
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "[Kyrolus CQRS Marten] Failed to save changes for command '{CommandType}'", typeof(TRequest).Name);
+            throw new InvalidOperationException(
+                $"Failed to save Marten changes for command '{typeof(TRequest).FullName}'.",
+                ex);
+        }
     }
 }

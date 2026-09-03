@@ -13,7 +13,7 @@ public class KyrolusReadModelProjectionBehaviorTests
     public sealed record ProductReadModel(int Id, string Name, decimal Price);
 
     public sealed record UpdateProductCommand(int Id, string Name, decimal Price)
-        : IKyrolusCommand<int>, IProjectableCommand<ProductReadModel>
+        : IKyrolusCommand<int>, IKyrolusProjectableCommand<ProductReadModel>
     {
         public ProductReadModel? ToReadModel() => new(Id, Name, Price);
     }

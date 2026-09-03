@@ -260,6 +260,18 @@ public sealed class KyrolusSmartSearchBuilder<TDocument> where TDocument : class
         return this;
     }
 
+    public KyrolusSmartSearchBuilder<TDocument> OrderBy(string fieldName, bool descending = false)
+    {
+        if (!string.IsNullOrWhiteSpace(fieldName))
+        {
+            _sortOptions.Add(SortOptions.Field(new Field(fieldName), new FieldSort
+            {
+                Order = descending ? SortOrder.Desc : SortOrder.Asc
+            }));
+        }
+        return this;
+    }
+
     public KyrolusSmartSearchBuilder<TDocument> OrderByScore()
     {
         _sortOptions.Add(SortOptions.Score(new ScoreSort()));

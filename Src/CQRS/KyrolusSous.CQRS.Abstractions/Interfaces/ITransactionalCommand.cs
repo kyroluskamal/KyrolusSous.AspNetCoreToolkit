@@ -3,7 +3,7 @@ namespace KyrolusSous.CQRS.Abstractions.Interfaces;
 /// <summary>
 /// Marks a command that requires explicit transaction boundary control.
 /// </summary>
-public interface ITransactionalCommand : IKyrolusCommandBase
+public interface IKyrolusTransactionalCommand : IKyrolusCommandBase
 {
     /// <summary>
     /// Optional transaction isolation level. If null, database default is used.

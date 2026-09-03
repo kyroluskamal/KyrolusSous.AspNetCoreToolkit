@@ -19,7 +19,7 @@ internal sealed class KyrolusIdempotencyRecord<TResponse>
 }
 
 /// <summary>
-/// Pipeline behavior guaranteeing idempotency on commands implementing <see cref="IIdempotentCommand"/> or <see cref="IIdempotentCommand{TResponse}"/>.
+/// Pipeline behavior guaranteeing idempotency on commands implementing <see cref="IKyrolusIdempotentCommand"/> or <see cref="IKyrolusIdempotentCommand{TResponse}"/>.
 /// </summary>
 /// <remarks>
 /// Claims the idempotency key atomically (via <see cref="IKyrolusCacheProvider.SetIfNotExistsAsync{T}"/>)
@@ -49,12 +49,12 @@ public sealed class KyrolusIdempotencyBehavior<TRequest, TResponse>(
         string? idempotencyKey = null;
         TimeSpan? idempotencyTtl = null;
 
-        if (request is IIdempotentCommand<TResponse> typedCmd)
+        if (request is IKyrolusIdempotentCommand<TResponse> typedCmd)
         {
             idempotencyKey = typedCmd.IdempotencyKey;
             idempotencyTtl = typedCmd.IdempotencyTtl;
         }
-        else if (request is IIdempotentCommand nonGenericCmd)
+        else if (request is IKyrolusIdempotentCommand nonGenericCmd)
         {
             idempotencyKey = nonGenericCmd.IdempotencyKey;
             idempotencyTtl = nonGenericCmd.IdempotencyTtl;

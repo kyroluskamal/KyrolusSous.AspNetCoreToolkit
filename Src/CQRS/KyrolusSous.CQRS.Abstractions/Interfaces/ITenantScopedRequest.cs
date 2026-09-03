@@ -12,7 +12,7 @@ namespace KyrolusSous.CQRS.Abstractions.Interfaces;
 /// body, a stale client, a bug in a mapper - can ask for tenant B's data while authenticated as tenant
 /// A's user, and nothing in the pipeline would ever notice.
 /// </remarks>
-public interface ITenantScopedRequest
+public interface IKyrolusTenantScopedRequest
 {
     /// <summary>
     /// The tenant this request claims to operate on. <see langword="null"/> means the request does

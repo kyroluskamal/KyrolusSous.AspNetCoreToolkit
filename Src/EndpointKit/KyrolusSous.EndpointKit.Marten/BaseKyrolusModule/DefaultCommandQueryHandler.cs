@@ -1211,7 +1211,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
                     $"Operation type '{operation.Operation}' is not allowed.");
                 results.Add(opResult);
 
-                if (!request.ContinueOnError && !operation.ContinueOnError)
+                if (useAtomic || (!request.ContinueOnError && !operation.ContinueOnError))
                 {
                     shouldContinue = false;
                 }
@@ -1221,7 +1221,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
             var result = await ExecuteBatchOperationAsync(operation, request.ReturnData, cancellationToken).ConfigureAwait(false);
             results.Add(result);
 
-            if (!result.Success && !request.ContinueOnError && !operation.ContinueOnError)
+            if (!result.Success && (useAtomic || (!request.ContinueOnError && !operation.ContinueOnError)))
             {
                 shouldContinue = false;
             }
@@ -2746,7 +2746,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
     private static void ApplyCacheable(object request, bool? cacheable)
     {
         if (cacheable is null) return;
-        if (request is ICacheableRequest cacheableRequest)
+        if (request is IKyrolusCacheableRequest cacheableRequest)
         {
             cacheableRequest.Cacheable = cacheable.Value;
         }

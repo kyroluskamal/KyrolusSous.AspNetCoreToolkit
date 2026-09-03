@@ -4,7 +4,7 @@ namespace KyrolusSous.CQRS.Abstractions.Interfaces;
 /// Marks a query (or the command that should invalidate it) as eligible for the query-caching /
 /// cache-invalidation behaviors.
 /// </summary>
-public interface ICacheableRequest
+public interface IKyrolusCacheableRequest
 {
     public bool Cacheable { get; set; }
 

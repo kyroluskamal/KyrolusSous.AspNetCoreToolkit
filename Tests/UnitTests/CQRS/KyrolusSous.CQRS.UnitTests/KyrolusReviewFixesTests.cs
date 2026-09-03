@@ -81,7 +81,7 @@ public sealed class KyrolusReviewFixesTests
 
     public sealed record CommitFailCmd(Guid Id) : IKyrolusCommand<bool>;
 
-    public sealed class CommitFailEntity : IDomainEventSource
+    public sealed class CommitFailEntity : IKyrolusDomainEventSource
     {
         public Guid Id { get; set; }
         private readonly List<object> _events = [];
@@ -120,7 +120,7 @@ public sealed class KyrolusReviewFixesTests
         await publisher.DidNotReceive().PublishAsync(Arg.Any<object>(), Arg.Any<CancellationToken>());
     }
 
-    public sealed record MartenCommitFailCmd(Guid Id) : IKyrolusCommand<bool>, IDomainEventSource
+    public sealed record MartenCommitFailCmd(Guid Id) : IKyrolusCommand<bool>, IKyrolusDomainEventSource
     {
         private readonly List<object> _events = [];
         public IReadOnlyCollection<object> DomainEvents => _events;

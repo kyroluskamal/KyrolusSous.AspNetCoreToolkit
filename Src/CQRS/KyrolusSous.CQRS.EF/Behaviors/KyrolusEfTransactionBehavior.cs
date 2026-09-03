@@ -1,7 +1,4 @@
-using KyrolusSous.CQRS.Abstractions.Interfaces;
 using KyrolusSous.Mediator.Abstractions.Attributes;
-using KyrolusSous.Mediator.Abstractions.Interfaces;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace KyrolusSous.CQRS.EF.Behaviors;
@@ -41,7 +38,7 @@ public sealed class KyrolusEfTransactionBehavior<TRequest, TResponse, TDbContext
             return await next(cancellationToken).ConfigureAwait(false);
         }
 
-        if (request is ITransactionalCommand { DisableAutoTransaction: true })
+        if (request is IKyrolusTransactionalCommand { DisableAutoTransaction: true })
         {
             return await next(cancellationToken).ConfigureAwait(false);
         }
@@ -57,6 +54,7 @@ public sealed class KyrolusEfTransactionBehavior<TRequest, TResponse, TDbContext
         return await strategy.ExecuteAsync(async () =>
         {
             var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            _logger?.LogDebug("[Kyrolus CQRS EF] Began transaction for command '{CommandType}'", typeof(TRequest).Name);
 
             await using (transaction)
             {
@@ -64,12 +62,16 @@ public sealed class KyrolusEfTransactionBehavior<TRequest, TResponse, TDbContext
                 {
                     var response = await next(cancellationToken).ConfigureAwait(false);
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    _logger?.LogDebug("[Kyrolus CQRS EF] Committed transaction for command '{CommandType}'", typeof(TRequest).Name);
                     return response;
                 }
-                catch
+                catch (Exception ex)
                 {
+                    _logger?.LogError(ex, "[Kyrolus CQRS EF] Transaction failed and rolled back for command '{CommandType}'", typeof(TRequest).Name);
                     await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
-                    throw;
+                    throw new InvalidOperationException(
+                        $"The EF transaction failed for command '{typeof(TRequest).Name}'.",
+                        ex);
                 }
             }
         }).ConfigureAwait(false);

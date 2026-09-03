@@ -3,7 +3,7 @@ namespace KyrolusSous.CQRS.Abstractions.Interfaces;
 /// <summary>
 /// Contract for aggregates or entities that raise domain events during business command handling.
 /// </summary>
-public interface IDomainEventSource
+public interface IKyrolusDomainEventSource
 {
     /// <summary>
     /// Collection of raised domain events pending dispatch.

@@ -9,11 +9,11 @@ namespace KyrolusSous.CQRS.Marten.Behaviors;
 /// Pipeline behavior collecting and dispatching domain events raised during Marten command handling.
 /// </summary>
 /// <remarks>
-/// Collects <see cref="IDomainEventSource"/> from the request, the response, and - since
+/// Collects <see cref="IKyrolusDomainEventSource"/> from the request, the response, and - since
 /// <c>AddRangeCommand</c>/<c>UpdateRangeCommand</c>/<c>BulkUpsertCommand</c> return
 /// <c>IEnumerable&lt;TResponse&gt;</c> rather than a single entity - every item of a response that is
 /// itself an entity collection. EF's equivalent behavior does not need this special case: it drains
-/// <c>DbContext.ChangeTracker.Entries&lt;IDomainEventSource&gt;()</c>, which sees every entity touched
+/// <c>DbContext.ChangeTracker.Entries&lt;IKyrolusDomainEventSource&gt;()</c>, which sees every entity touched
 /// during the operation regardless of the command's declared response shape. Marten has no directly
 /// analogous "every entity this unit of work touched" enumeration available to this package, so a
 /// command whose response is neither the entity nor a collection of entities - <c>RemoveByIdCommand</c>,
@@ -46,7 +46,7 @@ public sealed class KyrolusMartenDomainEventsDispatchBehavior<TRequest, TRespons
             return response;
         }
 
-        var sources = new List<IDomainEventSource>();
+        var sources = new List<IKyrolusDomainEventSource>();
         CollectSource(request, sources);
 
         if (!ReferenceEquals(response, request))
@@ -56,7 +56,7 @@ public sealed class KyrolusMartenDomainEventsDispatchBehavior<TRequest, TRespons
                 // Covers AddRangeCommand/UpdateRangeCommand/BulkUpsertCommand, whose response is
                 // IEnumerable<TResponse> rather than a single entity - each item is checked
                 // individually rather than the collection itself, which never implements
-                // IDomainEventSource.
+                // IKyrolusDomainEventSource.
                 foreach (var item in responseItems)
                 {
                     CollectSource(item, sources);
@@ -84,9 +84,9 @@ public sealed class KyrolusMartenDomainEventsDispatchBehavior<TRequest, TRespons
         return response;
     }
 
-    private static bool CollectSource(object? candidate, List<IDomainEventSource> sources)
+    private static bool CollectSource(object? candidate, List<IKyrolusDomainEventSource> sources)
     {
-        if (candidate is not IDomainEventSource source || source.DomainEvents.Count == 0) return false;
+        if (candidate is not IKyrolusDomainEventSource source || source.DomainEvents.Count == 0) return false;
         sources.Add(source);
         return true;
     }

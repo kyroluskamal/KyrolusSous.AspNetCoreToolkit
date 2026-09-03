@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 namespace KyrolusSous.CQRS.Abstractions.Behaviors;
 
 /// <summary>
-/// Pipeline behavior broadcasting real-time notifications upon successful execution of <see cref="ILivePushCommand"/>.
+/// Pipeline behavior broadcasting real-time notifications upon successful execution of <see cref="IKyrolusLivePushCommand"/>.
 /// </summary>
 /// <remarks>
 /// Ordered outer (more negative) than <c>KyrolusReadModelProjectionBehavior</c> (-600),
@@ -36,11 +36,11 @@ public sealed class KyrolusLivePushBehavior<TRequest, TResponse>(
 
         var response = await next(cancellationToken).ConfigureAwait(false);
 
-        if (request is ILivePushCommand liveCommand && _publisher is not null)
+        if (request is IKyrolusLivePushCommand liveCommand && _publisher is not null)
         {
             try
             {
-                var payload = liveCommand.PushData ?? response ?? (object)request!;
+                var payload = liveCommand.PushData ?? response ?? (object)request;
                 await _publisher.PublishLiveAsync(liveCommand.Channel, payload, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)

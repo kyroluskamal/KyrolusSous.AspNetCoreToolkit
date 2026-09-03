@@ -1,0 +1,15 @@
+global using System;
+global using System.Collections.Generic;
+global using System.Linq;
+global using System.Linq.Expressions;
+global using System.Threading;
+global using System.Threading.Tasks;
+global using Elastic.Clients.Elasticsearch;
+global using KyrolusSous.CQRS.Abstractions.Behaviors;
+global using KyrolusSous.CQRS.Abstractions.Interfaces;
+global using KyrolusSous.CQRS.Abstractions.Projections;
+global using KyrolusSous.Elasticsearch;
+global using KyrolusSous.Mediator.Abstractions.Interfaces;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.DependencyInjection.Extensions;
+global using Microsoft.Extensions.Logging;

@@ -3,7 +3,7 @@ namespace KyrolusSous.CQRS.Abstractions.Interfaces;
 /// <summary>
 /// Marks a query or command with concurrency throttling limits to prevent system overload.
 /// </summary>
-public interface IThrottledRequest : IKyrolusRequestBase
+public interface IKyrolusThrottledRequest : IKyrolusRequestBase
 {
     /// <summary>
     /// Throttling partition key (e.g. "reports", "export", or tenant identifier). If null, request type name is used.

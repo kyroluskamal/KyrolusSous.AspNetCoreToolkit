@@ -1,7 +1,3 @@
-using KyrolusSous.Mediator.Abstractions.Interfaces;
-using KyrolusSous.Repositories.EF.Abstractions.Interfaces;
-using Microsoft.EntityFrameworkCore;
-
 namespace KyrolusSous.CQRS.EF.Query;
 
 /// <summary>

@@ -38,7 +38,7 @@ public sealed class KyrolusDomainEventsDispatchBehavior<TRequest, TResponse, TDb
         while (true)
         {
             var domainEntities = _dbContext.ChangeTracker
-                .Entries<IDomainEventSource>()
+                .Entries<IKyrolusDomainEventSource>()
                 .Where(x => x.Entity.DomainEvents.Count > 0)
                 .Select(x => x.Entity)
                 .ToList();

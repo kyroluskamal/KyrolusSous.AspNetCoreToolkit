@@ -32,7 +32,7 @@ public class Kyrolus20RoundsReviewTests
     // ==========================================
     // Round 1: Throttling Key Normalization & Clear
     // ==========================================
-    public sealed record ThrottledReq(string ThrottleKey) : IKyrolusCommand<int>, IThrottledRequest
+    public sealed record ThrottledReq(string ThrottleKey) : IKyrolusCommand<int>, IKyrolusThrottledRequest
     {
         public int MaxConcurrentExecutions => 1;
         public TimeSpan ThrottleTimeout => TimeSpan.FromMilliseconds(50);
@@ -54,7 +54,7 @@ public class Kyrolus20RoundsReviewTests
     // ==========================================
     // Round 2: Idempotency Value-Type & Envelope
     // ==========================================
-    public sealed record IdempotentIntCmd(string IdempotencyKey) : IKyrolusCommand<string>, IIdempotentCommand<string>;
+    public sealed record IdempotentIntCmd(string IdempotencyKey) : IKyrolusIdempotentCommand<string>;
 
     [Fact(DisplayName = "Round2 Idempotency should cache and return response")]
     public async Task Round2_Idempotency_should_cache_and_return_response()
@@ -147,7 +147,7 @@ public class Kyrolus20RoundsReviewTests
     // ==========================================
     // Round 5: EF Cascading Domain Events
     // ==========================================
-    public sealed class CascadingEntity : IDomainEventSource
+    public sealed class CascadingEntity : IKyrolusDomainEventSource
     {
         public int Id { get; set; }
         private readonly List<object> _events = [];
@@ -212,7 +212,7 @@ public class Kyrolus20RoundsReviewTests
     // Round 7: Read-Model Projections from Response
     // ==========================================
     public sealed record TestReadModel(string Data);
-    public sealed record ResponseProjectableEntity(string Data) : IProjectableCommand<TestReadModel>
+    public sealed record ResponseProjectableEntity(string Data) : IKyrolusProjectableCommand<TestReadModel>
     {
         public TestReadModel? ToReadModel() => new(Data);
     }
@@ -246,7 +246,7 @@ public class Kyrolus20RoundsReviewTests
     // ==========================================
     // Round 8: Live Push Fallback to Response
     // ==========================================
-    public sealed record LivePushReq() : IKyrolusCommand<string>, ILivePushCommand
+    public sealed record LivePushReq() : IKyrolusCommand<string>, IKyrolusLivePushCommand
     {
         public string Channel => "test-live";
         public object? PushData => null;
@@ -267,7 +267,7 @@ public class Kyrolus20RoundsReviewTests
     // ==========================================
     // Round 10: Query Caching Nullable DI
     // ==========================================
-    public sealed record TestQuery : IKyrolusQuery<string>, ICacheableRequest
+    public sealed record TestQuery : IKyrolusQuery<string>, IKyrolusCacheableRequest
     {
         public bool Cacheable { get; set; } = true;
     }
@@ -378,7 +378,7 @@ public class Kyrolus20RoundsReviewTests
     // Round 20: Audit Sensitive Redaction
     // ==========================================
     public sealed record LoginCommand(string Username, string Password, string SecretToken)
-        : IKyrolusCommand<string>, IAuditableCommand
+        : IKyrolusCommand<string>, IKyrolusAuditableCommand
     {
         public string AuditAction => "UserLogin";
         public string AuditCategory => "Security";

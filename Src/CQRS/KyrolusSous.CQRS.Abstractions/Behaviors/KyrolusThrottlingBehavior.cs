@@ -6,7 +6,7 @@ namespace KyrolusSous.CQRS.Abstractions.Behaviors;
 /// <remarks>
 /// Kept on a non-generic type deliberately: a <see langword="static"/> field on a generic class gets
 /// its own storage per closed instantiation (one dictionary per distinct (TRequest, TResponse) pair),
-/// which would defeat <see cref="IThrottledRequest.ThrottleKey"/> the moment two different request
+/// which would defeat <see cref="IKyrolusThrottledRequest.ThrottleKey"/> the moment two different request
 /// types shared a key - each request type would silently get its own semaphore instead of contending
 /// for the same one. <c>KyrolusSous.Mediator.Runtime.Implementations.KyrolusMediatorMetrics</c>
 /// documents avoiding the exact same pitfall for the same reason.
@@ -16,7 +16,7 @@ internal static class KyrolusThrottlingSemaphores
     private sealed record Entry(SemaphoreSlim Semaphore, int MaxConcurrency);
 
     /// <summary>
-    /// Hard cap on distinct <see cref="IThrottledRequest.ThrottleKey"/> values tracked at once.
+    /// Hard cap on distinct <see cref="IKyrolusThrottledRequest.ThrottleKey"/> values tracked at once.
     /// </summary>
     /// <remarks>
     /// Without a cap this dictionary grew by one <see cref="SemaphoreSlim"/> forever - entries were
@@ -72,7 +72,7 @@ internal static class KyrolusThrottlingSemaphores
 }
 
 /// <summary>
-/// Pipeline behavior providing concurrency limiting and throttling on requests implementing <see cref="IThrottledRequest"/>.
+/// Pipeline behavior providing concurrency limiting and throttling on requests implementing <see cref="IKyrolusThrottledRequest"/>.
 /// </summary>
 [PipelineOrder(-750)]
 public sealed class KyrolusThrottlingBehavior<TRequest, TResponse>(
@@ -88,7 +88,7 @@ public sealed class KyrolusThrottlingBehavior<TRequest, TResponse>(
     {
         ArgumentNullException.ThrowIfNull(next);
 
-        if (request is not IThrottledRequest throttled)
+        if (request is not IKyrolusThrottledRequest throttled)
         {
             return await next(cancellationToken).ConfigureAwait(false);
         }

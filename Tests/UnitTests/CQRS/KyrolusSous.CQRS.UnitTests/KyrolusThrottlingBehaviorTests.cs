@@ -9,7 +9,7 @@ namespace KyrolusSous.CQRS.UnitTests;
 [Collection("ThrottlingSemaphores")]
 public sealed class KyrolusThrottlingBehaviorTests
 {
-    public sealed record HeavyReportQuery(string Key) : IThrottledRequest, IKyrolusQuery<string>
+    public sealed record HeavyReportQuery(string Key) : IKyrolusThrottledRequest, IKyrolusQuery<string>
     {
         public string? ThrottleKey => $"tenant-report-{Key}";
         public int MaxConcurrentExecutions => 1;

@@ -7,9 +7,9 @@ namespace KyrolusSous.CQRS.UnitTests;
 
 public class KyrolusBatchingTests
 {
-    public sealed record BulkCreateProductsCommand(IReadOnlyList<string> Items) : IBatchCommand<string, int>;
+    public sealed record BulkCreateProductsCommand(IReadOnlyList<string> Items) : IKyrolusBatchCommand<string, int>;
 
-    public sealed record BulkGetUsersQuery(IReadOnlyList<int> Keys) : IBatchQuery<int, string>;
+    public sealed record BulkGetUsersQuery(IReadOnlyList<int> Keys) : IKyrolusBatchQuery<int, string>;
 
     public sealed class BulkCreateProductsHandler : IKyrolusCommandHandler<BulkCreateProductsCommand, int>
     {

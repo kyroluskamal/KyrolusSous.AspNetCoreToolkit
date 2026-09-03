@@ -1,7 +1,4 @@
-using KyrolusSous.CQRS.Abstractions.Interfaces;
-using KyrolusSous.Repositories.Marten.Abstractions.Interfaces;
-
-namespace KyrolusSous.CQRS.Marten.Query;
+    namespace KyrolusSous.CQRS.Marten.Query;
 
 /// <summary>
 /// CQRS query that executes a Marten query specification.
@@ -10,7 +7,7 @@ public class MartenSpecificationQuery<TEntity>(
     IKyrolusQuerySpecification<TEntity> specification,
     string? tenantId = null,
     bool cacheable = false)
-    : CacheableRequest(cacheable), ISpecificationQuery<TEntity, TEntity>
+    : CacheableRequest(cacheable), IKyrolusSpecificationQuery<TEntity, TEntity>
     where TEntity : class
 {
     public IKyrolusQuerySpecification<TEntity> Specification { get; } = specification ?? throw new ArgumentNullException(nameof(specification));

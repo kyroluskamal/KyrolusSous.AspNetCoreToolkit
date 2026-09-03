@@ -203,12 +203,11 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         var validationResult = await ValidateModelAsync(model, CancellationToken.None).ConfigureAwait(false);
         if (validationResult is not null) return validationResult;
         var entity = (TResponse)mapper.MapModelToEntity<TModel, TResponse>(model);
-        IResult? errorResult;
-        if (!TrySetEntityId(entity, id, out errorResult)) return errorResult!;
+        if (!TrySetEntityId(entity, id, out IResult? errorResult)) return errorResult!;
         if (!TryApplyContextValues(entity, out errorResult)) return errorResult!;
         if (!TryApplyIfMatch(entity, out errorResult)) return errorResult!;
-        var accessResult = await TryEnsureAccessAsync(id, includeDeleted: false, cacheable, authResult).ConfigureAwait(false);
-        if (!accessResult.Success) return accessResult.Error!;
+        var (Success, Error) = await TryEnsureAccessAsync(id, includeDeleted: false, cacheable, authResult).ConfigureAwait(false);
+        if (!Success) return Error!;
 
         var command = config.UpdateCommand;
         ApplyCacheable(command, cacheable);
@@ -242,8 +241,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         var validationResult = await ValidateModelRangeAsync(model, CancellationToken.None).ConfigureAwait(false);
         if (validationResult is not null) return validationResult;
         var entities = (IEnumerable<TResponse>)mapper.MapModelToEntity<TModel, TResponse>(model);
-        IResult? errorResult;
-        if (!TryApplyContextValues(entities, out errorResult)) return errorResult!;
+        if (!TryApplyContextValues(entities, out IResult? errorResult)) return errorResult!;
         var command = config.UpdateRangeCommand;
         ApplyCacheable(command, cacheable);
         TrySetProperty(command, "Entities", entities);
@@ -281,8 +279,8 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
 
         ApplyCacheable(command, cacheable);
         TrySetProperty(command, KeyValuesPropertyName, keyValues);
-        var accessResult = await TryEnsureAccessAsync(id, includeDeleted: false, cacheable, authResult).ConfigureAwait(false);
-        if (!accessResult.Success) return accessResult.Error!;
+        var (Success, Error) = await TryEnsureAccessAsync(id, includeDeleted: false, cacheable, authResult).ConfigureAwait(false);
+        if (!Success) return Error!;
 
         try
         {
@@ -336,8 +334,8 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         {
             return BuildBadRequest("No patch fields are allowed.");
         }
-        var ifMatchResult = await TryEnsureIfMatchAsync(id, cacheable).ConfigureAwait(false);
-        if (!ifMatchResult.Success) return ifMatchResult.Error!;
+        var (Success, Error) = await TryEnsureIfMatchAsync(id, cacheable).ConfigureAwait(false);
+        if (!Success) return Error!;
         var accessResult = await TryEnsureAccessAsync(id, includeDeleted: false, cacheable, authResult).ConfigureAwait(false);
         if (!accessResult.Success) return accessResult.Error!;
         var keyValues = BuildKeyValues(id);
@@ -461,8 +459,8 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
 
         ApplyCacheable(command, cacheable);
         TrySetProperty(command, KeyValuesPropertyName, keyValues);
-        var accessResult = await TryEnsureAccessAsync(keyValues, includeDeleted: false, cacheable, authResult).ConfigureAwait(false);
-        if (!accessResult.Success) return accessResult.Error!;
+        var (Success, Error) = await TryEnsureAccessAsync(keyValues, includeDeleted: false, cacheable, authResult).ConfigureAwait(false);
+        if (!Success) return Error!;
 
         try
         {
@@ -496,10 +494,10 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         {
             return BuildBadRequest("No patch fields are allowed.");
         }
-        var ifMatchResult = await TryEnsureIfMatchAsync(keyValues, cacheable).ConfigureAwait(false);
-        if (!ifMatchResult.Success) return ifMatchResult.Error!;
-        var accessResult = await TryEnsureAccessAsync(keyValues, includeDeleted: false, cacheable, authResult).ConfigureAwait(false);
-        if (!accessResult.Success) return accessResult.Error!;
+        var (Success, Error) = await TryEnsureIfMatchAsync(keyValues, cacheable).ConfigureAwait(false);
+        if (!Success) return Error!;
+        var (_Success, _Error) = await TryEnsureAccessAsync(keyValues, includeDeleted: false, cacheable, authResult).ConfigureAwait(false);
+        if (!_Success) return _Error!;
 
         var command = config.PatchCommand;
         ApplyCacheable(command, cacheable);
@@ -586,8 +584,8 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
 
         if (!TryRequireTenant(out var errorResult)) return errorResult!;
-        var accessResult = await TryEnsureAccessAsync(id, includeDeleted: true, cacheable, authResult).ConfigureAwait(false);
-        if (!accessResult.Success) return accessResult.Error!;
+        var (Success, Error) = await TryEnsureAccessAsync(id, includeDeleted: true, cacheable, authResult).ConfigureAwait(false);
+        if (!Success) return Error!;
 
         var keyValues = BuildKeyValues(id);
         var command = efConfig?.RestoreCommand ?? new RestoreByIdCommand<TResponse, TKey>(keyValues, cacheable ?? false);
@@ -620,8 +618,8 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         if (!authResult.IsAuthorized) return BuildAuthorizationError(authResult);
 
         if (!TryRequireTenant(out errorResult)) return errorResult!;
-        var accessResult = await TryEnsureAccessAsync(keyValues, includeDeleted: true, cacheable, authResult).ConfigureAwait(false);
-        if (!accessResult.Success) return accessResult.Error!;
+        var (Success, Error) = await TryEnsureAccessAsync(keyValues, includeDeleted: true, cacheable, authResult).ConfigureAwait(false);
+        if (!Success) return Error!;
 
         var command = efConfig?.RestoreCommand ?? new RestoreByIdCommand<TResponse, TKey>(keyValues, cacheable ?? false);
         ApplyCacheable(command, cacheable);
@@ -678,13 +676,13 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         var useProjection = TryBuildProjectionSelector(EndpointNames.Query, selectedFields, out var selector);
         if (query is GetAllQuery<TResponse> getAllQuery)
         {
-            getAllQuery.IncludeDeleted = includeDeleted ?? request.IncludeDeleted?? false;
+            getAllQuery.IncludeDeleted = includeDeleted ?? request.IncludeDeleted ?? false;
             getAllQuery.DeletedOnly = false;
             if (useProjection) getAllQuery.Selector = selector;
         }
         else
         {
-            TrySetProperty(query, IncludeDeletedPropertyName, includeDeleted ?? request.IncludeDeleted?? false);
+            TrySetProperty(query, IncludeDeletedPropertyName, includeDeleted ?? request.IncludeDeleted ?? false);
             TrySetProperty(query, "DeletedOnly", false);
             if (useProjection) TrySetProperty(query, "Selector", selector);
         }
@@ -1182,7 +1180,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
                     $"Operation type '{operation.Operation}' is not allowed.");
                 results.Add(opResult);
 
-                if (!request.ContinueOnError && !operation.ContinueOnError)
+                if (useAtomic || (!request.ContinueOnError && !operation.ContinueOnError))
                 {
                     shouldContinue = false;
                 }
@@ -1192,7 +1190,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
             var result = await ExecuteBatchOperationAsync(operation, request.ReturnData, cancellationToken).ConfigureAwait(false);
             results.Add(result);
 
-            if (!result.Success && !request.ContinueOnError && !operation.ContinueOnError)
+            if (!result.Success && (useAtomic || (!request.ContinueOnError && !operation.ContinueOnError)))
             {
                 shouldContinue = false;
             }
@@ -1590,7 +1588,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         Expression<Func<TResponse, object?>>[]? IncludeExpressions,
         IncludeGraph<TResponse>? IncludeGraph,
         bool? AsNoTracking,
-        bool? UseSplitQuery, bool? IncludeDeleted=null);
+        bool? UseSplitQuery, bool? IncludeDeleted = null);
 
     private bool TryParseBulkPatchChunk(
         IReadOnlyList<KyrolusEfBulkPatchItem> chunk,
@@ -1842,8 +1840,8 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
         if (first is null) return second;
         if (second is null) return first;
         var parameter = Expression.Parameter(typeof(TResponse), "e");
-        var left = new ReplaceParameterVisitor(first.Parameters[0], parameter).Visit(first.Body)!;
-        var right = new ReplaceParameterVisitor(second.Parameters[0], parameter).Visit(second.Body)!;
+        var left = new ReplaceParameterVisitor(first.Parameters[0], parameter).Visit(first.Body);
+        var right = new ReplaceParameterVisitor(second.Parameters[0], parameter).Visit(second.Body);
         return Expression.Lambda<Func<TResponse, bool>>(Expression.AndAlso(left, right), parameter);
     }
 
@@ -2679,7 +2677,7 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
     private static void ApplyCacheable(object request, bool? cacheable)
     {
         if (cacheable is null) return;
-        if (request is ICacheableRequest cacheableRequest)
+        if (request is IKyrolusCacheableRequest cacheableRequest)
         {
             cacheableRequest.Cacheable = cacheable.Value;
         }

@@ -10,7 +10,7 @@ namespace KyrolusSous.CQRS.UnitTests;
 public class KyrolusLivePushBehaviorTests
 {
     public sealed record OrderStatusUpdatedCommand(string OrderId, string Status)
-        : IKyrolusCommand<string>, ILivePushCommand
+        : IKyrolusCommand<string>, IKyrolusLivePushCommand
     {
         public string Channel => "orders";
         public object? PushData => new { OrderId, Status };

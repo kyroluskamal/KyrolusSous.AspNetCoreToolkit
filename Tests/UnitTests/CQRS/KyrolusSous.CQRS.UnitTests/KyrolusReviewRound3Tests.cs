@@ -109,7 +109,7 @@ public sealed class KyrolusReviewRound3Tests
     #endregion
 
     #region Marten domain events: collection responses (AddRange/UpdateRange/BulkUpsert shape)
-    private sealed class EventedEntity : IDomainEventSource
+    internal sealed class EventedEntity : IKyrolusDomainEventSource
     {
         private readonly List<object> _events = [];
         public IReadOnlyCollection<object> DomainEvents => _events;
@@ -238,8 +238,7 @@ public sealed class KyrolusReviewRound3Tests
         : IKyrolusCommand<string>, IKyrolusPropertyUpdateRequest
     {
         public IReadOnlySet<string>? AllowedProperties { get; init; }
-
-        IEnumerable<string> IKyrolusPropertyUpdateRequest.UpdatedPropertyNames => Updates.Keys;
+        public IEnumerable<string> UpdatedPropertyNames => Updates.Keys;
     }
 
     [Fact(DisplayName = "PropertyAllowList: rejects a request naming a property outside its own allow-list")]

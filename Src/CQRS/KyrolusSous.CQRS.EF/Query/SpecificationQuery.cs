@@ -11,7 +11,7 @@ namespace KyrolusSous.CQRS.EF.Query;
 public class SpecificationQuery<TEntity, TResult>(
     IKyrolusQuerySpecification<TEntity, TResult> specification,
     bool cacheable = false)
-    : CacheableRequest(cacheable), ISpecificationQuery<TEntity, TResult>
+    : CacheableRequest(cacheable), IKyrolusSpecificationQuery<TEntity, TResult>
     where TEntity : class
 {
     public IKyrolusQuerySpecification<TEntity, TResult> Specification { get; } = specification ?? throw new ArgumentNullException(nameof(specification));

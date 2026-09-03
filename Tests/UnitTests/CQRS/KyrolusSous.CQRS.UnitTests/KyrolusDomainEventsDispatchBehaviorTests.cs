@@ -12,7 +12,7 @@ public sealed class KyrolusDomainEventsDispatchBehaviorTests
 {
     public sealed record OrderPlacedEvent(Guid OrderId);
 
-    public sealed class TestEntity : IDomainEventSource
+    public sealed class TestEntity : IKyrolusDomainEventSource
     {
         public Guid Id { get; set; }
         private readonly List<object> _domainEvents = [];

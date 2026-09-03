@@ -8,12 +8,12 @@ namespace KyrolusSous.CQRS.UnitTests;
 
 public sealed class KyrolusIdempotencyBehaviorTests
 {
-    public sealed record CreateOrderCommand(string OrderId, decimal Amount, string IdempotencyKey) : IIdempotentCommand<string>
+    public sealed record CreateOrderCommand(string OrderId, decimal Amount, string IdempotencyKey) : IKyrolusIdempotentCommand<string>
     {
         public TimeSpan? IdempotencyTtl => TimeSpan.FromMinutes(30);
     }
 
-    public sealed record VoidIdempotentCommand(string IdempotencyKey) : IKyrolusCommand, IIdempotentCommand;
+    public sealed record VoidIdempotentCommand(string IdempotencyKey) : IKyrolusCommand, IKyrolusIdempotentCommand;
 
     [Fact(DisplayName = "Idempotency: First execution executes handler and caches result")]
     public async Task Idempotency_FirstCall_ExecutesAndCachesResult()

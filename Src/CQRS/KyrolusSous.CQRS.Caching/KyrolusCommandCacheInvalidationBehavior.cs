@@ -27,18 +27,18 @@ public sealed class KyrolusCommandCacheInvalidationBehavior<TRequest, TResponse>
             return response;
         }
 
-        if (request is not ICacheableRequest cacheable || !cacheable.Cacheable)
+        if (request is not IKyrolusCacheableRequest cacheable || !cacheable.Cacheable)
         {
             return response;
         }
 
-        var pattern = cacheKeyProvider.GetCachePattern(request!);
+        var pattern = cacheKeyProvider.GetCachePattern(request);
         if (!string.IsNullOrWhiteSpace(pattern))
         {
             // IKyrolusCacheKeyProvider.GetCachePattern returns a bare entity name (e.g. "Order"),
             // not a glob - and KyrolusQueryCachingBehavior stores query results under
             // "tenant:{T}:user:{U}:{entityKey}" (or, for a request opted into
-            // ICacheableRequest.IsSharedAcrossUsers, the bare key with no such prefix at all). A
+            // IKyrolusCacheableRequest.IsSharedAcrossUsers, the bare key with no such prefix at all). A
             // literal, unwrapped "Order" pattern matches neither shape, so RemoveKeysByPatternAsync
             // would silently remove nothing and every write would leave stale cached reads behind
             // regardless of scoping. Wildcarding both ends matches the entity name wherever it sits

@@ -29,12 +29,12 @@ public sealed class KyrolusQueryCachingBehavior<TRequest, TResponse>(
             return await next(cancellationToken).ConfigureAwait(false);
         }
 
-        if (request is not ICacheableRequest cacheable || !cacheable.Cacheable)
+        if (request is not IKyrolusCacheableRequest cacheable || !cacheable.Cacheable)
         {
             return await next(cancellationToken).ConfigureAwait(false);
         }
 
-        var cacheKey = _cacheKeyProvider.GetCacheKey(request!);
+        var cacheKey = _cacheKeyProvider.GetCacheKey(request);
         if (string.IsNullOrWhiteSpace(cacheKey))
         {
             return await next(cancellationToken).ConfigureAwait(false);
@@ -59,17 +59,17 @@ public sealed class KyrolusQueryCachingBehavior<TRequest, TResponse>(
 
     /// <summary>
     /// Prefixes the entity-derived cache key with the current tenant/user unless the request opts
-    /// into a shared cache via <see cref="ICacheableRequest.IsSharedAcrossUsers"/>.
+    /// into a shared cache via <see cref="IKyrolusCacheableRequest.IsSharedAcrossUsers"/>.
     /// </summary>
     /// <remarks>
     /// Without this, the default cache key is built purely from the request's own shape (entity name,
     /// id, page) with no notion of who is asking - so a per-user query (a profile, "my orders") cached
     /// by one caller would be served straight back to the next caller who happens to send the same
     /// request shape, regardless of tenant or identity. Scoping by tenant+user is the safe default;
-    /// <see cref="ICacheableRequest.IsSharedAcrossUsers"/> is the explicit opt-out for data that really
+    /// <see cref="IKyrolusCacheableRequest.IsSharedAcrossUsers"/> is the explicit opt-out for data that really
     /// is the same for everyone (a product catalog, a public report).
     /// </remarks>
-    private string ScopeKey(string cacheKey, ICacheableRequest cacheable)
+    private string ScopeKey(string cacheKey, IKyrolusCacheableRequest cacheable)
     {
         if (cacheable.IsSharedAcrossUsers || _userContext is null)
         {

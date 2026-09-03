@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>13.0</LangVersion>
+    <RootNamespace>KyrolusSous.CQRS.Elasticsearch</RootNamespace>
+    <Description>CQRS generic query and command pipeline integration for Elasticsearch: smart search, vector embeddings, autocomplete, hybrid retrieval, and read-model projections for KyrolusSous toolkit.</Description>
+    <PackageTags>cqrs;mediator;elasticsearch;smartsearch;vector;knn;hybrid;projections</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KyrolusSous.CQRS.Abstractions\KyrolusSous.CQRS.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Elasticsearch\KyrolusSous.Elasticsearch\KyrolusSous.Elasticsearch.csproj" />
+    <ProjectReference Include="..\..\Elasticsearch\KyrolusSous.Elasticsearch.Abstractions\KyrolusSous.Elasticsearch.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Mediator\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Caching\KyrolusSous.Caching.Abstractions\KyrolusSous.Caching.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

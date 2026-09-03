@@ -10,7 +10,7 @@ namespace KyrolusSous.CQRS.UnitTests;
 
 public sealed class KyrolusMartenCqrsTests
 {
-    public sealed record TestMartenCommand(Guid Id) : IKyrolusCommand<bool>, IDomainEventSource
+    public sealed record TestMartenCommand(Guid Id) : IKyrolusCommand<bool>, IKyrolusDomainEventSource
     {
         private readonly List<object> _events = [];
         public IReadOnlyCollection<object> DomainEvents => _events.AsReadOnly();
