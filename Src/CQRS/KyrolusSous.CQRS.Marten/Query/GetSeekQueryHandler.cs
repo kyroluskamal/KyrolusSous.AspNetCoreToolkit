@@ -12,6 +12,11 @@ public sealed class GetSeekQueryHandler<TSession, TResponse, TKey>(IKyrolusMarte
 {
     public async Task<KyrolusSeekResult<TResponse>> Handle(GetSeekQuery<TResponse, TKey> query, CancellationToken cancellationToken)
     {
+        // Clamp caller-supplied PageSize so int.MaxValue (or negative) can't force the database to
+        // attempt to materialize an enormous or malformed result set. Mutated in place so every
+        // downstream Take(query.PageSize) call below sees the clamped value.
+        query.PageSize = Math.Clamp(query.PageSize, 1, KyrolusPagingLimits.MaxPageSize);
+
         var seekProperties = query.SeekPropertyNames?.Where(static p => !string.IsNullOrWhiteSpace(p)).ToArray();
         if (seekProperties is null || seekProperties.Length == 0)
         {
@@ -52,7 +57,10 @@ public sealed class GetSeekQueryHandler<TSession, TResponse, TKey>(IKyrolusMarte
 
         var list = items.ToList();
         var nextToken = BuildNextToken(list, seekProperties, query.Descending);
-        return new KyrolusSeekResult<TResponse>(list, nextToken, (int)total!, query.PageSize);
+        // TotalCount is nullable (only populated when IncludeTotalCount is requested) — pass it
+        // through as-is instead of force-unwrapping, which previously threw whenever the caller
+        // left IncludeTotalCount at its default of false (i.e. on every ordinary seek call).
+        return new KyrolusSeekResult<TResponse>(list, nextToken, (int?)total, query.PageSize);
     }
 
     private async Task<long?> ResolveTotalCountAsync(GetSeekQuery<TResponse, TKey> query, MartenQueryOptions<TResponse> options, CancellationToken cancellationToken)
@@ -271,14 +279,70 @@ public sealed class GetSeekQueryHandler<TSession, TResponse, TKey>(IKyrolusMarte
         return current;
     }
 
-    private static bool TryBuildCompare(Expression member, object typedValue, Type memberType, bool descending, out Expression expression, out string? error)
+    /// <summary>
+    /// Builds the seek continuation comparison via <see cref="IComparable.CompareTo"/> (found by
+    /// reflection) rather than <c>Expression.GreaterThan</c>/<c>LessThan</c>, which throw
+    /// <see cref="InvalidOperationException"/> for types with no built-in comparison operator
+    /// (e.g. <see cref="string"/>, <see cref="Guid"/>) — both common seek-key types. Mirrors the
+    /// EF provider's <c>GetSeekQueryHandler.TryBuildCompare</c>.
+    /// </summary>
+    private static bool TryBuildCompare(Expression member, object? value, Type memberType, bool descending, out Expression comparison, out string? error)
     {
         error = null;
-        var constant = Expression.Constant(typedValue, memberType);
-        var compare = Expression.GreaterThan(member, constant);
-        if (descending) compare = Expression.LessThan(member, constant);
-        expression = compare;
+        comparison = null!;
+        Expression left = member;
+        Expression? right = null;
+        Expression? notNull = null;
+
+        var underlying = Nullable.GetUnderlyingType(memberType);
+        if (underlying is not null)
+        {
+            left = Expression.Property(member, nameof(Nullable<int>.Value));
+            right = Expression.Constant(ConvertKeyValue(value, underlying), underlying);
+            notNull = Expression.Property(member, nameof(Nullable<int>.HasValue));
+            memberType = underlying;
+        }
+        else if (!memberType.IsValueType)
+        {
+            notNull = Expression.NotEqual(member, Expression.Constant(null, memberType));
+        }
+        right ??= Expression.Constant(ConvertKeyValue(value, memberType), memberType);
+
+        var compareMethod = memberType.GetMethod("CompareTo", new[] { memberType });
+        if (compareMethod is null)
+        {
+            error = $"Type '{memberType.Name}' does not support ordering.";
+            return false;
+        }
+
+        var compareCall = Expression.Call(left, compareMethod, right);
+        var zero = Expression.Constant(0);
+        comparison = descending
+            ? Expression.LessThan(compareCall, zero)
+            : Expression.GreaterThan(compareCall, zero);
+
+        if (notNull is not null)
+        {
+            comparison = Expression.AndAlso(notNull, comparison);
+        }
+
         return true;
+    }
+
+    private static object? ConvertKeyValue(object? value, Type targetType)
+    {
+        if (value is null) return null;
+        var underlying = Nullable.GetUnderlyingType(targetType) ?? targetType;
+        if (underlying.IsInstanceOfType(value)) return value;
+        if (value is string s)
+        {
+            if (underlying == typeof(Guid) && Guid.TryParse(s, out var guid)) return guid;
+            if (underlying == typeof(DateTimeOffset) && DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dto)) return dto;
+            if (underlying == typeof(DateTime) && DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt)) return dt;
+            if (underlying.IsEnum) return Enum.Parse(underlying, s, ignoreCase: true);
+        }
+        if (value is IConvertible) return Convert.ChangeType(value, underlying, CultureInfo.InvariantCulture);
+        return value;
     }
 
     private static string GetOrderMethodName(bool first, bool descending)

@@ -127,9 +127,10 @@ public static class MediatorReflectionExtensions
         Assembly[] assemblies,
         KyrolusMediatorConfiguration configuration)
     {
-        // Tracks which implementation already claimed a single-handler service type, so a second
-        // one can be reported with both names instead of silently losing.
-        var claimed = new Dictionary<Type, Type>();
+        // Tracks which implementation already claimed a single-handler shape, so a second one can
+        // be reported with both names instead of silently losing. Keyed by a canonical shape string
+        // rather than by Type - see BuildGenericShapeKey for why a Type key is not enough.
+        var claimed = new Dictionary<string, Type>(StringComparer.Ordinal);
 
         foreach (var assembly in assemblies)
         {
@@ -177,27 +178,42 @@ public static class MediatorReflectionExtensions
         Type ifaceDef,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type implType,
         KyrolusMediatorConfiguration configuration,
-        Dictionary<Type, Type> claimed)
+        Dictionary<string, Type> claimed)
     {
         if (implType.ContainsGenericParameters)
         {
-            if (claimed.TryGetValue(ifaceDef, out var existingGeneric))
+            RequireMatchingArity(ifaceDef, implType);
+
+            // Keying on ifaceDef alone (e.g. IKyrolusCommandHandler<,>) would treat every open-generic
+            // handler for that interface as "the same slot", even though CreateHandler<T> : IKyrolusCommandHandler<CreateCommand<T>, T>
+            // and UpdateHandler<T> : IKyrolusCommandHandler<UpdateCommand<T>, T> target completely
+            // different request shapes and must both be allowed to exist. The key has to describe the
+            // shape the handler actually closes over, not just which handler interface it implements.
+            var shapeKey = BuildGenericShapeKey(ifaceDef, iface, implType.GetGenericArguments());
+
+            if (claimed.TryGetValue(shapeKey, out var existingGeneric))
             {
                 if (existingGeneric == implType) return;
 
                 if (configuration.ThrowOnDuplicateRequestHandlers)
                     throw new InvalidOperationException(
-                        $"[KyrolusMediator] Two generic handlers are registered for {ifaceDef}: " +
-                        $"{existingGeneric.FullName} and {implType.FullName}. A request must have exactly one handler.");
+                        $"[KyrolusMediator] Two generic handlers are registered for the same request shape " +
+                        $"under {ifaceDef}: {existingGeneric.FullName} and {implType.FullName}. A request must have exactly one handler.");
                 return;
             }
 
-            claimed[ifaceDef] = implType;
-            services.TryAdd(new ServiceDescriptor(ifaceDef, implType, configuration.Lifetime));
+            claimed[shapeKey] = implType;
+            // Not TryAdd: TryAdd(single) no-ops as soon as ANY descriptor exists for ifaceDef, which
+            // would silently drop every open-generic handler after the first one registered for this
+            // interface - even though each targets a distinct request shape (already verified distinct
+            // above) and DI resolves a closed request type by matching whichever open registration's
+            // generic shape actually unifies with it. AddOpenGenericHandlerIfMissing still keeps this
+            // idempotent if the caller runs registration twice.
+            AddOpenGenericHandlerIfMissing(services, ifaceDef, implType, configuration.Lifetime);
             return;
         }
 
-        if (claimed.TryGetValue(iface, out var existing))
+        if (claimed.TryGetValue(iface.ToString(), out var existing))
         {
             if (existing == implType) return;
 
@@ -209,8 +225,72 @@ public static class MediatorReflectionExtensions
             return;
         }
 
-        claimed[iface] = implType;
+        claimed[iface.ToString()] = implType;
         services.TryAdd(new ServiceDescriptor(iface, implType, configuration.Lifetime));
+    }
+
+    /// <summary>
+    /// Builds a canonical string describing the request/response shape an open-generic handler
+    /// closes over, so two handlers can be compared for "same shape" without depending on Type
+    /// equality between generic-parameter placeholders that belong to different classes (which are
+    /// never equal even when the shapes they stand in for are identical).
+    /// </summary>
+    private static string BuildGenericShapeKey(Type ifaceDef, Type iface, Type[] implOwnParameters)
+    {
+        var args = iface.GetGenericArguments();
+        var parts = new string[args.Length];
+        for (var i = 0; i < args.Length; i++)
+            parts[i] = CanonicalizeShape(args[i], implOwnParameters);
+        return ifaceDef.FullName + "<" + string.Join(",", parts) + ">";
+    }
+
+    /// <summary>
+    /// Renders one generic argument of a handler's interface as a shape fragment: the handler's own
+    /// type parameter (wherever it appears, however nested) becomes a position-erased placeholder, so
+    /// "CreateCommand&lt;T&gt;" from one class and "CreateCommand&lt;T&gt;" from another both render
+    /// identically, while "CreateCommand&lt;T&gt;" and "UpdateCommand&lt;T&gt;" do not.
+    /// </summary>
+    private static string CanonicalizeShape(Type type, Type[] implOwnParameters)
+    {
+        if (Array.IndexOf(implOwnParameters, type) >= 0)
+            return "#";
+
+        if (type.IsGenericParameter)
+            return "#?" + type.Name;
+
+        if (!type.IsGenericType)
+            return type.FullName ?? type.Name;
+
+        var definition = type.GetGenericTypeDefinition();
+        var arguments = type.GetGenericArguments();
+        var parts = new string[arguments.Length];
+        for (var i = 0; i < arguments.Length; i++)
+            parts[i] = CanonicalizeShape(arguments[i], implOwnParameters);
+        return definition.FullName + "<" + string.Join(",", parts) + ">";
+    }
+
+    /// <summary>
+    /// Registers an open-generic handler unless a descriptor for the exact same
+    /// (service type, implementation type) pair is already present. Deliberately not
+    /// <c>TryAdd</c>: that overload skips registration as soon as any descriptor exists for
+    /// <paramref name="serviceType"/> at all, which would silently drop every open-generic handler
+    /// after the first one seen for a given handler interface - even though several distinct
+    /// implementation types legitimately share the same open service type, one per request shape.
+    /// Checking the pair instead keeps repeated registration calls idempotent without that side effect.
+    /// </summary>
+    private static void AddOpenGenericHandlerIfMissing(
+        IServiceCollection services,
+        Type serviceType,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type implementationType,
+        ServiceLifetime lifetime)
+    {
+        foreach (var descriptor in services)
+        {
+            if (descriptor.ServiceType == serviceType && descriptor.ImplementationType == implementationType)
+                return;
+        }
+
+        services.Add(new ServiceDescriptor(serviceType, implementationType, lifetime));
     }
 
     private static void RegisterMultiHandler(
@@ -222,10 +302,46 @@ public static class MediatorReflectionExtensions
     {
         if (implType.ContainsGenericParameters)
         {
+            RequireMatchingArity(ifaceDef, implType);
             services.TryAddEnumerable(new ServiceDescriptor(ifaceDef, implType, configuration.Lifetime));
             return;
         }
 
         services.TryAddEnumerable(new ServiceDescriptor(iface, implType, configuration.Lifetime));
+    }
+
+    /// <summary>
+    /// Rejects an open-generic handler whose own type-parameter count does not match the handler
+    /// interface's, with a message that explains why - rather than letting registration succeed and
+    /// leaving the confusing ".NET's built-in DI container can only close an open generic service by
+    /// applying the requested arguments straight onto the implementation's own type parameters, in
+    /// order" failure to surface later, at <c>BuildServiceProvider()</c> or first resolution, with no
+    /// hint that a Kyrolus handler registration is the actual cause.
+    /// </summary>
+    /// <remarks>
+    /// This is a real constraint of the framework's container, not a Kyrolus limitation: an open
+    /// generic implementation such as <c>CreateHandler&lt;T&gt; : IKyrolusCommandHandler&lt;CreateCommand&lt;T&gt;, T&gt;</c>
+    /// (one type parameter, wrapped into the interface's two arguments) cannot be closed by
+    /// <c>Microsoft.Extensions.DependencyInjection</c>'s default container at all - only a direct,
+    /// arity-matching passthrough like <c>Handler&lt;TRequest, TResponse&gt; : IKyrolusRequestHandler&lt;TRequest, TResponse&gt;</c>
+    /// can. A handler that needs the wrapped shape has to be written as a closed type per concrete
+    /// request instead, or the application should reference <c>KyrolusSous.Mediator.Generator</c>,
+    /// which closes such handlers at compile time rather than asking the container to do it at runtime.
+    /// </remarks>
+    /// <summary>Internal rather than private solely so the unit test suite can exercise it directly without polluting a shared, whole-assembly-scanned test fixture.</summary>
+    internal static void RequireMatchingArity(Type ifaceDef, Type implType)
+    {
+        var implArity = implType.GetGenericArguments().Length;
+        var ifaceArity = ifaceDef.GetGenericArguments().Length;
+        if (implArity == ifaceArity) return;
+
+        throw new InvalidOperationException(
+            $"[KyrolusMediator] {implType.FullName} declares {implArity} type parameter(s) but implements " +
+            $"{ifaceDef} whose open form needs {ifaceArity}. The built-in DI container can only close an " +
+            "open-generic handler by applying the request's type arguments straight onto the handler's own " +
+            "type parameters, in order - it cannot resolve a handler that wraps, fixes, or reorders them. " +
+            "Give the handler exactly one type parameter per interface argument, applied directly (for " +
+            "example `Handler<TRequest, TResponse> : IKyrolusRequestHandler<TRequest, TResponse>`), or write " +
+            "a closed handler per concrete request instead.");
     }
 }

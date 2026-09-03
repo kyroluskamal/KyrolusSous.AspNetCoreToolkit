@@ -206,7 +206,9 @@ namespace KyrolusSous.Mediator.Generator
                 var openGenerics = TryGetOpenGenericHandlerRegistrations(classSymbol, defs)
                     .Select(info => new OpenGenericModel(
                         GetOpenGenericTypeOf(info.HandlerType),
-                        GetOpenGenericTypeOf(info.InterfaceType)))
+                        GetOpenGenericTypeOf(info.InterfaceType),
+                        info.RequestShape,
+                        info.ResponseShape))
                     .ToImmutableArray();
 
                 return openGenerics.IsEmpty
@@ -414,14 +416,28 @@ namespace KyrolusSous.Mediator.Generator
         }
 
         /// <summary>
-        /// Reports SMG004 for every open generic handler interface claimed by more than one
-        /// distinct open generic handler class - the open-generic counterpart of
+        /// Reports SMG004 for every open generic message shape claimed by more than one distinct
+        /// open generic handler class - the open-generic counterpart of
         /// <see cref="ReportDuplicateHandlers"/>.
         /// </summary>
+        /// <remarks>
+        /// Grouped by <c>(InterfaceOpenName, RequestShape, ResponseShape)</c>, not by
+        /// <c>InterfaceOpenName</c> alone. Keying on the interface shape alone made
+        /// <c>CreateHandler&lt;T&gt; : IKyrolusCommandHandler&lt;CreateCommand&lt;T&gt;, T&gt;</c> and
+        /// <c>UpdateHandler&lt;T&gt; : IKyrolusCommandHandler&lt;UpdateCommand&lt;T&gt;, T&gt;</c> collide -
+        /// both implement <c>IKyrolusCommandHandler&lt;,&gt;</c>, but they cover disjoint request
+        /// shapes and are not actually duplicates. <see cref="OpenGenericModel.RequestShape"/>/
+        /// <see cref="OpenGenericModel.ResponseShape"/>
+        /// (built by <see cref="GetOpenShapeSignature"/>) canonicalise each type argument relative to
+        /// the handler's own type parameters, so two handlers only collide when they close over the
+        /// exact same generic shape - e.g. two handlers that both declare
+        /// <c>IKyrolusRequestHandler&lt;TRequest, TResponse&gt;</c> directly over their own type
+        /// parameters, which really would accept the same requests.
+        /// </remarks>
         private static void ReportDuplicateOpenGenericHandlers(SourceProductionContext context, List<OpenGenericModel> openGenericHandlers)
         {
             var duplicateGroups = openGenericHandlers
-                .GroupBy(info => info.InterfaceOpenName)
+                .GroupBy(info => (info.InterfaceOpenName, info.RequestShape, info.ResponseShape))
                 .Where(group => group.Select(info => info.HandlerOpenName).Distinct().Count() > 1);
 
             foreach (var group in duplicateGroups)
@@ -442,7 +458,7 @@ namespace KyrolusSous.Mediator.Generator
                         DiagnosticSeverity.Error,
                         isEnabledByDefault: true),
                     Location.None,
-                    group.Key, handlerNames));
+                    group.Key.InterfaceOpenName, handlerNames));
             }
         }
 
@@ -631,10 +647,28 @@ namespace KyrolusSous.Mediator.Generator
             public bool IsStream { get; } = isStream;
         }
 
-        private sealed class OpenGenericHandlerInfo(INamedTypeSymbol handlerType, INamedTypeSymbol interfaceType)
+        private sealed class OpenGenericHandlerInfo(
+            INamedTypeSymbol handlerType,
+            INamedTypeSymbol interfaceType,
+            string requestShape,
+            string responseShape)
         {
             public INamedTypeSymbol HandlerType { get; } = handlerType;
             public INamedTypeSymbol InterfaceType { get; } = interfaceType;
+
+            /// <summary>
+            /// The request type argument, canonicalised relative to the handler's own type
+            /// parameters by <see cref="GetOpenShapeSignature"/> - e.g. <c>"#0"</c> for a handler
+            /// that uses its own type parameter directly as the request, or
+            /// <c>"MyApp.CreateCommand`1&lt;#0&gt;"</c> for one that wraps it. Two handlers that
+            /// implement the same handler interface but close over different generic shapes get
+            /// different values here, so <see cref="ReportDuplicateOpenGenericHandlers"/> does not
+            /// treat them as duplicates.
+            /// </summary>
+            public string RequestShape { get; } = requestShape;
+
+            /// <summary>Same idea as <see cref="RequestShape"/>, for the response type argument.</summary>
+            public string ResponseShape { get; } = responseShape;
         }
 
         private sealed class HandlerInterfaceDefinitions(
@@ -707,8 +741,19 @@ namespace KyrolusSous.Mediator.Generator
             string InterfaceFullName,
             bool IsStream);
 
-        /// <summary>An open generic handler, registered by its unbound type.</summary>
-        private sealed record OpenGenericModel(string HandlerOpenName, string InterfaceOpenName);
+        /// <summary>
+        /// An open generic handler, registered by its unbound type.
+        /// </summary>
+        /// <param name="HandlerOpenName">The handler's own unbound type, e.g. <c>"Foo&lt;,&gt;"</c>.</param>
+        /// <param name="InterfaceOpenName">The handler interface's unbound type it implements.</param>
+        /// <param name="RequestShape">
+        /// The request type argument canonicalised relative to the handler's own type parameters -
+        /// see <see cref="OpenGenericHandlerInfo.RequestShape"/>. Part of the SMG004 duplicate key
+        /// alongside <paramref name="InterfaceOpenName"/>, so two handlers implementing the same open
+        /// interface for two different open request shapes are not flagged as duplicates.
+        /// </param>
+        /// <param name="ResponseShape">Same idea as <paramref name="RequestShape"/>, for the response.</param>
+        private sealed record OpenGenericModel(string HandlerOpenName, string InterfaceOpenName, string RequestShape, string ResponseShape);
 
         /// <summary>
         /// One (request, exception) pair an exception action was declared for.
@@ -940,16 +985,70 @@ namespace KyrolusSous.Mediator.Generator
                 if (!iface.IsGenericType || iface.ConstructedFrom is null) continue;
 
                 var originalDef = iface.OriginalDefinition;
+                ITypeSymbol requestType;
+                ITypeSymbol responseType;
+
                 if (SymbolEqualityComparer.Default.Equals(originalDef, defs.QueryHandlerDef) ||
-                    SymbolEqualityComparer.Default.Equals(originalDef, defs.CommandHandlerDef) ||
                     SymbolEqualityComparer.Default.Equals(originalDef, defs.CommandHandlerWithResponseDef) ||
                     SymbolEqualityComparer.Default.Equals(originalDef, defs.RequestHandlerDef) ||
-                    SymbolEqualityComparer.Default.Equals(originalDef, defs.RequestHandlerWithoutResponseDef) ||
                     SymbolEqualityComparer.Default.Equals(originalDef, defs.StreamRequestHandlerDef))
                 {
-                    yield return new OpenGenericHandlerInfo(handlerSymbol.OriginalDefinition, originalDef);
+                    requestType = iface.TypeArguments[0];
+                    responseType = iface.TypeArguments[1];
                 }
+                else if (SymbolEqualityComparer.Default.Equals(originalDef, defs.CommandHandlerDef) ||
+                         SymbolEqualityComparer.Default.Equals(originalDef, defs.RequestHandlerWithoutResponseDef))
+                {
+                    requestType = iface.TypeArguments[0];
+                    responseType = defs.UnitSymbol;
+                }
+                else
+                {
+                    continue;
+                }
+
+                yield return new OpenGenericHandlerInfo(
+                    handlerSymbol.OriginalDefinition,
+                    originalDef,
+                    GetOpenShapeSignature(requestType, handlerSymbol),
+                    GetOpenShapeSignature(responseType, handlerSymbol));
             }
+        }
+
+        /// <summary>
+        /// Canonicalises <paramref name="type"/> - a request or response type argument taken off an
+        /// open generic handler's own declared interface - relative to
+        /// <paramref name="handlerSymbol"/>'s own type parameters, so it can be compared for
+        /// SMG004's "same shape" duplicate check.
+        /// </summary>
+        /// <remarks>
+        /// A type argument that <em>is</em> one of the handler's own type parameters (the common
+        /// case: <c>class Foo&lt;TRequest,TResponse&gt; : IKyrolusRequestHandler&lt;TRequest,TResponse&gt;</c>)
+        /// becomes a placeholder keyed on its ordinal rather than its name, since two handlers that
+        /// both use their own first type parameter as the request are the same shape regardless of
+        /// what they each choose to call it. A constructed generic type built from those parameters
+        /// (<c>class Foo&lt;T&gt; : IKyrolusCommandHandler&lt;CreateCommand&lt;T&gt;, T&gt;</c>) is
+        /// canonicalised the same way, recursively, keyed on its own open definition - so
+        /// <c>CreateCommand&lt;T&gt;</c> and <c>UpdateCommand&lt;T&gt;</c> produce different shapes
+        /// even though both wrap "the handler's own parameter number 0". Anything else (a concrete,
+        /// non-generic type, or a type parameter belonging to something other than this handler) has
+        /// no ambiguity to canonicalise away, so its ordinary fully-qualified name is exact and stable.
+        /// </remarks>
+        private static string GetOpenShapeSignature(ITypeSymbol type, INamedTypeSymbol handlerSymbol)
+        {
+            if (type is ITypeParameterSymbol typeParameter &&
+                SymbolEqualityComparer.Default.Equals(typeParameter.ContainingSymbol, handlerSymbol))
+            {
+                return $"#{typeParameter.Ordinal}";
+            }
+
+            if (type is INamedTypeSymbol { IsGenericType: true } namedType)
+            {
+                var args = string.Join(",", namedType.TypeArguments.Select(arg => GetOpenShapeSignature(arg, handlerSymbol)));
+                return $"{namedType.ContainingNamespace.ToDisplayString()}.{namedType.Name}`{namedType.Arity}<{args}>";
+            }
+
+            return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         }
 
         /// <summary>
@@ -1401,10 +1500,20 @@ namespace KyrolusSous.Mediator.Generator
             }
 
             sb.AppendLine();
-            // Register open generic handlers
-            foreach (var info in openGenericHandlers)
+            // Register open generic handlers. TryAddEnumerable, not TryAddTransient: TryAdd/
+            // TryAddTransient dedupe on ServiceType alone, so once one open-generic handler was
+            // registered against e.g. IKyrolusCommandHandler<,>, a second, legitimately different
+            // open-generic handler against that same open interface (closing over a different
+            // request shape, such as CreateHandler<T> vs UpdateHandler<T>) silently failed to
+            // register at all - not an error, just quietly missing at resolve time. TryAddEnumerable
+            // dedupes on (ServiceType, ImplementationType) instead, which is what is actually wanted
+            // here: every distinct open-generic handler registered, exact re-registrations (e.g. a
+            // partial class contributing the same open interface from more than one file) skipped.
+            foreach (var info in openGenericHandlers
+                .Select(info => (info.InterfaceOpenName, info.HandlerOpenName))
+                .Distinct())
             {
-                sb.AppendLine($"            services.TryAddTransient(typeof({info.InterfaceOpenName}), typeof({info.HandlerOpenName}));");
+                sb.AppendLine($"            services.TryAddEnumerable(ServiceDescriptor.Transient(typeof({info.InterfaceOpenName}), typeof({info.HandlerOpenName})));");
             }
             sb.AppendLine();
             if (runtimeAvailable)
@@ -1610,15 +1719,39 @@ namespace KyrolusSous.Mediator.Generator
 
             if (pairs.Count == 0) return ImmutableArray<string>.Empty;
 
+            // Deterministic, but otherwise arbitrary, iteration order for `pairs` - a HashSet's own
+            // enumeration order is an implementation detail, not something identical input can rely
+            // on producing identically build to build. Ordering *between* different (request,
+            // response) pairs has no effect on tie-breaking below (each pair resolves through its own
+            // closed IKyrolusPipelineBehavior<,> and never sees another pair's registrations), so any
+            // stable order is fine here - this one just keeps the generated file reproducible.
+            var orderedPairs = pairs
+                .OrderBy(pair => ((ITypeSymbol)pair.Request).ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal)
+                .ThenBy(pair => ((ITypeSymbol)pair.Response).ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal)
+                .ToList();
+
             // 3. Cross-product, keeping only combinations that satisfy the behavior's own type
             //    parameter constraints - otherwise the emitted closed instantiation would not compile.
+            //
+            // The outer loop runs over `openBehaviors` in the order its own scan found the
+            // AddOpenBehavior(typeof(...)) call sites - source declaration order (SyntaxTrees, then
+            // document order within each tree). That order is deliberately preserved into `lines`
+            // rather than re-sorted: the runtime's pipeline resolution
+            // (serviceProvider.GetServices<>().OrderBy(PipelineOrder.Of), a stable sort) breaks ties
+            // between behaviors sharing a PipelineOrder value by DI registration order, which for the
+            // reflection/JIT path is the order AddOpenBehavior was called in. Sorting these lines
+            // alphabetically - as this used to do - reordered same-PipelineOrder user behaviors by
+            // generated-text (effectively by behavior type name) instead, so two behaviors with equal
+            // PipelineOrder could run in a different relative order under the generator (AOT) than
+            // under reflection (JIT) for the exact same source. Leaving `lines` in the order this
+            // double loop naturally produces keeps every pair's own registrations in call-site order.
             var lines = new List<string>();
             foreach (var (openType, requestParam, responseParam, isStream) in openBehaviors)
             {
                 var behaviorInterface = isStream ? StreamPipelineBehaviorInterface : PipelineBehaviorInterface;
                 var openTypeBaseName = GetQualifiedNameWithoutArity(openType);
 
-                foreach (var (request, response, pairIsStream) in pairs)
+                foreach (var (request, response, pairIsStream) in orderedPairs)
                 {
                     if (pairIsStream != isStream) continue;
 
@@ -1644,7 +1777,6 @@ namespace KyrolusSous.Mediator.Generator
                 }
             }
 
-            lines.Sort(StringComparer.Ordinal);
             return [.. lines];
         }
 

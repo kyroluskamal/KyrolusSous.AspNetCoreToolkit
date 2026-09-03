@@ -65,8 +65,10 @@ public sealed class EdgeCasesGenerationTests
         // Concrete class MUST be registered in DI
         handlersDiCode.ShouldContain("services.TryAddTransient<global::MyApp.EdgeCases.ConcreteQueryHandler>()");
 
-        // Open Generic Handler registered with TryAddTransient(typeof(...), typeof(...))
-        handlersDiCode.ShouldContain("services.TryAddTransient(typeof(global::KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusRequestHandler<,>), typeof(global::MyApp.EdgeCases.GenericLoggingHandler<,>))");
+        // Open Generic Handler registered with TryAddEnumerable(ServiceDescriptor.Transient(typeof(...), typeof(...)))
+        // - not TryAddTransient, which dedupes on ServiceType alone and would silently drop a second,
+        // legitimately different open-generic handler registered against the same open interface.
+        handlersDiCode.ShouldContain("services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(global::KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusRequestHandler<,>), typeof(global::MyApp.EdgeCases.GenericLoggingHandler<,>)))");
 
         // Unrelated class must NOT be registered
         handlersDiCode.ShouldNotContain("UnrelatedClass");

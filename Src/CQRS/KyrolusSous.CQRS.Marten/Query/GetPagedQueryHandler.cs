@@ -11,8 +11,13 @@ public sealed class GetPagedQueryHandler<TSession, TResponse, TKey>(IKyrolusMart
 {
     public async Task<KyrolusPagedResult<TResponse>> Handle(GetPagedQuery<TResponse, TKey> query, CancellationToken cancellationToken)
     {
+        // Clamp caller-supplied paging so PageSize = int.MaxValue (or negative) can't force the
+        // database to attempt to materialize an enormous or malformed result set.
+        var pageNumber = Math.Max(1, query.PageNumber);
+        var pageSize = Math.Clamp(query.PageSize, 1, KyrolusPagingLimits.MaxPageSize);
+
         var options = BuildOptions(query);
-        var page = new MartenPageRequest(query.PageNumber, query.PageSize);
+        var page = new MartenPageRequest(pageNumber, pageSize);
         var repo = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<TSession, TResponse, TKey>>();
         if (query.Selector is not null)
         {

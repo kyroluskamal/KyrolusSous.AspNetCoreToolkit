@@ -13,6 +13,10 @@ public sealed class ExecuteUpdateCommandHandler<TDbcontext, TResponse, TKey>(IKy
     public async Task<int> Handle(ExecuteUpdateCommand<TResponse, TKey> command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
+        // Defense in depth: the command's constructor already rejects a null filter, and Filter is
+        // init-only, but reflection (e.g. property-based command builders) can still bypass both, so
+        // re-validate here before anything reaches the database.
+        ArgumentNullException.ThrowIfNull(command.Filter, nameof(command.Filter));
         ArgumentNullException.ThrowIfNull(command.Updates);
 
         if (command.Updates.Count == 0)

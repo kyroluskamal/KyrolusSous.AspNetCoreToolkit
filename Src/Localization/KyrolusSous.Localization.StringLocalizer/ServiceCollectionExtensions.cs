@@ -1,6 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-
 namespace KyrolusSous.Localization.StringLocalizer;
 
 public static class ServiceCollectionExtensions

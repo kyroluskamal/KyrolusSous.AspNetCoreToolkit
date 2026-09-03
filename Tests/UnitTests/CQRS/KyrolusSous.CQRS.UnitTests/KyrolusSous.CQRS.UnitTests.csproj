@@ -31,6 +31,8 @@
     <ProjectReference Include="..\..\..\..\Src\CQRS\KyrolusSous.CQRS.Mapping\KyrolusSous.CQRS.Mapping.csproj" />
     <ProjectReference Include="..\..\..\..\Src\CQRS\KyrolusSous.CQRS.EF\KyrolusSous.CQRS.EF.csproj" />
     <ProjectReference Include="..\..\..\..\Src\CQRS\KyrolusSous.CQRS.Marten\KyrolusSous.CQRS.Marten.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\CQRS\KyrolusSous.CQRS.Saga\KyrolusSous.CQRS.Saga.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Mediator\KyrolusSous.Mediator.Runtime\KyrolusSous.Mediator.Runtime.csproj" />
   </ItemGroup>
 
   <ItemGroup>

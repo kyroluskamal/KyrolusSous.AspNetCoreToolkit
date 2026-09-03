@@ -26,6 +26,7 @@ using Xunit;
 
 namespace KyrolusSous.CQRS.UnitTests;
 
+[Collection("ThrottlingSemaphores")]
 public class Kyrolus20RoundsReviewTests
 {
     // ==========================================
@@ -58,14 +59,7 @@ public class Kyrolus20RoundsReviewTests
     [Fact(DisplayName = "Round2 Idempotency should cache and return response")]
     public async Task Round2_Idempotency_should_cache_and_return_response()
     {
-        var cache = Substitute.For<IKyrolusCacheProvider>();
-        string? cachedEnvelope = null;
-
-        cache.GetAsync<string>(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(x => cachedEnvelope);
-
-        cache.When(x => x.SetAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<KyrolusCacheEntryOptions>(), Arg.Any<CancellationToken>()))
-            .Do(x => cachedEnvelope = x.ArgAt<string>(1));
+        var cache = new FakeCacheProvider();
 
         var behavior = new KyrolusIdempotencyBehavior<IdempotentIntCmd, string>(cache);
         var cmd = new IdempotentIntCmd("key-123");
@@ -82,9 +76,9 @@ public class Kyrolus20RoundsReviewTests
     // ==========================================
     // Round 3: Outbox AppDomain Type Resolution
     // ==========================================
-    public sealed record Round3Event(string Message);
+    public sealed record Round3Event(string Message) : IKyrolusNotification;
 
-    [Fact(DisplayName = "Round3 Outbox should resolve types from appdomain")]
+    [Fact(DisplayName = "Round3 Outbox should resolve allow-listed notification types")]
     public async Task Round3_Outbox_should_resolve_types_from_appdomain()
     {
         var store = new InMemoryOutboxStore();
@@ -100,6 +94,30 @@ public class Kyrolus20RoundsReviewTests
         var processed = await processor.ProcessPendingMessagesAsync(10);
         processed.ShouldBe(1);
         await publisher.Received(1).PublishAsync(Arg.Is<object>(o => o is Round3Event), Arg.Any<CancellationToken>());
+    }
+
+    [Fact(DisplayName = "Outbox should refuse an event type outside the allow-list rather than resolve it")]
+    public async Task Outbox_should_reject_event_type_not_in_registry()
+    {
+        var store = new InMemoryOutboxStore();
+        var publisher = Substitute.For<IKyrolusMediatorPublisher>();
+        // An explicit, empty allow-list - Round3Event exists and is loadable, but is not in it.
+        var registry = new KyrolusOutboxEventTypeRegistry([]);
+        var processor = new KyrolusOutboxProcessor(store, publisher, registry);
+
+        await store.SaveAsync(new KyrolusOutboxMessage
+        {
+            EventType = typeof(Round3Event).FullName!,
+            Payload = "{\"Message\":\"Hello\"}"
+        });
+
+        var processed = await processor.ProcessPendingMessagesAsync(10);
+
+        processed.ShouldBe(0);
+        await publisher.DidNotReceive().PublishAsync(Arg.Any<object>(), Arg.Any<CancellationToken>());
+        store.AllMessages.Single().Status.ShouldBe(OutboxMessageStatus.Failed);
+        store.AllMessages.Single().Error.ShouldNotBeNull();
+        store.AllMessages.Single().Error!.ShouldContain("not in the outbox type registry's allow-list");
     }
 
     // ==========================================

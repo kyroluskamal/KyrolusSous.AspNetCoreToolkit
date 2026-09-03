@@ -513,6 +513,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.Cach
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.Validation.Caching.UnitTests", "Tests\UnitTests\Validation\KyrolusSous.Validation.Caching.UnitTests\KyrolusSous.Validation.Caching.UnitTests.csproj", "{EC37F729-1148-40C4-9C1E-245D40C9263D}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "CQRS", "CQRS", "{EF8D5A62-F0B1-5A35-CE34-34399E664908}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KyrolusSous.CQRS.Saga", "Src\CQRS\KyrolusSous.CQRS.Saga\KyrolusSous.CQRS.Saga.csproj", "{114E8B2A-994E-4456-9FA5-3A4F5B265886}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -2935,6 +2939,18 @@ Global
 		{EC37F729-1148-40C4-9C1E-245D40C9263D}.Release|x64.Build.0 = Release|Any CPU
 		{EC37F729-1148-40C4-9C1E-245D40C9263D}.Release|x86.ActiveCfg = Release|Any CPU
 		{EC37F729-1148-40C4-9C1E-245D40C9263D}.Release|x86.Build.0 = Release|Any CPU
+		{114E8B2A-994E-4456-9FA5-3A4F5B265886}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{114E8B2A-994E-4456-9FA5-3A4F5B265886}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{114E8B2A-994E-4456-9FA5-3A4F5B265886}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{114E8B2A-994E-4456-9FA5-3A4F5B265886}.Debug|x64.Build.0 = Debug|Any CPU
+		{114E8B2A-994E-4456-9FA5-3A4F5B265886}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{114E8B2A-994E-4456-9FA5-3A4F5B265886}.Debug|x86.Build.0 = Debug|Any CPU
+		{114E8B2A-994E-4456-9FA5-3A4F5B265886}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{114E8B2A-994E-4456-9FA5-3A4F5B265886}.Release|Any CPU.Build.0 = Release|Any CPU
+		{114E8B2A-994E-4456-9FA5-3A4F5B265886}.Release|x64.ActiveCfg = Release|Any CPU
+		{114E8B2A-994E-4456-9FA5-3A4F5B265886}.Release|x64.Build.0 = Release|Any CPU
+		{114E8B2A-994E-4456-9FA5-3A4F5B265886}.Release|x86.ActiveCfg = Release|Any CPU
+		{114E8B2A-994E-4456-9FA5-3A4F5B265886}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -3192,5 +3208,6 @@ Global
 		{C4BAC137-ABD1-42AA-B71E-C70EB7E6BB9C} = {8670B5A8-0397-5F8B-AD18-045EC32A71D5}
 		{50965EB2-DBFB-4F03-9BEA-7AED0F85C42A} = {82A4620A-484E-4054-9805-02C401EECED9}
 		{EC37F729-1148-40C4-9C1E-245D40C9263D} = {5B8C8C49-7F60-44D0-BB82-932F39B1F5D9}
+		{114E8B2A-994E-4456-9FA5-3A4F5B265886} = {EF8D5A62-F0B1-5A35-CE34-34399E664908}
 	EndGlobalSection
 EndGlobal

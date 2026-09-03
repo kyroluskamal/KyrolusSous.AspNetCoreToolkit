@@ -7,6 +7,22 @@ using Microsoft.Extensions.Logging;
 namespace KyrolusSous.CQRS.Abstractions.Behaviors;
 
 /// <summary>
+/// Holds the semaphores <see cref="KyrolusThrottlingBehavior{TRequest, TResponse}"/> throttles on.
+/// </summary>
+/// <remarks>
+/// Kept on a non-generic type deliberately: a <see langword="static"/> field on a generic class gets
+/// its own storage per closed instantiation (one dictionary per distinct (TRequest, TResponse) pair),
+/// which would defeat <see cref="IThrottledRequest.ThrottleKey"/> the moment two different request
+/// types shared a key - each request type would silently get its own semaphore instead of contending
+/// for the same one. <c>KyrolusSous.Mediator.Runtime.Implementations.KyrolusMediatorMetrics</c>
+/// documents avoiding the exact same pitfall for the same reason.
+/// </remarks>
+internal static class KyrolusThrottlingSemaphores
+{
+    internal static readonly ConcurrentDictionary<string, SemaphoreSlim> Semaphores = new(StringComparer.Ordinal);
+}
+
+/// <summary>
 /// Pipeline behavior providing concurrency limiting and throttling on requests implementing <see cref="IThrottledRequest"/>.
 /// </summary>
 [PipelineOrder(-750)]
@@ -14,7 +30,7 @@ public sealed class KyrolusThrottlingBehavior<TRequest, TResponse>(
     ILogger<KyrolusThrottlingBehavior<TRequest, TResponse>>? logger = null)
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
-    private static readonly ConcurrentDictionary<string, SemaphoreSlim> Semaphores = new(StringComparer.Ordinal);
+    private static ConcurrentDictionary<string, SemaphoreSlim> Semaphores => KyrolusThrottlingSemaphores.Semaphores;
     private readonly ILogger? _logger = logger;
 
     public async Task<TResponse> Handle(

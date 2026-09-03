@@ -203,6 +203,49 @@ public sealed class KyrolusRedisCacheProvider : IKyrolusCacheProvider
         }
     }
 
+    /// <summary>
+    /// Atomically stores <paramref name="value"/> under <paramref name="cacheKey"/> only if the key is not
+    /// already present, using Redis's native <c>SET NX</c> compare-and-set primitive (<see cref="When.NotExists"/>)
+    /// so the check-and-write is a single atomic server-side operation - unlike the naive
+    /// <c>ExistsAsync</c>-then-<c>SetAsync</c> default on <see cref="IKyrolusCacheProvider"/>, this override is
+    /// safe under concurrent callers racing for the same key.
+    /// </summary>
+    public async Task<bool> SetIfNotExistsAsync<T>(string cacheKey, T value, KyrolusCacheEntryOptions? requestOptions = null, CancellationToken cancellationToken = default)
+    {
+        var entryOptions = ApplyPolicy<T>(requestOptions, KyrolusCacheOperation.Set);
+        var (region, tenantId) = ResolveNamespace(entryOptions);
+        var ttl = ResolveExpiration(null, entryOptions);
+        var resolvedKey = keyFactory.BuildKey(cacheKey, region, tenantId);
+        using var activity = StartActivity(KyrolusCacheOperation.Set, cacheKey, region, tenantId);
+        if (!await EnsureConnectedAsync(KyrolusCacheOperation.Set, cacheKey, typeof(T), region, tenantId).ConfigureAwait(false))
+            return false;
+        var sw = Stopwatch.StartNew();
+
+        try
+        {
+            var created = await SetIfNotExistsInternalAsync(resolvedKey, value, ttl, entryOptions, cancellationToken).ConfigureAwait(false);
+            sw.Stop();
+            KyrolusCacheInstrumentation.RecordLatency(KyrolusCacheOperation.Set, ProviderName, sw.Elapsed);
+
+            if (created)
+            {
+                KyrolusCacheInstrumentation.RecordSet(KyrolusCacheOperation.Set, ProviderName);
+                await ObserveAsync(new KyrolusCacheObserverContext(Key: cacheKey, Operation: KyrolusCacheOperation.Set, Observation: KyrolusCacheObservation.Set, ValueType: typeof(T), Duration: sw.Elapsed, Region: region, TenantId: tenantId, Exception: null)).ConfigureAwait(false);
+            }
+            else
+            {
+                await ObserveAsync(new KyrolusCacheObserverContext(Key: cacheKey, Operation: KyrolusCacheOperation.Set, Observation: KyrolusCacheObservation.Exists, ValueType: typeof(T), Duration: sw.Elapsed, Region: region, TenantId: tenantId, Exception: null)).ConfigureAwait(false);
+            }
+
+            return created;
+        }
+        catch (Exception ex) when (IsGracefulFallback(ex))
+        {
+            await HandleGracefulFallbackAsync(ex, KyrolusCacheOperation.Set, cacheKey, typeof(T), region, tenantId, sw).ConfigureAwait(false);
+            return false;
+        }
+    }
+
     public async Task RemoveAsync(string cacheKey, CancellationToken cancellationToken = default)
     {
         var (region, tenantId) = ResolveNamespace(null);
@@ -945,6 +988,23 @@ public sealed class KyrolusRedisCacheProvider : IKyrolusCacheProvider
             await database.StringSetAsync(BuildSlidingKey(resolvedKey), sliding.Ticks, ttl, flags: writeFlags).ConfigureAwait(false);
         if (options?.Tags is { Count: > 0 } tags)
             await ApplyTagsAsync([resolvedKey], tags, options, ttl).ConfigureAwait(false);
+    }
+
+    private async Task<bool> SetIfNotExistsInternalAsync<T>(RedisKey resolvedKey, T value, TimeSpan ttl, KyrolusCacheEntryOptions? options, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var payload = serializer.Serialize(value);
+        var created = await database.StringSetAsync(resolvedKey, payload, ttl, When.NotExists, flags: writeFlags).ConfigureAwait(false);
+        if (!created)
+            return false;
+
+        await database.KeyDeleteAsync(BuildNegativeKey(resolvedKey), writeFlags).ConfigureAwait(false);
+        await TrackKeyAsync(resolvedKey).ConfigureAwait(false);
+        if (options?.SlidingExpiration is { } sliding)
+            await database.StringSetAsync(BuildSlidingKey(resolvedKey), sliding.Ticks, ttl, flags: writeFlags).ConfigureAwait(false);
+        if (options?.Tags is { Count: > 0 } tags)
+            await ApplyTagsAsync([resolvedKey], tags, options, ttl).ConfigureAwait(false);
+        return true;
     }
 
     private async Task StoreOrNegativeAsync<T>(

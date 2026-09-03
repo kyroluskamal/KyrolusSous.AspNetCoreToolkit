@@ -1030,6 +1030,11 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
 
         filterExpr = CombineFilters(filterExpr, contextFilter);
         filterExpr = CombineFilters(filterExpr, authResult.RowFilter);
+        // ExecuteUpdateCommand requires an explicit filter (a caller asking to affect every row must
+        // say so, not merely omit one) - a bulk-update request with no query filter, no context
+        // filter and no row-level auth filter still means "every row this user can see", so that
+        // intent is made explicit here rather than left as null.
+        filterExpr ??= _ => true;
         var command = martenConfig?.ExecuteUpdateCommand
             ?? new ExecuteUpdateCommand<TResponse, TKey>(filterExpr, filteredUpdates, request.Cacheable ?? false, queryRequest.UseSplitQuery);
 
@@ -1061,6 +1066,9 @@ public sealed class DefaultCommandQueryHandler<TResponse, TModel, TKey>(
 
         filterExpr = CombineFilters(filterExpr, contextFilter);
         filterExpr = CombineFilters(filterExpr, authResult.RowFilter);
+        // ExecuteDeleteCommand requires an explicit filter - see the matching comment in
+        // HandleBulkUpdateAsync above.
+        filterExpr ??= _ => true;
         var command = martenConfig?.ExecuteDeleteCommand
             ?? new ExecuteDeleteCommand<TResponse, TKey>(filterExpr, request.Cacheable ?? false, queryRequest.UseSplitQuery);
 

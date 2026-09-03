@@ -64,8 +64,8 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Marten.Runtime - Unit | unit | 28 | none | yes |
 | Logging | unit | 59 | none | yes |
 | Mediator.Runtime - Unit | unit | 124 | none | yes |
-| Mediator.Generator - Unit | unit | 28 | none | yes |
-| Mediator.Reflection - Unit | unit | 53 | none | yes |
+| Mediator.Generator - Unit | unit | 32 | none | yes |
+| Mediator.Reflection - Unit | unit | 56 | none | yes |
 | Validation.Runtime - Unit | unit | 96 | none | yes |
 | Validation.Fluent - Unit | unit | 30 | none | yes |
 | Validation.FluentValidation - Unit | unit | 18 | none | yes |
@@ -80,12 +80,12 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | ExceptionHandling.Redis - Unit | unit | 6 | none | yes |
 | ExceptionHandling.Marten - Unit | unit | 10 | none | yes |
 | Compression - Unit | unit | 58 | none | yes |
-| Caching - Unit | unit | 105 | none | yes |
+| Caching - Unit | unit | 108 | none | yes |
 | OpenApi - Integration | integration | 22 | none | yes |
 | Elasticsearch - Unit | unit | 12 | none | yes |
 | Resilience - Unit | unit | 24 | none | yes |
 | Mapping - Unit | unit | 54 | none | yes |
-| CQRS - Unit | unit | 52 | none | yes |
+| CQRS - Unit | unit | 89 | none | yes |
 | Auth - Unit<br><sub>Core runtime, principal factory, pbkdf2 hasher, external logins, and OpenIddict endpoints integration.</sub> | unit | 128 | none | yes |
 | Auth.ApiKey - Unit | unit | 11 | none | yes |
 | Auth.EntityFramework - Unit | unit | 8 | none | yes |
@@ -106,7 +106,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | DataProtection - Unit | unit | 33 | none | yes |
 | Payments - Unit | unit | 57 | none | yes |
 | Localization - Unit | unit | 53 | none | yes |
-| **Total** | | **2510** | | |
+| **Total** | | **2557** | | |
 
 <!-- END:GENERATED:test-suites -->
 

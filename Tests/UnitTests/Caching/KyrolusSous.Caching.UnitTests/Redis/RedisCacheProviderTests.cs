@@ -409,4 +409,108 @@ public sealed class RedisCacheProviderTests
         var result = await provider.GetAsync<ProductDto>("product:1");
         result.ShouldBeNull();
     }
+
+    [Fact(DisplayName = "KyrolusRedisCacheProvider: SetIfNotExistsAsync creates the key and tracks it when absent")]
+    public async Task SetIfNotExistsAsync_KeyAbsent_CreatesAndTracks()
+    {
+        var muxer = Substitute.For<IConnectionMultiplexer>();
+        var db = Substitute.For<IDatabase>();
+        muxer.IsConnected.Returns(true);
+        muxer.GetDatabase(Arg.Any<int>(), Arg.Any<object?>()).Returns(db);
+        muxer.GetDatabase().Returns(db);
+
+        // The provider calls the (key, value, TimeSpan? expiry, When when, CommandFlags flags) overload
+        // (it passes When.NotExists explicitly), so the mock must be set up on that exact overload.
+        db.StringSetAsync(Arg.Any<RedisKey>(), Arg.Any<RedisValue>(), Arg.Any<TimeSpan?>(), Arg.Any<When>(), Arg.Any<CommandFlags>())
+            .Returns(Task.FromResult(true));
+
+        var deps = new KyrolusRedisCacheDependencies(
+            new KyrolusJsonCacheSerializer(),
+            new KyrolusCacheKeyFactory("test"),
+            new KyrolusRedisCacheOptions());
+
+        var provider = new KyrolusRedisCacheProvider(muxer, deps);
+
+        var created = await provider.SetIfNotExistsAsync("idempotency:order-2", "payload");
+
+        created.ShouldBeTrue();
+        // A successful claim must delete any stale negative marker and track the new key.
+        await db.Received(1).KeyDeleteAsync(Arg.Any<RedisKey>(), Arg.Any<CommandFlags>());
+        await db.Received(1).SetAddAsync(Arg.Any<RedisKey>(), Arg.Any<RedisValue>(), Arg.Any<CommandFlags>());
+    }
+
+    [Fact(DisplayName = "KyrolusRedisCacheProvider: SetIfNotExistsAsync returns false and skips tracking when the key already exists")]
+    public async Task SetIfNotExistsAsync_KeyPresent_ReturnsFalseWithoutTracking()
+    {
+        var muxer = Substitute.For<IConnectionMultiplexer>();
+        var db = Substitute.For<IDatabase>();
+        muxer.IsConnected.Returns(true);
+        muxer.GetDatabase(Arg.Any<int>(), Arg.Any<object?>()).Returns(db);
+        muxer.GetDatabase().Returns(db);
+
+        // SET NX reports the key was already present - this call lost the race and wrote nothing.
+        db.StringSetAsync(Arg.Any<RedisKey>(), Arg.Any<RedisValue>(), Arg.Any<TimeSpan?>(), Arg.Any<When>(), Arg.Any<CommandFlags>())
+            .Returns(Task.FromResult(false));
+
+        var deps = new KyrolusRedisCacheDependencies(
+            new KyrolusJsonCacheSerializer(),
+            new KyrolusCacheKeyFactory("test"),
+            new KyrolusRedisCacheOptions());
+
+        var provider = new KyrolusRedisCacheProvider(muxer, deps);
+
+        var created = await provider.SetIfNotExistsAsync("idempotency:order-3", "payload");
+
+        created.ShouldBeFalse();
+        await db.DidNotReceive().KeyDeleteAsync(Arg.Any<RedisKey>(), Arg.Any<CommandFlags>());
+        await db.DidNotReceive().SetAddAsync(Arg.Any<RedisKey>(), Arg.Any<RedisValue>(), Arg.Any<CommandFlags>());
+    }
+
+    [Fact(DisplayName = "KyrolusRedisCacheProvider: SetIfNotExistsAsync is atomic under concurrent callers - exactly one wins")]
+    public async Task SetIfNotExistsAsync_ConcurrentCallers_ExactlyOneWins()
+    {
+        // No real Redis instance is available in this environment, so this drives the provider
+        // against a mocked IDatabase. The mock's StringSetAsync(..., When.NotExists, ...) callback
+        // stands in for Redis's real atomic SET NX by performing a single Interlocked.CompareExchange,
+        // and both concurrent SetIfNotExistsAsync calls are held on a shared gate and released together
+        // so they genuinely race at that point instead of being serialized by task scheduling.
+        // This proves the provider funnels the whole "claim the key" decision through that one atomic
+        // call - and never falls back to a separate KeyExistsAsync check, which is exactly the race
+        // window the naive default IKyrolusCacheProvider.SetIfNotExistsAsync implementation has.
+        var muxer = Substitute.For<IConnectionMultiplexer>();
+        var db = Substitute.For<IDatabase>();
+        muxer.IsConnected.Returns(true);
+        muxer.GetDatabase(Arg.Any<int>(), Arg.Any<object?>()).Returns(db);
+        muxer.GetDatabase().Returns(db);
+
+        var gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var claimed = 0;
+
+        db.StringSetAsync(Arg.Any<RedisKey>(), Arg.Any<RedisValue>(), Arg.Any<TimeSpan?>(), Arg.Any<When>(), Arg.Any<CommandFlags>())
+            .Returns(async _ =>
+            {
+                await gate.Task;
+                return Interlocked.CompareExchange(ref claimed, 1, 0) == 0;
+            });
+
+        var deps = new KyrolusRedisCacheDependencies(
+            new KyrolusJsonCacheSerializer(),
+            new KyrolusCacheKeyFactory("test"),
+            new KyrolusRedisCacheOptions());
+
+        var provider = new KyrolusRedisCacheProvider(muxer, deps);
+
+        var first = provider.SetIfNotExistsAsync("idempotency:order-1", "first-caller");
+        var second = provider.SetIfNotExistsAsync("idempotency:order-1", "second-caller");
+
+        // Give both calls a chance to reach the gated StringSetAsync await before releasing them together.
+        await Task.Delay(20);
+        gate.SetResult(true);
+
+        var results = await Task.WhenAll(first, second);
+
+        results.Count(r => r).ShouldBe(1);
+        results.Count(r => !r).ShouldBe(1);
+        await db.DidNotReceive().KeyExistsAsync(Arg.Any<RedisKey>(), Arg.Any<CommandFlags>());
+    }
 }

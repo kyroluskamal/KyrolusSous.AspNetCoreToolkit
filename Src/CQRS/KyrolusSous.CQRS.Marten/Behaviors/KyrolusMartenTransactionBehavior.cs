@@ -9,7 +9,16 @@ namespace KyrolusSous.CQRS.Marten.Behaviors;
 /// <summary>
 /// Pipeline behavior automatically persisting atomic changes on Marten <see cref="IDocumentSession"/> after command execution.
 /// </summary>
-[PipelineOrder(-700)]
+/// <remarks>
+/// Order is -530, deliberately INNER of the DomainEventsDispatch(-650)/ReadModelProjection(-600)/
+/// LivePush(-550) cluster (lower number = outer). Those three behaviors run their post-`next()`
+/// side effects (dispatch/project/broadcast) only after control returns to them from whatever is
+/// nested inside — so Transaction must be the innermost of the group for its SaveChangesAsync to
+/// happen BEFORE those side effects fire, not after. With Transaction at -700 (outermost) those
+/// behaviors dispatched events/broadcasts before the session was ever flushed to Postgres, so a
+/// failed SaveChangesAsync could still leave subscribers having observed a write that never persisted.
+/// </remarks>
+[PipelineOrder(-530)]
 public sealed class KyrolusMartenTransactionBehavior<TRequest, TResponse>(
     IDocumentSession? session = null,
     ILogger<KyrolusMartenTransactionBehavior<TRequest, TResponse>>? logger = null)

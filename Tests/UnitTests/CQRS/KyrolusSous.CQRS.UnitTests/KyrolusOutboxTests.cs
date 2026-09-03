@@ -89,6 +89,6 @@ public class KyrolusOutboxTests
         var all = store.AllMessages.ToList();
         all[0].Status.ShouldBe(OutboxMessageStatus.Failed);
         all[0].Error.ShouldNotBeNull();
-        all[0].Error!.ShouldContain("Could not resolve event type");
+        all[0].Error!.ShouldContain("not in the outbox type registry's allow-list");
     }
 }

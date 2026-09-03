@@ -11,6 +11,11 @@ public sealed class GetSeekQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
 {
     public async Task<KyrolusSeekResult<TResponse>> Handle(GetSeekQuery<TResponse, TKey> query, CancellationToken cancellationToken)
     {
+        // Clamp caller-supplied PageSize so int.MaxValue (or negative) can't force the database to
+        // attempt to materialize an enormous or malformed result set. Mutated in place so every
+        // downstream Take(query.PageSize) and the private helpers below all see the clamped value.
+        query.PageSize = Math.Clamp(query.PageSize, 1, KyrolusPagingLimits.MaxPageSize);
+
         var seekProperties = query.SeekPropertyNames?.Where(static p => !string.IsNullOrWhiteSpace(p)).ToArray();
         if (seekProperties is null || seekProperties.Length == 0)
         {

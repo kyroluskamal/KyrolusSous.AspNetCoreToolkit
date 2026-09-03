@@ -101,4 +101,33 @@ public interface IKyrolusCacheProvider
     /// Asynchronously deletes a specific field from a Redis Hash map structure (HDEL).
     /// </summary>
     Task<bool> HashDeleteAsync(string cacheKey, string field, CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+    /// <summary>
+    /// Atomically stores <paramref name="value"/> under <paramref name="cacheKey"/> only if the key is
+    /// not already present, returning whether this call is the one that claimed it.
+    /// </summary>
+    /// <remarks>
+    /// Built for "claim before you execute" patterns such as idempotency keys and distributed locks,
+    /// where a plain <c>ExistsAsync</c> then <c>SetAsync</c> leaves a race window between two
+    /// concurrent callers that both observe "not present" and both proceed. The default
+    /// implementation here is that naive, non-atomic sequence - it is provided so every provider keeps
+    /// compiling without a breaking interface change, not because it is safe under real concurrency.
+    /// A provider backed by a store that supports a real atomic compare-and-set (Redis <c>SET NX</c>,
+    /// for example) should override this with that primitive instead of relying on the default.
+    /// </remarks>
+    /// <returns><see langword="true"/> if this call created the entry; <see langword="false"/> if the key already existed.</returns>
+    async Task<bool> SetIfNotExistsAsync<T>(
+        string cacheKey,
+        T value,
+        KyrolusCacheEntryOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (await ExistsAsync(cacheKey, cancellationToken).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        await SetAsync(cacheKey, value, options, cancellationToken).ConfigureAwait(false);
+        return true;
+    }
 }

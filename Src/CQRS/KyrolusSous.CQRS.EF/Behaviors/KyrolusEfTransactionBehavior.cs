@@ -9,7 +9,16 @@ namespace KyrolusSous.CQRS.EF.Behaviors;
 /// <summary>
 /// Pipeline behavior managing atomic EF Core transaction boundaries for commands.
 /// </summary>
-[PipelineOrder(-700)]
+/// <remarks>
+/// Order is -530, deliberately INNER of the DomainEventsDispatch(-650)/ReadModelProjection(-600)/
+/// LivePush(-550) cluster (lower number = outer). Those three behaviors run their post-`next()`
+/// side effects (dispatch/project/broadcast) only after control returns to them from whatever is
+/// nested inside — so Transaction must be the innermost of the group for its commit to happen
+/// BEFORE those side effects fire, not after. With Transaction at -700 (outermost) those behaviors
+/// dispatched events/broadcasts before the transaction actually committed, so a failed commit could
+/// still leave subscribers having observed a write that never persisted.
+/// </remarks>
+[PipelineOrder(-530)]
 public sealed class KyrolusEfTransactionBehavior<TRequest, TResponse, TDbContext>(
     TDbContext? dbContext = null,
     ILogger<KyrolusEfTransactionBehavior<TRequest, TResponse, TDbContext>>? logger = null)

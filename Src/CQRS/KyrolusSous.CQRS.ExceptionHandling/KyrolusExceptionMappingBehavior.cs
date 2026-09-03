@@ -3,7 +3,12 @@ using KyrolusSous.Mediator.Abstractions.Attributes;
 
 namespace KyrolusSous.CQRS.ExceptionHandling;
 
-[PipelineOrder(-2000)]
+// Must wrap OUTSIDE (more negative than) KyrolusRequestExceptionProcessorBehavior, which stays at
+// -2000 in KyrolusSous.Mediator.Runtime. That behavior runs its registered
+// IKyrolusRequestExceptionAction/IKyrolusRequestExceptionHandler implementations (logging,
+// alerting, recovery) first; only an exception neither of those recovers should ever reach this
+// CQRS-level exception-to-response mapping, as the true last line of defense.
+[PipelineOrder(-2100)]
 public sealed class KyrolusExceptionMappingBehavior<TRequest, TResponse>(
     IEnumerable<IKyrolusExceptionMapper<TResponse>>? mappers = null)
     : IKyrolusPipelineBehavior<TRequest, TResponse>

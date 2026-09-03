@@ -4,6 +4,22 @@ using System.Globalization;
 
 namespace KyrolusSous.CQRS.EF.Command.Bulk;
 
+/// <summary>
+/// Splits entities into inserts and updates by querying which keys already exist, then saves both in
+/// one <c>SaveChangesAsync</c> call.
+/// </summary>
+/// <remarks>
+/// This is a check-then-act upsert, not a database-native <c>INSERT ... ON CONFLICT</c>/<c>MERGE</c>:
+/// the "does this key already exist" query and the eventual insert are not atomic. Two concurrent
+/// upserts for the same new key can both see "not present" and both attempt to insert it - the
+/// database's unique constraint (on whatever key column(s) <see cref="BulkUpsertCommand{TResponse, TKey}.KeyPropertyNames"/>
+/// maps to) then rejects the later of the two writes, and this handler surfaces that as
+/// <see cref="DbUpdateException"/> rather than silently converting it into an update. The whole
+/// command still runs inside the enclosing transaction behavior's transaction, so a conflict here
+/// rolls the entire command back cleanly - it cannot leave a partial write - but the caller does need
+/// to be prepared to retry a genuinely concurrent upsert of the same key, the same way any unique
+/// constraint violation would need retrying.
+/// </remarks>
 public sealed class BulkUpsertCommandHandler<TDbcontext, TResponse, TKey>(IKyrolusUnitOfWork unitOfWork)
     : IKyrolusCommandHandler<BulkUpsertCommand<TResponse, TKey>, IEnumerable<TResponse>>
     where TDbcontext : DbContext
@@ -48,7 +64,23 @@ public sealed class BulkUpsertCommandHandler<TDbcontext, TResponse, TKey>(IKyrol
             await repo.UpdateRangeAsync(toUpdate, cancellationToken).ConfigureAwait(false);
         }
 
-        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (toAdd.Count > 0)
+        {
+            // Most likely cause, given this handler already checked "does this key exist" before
+            // inserting: a concurrent upsert inserted the same key in between that check and this
+            // save. Re-raised with an explicit message rather than left as a raw constraint-violation
+            // exception, so this doesn't read as a generic/unexplained EF failure.
+            throw new InvalidOperationException(
+                "[Kyrolus CQRS] Bulk upsert failed to save - most likely because a concurrent upsert " +
+                "inserted one of the same keys after this command checked for their existence. Retry " +
+                "the command; the retry will see the now-existing rows and update them instead.",
+                ex);
+        }
+
         return entities;
     }
 

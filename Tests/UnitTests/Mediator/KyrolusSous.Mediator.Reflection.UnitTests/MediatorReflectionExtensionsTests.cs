@@ -356,5 +356,78 @@ public class MediatorReflectionExtensionsTests
         // Act & Assert (DuplicateSelfQueryHandler implements IKyrolusQueryHandler twice via hierarchy, should not throw)
         serviceCollection.AddKyrolusMediatorFromAssemblies(c => c.ThrowOnDuplicateRequestHandlers = false, assemblies);
     }
+
+    [Fact(DisplayName = "AddKyrolusMediatorReflection should still detect two open generic handlers claiming the exact same shape")]
+    public void AddKyrolusMediatorReflection_ShouldStillDetect_TwoOpenGenericHandlersClaimingTheSameShape()
+    {
+        // Arrange - exercises RegisterHandler directly, with two unrelated generic probe types
+        // standing in for two different handler classes that both directly pass their own type
+        // parameters through to the same two-argument interface shape. Neither probe type actually
+        // implements IKyrolusRequestHandler<,> (the "iface" argument below is built by hand to
+        // simulate what ImplementedInterfaces would report if they did), so - unlike a real fixture
+        // declared at file scope - they are invisible to every other test's whole-assembly scan.
+        var serviceCollection = new ServiceCollection();
+        var claimed = new Dictionary<string, Type>(StringComparer.Ordinal);
+        var registerHandler = typeof(MediatorReflectionExtensions).GetMethod("RegisterHandler", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var configuration = new KyrolusMediatorConfiguration { ThrowOnDuplicateRequestHandlers = true };
+
+        var firstImpl = typeof(ShapeProbeA<,>);
+        var firstIface = typeof(IKyrolusRequestHandler<,>).MakeGenericType(firstImpl.GetGenericArguments()[0], firstImpl.GetGenericArguments()[1]);
+        registerHandler.Invoke(null, [serviceCollection, firstIface, typeof(IKyrolusRequestHandler<,>), firstImpl, configuration, claimed]);
+
+        var secondImpl = typeof(ShapeProbeB<,>);
+        var secondIface = typeof(IKyrolusRequestHandler<,>).MakeGenericType(secondImpl.GetGenericArguments()[0], secondImpl.GetGenericArguments()[1]);
+
+        // Act & Assert - a second, unrelated type with the exact same direct-passthrough shape must
+        // be rejected, proving the shape-keyed duplicate check (which replaced keying on the bare
+        // handler interface alone) still catches a genuine duplicate and not only avoids false
+        // positives.
+        var exception = Should.Throw<TargetInvocationException>(() =>
+            registerHandler.Invoke(null, [serviceCollection, secondIface, typeof(IKyrolusRequestHandler<,>), secondImpl, configuration, claimed]));
+
+        exception.InnerException.ShouldBeOfType<InvalidOperationException>();
+        exception.InnerException!.Message.ShouldContain("Two generic handlers are registered for the same request shape");
+    }
+    #endregion
+
+    #region Arity-guard tests
+    [Fact(DisplayName = "Scanning an open-generic handler whose own type-parameter count does not match its interface throws a clear, early error")]
+    public void RequireMatchingArity_ThrowsClearError_WhenImplementationArityDoesNotMatchInterfaceArity()
+    {
+        // List<> stands in for any open-generic handler that only declares one type parameter while
+        // wrapping/fixing its way into a two-argument interface shape - the exact pattern
+        // Microsoft.Extensions.DependencyInjection's container cannot close at all (confirmed
+        // empirically: BuildServiceProvider() itself throws "Arity of open generic service type ...
+        // does not equal ..."). RequireMatchingArity exists so this fails immediately, at scan time,
+        // with a message that names the actual cause, instead of surfacing later as a confusing
+        // container error nowhere near the handler that caused it.
+        var ifaceDef = typeof(IKyrolusRequestHandler<,>);
+        var mismatchedImplType = typeof(List<>); // arity 1, unrelated to the interface - stands in for any wrapped-parameter handler shape
+
+        var exception = Should.Throw<InvalidOperationException>(
+            () => MediatorReflectionExtensions.RequireMatchingArity(ifaceDef, mismatchedImplType));
+
+        exception.Message.ShouldContain("declares 1 type parameter");
+        exception.Message.ShouldContain("needs 2");
+    }
+
+    [Fact(DisplayName = "RequireMatchingArity does not throw when the implementation's arity matches its interface")]
+    public void RequireMatchingArity_DoesNotThrow_WhenArityMatches()
+    {
+        Should.NotThrow(() => MediatorReflectionExtensions.RequireMatchingArity(
+            typeof(IKyrolusRequestHandler<,>),
+            typeof(OpenGenericRequestHandler<,>)));
+    }
     #endregion
 }
+
+/// <summary>
+/// Generic-shape probes for <see cref="MediatorReflectionExtensionsTests.AddKyrolusMediatorReflection_ShouldStillDetect_TwoOpenGenericHandlersClaimingTheSameShape"/>.
+/// Deliberately do not implement <see cref="IKyrolusRequestHandler{TRequest, TResponse}"/> - the test
+/// builds that relationship by hand via <c>MakeGenericType</c> - so a real whole-assembly scan (every
+/// other test in this file performs one) never touches them.
+/// </summary>
+file class ShapeProbeA<TRequest, TResponse> where TRequest : IKyrolusRequest<TResponse>;
+
+/// <inheritdoc cref="ShapeProbeA{TRequest, TResponse}"/>
+file class ShapeProbeB<TRequest, TResponse> where TRequest : IKyrolusRequest<TResponse>;

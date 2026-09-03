@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-
 namespace KyrolusSous.Localization.Abstractions;
 
 /// <summary>

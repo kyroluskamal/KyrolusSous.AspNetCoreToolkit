@@ -4,7 +4,10 @@ using KyrolusSous.Validation.Abstractions;
 
 namespace KyrolusSous.CQRS.Validation;
 
-[PipelineOrder(-500)]
+// Runs right after Authorization/PreProcessor (-1000) and before Performance(-900), Audit(-850),
+// Idempotency(-800) and Throttling(-750), so a malformed request is rejected before it is audited,
+// consumes an idempotency slot, or is throttle-counted as if it were a legitimate attempt.
+[PipelineOrder(-950)]
 public sealed class KyrolusValidationBehavior<TRequest, TResponse>(
     IEnumerable<IKyrolusRequestValidator<TRequest>>? validators = null,
     IKyrolusValidationEngine? engine = null)

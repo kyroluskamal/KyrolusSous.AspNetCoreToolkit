@@ -36,11 +36,28 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// Registers the CQRS Security &amp; Authorization pipeline behavior.
     /// </summary>
+    /// <remarks>
+    /// This overload does not register an <see cref="Security.IKyrolusAuthorizationPolicyEvaluator"/>.
+    /// A request that names a <c>Policy</c> will fail closed with a configuration error until one is
+    /// registered - via the other overload, or directly with the container. Roles and permissions work
+    /// without it.
+    /// </remarks>
     public static IServiceCollection AddKyrolusCqrsAuthorization(this IServiceCollection services)
     {
         services.TryAddScoped<Security.IKyrolusCurrentUserContext, Security.KyrolusDefaultCurrentUserContext>();
         services.AddTransient(typeof(IKyrolusPipelineBehavior<,>), typeof(KyrolusAuthorizationBehavior<,>));
         return services;
+    }
+
+    /// <summary>
+    /// Registers the CQRS Security &amp; Authorization pipeline behavior together with a named-policy
+    /// evaluator (for example, a bridge to ASP.NET Core's <c>IAuthorizationService</c>).
+    /// </summary>
+    public static IServiceCollection AddKyrolusCqrsAuthorization<TPolicyEvaluator>(this IServiceCollection services)
+        where TPolicyEvaluator : class, Security.IKyrolusAuthorizationPolicyEvaluator
+    {
+        services.TryAddScoped<Security.IKyrolusAuthorizationPolicyEvaluator, TPolicyEvaluator>();
+        return services.AddKyrolusCqrsAuthorization();
     }
 
     /// <summary>
@@ -102,6 +119,18 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddKyrolusCqrsLivePush(this IServiceCollection services)
         => services.AddKyrolusCqrsLivePush<LivePush.LoggerLivePushPublisher>();
+
+    /// <summary>
+    /// Registers the CQRS Multi-Tenancy guard, which rejects a request implementing
+    /// <see cref="Interfaces.ITenantScopedRequest"/> whose <c>TenantId</c> does not match the current
+    /// user's tenant.
+    /// </summary>
+    public static IServiceCollection AddKyrolusCqrsTenantScoping(this IServiceCollection services)
+    {
+        services.TryAddScoped<Security.IKyrolusCurrentUserContext, Security.KyrolusDefaultCurrentUserContext>();
+        services.AddTransient(typeof(IKyrolusPipelineBehavior<,>), typeof(KyrolusTenantScopingBehavior<,>));
+        return services;
+    }
 }
 
 

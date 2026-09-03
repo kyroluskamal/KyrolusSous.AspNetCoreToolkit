@@ -12,6 +12,11 @@ public sealed class GetPagedQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUn
 {
     public async Task<KyrolusPagedResult<TResponse>> Handle(GetPagedQuery<TResponse, TKey> query, CancellationToken cancellationToken)
     {
+        // Clamp caller-supplied paging so PageSize = int.MaxValue (or negative) can't force the
+        // database to attempt to materialize an enormous or malformed result set.
+        var pageNumber = Math.Max(1, query.PageNumber);
+        var pageSize = Math.Clamp(query.PageSize, 1, KyrolusPagingLimits.MaxPageSize);
+
         var repo = unitOfWork.GetRepository<IKyrolusRepositoryAsync<TDbcontext, TResponse, TKey>>();
         var includes = KyrolusIncludeMerge.MergeExpressions(query.IncludeProperties, query.IncludeGraph, query.IncludeExpressions) ?? [];
         if (query.Selector is not null)
@@ -26,10 +31,10 @@ public sealed class GetPagedQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUn
                     Selector: query.Selector,
                     Includes: includes
                 ),
-                query.PageNumber,
-                query.PageSize);
+                pageNumber,
+                pageSize);
             var (projectedItems, projectedTotal) = await repo.GetPagedAsync(spec, cancellationToken);
-            return new KyrolusPagedResult<TResponse>(projectedItems, projectedTotal, query.PageNumber, query.PageSize);
+            return new KyrolusPagedResult<TResponse>(projectedItems, projectedTotal, pageNumber, pageSize);
         }
 
         var specification = new KyrolusEfPagedQuerySpecification<TResponse>(
@@ -42,8 +47,8 @@ public sealed class GetPagedQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUn
                     Selector: query.Selector,
                     Includes: includes
                 ),
-            query.PageNumber,
-            query.PageSize);
+            pageNumber,
+            pageSize);
 
         var (items, total) = await repo.GetPagedWithDefaultsAsync(
             specification,
@@ -54,6 +59,6 @@ public sealed class GetPagedQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUn
             cancellationToken: cancellationToken,
             includeExpressions: includes);
 
-        return new KyrolusPagedResult<TResponse>(items, total, query.PageNumber, query.PageSize);
+        return new KyrolusPagedResult<TResponse>(items, total, pageNumber, pageSize);
     }
 }

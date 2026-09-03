@@ -1,8 +1,6 @@
-using KyrolusSous.Caching.Abstractions;
 using KyrolusSous.CQRS.Abstractions.Interfaces;
 using KyrolusSous.CQRS.Caching;
 using KyrolusSous.Mediator.Abstractions.Interfaces;
-using NSubstitute;
 using Shouldly;
 using Xunit;
 
@@ -15,18 +13,17 @@ public sealed class KyrolusIdempotencyBehaviorTests
         public TimeSpan? IdempotencyTtl => TimeSpan.FromMinutes(30);
     }
 
+    public sealed record VoidIdempotentCommand(string IdempotencyKey) : IKyrolusCommand, IIdempotentCommand;
+
     [Fact(DisplayName = "Idempotency: First execution executes handler and caches result")]
     public async Task Idempotency_FirstCall_ExecutesAndCachesResult()
     {
-        var cache = Substitute.For<IKyrolusCacheProvider>();
-        cache.GetAsync<string>(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<string?>(null));
-
+        var cache = new FakeCacheProvider();
         var behavior = new KyrolusIdempotencyBehavior<CreateOrderCommand, string>(cache);
         var command = new CreateOrderCommand("ord-1", 100m, "key-123");
 
         var executionCount = 0;
-        RequestHandlerDelegate<string> next = (ct) =>
+        RequestHandlerDelegate<string> next = _ =>
         {
             executionCount++;
             return Task.FromResult("OrderCreated:ord-1");
@@ -36,33 +33,97 @@ public sealed class KyrolusIdempotencyBehaviorTests
 
         result.ShouldBe("OrderCreated:ord-1");
         executionCount.ShouldBe(1);
-        await cache.Received(1).SetAsync(
-            Arg.Is<string>(k => k.Contains("key-123")),
-            "OrderCreated:ord-1",
-            Arg.Is<KyrolusCacheEntryOptions>(o => o.AbsoluteExpirationRelativeToNow == TimeSpan.FromMinutes(30)),
-            Arg.Any<CancellationToken>());
     }
 
     [Fact(DisplayName = "Idempotency: Second execution with same key returns cached result without running handler")]
     public async Task Idempotency_SecondCall_ReturnsCachedWithoutHandler()
     {
-        var cache = Substitute.For<IKyrolusCacheProvider>();
-        cache.GetAsync<string>(Arg.Is<string>(k => k.Contains("key-123")), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<string?>("OrderCreated:ord-1"));
-
+        var cache = new FakeCacheProvider();
         var behavior = new KyrolusIdempotencyBehavior<CreateOrderCommand, string>(cache);
         var command = new CreateOrderCommand("ord-1", 100m, "key-123");
 
         var executionCount = 0;
-        RequestHandlerDelegate<string> next = (ct) =>
+        RequestHandlerDelegate<string> next = _ =>
+        {
+            executionCount++;
+            return Task.FromResult("OrderCreated:ord-1");
+        };
+
+        var first = await behavior.Handle(command, next, CancellationToken.None);
+        var second = await behavior.Handle(command, next, CancellationToken.None);
+
+        first.ShouldBe("OrderCreated:ord-1");
+        second.ShouldBe("OrderCreated:ord-1");
+        executionCount.ShouldBe(1);
+    }
+
+    [Fact(DisplayName = "Idempotency: A key already claimed by an in-flight execution is rejected, not re-run")]
+    public async Task Idempotency_ConcurrentClaim_ThrowsInsteadOfDoubleExecuting()
+    {
+        var cache = new FakeCacheProvider();
+        var behavior = new KyrolusIdempotencyBehavior<CreateOrderCommand, string>(cache);
+        var command = new CreateOrderCommand("ord-1", 100m, "key-123");
+
+        // Simulate another in-flight caller: the key is claimed (SetIfNotExistsAsync already
+        // succeeded for them) but they have not finished, so no completed record exists yet.
+        cache.Seed("idempotency:CreateOrderCommand:key-123", new KyrolusIdempotencyRecord<string> { Completed = false });
+
+        var executionCount = 0;
+        RequestHandlerDelegate<string> next = _ =>
         {
             executionCount++;
             return Task.FromResult("ShouldNotExecute");
         };
 
-        var result = await behavior.Handle(command, next, CancellationToken.None);
+        await Should.ThrowAsync<KyrolusIdempotencyConflictException>(
+            () => behavior.Handle(command, next, CancellationToken.None));
+
+        executionCount.ShouldBe(0);
+    }
+
+    [Fact(DisplayName = "Idempotency: A failed first attempt releases the claim so a retry can proceed")]
+    public async Task Idempotency_FailedFirstAttempt_ReleasesClaimForRetry()
+    {
+        var cache = new FakeCacheProvider();
+        var behavior = new KyrolusIdempotencyBehavior<CreateOrderCommand, string>(cache);
+        var command = new CreateOrderCommand("ord-1", 100m, "key-123");
+
+        RequestHandlerDelegate<string> failing = _ => throw new InvalidOperationException("boom");
+        await Should.ThrowAsync<InvalidOperationException>(() => behavior.Handle(command, failing, CancellationToken.None));
+
+        var executionCount = 0;
+        RequestHandlerDelegate<string> succeeding = _ =>
+        {
+            executionCount++;
+            return Task.FromResult("OrderCreated:ord-1");
+        };
+        var result = await behavior.Handle(command, succeeding, CancellationToken.None);
 
         result.ShouldBe("OrderCreated:ord-1");
-        executionCount.ShouldBe(0);
+        executionCount.ShouldBe(1);
+    }
+
+    [Fact(DisplayName = "Idempotency: works for commands with no response value (Unit), not just typed responses")]
+    public async Task Idempotency_UnitResponse_StillDedupes()
+    {
+        // Regression test: Unit's equality always returns true (all instances are "equal to
+        // default"), so a naive "was something cached?" check via EqualityComparer<Unit>.Equals
+        // could never tell "nothing cached yet" apart from "Unit.Value was cached" - the envelope
+        // (KyrolusIdempotencyRecord.Completed) is what makes this distinguishable.
+        var cache = new FakeCacheProvider();
+        var behavior = new KyrolusIdempotencyBehavior<VoidIdempotentCommand, Unit>(cache);
+        var command = new VoidIdempotentCommand("key-456");
+
+        var executionCount = 0;
+        RequestHandlerDelegate<Unit> next = _ =>
+        {
+            executionCount++;
+            return Task.FromResult(Unit.Value);
+        };
+
+        await behavior.Handle(command, next, CancellationToken.None);
+        await behavior.Handle(command, next, CancellationToken.None);
+
+        executionCount.ShouldBe(1);
     }
 }

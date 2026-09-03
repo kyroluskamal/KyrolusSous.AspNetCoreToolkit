@@ -261,7 +261,7 @@ public partial class KyrolusJsonLocalizer : IKyrolusLocalizer, IDisposable
 
     /// <inheritdoc />
     public IEnumerable<string> GetAvailableCultures()
-        => _cultureTranslations.Keys.Where(k => k.Length > 0).ToArray();
+        => [.. _cultureTranslations.Keys.Where(k => k.Length > 0)];
 
     /// <summary>Stops watching the directory (a no-op when <see cref="KyrolusJsonLocalizationOptions.EnableHotReload"/> was never enabled).</summary>
     public void Dispose()

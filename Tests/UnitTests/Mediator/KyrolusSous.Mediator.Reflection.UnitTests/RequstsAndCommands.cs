@@ -190,6 +190,7 @@ internal class OpenGenericNotificationHandler<TNotification> : IKyrolusNotificat
     public Task Handle(TNotification notification, CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
+
 internal interface IBaseTestQueryHandler : IKyrolusQueryHandler<TestQuery, string> { }
 
 internal class DuplicateSelfQueryHandler : IBaseTestQueryHandler, IKyrolusQueryHandler<TestQuery, string>

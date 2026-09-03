@@ -6,6 +6,7 @@ using Xunit;
 
 namespace KyrolusSous.CQRS.UnitTests;
 
+[Collection("ThrottlingSemaphores")]
 public sealed class KyrolusThrottlingBehaviorTests
 {
     public sealed record HeavyReportQuery(string Key) : IThrottledRequest, IKyrolusQuery<string>

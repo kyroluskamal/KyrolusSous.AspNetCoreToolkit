@@ -12,14 +12,16 @@ namespace KyrolusSous.CQRS.Abstractions.Behaviors;
 /// <summary>
 /// Pipeline behavior enforcing security and authorization rules for CQRS commands and queries.
 /// </summary>
-[PipelineOrder(-1000)]
+[PipelineOrder(-1050)]
 public sealed class KyrolusAuthorizationBehavior<TRequest, TResponse>(
     IKyrolusCurrentUserContext? userContext = null,
+    IKyrolusAuthorizationPolicyEvaluator? policyEvaluator = null,
     ILogger<KyrolusAuthorizationBehavior<TRequest, TResponse>>? logger = null)
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
     private static readonly ConcurrentDictionary<Type, IReadOnlyList<KyrolusAuthorizeAttribute>> s_cachedAttributes = new();
     private readonly IKyrolusCurrentUserContext? _userContext = userContext;
+    private readonly IKyrolusAuthorizationPolicyEvaluator? _policyEvaluator = policyEvaluator;
     private readonly ILogger? _logger = logger;
 
     public async Task<TResponse> Handle(
@@ -42,11 +44,11 @@ public sealed class KyrolusAuthorizationBehavior<TRequest, TResponse>(
 
         var context = _userContext ?? new KyrolusDefaultCurrentUserContext();
         ValidateAuthentication(context);
-        ValidateAttributeAuthorization(authorizeAttributes, context);
+        await ValidateAttributeAuthorizationAsync(authorizeAttributes, context, request!, cancellationToken).ConfigureAwait(false);
 
         if (request is IAuthorizedRequest authorizedRequest)
         {
-            ValidateProgrammaticAuthorization(authorizedRequest, context);
+            await ValidateProgrammaticAuthorizationAsync(authorizedRequest, context, request!, cancellationToken).ConfigureAwait(false);
         }
 
         return await next(cancellationToken).ConfigureAwait(false);
@@ -61,14 +63,53 @@ public sealed class KyrolusAuthorizationBehavior<TRequest, TResponse>(
         }
     }
 
-    private void ValidateAttributeAuthorization(
+    private async Task ValidateAttributeAuthorizationAsync(
         IReadOnlyList<KyrolusAuthorizeAttribute> attributes,
-        IKyrolusCurrentUserContext context)
+        IKyrolusCurrentUserContext context,
+        object request,
+        CancellationToken cancellationToken)
     {
         foreach (var attr in attributes)
         {
             ValidateRoles(attr.Roles, context);
             ValidatePermissions(attr.Permissions, context);
+            await ValidatePolicyAsync(attr.Policy, context, request, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Evaluates a named policy via <see cref="IKyrolusAuthorizationPolicyEvaluator"/>.
+    /// </summary>
+    /// <remarks>
+    /// Fails closed: a request naming a policy with no evaluator registered throws immediately rather
+    /// than silently letting the request through, because <c>Policy</c>/<c>RequiredPolicy</c> being
+    /// declared but never checked used to be exactly that - a silent authorization bypass for anyone
+    /// who reached for the policy option instead of roles/permissions.
+    /// </remarks>
+    private async Task ValidatePolicyAsync(string? policyName, IKyrolusCurrentUserContext context, object request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(policyName)) return;
+
+        if (_policyEvaluator is null)
+        {
+            throw new InvalidOperationException(
+                $"[Kyrolus CQRS Security] '{typeof(TRequest).Name}' requires policy '{policyName}', but no " +
+                $"{nameof(IKyrolusAuthorizationPolicyEvaluator)} is registered. Register one (for example a " +
+                "bridge to ASP.NET Core's IAuthorizationService) before using policy-based authorization - " +
+                "a request naming a policy must never execute without that policy actually being evaluated.");
+        }
+
+        var satisfied = await _policyEvaluator.EvaluateAsync(policyName, context, request, cancellationToken).ConfigureAwait(false);
+        if (!satisfied)
+        {
+            _logger?.LogWarning(
+                "[Kyrolus CQRS Security] User '{UserId}' does not satisfy policy '{Policy}' for {RequestType}",
+                context.UserId,
+                policyName,
+                typeof(TRequest).Name);
+            throw new KyrolusSecurityException(
+                $"User '{context.UserId}' does not satisfy the required policy '{policyName}'.",
+                policyName);
         }
     }
 
@@ -111,7 +152,11 @@ public sealed class KyrolusAuthorizationBehavior<TRequest, TResponse>(
         }
     }
 
-    private static void ValidateProgrammaticAuthorization(IAuthorizedRequest request, IKyrolusCurrentUserContext context)
+    private async Task ValidateProgrammaticAuthorizationAsync(
+        IAuthorizedRequest request,
+        IKyrolusCurrentUserContext context,
+        object rawRequest,
+        CancellationToken cancellationToken)
     {
         if (request.RequiredRoles is { Count: > 0 } roles && !roles.Any(context.IsInRole))
         {
@@ -129,5 +174,7 @@ public sealed class KyrolusAuthorizationBehavior<TRequest, TResponse>(
                     missingPermission);
             }
         }
+
+        await ValidatePolicyAsync(request.RequiredPolicy, context, rawRequest, cancellationToken).ConfigureAwait(false);
     }
 }
