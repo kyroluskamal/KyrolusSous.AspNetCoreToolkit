@@ -70,10 +70,17 @@ internal sealed class ReflectionNotificationDispatchSource : IKyrolusNotificatio
         var handlerInterfaceType = typeof(IKyrolusNotificationHandler<>).MakeGenericType(notificationType);
         var compatHandlerInterfaceType = typeof(KyrolusSous.Mediator.Abstractions.Compatibility.INotificationHandler<>).MakeGenericType(notificationType);
 
+        // Deduped by concrete runtime type rather than reference: a handler registered under both
+        // IKyrolusNotificationHandler<> and the compat INotificationHandler<> (whether by manual
+        // registration or, formerly, by scanning - see the remark on s_multiHandlerInterfaces)
+        // resolves to two distinct instances, and reference-based Distinct() cannot tell they are
+        // the same logical handler. This is defense in depth: scanning no longer produces the
+        // double registration, but a consumer registering the same class under both by hand still
+        // should not run it twice.
         var handlers = serviceProvider.GetServices(handlerInterfaceType)
             .Concat(serviceProvider.GetServices(compatHandlerInterfaceType))
             .Where(handler => handler is not null)
-            .Distinct();
+            .DistinctBy(handler => handler!.GetType());
 
         return
         [

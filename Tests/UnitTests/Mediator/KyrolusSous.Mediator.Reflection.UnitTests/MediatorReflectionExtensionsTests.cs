@@ -182,6 +182,30 @@ public class MediatorReflectionExtensionsTests
         notificationHandlers.ShouldContain(h => h.GetType() == typeof(TestNotificationHandler1));
         notificationHandlers.ShouldContain(h => h.GetType() == typeof(TestNotificationHandler2));
     }
+
+    [Fact(DisplayName = "A notification handler discovered by scanning that implements only the MediatR-compat INotificationHandler<> runs exactly once, not once per interface")]
+    public async Task AddKyrolusMediatorReflection_PortedNotificationHandler_RunsExactlyOnce()
+    {
+        // Arrange
+        var counter = new PortedScannedNotificationHandler.InvocationCounter();
+        var serviceCollection = new ServiceCollection();
+        var assembly = typeof(MediatorReflectionExtensionsTests).Assembly;
+        serviceCollection.AddSingleton(counter);
+        serviceCollection.AddKyrolusMediator(configuration =>
+        {
+            configuration.ThrowOnDuplicateRequestHandlers = false;
+            configuration.RegisterServicesFromAssemblies(assembly);
+        });
+        serviceCollection.AddKyrolusMediatorReflection();
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+        var publisher = serviceProvider.GetRequiredService<IKyrolusMediatorPublisher>();
+
+        // Act
+        await publisher.PublishAsync(new PortedScannedNotification("hi"));
+
+        // Assert
+        counter.Count.ShouldBe(1);
+    }
     #endregion
 
     #region  AddKyrolusMediatorFromAssemblies

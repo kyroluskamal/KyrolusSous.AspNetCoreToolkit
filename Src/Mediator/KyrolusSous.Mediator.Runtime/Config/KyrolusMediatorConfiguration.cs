@@ -10,7 +10,47 @@ public enum NotificationPublishMode
     Parallel = 0,
 
     /// <summary>Handlers run one after another. Slower, but safe to share a scoped resource.</summary>
-    Sequential = 1
+    Sequential = 1,
+
+    /// <summary>
+    /// Handlers run in parallel, capped at <see cref="KyrolusMediatorConfiguration.NotificationPublishMaxDegreeOfParallelism"/>
+    /// running at once. Use this when a notification can fan out to enough handlers that
+    /// unbounded parallelism would exhaust a connection pool or the thread pool.
+    /// </summary>
+    BoundedParallel = 2
+}
+
+/// <summary>
+/// One user-supplied pipeline behavior registration: which service interface it answers to, and
+/// which concrete type implements it.
+/// </summary>
+/// <remarks>
+/// A dedicated type rather than a plain <c>(Type Service, Type Implementation)</c> tuple. A tuple
+/// field cannot carry <see cref="DynamicallyAccessedMembersAttribute"/>, and
+/// <see cref="KyrolusMediatorConfiguration.AddBehavior(Type)"/> and
+/// <see cref="KyrolusMediatorConfiguration.AddOpenBehavior"/> both receive that annotation on their
+/// own <c>Type</c> parameter - it tells the trimmer the type's public constructors must survive,
+/// because <see cref="ServiceDescriptor"/> needs them to build the behavior later. Storing the
+/// value in a tuple and reading it back out - which is exactly what
+/// <c>MediatorExtensions.RegisterConfiguredBehaviors</c> does - silently drops that guarantee, and
+/// a NativeAOT publish (not the per-project build-time analyzer, which cannot see that far) reports
+/// it as IL2077. <see cref="Implementation"/> carries the same annotation directly, so the
+/// guarantee survives the round trip.
+/// </remarks>
+internal readonly struct BehaviorRegistration
+{
+    public BehaviorRegistration(
+        Type service,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type implementation)
+    {
+        Service = service;
+        Implementation = implementation;
+    }
+
+    public Type Service { get; }
+
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)]
+    public Type Implementation { get; }
 }
 
 /// <summary>
@@ -27,10 +67,10 @@ public sealed class KyrolusMediatorConfiguration
         DynamicallyAccessedMemberTypes.Interfaces | DynamicallyAccessedMemberTypes.PublicConstructors;
 
     internal List<Assembly> AssembliesToScan { get; } = [];
-    internal List<(Type Service, Type Implementation)> ClosedBehaviors { get; } = [];
-    internal List<(Type Service, Type Implementation)> OpenBehaviors { get; } = [];
-    internal List<(Type Service, Type Implementation)> ClosedStreamBehaviors { get; } = [];
-    internal List<(Type Service, Type Implementation)> OpenStreamBehaviors { get; } = [];
+    internal List<BehaviorRegistration> ClosedBehaviors { get; } = [];
+    internal List<BehaviorRegistration> OpenBehaviors { get; } = [];
+    internal List<BehaviorRegistration> ClosedStreamBehaviors { get; } = [];
+    internal List<BehaviorRegistration> OpenStreamBehaviors { get; } = [];
 
     /// <summary>
     /// Lifetime used for handlers, behaviors and processors discovered by assembly scanning.
@@ -48,6 +88,13 @@ public sealed class KyrolusMediatorConfiguration
     /// <see cref="NotificationPublishMode.Parallel"/>.
     /// </summary>
     public NotificationPublishMode NotificationPublishMode { get; set; } = NotificationPublishMode.Parallel;
+
+    /// <summary>
+    /// The most notification handlers allowed to run at once when
+    /// <see cref="NotificationPublishMode"/> is <see cref="NotificationPublishMode.BoundedParallel"/>.
+    /// Required in that mode; ignored otherwise.
+    /// </summary>
+    public int? NotificationPublishMaxDegreeOfParallelism { get; set; }
 
     /// <summary>
     /// When two handlers claim the same request, throw instead of silently keeping the first one.
@@ -112,12 +159,12 @@ public sealed class KyrolusMediatorConfiguration
             var definition = iface.GetGenericTypeDefinition();
             if (definition == typeof(IKyrolusPipelineBehavior<,>))
             {
-                ClosedBehaviors.Add((iface, implementationType));
+                ClosedBehaviors.Add(new BehaviorRegistration(iface, implementationType));
                 added = true;
             }
             else if (definition == typeof(IKyrolusStreamPipelineBehavior<,>))
             {
-                ClosedStreamBehaviors.Add((iface, implementationType));
+                ClosedStreamBehaviors.Add(new BehaviorRegistration(iface, implementationType));
                 added = true;
             }
         }
@@ -152,13 +199,13 @@ public sealed class KyrolusMediatorConfiguration
 
         if (Array.IndexOf(implemented, typeof(IKyrolusPipelineBehavior<,>)) >= 0)
         {
-            OpenBehaviors.Add((typeof(IKyrolusPipelineBehavior<,>), openBehaviorType));
+            OpenBehaviors.Add(new BehaviorRegistration(typeof(IKyrolusPipelineBehavior<,>), openBehaviorType));
             return this;
         }
 
         if (Array.IndexOf(implemented, typeof(IKyrolusStreamPipelineBehavior<,>)) >= 0)
         {
-            OpenStreamBehaviors.Add((typeof(IKyrolusStreamPipelineBehavior<,>), openBehaviorType));
+            OpenStreamBehaviors.Add(new BehaviorRegistration(typeof(IKyrolusStreamPipelineBehavior<,>), openBehaviorType));
             return this;
         }
 
@@ -166,4 +213,22 @@ public sealed class KyrolusMediatorConfiguration
             $"[KyrolusMediator] {openBehaviorType.FullName} implements neither IKyrolusPipelineBehavior<,> nor IKyrolusStreamPipelineBehavior<,>.",
             nameof(openBehaviorType));
     }
+
+    /// <summary>
+    /// Enables <c>kyrolus.mediator.*</c> metrics (request count and duration, via <see cref="System.Diagnostics.Metrics"/>)
+    /// for every request dispatched through the pipeline. Equivalent to
+    /// <c>AddOpenBehavior(typeof(KyrolusMediatorMetricsBehavior&lt;,&gt;))</c> - see that type for what
+    /// gets recorded.
+    /// </summary>
+    public KyrolusMediatorConfiguration AddKyrolusMediatorMetrics()
+        => AddOpenBehavior(typeof(KyrolusMediatorMetricsBehavior<,>));
+
+    /// <summary>
+    /// Logs the start, completion and failure of every request dispatched through the pipeline,
+    /// via the standard <see cref="Microsoft.Extensions.Logging"/> API. Equivalent to
+    /// <c>AddOpenBehavior(typeof(KyrolusMediatorLoggingBehavior&lt;,&gt;))</c> - see that type for
+    /// what gets logged. Not registered by default.
+    /// </summary>
+    public KyrolusMediatorConfiguration AddKyrolusMediatorLogging()
+        => AddOpenBehavior(typeof(KyrolusMediatorLoggingBehavior<,>));
 }

@@ -63,9 +63,9 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Marten.Runtime - FullPipeline | integration | 235 | postgres, redis | yes |
 | Marten.Runtime - Unit | unit | 28 | none | yes |
 | Logging | unit | 59 | none | yes |
-| Mediator.Runtime - Unit | unit | 105 | none | yes |
-| Mediator.Generator - Unit | unit | 14 | none | yes |
-| Mediator.Reflection - Unit | unit | 52 | none | yes |
+| Mediator.Runtime - Unit | unit | 124 | none | yes |
+| Mediator.Generator - Unit | unit | 28 | none | yes |
+| Mediator.Reflection - Unit | unit | 53 | none | yes |
 | Validation.Runtime - Unit | unit | 96 | none | yes |
 | Validation.Fluent - Unit | unit | 30 | none | yes |
 | Validation.FluentValidation - Unit | unit | 18 | none | yes |
@@ -106,7 +106,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | DataProtection - Unit | unit | 33 | none | yes |
 | Payments - Unit | unit | 57 | none | yes |
 | Localization - Unit | unit | 53 | none | yes |
-| **Total** | | **2476** | | |
+| **Total** | | **2510** | | |
 
 <!-- END:GENERATED:test-suites -->
 

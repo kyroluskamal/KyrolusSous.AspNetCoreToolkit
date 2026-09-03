@@ -19,8 +19,12 @@ namespace KyrolusSous.Mediator.Abstractions.Interfaces;
 /// Slower, and not trim-safe, but it works with no build-time step.
 /// </description></item>
 /// </list>
-/// Registration uses <c>TryAdd</c>, so whichever is registered first wins: the generated one
-/// registers itself, and the reflection one only fills in when nothing else did.
+/// Registering either replaces a throwing placeholder, so whichever one you call wins over that
+/// placeholder. Calling the <em>other</em> one afterwards, on top of a real dispatcher that is
+/// already installed, throws immediately instead of silently discarding it - see
+/// <c>KyrolusMediatorDispatcherRegistration</c> in the runtime package. Call exactly one of
+/// <c>AddKyrolusMediatorGeneratedDispatcher()</c> or <c>AddKyrolusMediatorReflection()</c> for a
+/// given service collection.
 /// <para>
 /// The interface is public because the generated implementation lives in the consumer's own
 /// assembly and has to be able to name it.

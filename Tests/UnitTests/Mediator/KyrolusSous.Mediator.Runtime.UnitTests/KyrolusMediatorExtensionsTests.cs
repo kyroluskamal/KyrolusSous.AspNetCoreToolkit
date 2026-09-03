@@ -135,10 +135,30 @@ public sealed class KyrolusMediatorExtensionsTests
         mediatorDescriptor!.Lifetime.ShouldBe(ServiceLifetime.Scoped);
         mediatorDescriptor.ImplementationType.ShouldBe(typeof(KyrolusMediator));
 
-        var ImediaorDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IMediator));
-        ImediaorDescriptor.ShouldNotBeNull();
-        ImediaorDescriptor!.Lifetime.ShouldBe(ServiceLifetime.Scoped);
-        ImediaorDescriptor.ImplementationType.ShouldBe(typeof(KyrolusMediator));
+        // IMediator is a forwarding factory rather than a second type registration - see the remark
+        // on ImplementationFactory below - so it carries no ImplementationType of its own.
+        var mediatorCompatDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IMediator));
+        mediatorCompatDescriptor.ShouldNotBeNull();
+        mediatorCompatDescriptor!.Lifetime.ShouldBe(ServiceLifetime.Scoped);
+        mediatorCompatDescriptor.ImplementationFactory.ShouldNotBeNull();
+    }
+
+    [Fact(DisplayName = "AddKyrolusMediator resolves IKyrolusMediator and IMediator to the same instance within a scope")]
+    public async Task AddKyrolusMediator_IKyrolusMediator_and_IMediator_resolve_to_same_instance()
+    {
+        // Two independent ServiceDescriptor registrations of the same concrete type would still
+        // build two separate instances - one per resolution - which would contradict the documented
+        // "resolving either gives the same mediator" on IMediator (MediatRCompatibility.cs). This is
+        // the behavior that documentation promises: resolving both from one scope must hand back the
+        // very same object, not merely two objects of the same type.
+        var services = TestHost.Standard(new Recorder());
+        await using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var kyrolusMediator = scope.ServiceProvider.GetRequiredService<IKyrolusMediator>();
+        var compatMediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+
+        ReferenceEquals(kyrolusMediator, compatMediator).ShouldBeTrue();
     }
 
     [Fact(DisplayName = "AddKyrolusMediator registers the default notification publish strategy")]
@@ -165,6 +185,36 @@ public sealed class KyrolusMediatorExtensionsTests
         strategyDescriptor.ShouldNotBeNull();
         strategyDescriptor!.Lifetime.ShouldBe(ServiceLifetime.Singleton);
         strategyDescriptor.ImplementationType.ShouldBe(typeof(KyrolusSequentialNotificationPublishStrategy));
+    }
+    [Fact(DisplayName = "AddKyrolusMediator registers the bounded parallel notification publish strategy when configured")]
+    public void AddKyrolusMediator_registers_bounded_parallel_notification_strategy_when_configured()
+    {
+        var services = new ServiceCollection();
+        services.AddKyrolusMediator(configuration =>
+        {
+            configuration.NotificationPublishMode = NotificationPublishMode.BoundedParallel;
+            configuration.NotificationPublishMaxDegreeOfParallelism = 4;
+        });
+
+        var strategyDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IKyrolusNotificationPublishStrategy));
+        strategyDescriptor.ShouldNotBeNull();
+        strategyDescriptor!.Lifetime.ShouldBe(ServiceLifetime.Singleton);
+        strategyDescriptor.ImplementationType.ShouldBeNull();
+        strategyDescriptor.ImplementationFactory.ShouldNotBeNull();
+
+        using var provider = services.BuildServiceProvider();
+        provider.GetRequiredService<IKyrolusNotificationPublishStrategy>()
+            .ShouldBeOfType<Implementations.KyrolusBoundedParallelNotificationPublishStrategy>();
+    }
+    [Fact(DisplayName = "AddKyrolusMediator throws InvalidOperationException when BoundedParallel is configured without a degree of parallelism")]
+    public void AddKyrolusMediator_throws_when_bounded_parallel_configured_without_cap()
+    {
+        var services = new ServiceCollection();
+
+        var exception = Should.Throw<InvalidOperationException>(() => services.AddKyrolusMediator(configuration =>
+            configuration.NotificationPublishMode = NotificationPublishMode.BoundedParallel));
+
+        exception.Message.ShouldContain(nameof(KyrolusMediatorConfiguration.NotificationPublishMaxDegreeOfParallelism));
     }
     [Fact(DisplayName = "AddKyrolusMediator registers built-in pipeline behaviors")]
     public void AddKyrolusMediator_registers_built_in_pipeline_behaviors()

@@ -36,6 +36,12 @@ namespace KyrolusSous.Mediator.Generator
         private const string UnitTypeFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.Unit";
         private const string DispatcherInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusMediatorDispatcher";
 
+        // For SMG005 (ComputeCandidateOrphanRequests): the universal request marker, and the
+        // interface every SendAsync/Send/StreamAsync/CreateStream method - native or MediatR-compat -
+        // is ultimately declared on.
+        private const string RequestBaseInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusRequestBase";
+        private const string MediatorSenderInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusMediatorSender";
+
         // Lives in the runtime package, not the abstractions, because closing the wrapper types
         // needs the wrapper types - and those stay internal to the runtime. Its presence is what
         // decides whether the AOT wrapper table below can be emitted at all: a project referencing
@@ -61,6 +67,13 @@ namespace KyrolusSous.Mediator.Generator
         ];
 
         private const string BuiltInStreamBehavior = RuntimeImplementationsNamespace + ".KyrolusStreamPassThroughBehavior";
+
+        // For closing user-supplied AddOpenBehavior(typeof(...)) registrations at compile time - see
+        // ComputeClosedUserOpenBehaviorRegistrations and AppendClosedUserOpenBehaviors.
+        private const string MediatorConfigurationFullName = "KyrolusSous.Mediator.Runtime.Config.KyrolusMediatorConfiguration";
+        private const string PipelineBehaviorInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusPipelineBehavior`2";
+        private const string StreamPipelineBehaviorInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusStreamPipelineBehavior`2";
+        private const string AddOpenBehaviorMethodName = "AddOpenBehavior";
 
         private const string ExceptionActionInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusRequestExceptionAction`2";
         private const string ExceptionHandlerInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusRequestExceptionHandler`3";
@@ -118,10 +131,38 @@ namespace KyrolusSous.Mediator.Generator
                     Runtime: compilation.GetTypeByMetadataName(PipelineWrapperFactoryFullName) is not null
                             && compilation.GetTypeByMetadataName(PipelineWrapperSourceInterfaceFullName) is not null));
 
-            // STEP 3: Register the final execution step with the two small, equatable inputs.
+            // STEP 3: Closed registrations for any AddOpenBehavior(typeof(...)) call site, so a
+            // user-supplied open-generic behavior gets the same compile-time closing as the four
+            // built-in ones instead of needing MakeGenericType to resolve under NativeAOT.
+            //
+            // Deliberately off the raw Compilation rather than folded into the per-class pipeline
+            // above: closing a behavior needs both its own generic constraints and every handler's
+            // request/response types available together, and those live in two different
+            // incremental stages that only combine after being reduced to plain data. Doing the
+            // whole cross-reference here means this one step recomputes on every edit instead of
+            // being incrementally cached - see the remark on ComputeClosedUserOpenBehaviorRegistrations
+            // for why that trade was made.
+            IncrementalValueProvider<EquatableArray<string>> closedUserBehaviors = context.CompilationProvider
+                .Select(static (compilation, ct) => new EquatableArray<string>(
+                    ComputeClosedUserOpenBehaviorRegistrations(compilation, ct)));
+
+            // STEP 4: Every request type this project both declares and sends through the mediator -
+            // candidates for SMG005 (see ComputeCandidateOrphanRequests). Whether each one actually
+            // has a handler is decided in Execute, against handlerInfos and openGenericHandlers,
+            // which this step has no access to; this step only answers "declared here and sent here".
+            //
+            // Off the raw Compilation for the same reason as STEP 3: correlating request
+            // declarations against SendAsync call sites needs live symbols across the whole
+            // compilation at once. Diagnostic and Location are not run through EquatableArray -
+            // this step already recomputes on every edit for the reason above, so there is nothing
+            // left to gain from making its own output compare cheaply.
+            IncrementalValueProvider<ImmutableArray<CandidateOrphanRequest>> candidateOrphanRequests = context.CompilationProvider
+                .Select(static (compilation, ct) => ComputeCandidateOrphanRequests(compilation, ct));
+
+            // STEP 5: Register the final execution step with the equatable inputs.
             context.RegisterSourceOutput(
-                availability.Combine(classModels.Collect()),
-                static (spc, source) => Execute(spc, source.Left, source.Right));
+                availability.Combine(classModels.Collect()).Combine(closedUserBehaviors).Combine(candidateOrphanRequests),
+                static (spc, source) => Execute(spc, source.Left.Left.Left, source.Left.Left.Right, source.Left.Right.Items, source.Right));
         }
 
         /// <summary>The types the generated code depends on; all must resolve or nothing is emitted.</summary>
@@ -221,7 +262,9 @@ namespace KyrolusSous.Mediator.Generator
         private static void Execute(
             SourceProductionContext context,
             (bool Abstractions, bool Runtime) availability,
-            ImmutableArray<ClassHandlerModel> classModels)
+            ImmutableArray<ClassHandlerModel> classModels,
+            ImmutableArray<string> closedUserBehaviorLines,
+            ImmutableArray<CandidateOrphanRequest> candidateOrphanRequests)
         {
             // --- Crucial Check: Ensure all base types/interfaces are resolvable ---
             // If any are missing, the consuming project is not referencing the
@@ -241,8 +284,6 @@ namespace KyrolusSous.Mediator.Generator
                 return; // Stop generation if base types are missing
             }
 
-            if (classModels.IsDefaultOrEmpty) return; // Exit if no handlers found
-
             var handlerInfos = new List<HandlerModel>();
             var openGenericHandlers = new List<OpenGenericModel>();
             var exceptionActions = new List<ExceptionActionModel>();
@@ -256,23 +297,42 @@ namespace KyrolusSous.Mediator.Generator
                 "KyrolusSous.Mediator.Generated" // Namespace for the generated static dispatcher
             };
 
-            foreach (var model in classModels)
+            // Populated even when there are no handlers at all: that is exactly the case SMG005
+            // below most needs to catch (a project that sends requests but has no handlers for
+            // anything), and file generation - the part that actually needs handlers - still checks
+            // handlerInfos.Count > 0 further down on its own.
+            if (!classModels.IsDefaultOrEmpty)
             {
-                context.CancellationToken.ThrowIfCancellationRequested(); // Check for cancellation
-
-                handlerInfos.AddRange(model.Handlers.Items);
-                openGenericHandlers.AddRange(model.OpenGenerics.Items);
-                exceptionActions.AddRange(model.ExceptionActions.Items);
-                exceptionHandlers.AddRange(model.ExceptionHandlers.Items);
-
-                if (model.Namespaces.Length > 0)
+                foreach (var model in classModels)
                 {
-                    foreach (var ns in model.Namespaces.Split(';'))
+                    context.CancellationToken.ThrowIfCancellationRequested(); // Check for cancellation
+
+                    handlerInfos.AddRange(model.Handlers.Items);
+                    openGenericHandlers.AddRange(model.OpenGenerics.Items);
+                    exceptionActions.AddRange(model.ExceptionActions.Items);
+                    exceptionHandlers.AddRange(model.ExceptionHandlers.Items);
+
+                    if (model.Namespaces.Length > 0)
                     {
-                        namespaces.Add(ns);
+                        foreach (var ns in model.Namespaces.Split(';'))
+                        {
+                            namespaces.Add(ns);
+                        }
                     }
                 }
             }
+
+            // Two different concrete classes handling the exact same (request, response) pair
+            // compile silently otherwise: the dispatch table below is a plain dictionary, so the
+            // second entry just overwrites the first with no error and no guarantee of which one
+            // that ends up being. Reflection scanning (KyrolusSous.Mediator.Reflection) already
+            // catches this at start-up via ThrowOnDuplicateRequestHandlers; this is the same check
+            // for the generator path, done here at compile time instead, and unconditional - unlike
+            // the reflection package, everything this method sees comes from this project's own
+            // source, never a referenced assembly, so there is no legitimate reason to suppress it.
+            ReportDuplicateHandlers(context, handlerInfos);
+            ReportDuplicateOpenGenericHandlers(context, openGenericHandlers);
+            ReportOrphanRequests(context, handlerInfos, openGenericHandlers, candidateOrphanRequests);
 
             // --- Generate the source code files if any valid handlers were found ---
             if (handlerInfos.Count > 0)
@@ -290,7 +350,7 @@ namespace KyrolusSous.Mediator.Generator
                 context.AddSource("KyrolusSous.Mediator.GeneratedDIExtensions.g.cs", SourceText.From(diExtensionCode, Encoding.UTF8));
 
                 // 4. Generate the DI extension method for Handler Registration ****
-                string handlersDiExtensionCode = GenerateHandlerRegistrationMethod(handlerInfos, openGenericHandlers, namespaces, availability.Runtime);
+                string handlersDiExtensionCode = GenerateHandlerRegistrationMethod(handlerInfos, openGenericHandlers, namespaces, availability.Runtime, closedUserBehaviorLines);
                 context.AddSource("KyrolusSous.Mediator.GeneratedHandlersDIExtensions.g.cs", SourceText.From(handlersDiExtensionCode, Encoding.UTF8));
 
                 // 5. Generate the closed pipeline wrappers, which is what makes the send path
@@ -310,6 +370,254 @@ namespace KyrolusSous.Mediator.Generator
                     context.AddSource("KyrolusSous.Mediator.GeneratedExceptionDispatch.g.cs", SourceText.From(exceptionSourceCode, Encoding.UTF8));
                 }
             }
+        }
+
+        /// <summary>
+        /// Reports SMG003 for every (request, response) pair - or, for a stream, (request, item
+        /// type) pair - claimed by more than one distinct concrete handler class.
+        /// </summary>
+        /// <remarks>
+        /// Grouped after collection, in <c>Execute</c>, rather than checked per class: telling
+        /// "two different handlers for the same message" from "the same handler seen twice because
+        /// it is declared <c>partial</c> across files" needs every class considered together, and
+        /// the per-class incremental stage only ever sees one class at a time. Distinct-ing handler
+        /// names before counting is what tells those two cases apart - a partial class contributes
+        /// the same <see cref="HandlerModel.HandlerFullName"/> once per file, but it is still one name.
+        /// </remarks>
+        private static void ReportDuplicateHandlers(SourceProductionContext context, List<HandlerModel> handlerInfos)
+        {
+            var duplicateGroups = handlerInfos
+                .GroupBy(info => (info.RequestFullName, info.ResponseFullName, info.IsStream))
+                .Where(group => group.Select(info => info.HandlerFullName).Distinct().Count() > 1);
+
+            foreach (var group in duplicateGroups)
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+
+                var handlerNames = string.Join(", ", group
+                    .Select(info => info.HandlerFullName)
+                    .Distinct()
+                    .OrderBy(name => name, StringComparer.Ordinal));
+                var kind = group.Key.IsStream ? "stream request" : "request";
+
+                context.ReportDiagnostic(Diagnostic.Create(
+                    new DiagnosticDescriptor(
+                        id: "SMG003",
+                        title: "More than one handler for the same message",
+                        messageFormat: "The {0} '{1}' returning '{2}' has more than one handler: {3}. A message must have exactly one handler - remove all but one, or give the extra ones a different request or response type.",
+                        category: "KyrolusSous.Mediator.Generator",
+                        DiagnosticSeverity.Error,
+                        isEnabledByDefault: true),
+                    Location.None,
+                    kind, group.Key.RequestFullName, group.Key.ResponseFullName, handlerNames));
+            }
+        }
+
+        /// <summary>
+        /// Reports SMG004 for every open generic handler interface claimed by more than one
+        /// distinct open generic handler class - the open-generic counterpart of
+        /// <see cref="ReportDuplicateHandlers"/>.
+        /// </summary>
+        private static void ReportDuplicateOpenGenericHandlers(SourceProductionContext context, List<OpenGenericModel> openGenericHandlers)
+        {
+            var duplicateGroups = openGenericHandlers
+                .GroupBy(info => info.InterfaceOpenName)
+                .Where(group => group.Select(info => info.HandlerOpenName).Distinct().Count() > 1);
+
+            foreach (var group in duplicateGroups)
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+
+                var handlerNames = string.Join(", ", group
+                    .Select(info => info.HandlerOpenName)
+                    .Distinct()
+                    .OrderBy(name => name, StringComparer.Ordinal));
+
+                context.ReportDiagnostic(Diagnostic.Create(
+                    new DiagnosticDescriptor(
+                        id: "SMG004",
+                        title: "More than one open generic handler for the same message shape",
+                        messageFormat: "'{0}' has more than one open generic handler: {1}. A message shape must have exactly one handler - remove all but one.",
+                        category: "KyrolusSous.Mediator.Generator",
+                        DiagnosticSeverity.Error,
+                        isEnabledByDefault: true),
+                    Location.None,
+                    group.Key, handlerNames));
+            }
+        }
+
+        /// <summary>
+        /// Reports SMG005 for every candidate <see cref="ComputeCandidateOrphanRequests"/> found -
+        /// a request this project both declares and sends through the mediator - that this project
+        /// has no handler for.
+        /// </summary>
+        /// <remarks>
+        /// A warning, not an error: unlike SMG003/SMG004, this one can have a legitimate false
+        /// positive - a request declared here can genuinely be handled in a different project this
+        /// compilation does not reference. SMG003/SMG004 have no such excuse, because everything
+        /// they compare comes from this project's own source.
+        /// </remarks>
+        private static void ReportOrphanRequests(
+            SourceProductionContext context,
+            List<HandlerModel> handlerInfos,
+            List<OpenGenericModel> openGenericHandlers,
+            ImmutableArray<CandidateOrphanRequest> candidateOrphanRequests)
+        {
+            if (candidateOrphanRequests.IsDefaultOrEmpty) return;
+
+            // An open generic handler might cover any request shape, and confirming whether it
+            // actually covers this one needs the same constraint-satisfaction check
+            // AppendClosedUserOpenBehaviors already pays for elsewhere - too expensive to repeat
+            // here just to decide whether to print a warning. Staying silent whenever one exists at
+            // all trades a handful of missed warnings for zero false positives from this specific
+            // cause, which is the right side of that trade for a diagnostic nothing can turn into a
+            // build failure anyway.
+            if (openGenericHandlers.Count > 0) return;
+
+            var handledRequestNames = new HashSet<string>(
+                handlerInfos.Select(info => info.RequestFullName), StringComparer.Ordinal);
+
+            var descriptor = new DiagnosticDescriptor(
+                id: "SMG005",
+                title: "Request has no handler in this project",
+                messageFormat: "'{0}' is sent through the mediator in this project, but no handler for it exists in this project. If you have confirmed its handler is registered from a different project, this is a false positive and safe to ignore - suppress it with '#pragma warning disable SMG005' around the declaration, or 'dotnet_diagnostic.SMG005.severity = none' in .editorconfig. Otherwise, sending it will fail at runtime with \"No handler registered for ...\".",
+                category: "KyrolusSous.Mediator.Generator",
+                DiagnosticSeverity.Warning,
+                isEnabledByDefault: true,
+                description: "SMG005 only ever looks at this one project: it cannot see a handler registered from a different project the same solution builds, so that split is a legitimate reason to suppress it rather than a bug to fix.");
+
+            foreach (var candidate in candidateOrphanRequests)
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                if (handledRequestNames.Contains(candidate.RequestFullName)) continue;
+
+                context.ReportDiagnostic(Diagnostic.Create(descriptor, candidate.Location, candidate.RequestFullName));
+            }
+        }
+
+        /// <summary>One request type SMG005 should consider: declared and sent in this project.</summary>
+        private sealed record CandidateOrphanRequest(string RequestFullName, Location Location);
+
+        /// <summary>
+        /// Finds every request type this project both declares and sends through the mediator -
+        /// candidates for SMG005. Whether each candidate actually has a handler is decided later in
+        /// <see cref="ReportOrphanRequests"/>, against data (handlerInfos, openGenericHandlers) this
+        /// method has no access to.
+        /// </summary>
+        /// <remarks>
+        /// Deliberately scoped to "declared here AND sent here". A request declared in a shared
+        /// contracts assembly and handled in a separate, unreferenced handlers assembly is a
+        /// legitimate, common split this method cannot see across - the handler is real, just not
+        /// visible to this compilation - so only asking "does this project, entirely on its own,
+        /// actually work" avoids flagging that split as a mistake. Not part of the incrementally
+        /// cached per-class pipeline for the same reason as
+        /// <see cref="ComputeClosedUserOpenBehaviorRegistrations"/>: correlating every request
+        /// declaration against every SendAsync call site needs the whole live Compilation at once,
+        /// by which point the per-class stage has already reduced its symbols to plain strings.
+        /// </remarks>
+        private static ImmutableArray<CandidateOrphanRequest> ComputeCandidateOrphanRequests(Compilation compilation, CancellationToken cancellationToken)
+        {
+            var requestBaseDef = compilation.GetTypeByMetadataName(RequestBaseInterfaceFullName);
+            var senderDef = compilation.GetTypeByMetadataName(MediatorSenderInterfaceFullName);
+            if (requestBaseDef is null || senderDef is null) return ImmutableArray<CandidateOrphanRequest>.Empty;
+
+            // 1. Every concrete request type this project declares, keyed by symbol so the "sent
+            //    here" pass below can look each one up by identity rather than by name.
+            var declared = new Dictionary<INamedTypeSymbol, Location>(SymbolEqualityComparer.Default);
+
+            foreach (var tree in compilation.SyntaxTrees)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var semanticModel = compilation.GetSemanticModel(tree);
+
+                // Requests are declared `record Foo(...) : IKyrolusCommand;` at least as often as
+                // `class Foo`, so both shapes are scanned here - unlike handler discovery elsewhere,
+                // which only ever looks for classes because a handler is conventionally written as
+                // one.
+                foreach (var typeDeclaration in tree.GetRoot(cancellationToken).DescendantNodes().OfType<TypeDeclarationSyntax>())
+                {
+                    if (semanticModel.GetDeclaredSymbol(typeDeclaration, cancellationToken) is not INamedTypeSymbol symbol) continue;
+                    if (symbol.TypeKind is not (TypeKind.Class or TypeKind.Struct)) continue;
+                    if (symbol.IsAbstract || symbol.IsStatic || symbol.IsGenericType) continue;
+                    if (!ImplementsInterface(symbol, requestBaseDef)) continue;
+
+                    declared[symbol] = typeDeclaration.Identifier.GetLocation();
+                }
+            }
+
+            if (declared.Count == 0) return ImmutableArray<CandidateOrphanRequest>.Empty;
+
+            // 2. Every request type actually sent through the mediator in this same project - the
+            //    other half of "declared here and sent here".
+            var sent = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+
+            foreach (var tree in compilation.SyntaxTrees)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var semanticModel = compilation.GetSemanticModel(tree);
+
+                foreach (var invocation in tree.GetRoot(cancellationToken).DescendantNodes().OfType<InvocationExpressionSyntax>())
+                {
+                    if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess) continue;
+                    if (memberAccess.Name.Identifier.Text is not ("SendAsync" or "Send" or "StreamAsync" or "CreateStream")) continue;
+                    if (invocation.ArgumentList.Arguments.Count == 0) continue;
+
+                    if (semanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is not IMethodSymbol methodSymbol) continue;
+
+                    // The receiver must implement IKyrolusMediatorSender - the interface every one
+                    // of these methods (native or MediatR-compat) is ultimately declared on - or
+                    // this is an unrelated method that merely happens to share a name.
+                    ITypeSymbol? receiverType;
+                    if (methodSymbol.IsExtensionMethod)
+                    {
+                        var original = methodSymbol.ReducedFrom ?? methodSymbol;
+                        if (original.Parameters.Length == 0) continue;
+                        receiverType = original.Parameters[0].Type;
+                    }
+                    else
+                    {
+                        receiverType = methodSymbol.ContainingType;
+                    }
+
+                    if (receiverType is null || !ImplementsInterface(receiverType, senderDef)) continue;
+
+                    // The static type of the argument expression, e.g. `DeleteUser` for
+                    // `sender.SendAsync(new DeleteUser(id))`. Left alone (not added to `sent`) when
+                    // it resolves to an interface or an abstract type - `sender.SendAsync(cmd)` for
+                    // some `IKyrolusCommand cmd` names no specific request, so there is nothing
+                    // concrete to hold this project to.
+                    if (semanticModel.GetTypeInfo(invocation.ArgumentList.Arguments[0].Expression, cancellationToken).Type is not INamedTypeSymbol argumentType) continue;
+                    if (argumentType.IsAbstract) continue;
+
+                    sent.Add(argumentType);
+                }
+            }
+
+            if (sent.Count == 0) return ImmutableArray<CandidateOrphanRequest>.Empty;
+
+            // 3. The intersection.
+            var candidates = ImmutableArray.CreateBuilder<CandidateOrphanRequest>();
+            foreach (var pair in declared)
+            {
+                if (!sent.Contains(pair.Key)) continue;
+                candidates.Add(new CandidateOrphanRequest(
+                    pair.Key.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                    pair.Value));
+            }
+
+            return candidates.ToImmutable();
+        }
+
+        /// <summary>Whether <paramref name="type"/> is, or implements, <paramref name="interfaceDef"/>.</summary>
+        private static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol interfaceDef)
+        {
+            if (SymbolEqualityComparer.Default.Equals(type, interfaceDef)) return true;
+
+            foreach (var iface in type.AllInterfaces)
+                if (SymbolEqualityComparer.Default.Equals(iface, interfaceDef))
+                    return true;
+
+            return false;
         }
 
         // --- Helper Record ---
@@ -786,8 +1094,21 @@ namespace KyrolusSous.Mediator.Generator
             sb.AppendLine("        /// <remarks>Call this after registering handlers and before resolving IKyrolusMediatorSender.</remarks>");
             sb.AppendLine("        public static IServiceCollection AddKyrolusMediatorGeneratedDispatcher(this IServiceCollection services)");
             sb.AppendLine(Indent8OpenBrace);
-            // Replace any existing dispatcher (e.g., reflection-based) with the generated one
-            sb.AppendLine($"            services.Replace(ServiceDescriptor.Singleton<{interfaceFullName}, {implementationFullName}>());");
+            if (runtimeAvailable)
+            {
+                // Goes through the runtime's shared guard rather than a bare Replace: calling this
+                // and AddKyrolusMediatorReflection() for the same service collection must throw
+                // immediately instead of one silently discarding whichever dispatcher the other
+                // installed. See the remarks on KyrolusMediatorDispatcherRegistration.
+                sb.AppendLine($"            global::KyrolusSous.Mediator.Runtime.Config.KyrolusMediatorDispatcherRegistration.Install<{implementationFullName}>(services, nameof(AddKyrolusMediatorGeneratedDispatcher));");
+            }
+            else
+            {
+                // The runtime package - and so the guard above, and the reflection package that is
+                // the only thing this guard would ever collide with - is not referenced here. No
+                // collision is possible, so a plain Replace is exactly as safe.
+                sb.AppendLine($"            services.Replace(ServiceDescriptor.Singleton<{interfaceFullName}, {implementationFullName}>());");
+            }
             if (runtimeAvailable)
             {
                 sb.AppendLine();
@@ -1027,7 +1348,8 @@ namespace KyrolusSous.Mediator.Generator
             List<HandlerModel> handlerInfos,
             List<OpenGenericModel> openGenericHandlers,
             HashSet<string> namespaces,
-            bool runtimeAvailable)
+            bool runtimeAvailable,
+            ImmutableArray<string> closedUserBehaviorLines)
         {
             var sb = new StringBuilder();
             sb.AppendLine(AutoGeneratedHeader);
@@ -1088,6 +1410,7 @@ namespace KyrolusSous.Mediator.Generator
             if (runtimeAvailable)
             {
                 AppendClosedBuiltInBehaviors(sb, handlerInfos);
+                AppendClosedUserOpenBehaviors(sb, closedUserBehaviorLines);
             }
             sb.AppendLine("            return services;");
             sb.AppendLine(Indent8CloseBrace);
@@ -1143,6 +1466,27 @@ namespace KyrolusSous.Mediator.Generator
             sb.AppendLine();
         }
 
+        /// <summary>
+        /// Emits the registration lines <see cref="ComputeClosedUserOpenBehaviorRegistrations"/>
+        /// already computed - one per (user open behavior, request, response) combination whose
+        /// constraints are satisfied - guarded the same way as the built-in four.
+        /// </summary>
+        private static void AppendClosedUserOpenBehaviors(StringBuilder sb, ImmutableArray<string> closedUserBehaviorLines)
+        {
+            if (closedUserBehaviorLines.IsDefaultOrEmpty) return;
+
+            sb.AppendLine("            // User-supplied open-generic behaviors (configuration.AddOpenBehavior(typeof(...))),");
+            sb.AppendLine("            // closed at compile time the same way the built-in four are. See RegisterConfiguredBehaviors");
+            sb.AppendLine("            // in the runtime: it registers the same open-generic descriptors and declines on this exact");
+            sb.AppendLine("            // condition, so only one of the two sets is ever present.");
+            sb.AppendLine("            if (!global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)");
+            sb.AppendLine(Indent12OpenBrace);
+            foreach (var line in closedUserBehaviorLines)
+                sb.AppendLine(line);
+            sb.AppendLine(Indent12CloseBrace);
+            sb.AppendLine();
+        }
+
         private static string GetOpenGenericTypeOf(INamedTypeSymbol symbol)
         {
             string ns = symbol.ContainingNamespace.ToDisplayString();
@@ -1150,6 +1494,199 @@ namespace KyrolusSous.Mediator.Generator
             int arity = symbol.Arity;
             string typeParams = arity == 0 ? string.Empty : $"<{new string(',', arity - 1)}>";
             return $"global::{ns}.{name}{typeParams}";
+        }
+
+        /// <summary>The type's fully-qualified name with no type argument list at all, so a caller can append its own (e.g. "&lt;Foo, Bar&gt;").</summary>
+        private static string GetQualifiedNameWithoutArity(INamedTypeSymbol symbol)
+            => $"global::{symbol.ContainingNamespace.ToDisplayString()}.{symbol.Name}";
+
+        /// <summary>
+        /// Finds every <c>configuration.AddOpenBehavior(typeof(Foo&lt;,&gt;))</c> call in the
+        /// compilation and, for each (request, response) pair a handler class declares, emits an
+        /// already-closed <c>TryAddEnumerable</c> registration line for <c>Foo&lt;request, response&gt;</c> -
+        /// but only where <c>Foo</c>'s own generic constraints are actually satisfied by that pair,
+        /// so the emitted line is guaranteed to compile rather than merely guaranteed to exist.
+        /// </summary>
+        /// <remarks>
+        /// Deliberately not part of the per-class incremental pipeline in <c>Initialize</c>: closing
+        /// a behavior needs its own type parameter constraints and every handler's request/response
+        /// types considered together, and those live in two different incremental stages that only
+        /// ever combine after being reduced to plain, symbol-free data - by which point there is
+        /// nothing left to check constraints against. Doing the whole cross-reference here, against
+        /// the live Compilation, means this one step recomputes on every edit instead of being
+        /// incrementally cached. <c>AddOpenBehavior</c> is rare enough, and the work bounded enough
+        /// (a text pre-check skips everything below when no call site exists at all), that this is
+        /// the smaller cost - the alternative was reimplementing handler discovery a second time just
+        /// to keep this feature on the fully-cached path.
+        /// </remarks>
+        private static ImmutableArray<string> ComputeClosedUserOpenBehaviorRegistrations(Compilation compilation, CancellationToken cancellationToken)
+        {
+            // A textual pre-check can never produce a false negative for real usage: the call has to
+            // spell the method name to compile at all. It lets every project that does not use
+            // AddOpenBehavior skip the rest of this method entirely.
+            var mightHaveOpenBehaviors = false;
+            foreach (var tree in compilation.SyntaxTrees)
+            {
+                if (tree.GetText(cancellationToken).ToString().Contains(AddOpenBehaviorMethodName))
+                {
+                    mightHaveOpenBehaviors = true;
+                    break;
+                }
+            }
+            if (!mightHaveOpenBehaviors) return ImmutableArray<string>.Empty;
+
+            var defs = HandlerInterfaceDefinitions.TryResolve(compilation);
+            if (defs is null) return ImmutableArray<string>.Empty;
+
+            var configurationType = compilation.GetTypeByMetadataName(MediatorConfigurationFullName);
+            var pipelineBehaviorDef = compilation.GetTypeByMetadataName(PipelineBehaviorInterfaceFullName);
+            var streamBehaviorDef = compilation.GetTypeByMetadataName(StreamPipelineBehaviorInterfaceFullName);
+            if (configurationType is null || pipelineBehaviorDef is null || streamBehaviorDef is null)
+                return ImmutableArray<string>.Empty;
+
+            // 1. Every AddOpenBehavior(typeof(Foo<,>)) call site, resolved down to which of Foo's own
+            //    type parameters play TRequest and TResponse (not necessarily Foo's own declaration
+            //    order - see the interface's own type arguments, not Foo.TypeParameters directly).
+            var openBehaviors = new List<(INamedTypeSymbol OpenType, ITypeParameterSymbol RequestParam, ITypeParameterSymbol ResponseParam, bool IsStream)>();
+
+            foreach (var tree in compilation.SyntaxTrees)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var semanticModel = compilation.GetSemanticModel(tree);
+
+                foreach (var invocation in tree.GetRoot(cancellationToken).DescendantNodes().OfType<InvocationExpressionSyntax>())
+                {
+                    if (invocation.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: AddOpenBehaviorMethodName }) continue;
+                    if (invocation.ArgumentList.Arguments.Count != 1) continue;
+                    if (invocation.ArgumentList.Arguments[0].Expression is not TypeOfExpressionSyntax typeOfExpression) continue;
+
+                    if (semanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is not IMethodSymbol methodSymbol) continue;
+                    if (!SymbolEqualityComparer.Default.Equals(methodSymbol.ContainingType, configurationType)) continue;
+
+                    if (semanticModel.GetTypeInfo(typeOfExpression.Type, cancellationToken).Type is not INamedTypeSymbol { IsGenericType: true } typeSymbol) continue;
+
+                    var openType = typeSymbol.OriginalDefinition;
+                    if (openType.Arity != 2) continue; // Only the conventional Foo<TRequest, TResponse> shape can be closed this way.
+
+                    foreach (var iface in openType.AllInterfaces)
+                    {
+                        if (!iface.IsGenericType) continue;
+                        var ifaceDef = iface.OriginalDefinition;
+
+                        bool isStream;
+                        if (SymbolEqualityComparer.Default.Equals(ifaceDef, pipelineBehaviorDef)) isStream = false;
+                        else if (SymbolEqualityComparer.Default.Equals(ifaceDef, streamBehaviorDef)) isStream = true;
+                        else continue;
+
+                        if (iface.TypeArguments[0] is not ITypeParameterSymbol requestParam) continue;
+                        if (iface.TypeArguments[1] is not ITypeParameterSymbol responseParam) continue;
+
+                        openBehaviors.Add((openType, requestParam, responseParam, isStream));
+                        break;
+                    }
+                }
+            }
+
+            if (openBehaviors.Count == 0) return ImmutableArray<string>.Empty;
+
+            // 2. Every (request, response) pair a handler class declares - the same shapes
+            //    GetHandlerInfos already recognises for the main dispatch table.
+            var pairs = new HashSet<(ISymbol Request, ISymbol Response, bool IsStream)>(RequestResponseComparer.Instance);
+
+            foreach (var tree in compilation.SyntaxTrees)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var semanticModel = compilation.GetSemanticModel(tree);
+
+                foreach (var classDeclaration in tree.GetRoot(cancellationToken).DescendantNodes().OfType<ClassDeclarationSyntax>())
+                {
+                    if (semanticModel.GetDeclaredSymbol(classDeclaration, cancellationToken) is not INamedTypeSymbol classSymbol) continue;
+                    if (classSymbol.TypeKind != TypeKind.Class || classSymbol.IsAbstract || classSymbol.IsStatic || classSymbol.IsGenericType) continue;
+
+                    foreach (var info in GetHandlerInfos(classSymbol, defs))
+                        pairs.Add((info.RequestType, info.ResponseType, info.IsStream));
+                }
+            }
+
+            if (pairs.Count == 0) return ImmutableArray<string>.Empty;
+
+            // 3. Cross-product, keeping only combinations that satisfy the behavior's own type
+            //    parameter constraints - otherwise the emitted closed instantiation would not compile.
+            var lines = new List<string>();
+            foreach (var (openType, requestParam, responseParam, isStream) in openBehaviors)
+            {
+                var behaviorInterface = isStream ? StreamPipelineBehaviorInterface : PipelineBehaviorInterface;
+                var openTypeBaseName = GetQualifiedNameWithoutArity(openType);
+
+                foreach (var (request, response, pairIsStream) in pairs)
+                {
+                    if (pairIsStream != isStream) continue;
+
+                    var requestType = (ITypeSymbol)request;
+                    var responseType = (ITypeSymbol)response;
+                    if (!SatisfiesConstraints(compilation, requestParam, requestType)) continue;
+                    if (!SatisfiesConstraints(compilation, responseParam, responseType)) continue;
+
+                    var requestName = requestType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    var responseName = responseType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+                    // The interface always reads <TRequest, TResponse>, but the behavior's own
+                    // declared type parameter order can differ (its Ordinal is the position that
+                    // matters, not "request first") - see the deliberately-swapped test case this
+                    // guards against.
+                    var behaviorTypeArgs = new string[2];
+                    behaviorTypeArgs[requestParam.Ordinal] = requestName;
+                    behaviorTypeArgs[responseParam.Ordinal] = responseName;
+                    var closedBehaviorName = $"{openTypeBaseName}<{behaviorTypeArgs[0]}, {behaviorTypeArgs[1]}>";
+
+                    lines.Add(
+                        $"                services.TryAddEnumerable(ServiceDescriptor.Transient<{behaviorInterface}<{requestName}, {responseName}>, {closedBehaviorName}>());");
+                }
+            }
+
+            lines.Sort(StringComparer.Ordinal);
+            return [.. lines];
+        }
+
+        /// <summary>
+        /// Whether <paramref name="candidate"/> could legally be substituted for <paramref name="typeParameter"/> -
+        /// reference/value/unmanaged/constructor constraints checked directly, and each named
+        /// constraint type (an interface or base class) checked via <c>CSharpCompilation.ClassifyConversion</c>
+        /// for an identity or implicit conversion. Deliberately conservative: a constraint shape this
+        /// does not recognise fails closed (returns <see langword="false"/>), which only costs the
+        /// AOT closing for that one pair - it never emits a closed instantiation that would fail to compile.
+        /// </summary>
+        private static bool SatisfiesConstraints(Compilation compilation, ITypeParameterSymbol typeParameter, ITypeSymbol candidate)
+        {
+            if (typeParameter.HasReferenceTypeConstraint && !candidate.IsReferenceType) return false;
+            if (typeParameter.HasValueTypeConstraint && !candidate.IsValueType) return false;
+            if (typeParameter.HasUnmanagedTypeConstraint && !candidate.IsUnmanagedType) return false;
+
+            if (typeParameter.HasConstructorConstraint)
+            {
+                if (candidate is not INamedTypeSymbol namedCandidate || namedCandidate.IsAbstract) return false;
+                var hasPublicParameterlessConstructor = false;
+                foreach (var constructor in namedCandidate.InstanceConstructors)
+                {
+                    if (constructor.Parameters.Length == 0 && constructor.DeclaredAccessibility == Accessibility.Public)
+                    {
+                        hasPublicParameterlessConstructor = true;
+                        break;
+                    }
+                }
+                if (!hasPublicParameterlessConstructor) return false;
+            }
+
+            // ClassifyConversion is declared on CSharpCompilation, not the language-agnostic base
+            // class - safe to assume here since this generator only ever runs in a C# compilation.
+            var csharpCompilation = (Microsoft.CodeAnalysis.CSharp.CSharpCompilation)compilation;
+            foreach (var constraintType in typeParameter.ConstraintTypes)
+            {
+                var conversion = csharpCompilation.ClassifyConversion(candidate, constraintType);
+                if (!conversion.Exists || !(conversion.IsIdentity || conversion.IsImplicit)) return false;
+            }
+
+            return true;
         }
         /// <summary>
         /// Helper method to generate the body of the static dispatch methods.
@@ -1246,11 +1783,26 @@ namespace KyrolusSous.Mediator.Generator
             sb.AppendLine(Indent12OpenBrace);
             sb.AppendLine("                var method = openHandlerType.GetMethod(\"Handle\", new[] { requestType, typeof(CancellationToken) });");
             sb.AppendLine("                if (method is null) throw new InvalidOperationException($\"[KyrolusMediator] Could not find Handle(...) on {openHandlerType.FullName}.\");");
-            sb.AppendLine("                var stream = (IAsyncEnumerable<TResponse>)method.Invoke(openHandler, new object[] { request, cancellationToken })!;");
+            sb.AppendLine("                var stream = (IAsyncEnumerable<TResponse>)InvokeHandlerMethod(method, openHandler, new object[] { request, cancellationToken })!;");
             sb.AppendLine("                return stream;");
             sb.AppendLine(Indent12CloseBrace);
             sb.AppendLine();
             sb.AppendLine("            throw new InvalidOperationException($\"[KyrolusMediator] No stream handler registered for {requestType.FullName}. Ensure the handler class is concrete, public, implements IKyrolusStreamRequestHandler<..., ...>, and is registered in the dependency injection container.\");");
+            sb.AppendLine(Indent8CloseBrace);
+            sb.AppendLine();
+
+            sb.AppendLine("        /// <summary>Invokes a reflected Handle method, unwrapping TargetInvocationException so the caller sees the handler's real exception type instead of the reflection wrapper.</summary>");
+            sb.AppendLine("        private static object? InvokeHandlerMethod(global::System.Reflection.MethodInfo method, object target, object?[] arguments)");
+            sb.AppendLine(Indent8OpenBrace);
+            sb.AppendLine("            try");
+            sb.AppendLine(Indent12OpenBrace);
+            sb.AppendLine("                return method.Invoke(target, arguments);");
+            sb.AppendLine(Indent12CloseBrace);
+            sb.AppendLine("            catch (global::System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)");
+            sb.AppendLine(Indent12OpenBrace);
+            sb.AppendLine("                global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();");
+            sb.AppendLine("                return null; // Unreachable: Throw() always throws.");
+            sb.AppendLine(Indent12CloseBrace);
             sb.AppendLine(Indent8CloseBrace);
             sb.AppendLine();
 
@@ -1325,7 +1877,7 @@ namespace KyrolusSous.Mediator.Generator
                 sb.AppendLine(Indent12OpenBrace);
                 sb.AppendLine($"                var method = commandHandlerType.GetMethod(\"Handle\", new[] {{ {localRequestVarName}, typeof(CancellationToken) }});");
                 sb.AppendLine("                if (method is null) throw new InvalidOperationException($\"[KyrolusMediator] Could not find Handle(...) on {commandHandlerType.FullName}.\");");
-                sb.AppendLine($"                var task = (Task)method.Invoke(commandHandler, new object[] {{ {inputParamName}, cancellationToken }})!;");
+                sb.AppendLine($"                var task = (Task)InvokeHandlerMethod(method, commandHandler, new object[] {{ {inputParamName}, cancellationToken }})!;");
                 sb.AppendLine("                return task;");
                 sb.AppendLine(Indent12CloseBrace);
                 return;
@@ -1350,7 +1902,7 @@ namespace KyrolusSous.Mediator.Generator
             sb.AppendLine(Indent12OpenBrace);
             sb.AppendLine("                var method = openGenericHandlerType!.GetMethod(\"Handle\", new[] { " + localRequestVarName + ", typeof(CancellationToken) });");
             sb.AppendLine("                if (method is null) throw new InvalidOperationException($\"[KyrolusMediator] Could not find Handle(...) on {openGenericHandlerType.FullName}.\");");
-            sb.AppendLine($"                var task = (Task<TResponse>)method.Invoke(openHandler, new object[] {{ {inputParamName}, cancellationToken }})!;");
+            sb.AppendLine($"                var task = (Task<TResponse>)InvokeHandlerMethod(method, openHandler, new object[] {{ {inputParamName}, cancellationToken }})!;");
             sb.AppendLine("                return await task;");
             sb.AppendLine(Indent12CloseBrace);
         }

@@ -18,12 +18,12 @@ public static class MediatorExtensions
 
         // A placeholder rather than a default implementation. Something has to supply the dispatch,
         // and both things that can - the generator and the reflection package - replace this
-        // descriptor. Resolving it means neither was set up, and the message says so instead of
-        // letting the container report a missing IKyrolusMediatorDispatcher.
-        services.TryAddSingleton<IKyrolusMediatorDispatcher>(static _ => throw new InvalidOperationException(
-            "[KyrolusMediator] No dispatcher is registered. Reference KyrolusSous.Mediator.Generator " +
-            "and call AddKyrolusMediatorGeneratedDispatcher(), or reference " +
-            "KyrolusSous.Mediator.Reflection and call AddKyrolusMediatorReflection()."));
+        // descriptor via KyrolusMediatorDispatcherRegistration.Install. Resolving it unreplaced
+        // means neither was set up, and the message says so instead of letting the container
+        // report a missing IKyrolusMediatorDispatcher. A named type rather than a throwing factory
+        // lambda, so Install can recognise "nothing configured yet" by its ImplementationType and
+        // tell that apart from "the other package already installed a real one".
+        services.TryAddSingleton<IKyrolusMediatorDispatcher, KyrolusMediatorDispatcherPlaceholder>();
     }
 
     public static void AddKyrolusMediatorPublisher(this IServiceCollection services)
@@ -42,6 +42,30 @@ public static class MediatorExtensions
     /// </summary>
     public static IServiceCollection UseKyrolusMediatorSequentialNotifications(this IServiceCollection services)
         => services.ReplaceNotificationStrategy<KyrolusSequentialNotificationPublishStrategy>();
+
+    /// <summary>
+    /// Replaces the notification publish strategy with a parallel one capped at
+    /// <paramref name="maxDegreeOfParallelism"/> handlers running at once. Use this when a
+    /// notification can fan out to enough handlers that unbounded parallelism would exhaust a
+    /// connection pool or the thread pool.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxDegreeOfParallelism"/> is less than 1.</exception>
+    public static IServiceCollection UseKyrolusMediatorBoundedParallelNotifications(this IServiceCollection services, int maxDegreeOfParallelism)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        if (maxDegreeOfParallelism < 1)
+            throw new ArgumentOutOfRangeException(
+                nameof(maxDegreeOfParallelism),
+                maxDegreeOfParallelism,
+                "[KyrolusMediator] At least one handler must be allowed to run at a time.");
+
+        // Not ReplaceNotificationStrategy<T>: that helper builds TStrategy with a parameterless
+        // constructor, and this strategy needs the cap threaded through instead.
+        services.RemoveAll<IKyrolusNotificationPublishStrategy>();
+        services.AddSingleton<IKyrolusNotificationPublishStrategy>(
+            _ => new KyrolusBoundedParallelNotificationPublishStrategy(maxDegreeOfParallelism));
+        return services;
+    }
 
     private static IServiceCollection ReplaceNotificationStrategy<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TStrategy>(
@@ -84,12 +108,33 @@ public static class MediatorExtensions
         services.AddKyrolusMediatorPublisher();
 
         services.TryAdd(new ServiceDescriptor(typeof(IKyrolusMediator), typeof(KyrolusMediator), configuration.MediatorLifetime));
-        services.TryAdd(new ServiceDescriptor(typeof(IMediator), typeof(KyrolusMediator), configuration.MediatorLifetime));
+
+        // A forwarding factory, not a second ServiceDescriptor for KyrolusMediator: two independent
+        // registrations of the same concrete type still build two separate instances, one per
+        // resolution, which contradicts the documented "resolving either gives the same mediator"
+        // on IMediator (see MediatRCompatibility.cs). KyrolusMediator implements both interfaces,
+        // so resolving IKyrolusMediator once and casting it is exactly the same object either way.
+        services.TryAdd(new ServiceDescriptor(
+            typeof(IMediator),
+            static sp => (IMediator)sp.GetRequiredService<IKyrolusMediator>(),
+            configuration.MediatorLifetime));
 
         AddBuiltInBehaviors(services);
 
-        if (configuration.NotificationPublishMode == NotificationPublishMode.Sequential)
-            services.UseKyrolusMediatorSequentialNotifications();
+        switch (configuration.NotificationPublishMode)
+        {
+            case NotificationPublishMode.Sequential:
+                services.UseKyrolusMediatorSequentialNotifications();
+                break;
+            case NotificationPublishMode.BoundedParallel:
+                if (configuration.NotificationPublishMaxDegreeOfParallelism is not { } maxDegreeOfParallelism || maxDegreeOfParallelism < 1)
+                    throw new InvalidOperationException(
+                        "[KyrolusMediator] NotificationPublishMode.BoundedParallel requires " +
+                        $"{nameof(KyrolusMediatorConfiguration.NotificationPublishMaxDegreeOfParallelism)} " +
+                        "to be set to a positive number.");
+                services.UseKyrolusMediatorBoundedParallelNotifications(maxDegreeOfParallelism);
+                break;
+        }
 
         RegisterConfiguredBehaviors(services, configuration);
 
@@ -133,16 +178,32 @@ public static class MediatorExtensions
     {
         // Add, not TryAddEnumerable: the caller listed these explicitly, so registration order is
         // the intended execution order and a deliberate duplicate is legal.
-        foreach (var (service, implementation) in configuration.ClosedBehaviors)
-            services.Add(new ServiceDescriptor(service, implementation, configuration.Lifetime));
+        // Closed behaviors (AddBehavior<TImplementation>()) are already concrete, closed types - no
+        // MakeGenericType involved in registering or resolving them - so these always run.
+        //
+        // Reads registration.Implementation directly rather than deconstructing into a local -
+        // BehaviorRegistration carries the DynamicallyAccessedMembers(PublicConstructors) annotation
+        // ServiceDescriptor's constructor needs on the property itself; a deconstructed local would
+        // not carry it, and the trimmer would be back to guessing.
+        foreach (var registration in configuration.ClosedBehaviors)
+            services.Add(new ServiceDescriptor(registration.Service, registration.Implementation, configuration.Lifetime));
 
-        foreach (var (service, implementation) in configuration.OpenBehaviors)
-            services.Add(new ServiceDescriptor(service, implementation, configuration.Lifetime));
+        foreach (var registration in configuration.ClosedStreamBehaviors)
+            services.Add(new ServiceDescriptor(registration.Service, registration.Implementation, configuration.Lifetime));
 
-        foreach (var (service, implementation) in configuration.ClosedStreamBehaviors)
-            services.Add(new ServiceDescriptor(service, implementation, configuration.Lifetime));
+        // Open behaviors (AddOpenBehavior(typeof(Foo<,>))) need the container to close them with
+        // MakeGenericType the first time one is resolved, which an application published ahead of
+        // time cannot do - the exact same reason AddBuiltInBehaviors declines above. Skipped there;
+        // KyrolusSous.Mediator.Generator closes the same registrations at compile time instead, for
+        // every AddOpenBehavior(typeof(...)) call site it can see (see AppendClosedUserOpenBehaviors),
+        // so exactly one of the two sets is ever present, mirroring the built-in four.
+        if (RuntimeFeature.IsDynamicCodeSupported)
+        {
+            foreach (var registration in configuration.OpenBehaviors)
+                services.Add(new ServiceDescriptor(registration.Service, registration.Implementation, configuration.Lifetime));
 
-        foreach (var (service, implementation) in configuration.OpenStreamBehaviors)
-            services.Add(new ServiceDescriptor(service, implementation, configuration.Lifetime));
+            foreach (var registration in configuration.OpenStreamBehaviors)
+                services.Add(new ServiceDescriptor(registration.Service, registration.Implementation, configuration.Lifetime));
+        }
     }
 }

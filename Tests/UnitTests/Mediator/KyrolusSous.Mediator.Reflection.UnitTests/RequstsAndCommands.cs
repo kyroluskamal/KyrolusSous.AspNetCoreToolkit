@@ -112,6 +112,29 @@ internal class TestNotificationHandler2 : IKyrolusNotificationHandler<TestNotifi
 {
     public Task Handle(TestNotification notification, CancellationToken cancellationToken) => Task.CompletedTask;
 }
+
+/// <summary>A ported notification, discovered by assembly scanning rather than manual registration.</summary>
+internal record PortedScannedNotification(string Message) : KyrolusSous.Mediator.Abstractions.Compatibility.INotification;
+
+/// <summary>
+/// Implements only the MediatR-compatibility notification handler interface - the exact shape a
+/// ported MediatR handler has - to prove scanning registers it once, not once per interface it
+/// happens to satisfy through inheritance.
+/// </summary>
+internal sealed class PortedScannedNotificationHandler(PortedScannedNotificationHandler.InvocationCounter counter)
+    : KyrolusSous.Mediator.Abstractions.Compatibility.INotificationHandler<PortedScannedNotification>
+{
+    public sealed class InvocationCounter
+    {
+        public int Count;
+    }
+
+    public Task Handle(PortedScannedNotification notification, CancellationToken cancellationToken)
+    {
+        Interlocked.Increment(ref counter.Count);
+        return Task.CompletedTask;
+    }
+}
 #endregion
 
 internal class ExplicitHandleRequest : IKyrolusRequest<string> { }

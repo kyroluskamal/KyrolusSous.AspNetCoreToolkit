@@ -31,10 +31,17 @@ public static class MediatorReflectionExtensions
     ];
 
     /// <summary>Interfaces where any number of implementations may be registered together.</summary>
+    /// <remarks>
+    /// The MediatR compatibility <c>INotificationHandler&lt;&gt;</c> is deliberately absent: it
+    /// inherits <see cref="IKyrolusNotificationHandler{TNotification}"/>, so a class implementing it
+    /// already shows up here under the native interface via <c>ImplementedInterfaces</c> - listing
+    /// both meant a compat-ported handler got registered twice (once per interface) and ran twice
+    /// per notification. Request/command/query handlers already followed this rule; this list did
+    /// not, which is what let the duplicate slip in.
+    /// </remarks>
     private static readonly HashSet<Type> s_multiHandlerInterfaces =
     [
         typeof(IKyrolusNotificationHandler<>),
-        typeof(INotificationHandler<>),
         typeof(IKyrolusPipelineBehavior<,>),
         typeof(IKyrolusStreamPipelineBehavior<,>),
         typeof(IKyrolusRequestPreProcessor<>),
@@ -54,9 +61,12 @@ public static class MediatorReflectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // Replace, not TryAdd: the runtime registers a placeholder that throws, precisely so that
-        // reaching it means neither half was set up.
-        services.Replace(ServiceDescriptor.Singleton<IKyrolusMediatorDispatcher, KyrolusReflectionDispatcher>());
+        // Goes through the shared guard rather than a bare Replace: the runtime registers a
+        // placeholder that throws, precisely so that reaching it means neither half was set up, but
+        // a bare Replace could not tell that apart from "AddKyrolusMediatorGeneratedDispatcher()
+        // already installed the generated one" - it would silently discard whichever ran first.
+        // See the remarks on KyrolusMediatorDispatcherRegistration for why that matters.
+        KyrolusMediatorDispatcherRegistration.Install<KyrolusReflectionDispatcher>(services, nameof(AddKyrolusMediatorReflection));
         services.Replace(ServiceDescriptor.Singleton<IMediatorDispatcher>(static sp => (IMediatorDispatcher)sp.GetRequiredService<IKyrolusMediatorDispatcher>()));
 
         services.TryAddSingleton<IKyrolusPipelineWrapperSource, ReflectionPipelineWrapperSource>();
