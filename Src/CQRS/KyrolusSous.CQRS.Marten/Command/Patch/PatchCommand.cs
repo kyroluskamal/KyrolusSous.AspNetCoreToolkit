@@ -6,7 +6,7 @@ public class PatchCommand<TResponse, TKey>(
     Dictionary<string, object> updates,
     string? tenantId = null,
     bool cacheable = false)
-    : CacheableRequest(cacheable), IKyrolusCommand<TResponse?>
+    : CacheableRequest(cacheable), IKyrolusCommand<TResponse?>, IKyrolusPropertyUpdateRequest
     where TResponse : class
     where TKey : IEquatable<TKey>
 {
@@ -14,4 +14,9 @@ public class PatchCommand<TResponse, TKey>(
     public Dictionary<string, object> Updates { get; set; } = updates;
     public string? TenantId { get; set; } = tenantId;
     public string? RowVersionPropertyName { get; set; }
+
+    /// <inheritdoc cref="IKyrolusPropertyUpdateRequest.AllowedProperties"/>
+    public IReadOnlySet<string>? AllowedProperties { get; set; }
+
+    IEnumerable<string> IKyrolusPropertyUpdateRequest.UpdatedPropertyNames => Updates.Keys;
 }

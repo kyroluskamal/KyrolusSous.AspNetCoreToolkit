@@ -9,7 +9,16 @@ namespace KyrolusSous.CQRS.Abstractions.Behaviors;
 /// <summary>
 /// Pipeline behavior broadcasting real-time notifications upon successful execution of <see cref="ILivePushCommand"/>.
 /// </summary>
-[PipelineOrder(-550)]
+/// <remarks>
+/// Ordered outer (more negative) than <c>KyrolusReadModelProjectionBehavior</c> (-600),
+/// <c>KyrolusCommandCacheInvalidationBehavior</c> (-560, in <c>KyrolusSous.CQRS.Caching</c>) and the
+/// EF/Marten <c>DomainEventsDispatchBehavior</c> (-650), so the broadcast is the LAST post-write side
+/// effect to run, after all of those have already updated their own state. Broadcasting first (its
+/// previous position, -550, inside all three) meant a subscriber that reacts to the push by
+/// immediately re-querying could still see a stale cached response or a stale read model - the
+/// notification arrived before the things it was announcing were actually done.
+/// </remarks>
+[PipelineOrder(-660)]
 public sealed class KyrolusLivePushBehavior<TRequest, TResponse>(
     ILivePushPublisher? publisher = null,
     ILogger<KyrolusLivePushBehavior<TRequest, TResponse>>? logger = null)

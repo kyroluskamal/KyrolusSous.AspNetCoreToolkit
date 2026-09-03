@@ -69,7 +69,7 @@ public class GetByKeyValuesQueryHandler<TSession, TResponse, TKey>(IKyrolusMarte
         {
             return unitOfWork.GetRepository<IKyrolusMartenSoftDeleteRepositoryAsync<TSession, TResponse, TKey>>();
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex) when (ex.IsRepositoryNotRegistered())
         {
             return null;
         }

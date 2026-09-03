@@ -7,3 +7,4 @@ global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.DependencyInjection.Extensions;
 global using KyrolusSous.Mediator.Abstractions.Interfaces;
 global using Marten;
+global using KyrolusSous.CQRS.Marten;

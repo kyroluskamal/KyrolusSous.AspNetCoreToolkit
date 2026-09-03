@@ -388,7 +388,7 @@ public class Kyrolus20RoundsReviewTests
     [Fact(DisplayName = "Round20 Audit should redact passwords and tokens")]
     public async Task Round20_Audit_should_redact_passwords_and_tokens()
     {
-        var sink = new InMemoryAuditSink();
+        var sink = new KyrolusInMemoryAuditSink();
         var context = new KyrolusDefaultCurrentUserContext(user: null);
         var behavior = new KyrolusAuditBehavior<LoginCommand, string>(sink, context);
 

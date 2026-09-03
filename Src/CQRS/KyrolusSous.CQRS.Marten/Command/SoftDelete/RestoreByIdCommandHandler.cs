@@ -29,7 +29,7 @@ public sealed class RestoreByIdCommandHandler<TSession, TResponse, TKey>(IKyrolu
         {
             repo = unitOfWork.GetRepository<IKyrolusMartenSoftDeleteRepositoryAsync<TSession, TResponse, TKey>>();
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex) when (ex.IsRepositoryNotRegistered())
         {
             return false;
         }

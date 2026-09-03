@@ -1,9 +1,3 @@
-using System.Diagnostics;
-using System.Text.Json;
-using KyrolusSous.CQRS.Abstractions.Telemetry;
-using KyrolusSous.Mediator.Abstractions.Interfaces;
-using Microsoft.Extensions.Logging;
-
 namespace KyrolusSous.CQRS.Abstractions.Outbox;
 
 /// <summary>

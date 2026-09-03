@@ -1,8 +1,3 @@
-using KyrolusSous.CQRS.Abstractions.Behaviors;
-using KyrolusSous.Mediator.Abstractions.Interfaces;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-
 namespace KyrolusSous.CQRS.Abstractions.Config;
 
 /// <summary>
@@ -64,9 +59,9 @@ public static class ServiceCollectionExtensions
     /// Registers the CQRS Audit Trail pipeline behavior with the specified sink.
     /// </summary>
     public static IServiceCollection AddKyrolusCqrsAudit<TSink>(this IServiceCollection services)
-        where TSink : class, Audit.IAuditSink
+        where TSink : class, Audit.IKyrolusAuditSink
     {
-        services.TryAddScoped<Audit.IAuditSink, TSink>();
+        services.TryAddScoped<Audit.IKyrolusAuditSink, TSink>();
         services.AddTransient(typeof(IKyrolusPipelineBehavior<,>), typeof(KyrolusAuditBehavior<,>));
         return services;
     }
@@ -129,6 +124,17 @@ public static class ServiceCollectionExtensions
     {
         services.TryAddScoped<Security.IKyrolusCurrentUserContext, Security.KyrolusDefaultCurrentUserContext>();
         services.AddTransient(typeof(IKyrolusPipelineBehavior<,>), typeof(KyrolusTenantScopingBehavior<,>));
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the CQRS Property Allow-List guard, which rejects a Patch/BulkPatch/ExecuteUpdate
+    /// request that names a property outside its own declared
+    /// <see cref="Interfaces.IKyrolusPropertyUpdateRequest.AllowedProperties"/>.
+    /// </summary>
+    public static IServiceCollection AddKyrolusCqrsPropertyAllowList(this IServiceCollection services)
+    {
+        services.AddTransient(typeof(IKyrolusPipelineBehavior<,>), typeof(KyrolusPropertyAllowListBehavior<,>));
         return services;
     }
 }

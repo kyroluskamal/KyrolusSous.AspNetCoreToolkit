@@ -117,7 +117,26 @@ public sealed class KyrolusSagaCoordinator(
 
     private async Task RunAsync(IKyrolusSagaDefinition definition, KyrolusSagaInstance instance, CancellationToken cancellationToken)
     {
-        var context = definition.DeserializeContext(instance.ContextJson);
+        object context;
+        try
+        {
+            context = definition.DeserializeContext(instance.ContextJson);
+        }
+        catch (Exception ex)
+        {
+            // Left uncaught, this would leave the instance stuck as Running (or Compensating)
+            // forever: ResumeIncompleteAsync's own catch logs the failure but does not change the
+            // instance's status, so GetIncompleteAsync keeps handing it back on every future call,
+            // and it can never reach Failed - the only status RetryCompensationAsync accepts - so
+            // there is no way to rescue it either. Marking it Failed here, the same way a failed
+            // compensation step already does, at least makes it stop being silently retried forever
+            // and turns it into something discoverable that needs a human (a schema-drifted TContext,
+            // corrupt JSON, or similar) rather than an invisible zombie.
+            instance.Status = KyrolusSagaStatus.Failed;
+            instance.Error = $"Failed to deserialize stored context: {ex.Message}";
+            await _store.SaveAsync(instance, cancellationToken).ConfigureAwait(false);
+            throw;
+        }
 
         if (instance.Status == KyrolusSagaStatus.Compensating)
         {

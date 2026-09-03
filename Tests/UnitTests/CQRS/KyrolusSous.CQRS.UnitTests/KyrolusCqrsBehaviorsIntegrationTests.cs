@@ -1,7 +1,11 @@
 using System.Reflection;
+using System.Security.Claims;
 using KyrolusSous.Caching.Abstractions;
+using KyrolusSous.CQRS.Abstractions.Attributes;
+using KyrolusSous.CQRS.Abstractions.Audit;
 using KyrolusSous.CQRS.Abstractions.Behaviors;
 using KyrolusSous.CQRS.Abstractions.Interfaces;
+using KyrolusSous.CQRS.Abstractions.Security;
 using KyrolusSous.CQRS.Caching;
 using KyrolusSous.CQRS.ExceptionHandling;
 using KyrolusSous.CQRS.Validation;
@@ -63,16 +67,76 @@ public sealed class KyrolusCqrsBehaviorsIntegrationTests
         ex.Errors.First().PropertyName.ShouldBe("Name");
     }
 
-    [Fact(DisplayName = "PipelineOrder: ValidationBehavior (-950) sits outside Performance/Audit/Idempotency/Throttling (-900/-850/-800/-750)")]
-    public void ValidationBehavior_PipelineOrder_RunsBeforeAuditIdempotencyThrottling()
+    [Fact(DisplayName = "PipelineOrder: ValidationBehavior (-950) sits outside Performance/Idempotency/Throttling (-900/-800/-750)")]
+    public void ValidationBehavior_PipelineOrder_RunsBeforeIdempotencyThrottling()
     {
         var validationOrder = typeof(KyrolusValidationBehavior<,>).GetCustomAttribute<PipelineOrderAttribute>()!.Order;
 
         validationOrder.ShouldBe(-950);
         validationOrder.ShouldBeLessThan(typeof(KyrolusPerformanceAndTelemetryBehavior<,>).GetCustomAttribute<PipelineOrderAttribute>()!.Order);
-        validationOrder.ShouldBeLessThan(typeof(KyrolusAuditBehavior<,>).GetCustomAttribute<PipelineOrderAttribute>()!.Order);
         validationOrder.ShouldBeLessThan(typeof(KyrolusIdempotencyBehavior<,>).GetCustomAttribute<PipelineOrderAttribute>()!.Order);
         validationOrder.ShouldBeLessThan(typeof(KyrolusThrottlingBehavior<,>).GetCustomAttribute<PipelineOrderAttribute>()!.Order);
+    }
+
+    [Fact(DisplayName = "PipelineOrder: AuditBehavior (-2050) now sits outside Authorization/TenantScoping/Validation (-1050/-1040/-950), reversing its old position inside them")]
+    public void AuditBehavior_PipelineOrder_WrapsAuthorizationTenantScopingAndValidation()
+    {
+        var auditOrder = typeof(KyrolusAuditBehavior<,>).GetCustomAttribute<PipelineOrderAttribute>()!.Order;
+        var mappingOrder = typeof(KyrolusExceptionMappingBehavior<,>).GetCustomAttribute<PipelineOrderAttribute>()!.Order;
+
+        // Second-outermost: inside ExceptionMapping (the true last line of defense), outside
+        // everything else - specifically Authorization and TenantScoping, whose denials previously
+        // never reached this behavior at all because they used to run OUTSIDE it.
+        auditOrder.ShouldBeGreaterThan(mappingOrder);
+        auditOrder.ShouldBeLessThan(typeof(KyrolusAuthorizationBehavior<,>).GetCustomAttribute<PipelineOrderAttribute>()!.Order);
+        auditOrder.ShouldBeLessThan(typeof(KyrolusTenantScopingBehavior<,>).GetCustomAttribute<PipelineOrderAttribute>()!.Order);
+        auditOrder.ShouldBeLessThan(typeof(KyrolusValidationBehavior<,>).GetCustomAttribute<PipelineOrderAttribute>()!.Order);
+    }
+
+    [KyrolusAuthorize(Roles = "Admin")]
+    public sealed record AuditedAdminCommand(string Payload) : IKyrolusCommand<string>, IAuditableCommand
+    {
+        public string? AuditAction => "AdminAction";
+        public string? AuditCategory => "Security";
+    }
+
+    [Fact(DisplayName = "PipelineOrder: with Audit now wrapping Authorization, a denied auditable request is still recorded in the audit trail")]
+    public async Task AuditBehavior_WrapsAuthorization_RecordsDeniedAttempt()
+    {
+        var sink = new KyrolusInMemoryAuditSink();
+        var identity = new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, "user-1"), new Claim(ClaimTypes.Role, "Member")],
+            "TestAuth");
+        var userContext = new KyrolusDefaultCurrentUserContext(new ClaimsPrincipal(identity));
+
+        var authorization = new KyrolusAuthorizationBehavior<AuditedAdminCommand, string>(userContext);
+        var audit = new KyrolusAuditBehavior<AuditedAdminCommand, string>(sink, userContext);
+
+        var command = new AuditedAdminCommand("do-thing");
+        var handlerRan = false;
+
+        // Mirrors the real DI-registered pipeline composition after the fix: Audit (-2050) is now
+        // OUTER than Authorization (-1050), so Audit.Handle wraps Authorization.Handle - not the
+        // reverse, which is how these two used to nest before this ordering change.
+        RequestHandlerDelegate<string> auditedCall = ct => audit.Handle(
+            command,
+            innerCt => authorization.Handle(
+                command,
+                _ =>
+                {
+                    handlerRan = true;
+                    return Task.FromResult("done");
+                },
+                innerCt),
+            ct);
+
+        await Should.ThrowAsync<KyrolusSecurityException>(() => auditedCall(CancellationToken.None));
+
+        handlerRan.ShouldBeFalse("Authorization must still reject the request before the handler runs");
+        sink.Entries.Count.ShouldBe(1, "the denied attempt must now be captured in the audit trail - it never was before this fix, because Audit ran inside Authorization and its Handle was never even reached for a rejected request");
+        var entry = sink.Entries.First();
+        entry.IsSuccess.ShouldBeFalse();
+        entry.Action.ShouldBe("AdminAction");
     }
 
     public sealed record ValidatedIdempotentCommand(string Name, string IdempotencyKey) : IIdempotentCommand<string>

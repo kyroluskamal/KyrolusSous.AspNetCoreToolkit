@@ -12,7 +12,7 @@ public sealed class ExecuteUpdateCommand<TResponse, TKey>(
     Dictionary<string, object> updates,
     bool cacheable = false,
     bool? useSplitQuery = null)
-    : CacheableRequest(cacheable), IKyrolusCommand<int>
+    : CacheableRequest(cacheable), IKyrolusCommand<int>, IKyrolusPropertyUpdateRequest
     where TResponse : class
     where TKey : notnull, IEquatable<TKey>
 {
@@ -23,4 +23,9 @@ public sealed class ExecuteUpdateCommand<TResponse, TKey>(
     public Expression<Func<TResponse, bool>> Filter { get; init; } = filter ?? throw new ArgumentNullException(nameof(filter), "An update filter is required; pass 'x => true' explicitly to update every row.");
     public Dictionary<string, object> Updates { get; set; } = updates;
     public bool? UseSplitQuery { get; set; } = useSplitQuery;
+
+    /// <inheritdoc cref="IKyrolusPropertyUpdateRequest.AllowedProperties"/>
+    public IReadOnlySet<string>? AllowedProperties { get; set; }
+
+    IEnumerable<string> IKyrolusPropertyUpdateRequest.UpdatedPropertyNames => Updates.Keys;
 }

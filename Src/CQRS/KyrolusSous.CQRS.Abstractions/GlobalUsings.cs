@@ -1,0 +1,21 @@
+global using System.Collections.Concurrent;
+global using Microsoft.Extensions.Logging;
+global using System.Diagnostics;
+global using KyrolusSous.CQRS.Abstractions.Audit;
+global using KyrolusSous.CQRS.Abstractions.Interfaces;
+global using KyrolusSous.CQRS.Abstractions.Security;
+global using KyrolusSous.Mediator.Abstractions.Attributes;
+global using KyrolusSous.Mediator.Abstractions.Interfaces;
+global using System.Reflection;
+global using KyrolusSous.CQRS.Abstractions.Attributes;
+global using KyrolusSous.CQRS.Abstractions.Telemetry;
+global using KyrolusSous.CQRS.Abstractions.Projections;
+global using Microsoft.Extensions.DependencyInjection;
+global using KyrolusSous.CQRS.Abstractions.Behaviors;
+global using Microsoft.Extensions.DependencyInjection.Extensions;
+global using System.Data;
+global using System.Text.Json;
+global using System.Security.Claims;
+global using System.Diagnostics.Metrics;
+
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("KyrolusSous.CQRS.UnitTests")]

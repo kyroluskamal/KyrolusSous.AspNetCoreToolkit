@@ -25,33 +25,41 @@ public sealed class KyrolusValidationBehavior<TRequest, TResponse>(
         ArgumentNullException.ThrowIfNull(next);
         cancellationToken.ThrowIfCancellationRequested();
 
-        IReadOnlyList<KyrolusValidationFailure> failures;
-        if (_engine is not null)
-        {
-            failures = await _engine.ValidateAsync(request, cancellationToken).ConfigureAwait(false);
-        }
-        else if (_validators.Count == 0)
+        if (_engine is null && _validators.Count == 0)
         {
             return await next(cancellationToken).ConfigureAwait(false);
         }
-        else
+
+        // Additive, not either/or: every other behavior in this pipeline composes multiple sources
+        // the same way (multiple audit sinks, multiple exception actions, ...), and an engine
+        // registered app-wide alongside a targeted IKyrolusRequestValidator<TRequest> for one
+        // command must not make that extra check silently stop running - which is exactly what
+        // happened here before, since the engine branch used to run INSTEAD of the validators
+        // branch rather than alongside it.
+        List<KyrolusValidationFailure> collected = [];
+
+        if (_engine is not null)
         {
-            List<KyrolusValidationFailure> collected = [];
-            foreach (var validator in _validators)
+            var engineResult = await _engine.ValidateAsync(request, cancellationToken).ConfigureAwait(false);
+            if (engineResult is not null && engineResult.Count > 0)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var result = await validator.ValidateAsync(request, cancellationToken).ConfigureAwait(false);
-                if (result is not null && result.Count > 0)
-                {
-                    collected.AddRange(result);
-                }
+                collected.AddRange(engineResult);
             }
-            failures = collected;
         }
 
-        if (failures.Count > 0)
+        foreach (var validator in _validators)
         {
-            throw new KyrolusValidationException(failures);
+            cancellationToken.ThrowIfCancellationRequested();
+            var result = await validator.ValidateAsync(request, cancellationToken).ConfigureAwait(false);
+            if (result is not null && result.Count > 0)
+            {
+                collected.AddRange(result);
+            }
+        }
+
+        if (collected.Count > 0)
+        {
+            throw new KyrolusValidationException(collected);
         }
 
         return await next(cancellationToken).ConfigureAwait(false);

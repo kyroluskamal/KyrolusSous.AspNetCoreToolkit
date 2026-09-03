@@ -1,11 +1,9 @@
-using System.Collections.Concurrent;
-
 namespace KyrolusSous.CQRS.Abstractions.Audit;
 
 /// <summary>
 /// In-memory audit sink designed for testing and lightweight local environments.
 /// </summary>
-public sealed class InMemoryAuditSink : IAuditSink
+public sealed class KyrolusInMemoryAuditSink : IKyrolusAuditSink
 {
     private readonly ConcurrentBag<KyrolusAuditEntry> _entries = [];
 

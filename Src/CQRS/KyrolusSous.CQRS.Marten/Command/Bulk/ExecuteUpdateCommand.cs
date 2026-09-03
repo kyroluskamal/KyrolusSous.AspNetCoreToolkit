@@ -11,7 +11,7 @@ public sealed class ExecuteUpdateCommand<TResponse, TKey>(
     Dictionary<string, object> updates,
     bool cacheable = false,
     bool? useSplitQuery = null)
-    : CacheableRequest(cacheable), IKyrolusCommand<int>
+    : CacheableRequest(cacheable), IKyrolusCommand<int>, IKyrolusPropertyUpdateRequest
     where TResponse : class
     where TKey : notnull, IEquatable<TKey>
 {
@@ -23,4 +23,9 @@ public sealed class ExecuteUpdateCommand<TResponse, TKey>(
     public Dictionary<string, object> Updates { get; set; } = updates;
     public bool? UseSplitQuery { get; set; } = useSplitQuery;
     public string? TenantId { get; set; }
+
+    /// <inheritdoc cref="IKyrolusPropertyUpdateRequest.AllowedProperties"/>
+    public IReadOnlySet<string>? AllowedProperties { get; set; }
+
+    IEnumerable<string> IKyrolusPropertyUpdateRequest.UpdatedPropertyNames => Updates.Keys;
 }

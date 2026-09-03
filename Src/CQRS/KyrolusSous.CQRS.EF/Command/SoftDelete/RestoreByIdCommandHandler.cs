@@ -26,7 +26,7 @@ public sealed class RestoreByIdCommandHandler<TDbcontext, TResponse, TKey>(IKyro
             {
                 singleRepo = unitOfWork.GetRepository<IKyrolusSingleKeySoftDeleteRepository<TResponse, TKey>>();
             }
-            catch (InvalidOperationException)
+            catch (InvalidOperationException ex) when (ex.IsRepositoryNotRegistered())
             {
                 return false;
             }
@@ -45,7 +45,7 @@ public sealed class RestoreByIdCommandHandler<TDbcontext, TResponse, TKey>(IKyro
             {
                 compositeRepo = unitOfWork.GetRepository<IKyrolusCompositeKeySoftDeleteRepository<TResponse>>();
             }
-            catch (InvalidOperationException)
+            catch (InvalidOperationException ex) when (ex.IsRepositoryNotRegistered())
             {
                 return false;
             }

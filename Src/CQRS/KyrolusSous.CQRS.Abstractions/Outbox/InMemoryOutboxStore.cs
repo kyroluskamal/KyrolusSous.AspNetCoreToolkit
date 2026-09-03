@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-
 namespace KyrolusSous.CQRS.Abstractions.Outbox;
 
 /// <summary>
@@ -9,7 +7,7 @@ public sealed class InMemoryOutboxStore : IOutboxStore
 {
     private readonly ConcurrentDictionary<Guid, KyrolusOutboxMessage> _messages = new();
 
-    public IReadOnlyCollection<KyrolusOutboxMessage> AllMessages => _messages.Values.ToArray();
+    public IReadOnlyCollection<KyrolusOutboxMessage> AllMessages => [.. _messages.Values];
 
     public Task SaveAsync(KyrolusOutboxMessage message, CancellationToken cancellationToken = default)
     {

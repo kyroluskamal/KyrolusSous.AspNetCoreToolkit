@@ -1,9 +1,3 @@
-using System.Collections.Concurrent;
-using KyrolusSous.CQRS.Abstractions.Interfaces;
-using KyrolusSous.Mediator.Abstractions.Attributes;
-using KyrolusSous.Mediator.Abstractions.Interfaces;
-using Microsoft.Extensions.Logging;
-
 namespace KyrolusSous.CQRS.Abstractions.Behaviors;
 
 /// <summary>
@@ -19,7 +13,62 @@ namespace KyrolusSous.CQRS.Abstractions.Behaviors;
 /// </remarks>
 internal static class KyrolusThrottlingSemaphores
 {
-    internal static readonly ConcurrentDictionary<string, SemaphoreSlim> Semaphores = new(StringComparer.Ordinal);
+    private sealed record Entry(SemaphoreSlim Semaphore, int MaxConcurrency);
+
+    /// <summary>
+    /// Hard cap on distinct <see cref="IThrottledRequest.ThrottleKey"/> values tracked at once.
+    /// </summary>
+    /// <remarks>
+    /// Without a cap this dictionary grew by one <see cref="SemaphoreSlim"/> forever - entries were
+    /// never removed, so a workload that throttles on a per-user or per-tenant key (rather than a
+    /// fixed, small set of keys) leaked memory slowly but without bound. Past the cap,
+    /// <see cref="GetOrAdd"/> evicts currently-idle entries (no caller holding a permit right now) to
+    /// make room; a key that's genuinely busy is never touched, and a key evicted while idle just
+    /// gets a fresh semaphore on its next call - resetting only that one key's own bookkeeping.
+    /// </remarks>
+    private const int MaxTrackedKeys = 10_000;
+
+    private static readonly ConcurrentDictionary<string, Entry> Entries = new(StringComparer.Ordinal);
+
+    internal static SemaphoreSlim GetOrAdd(string key, int maxConcurrency)
+    {
+        var entry = Entries.GetOrAdd(
+            key,
+            static (_, mc) => new Entry(new SemaphoreSlim(mc, mc), mc),
+            maxConcurrency);
+
+        if (Entries.Count > MaxTrackedKeys)
+        {
+            EvictIdle();
+        }
+
+        return entry.Semaphore;
+    }
+
+    private static void EvictIdle()
+    {
+        foreach (var kv in Entries)
+        {
+            if (Entries.Count <= MaxTrackedKeys) break;
+
+            // Only an entry nobody currently holds a permit for (CurrentCount == MaxConcurrency) is
+            // safe to drop.
+            if (kv.Value.Semaphore.CurrentCount != kv.Value.MaxConcurrency) continue;
+
+            // Deliberately NOT calling Semaphore.Dispose(): a caller could have already fetched this
+            // exact instance via GetOrAdd an instant before this removal takes effect and be about to
+            // WaitAsync/Release on it - disposing here would throw ObjectDisposedException on what
+            // should be a perfectly normal request. Dropping the dictionary entry is enough: once
+            // every holder of the reference finishes with it, it becomes ordinary garbage - the
+            // unbounded dictionary, not the SemaphoreSlim's lifetime, was the actual leak.
+            Entries.TryRemove(new KeyValuePair<string, Entry>(kv.Key, kv.Value));
+        }
+    }
+
+    internal static void ClearSemaphores() => Entries.Clear();
+
+    /// <summary>Test hook: number of distinct throttle keys currently tracked.</summary>
+    internal static int TrackedKeyCount => Entries.Count;
 }
 
 /// <summary>
@@ -30,7 +79,6 @@ public sealed class KyrolusThrottlingBehavior<TRequest, TResponse>(
     ILogger<KyrolusThrottlingBehavior<TRequest, TResponse>>? logger = null)
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
-    private static ConcurrentDictionary<string, SemaphoreSlim> Semaphores => KyrolusThrottlingSemaphores.Semaphores;
     private readonly ILogger? _logger = logger;
 
     public async Task<TResponse> Handle(
@@ -51,7 +99,7 @@ public sealed class KyrolusThrottlingBehavior<TRequest, TResponse>(
         var maxConcurrency = throttled.MaxConcurrentExecutions <= 0 ? 5 : throttled.MaxConcurrentExecutions;
         var timeout = throttled.ThrottleTimeout;
 
-        var semaphore = Semaphores.GetOrAdd(throttleKey, _ => new SemaphoreSlim(maxConcurrency, maxConcurrency));
+        var semaphore = KyrolusThrottlingSemaphores.GetOrAdd(throttleKey, maxConcurrency);
 
         var acquired = await semaphore.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
         if (!acquired)
@@ -79,5 +127,5 @@ public sealed class KyrolusThrottlingBehavior<TRequest, TResponse>(
     /// <summary>
     /// Clears cached semaphores (useful for test resets and memory reclamation).
     /// </summary>
-    public static void ClearSemaphores() => Semaphores.Clear();
+    public static void ClearSemaphores() => KyrolusThrottlingSemaphores.ClearSemaphores();
 }

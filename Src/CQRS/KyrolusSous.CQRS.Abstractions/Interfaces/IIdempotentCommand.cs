@@ -1,5 +1,3 @@
-using KyrolusSous.Mediator.Abstractions.Interfaces;
-
 namespace KyrolusSous.CQRS.Abstractions.Interfaces;
 
 /// <summary>

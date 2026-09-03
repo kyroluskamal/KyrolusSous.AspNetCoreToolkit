@@ -20,7 +20,7 @@ public class GetByKeyValuesQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
             {
                 softRepo = unitOfWork.GetRepository<IKyrolusCompositeKeySoftDeleteRepository<TResponse>>();
             }
-            catch (InvalidOperationException)
+            catch (InvalidOperationException ex) when (ex.IsRepositoryNotRegistered())
             {
                 softRepo = null;
             }

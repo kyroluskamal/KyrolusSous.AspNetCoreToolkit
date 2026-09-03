@@ -51,7 +51,14 @@ public sealed class GetSeekQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
         else
         {
             var repo = unitOfWork.GetRepository<IKyrolusRepositoryAsync<TDbcontext, TResponse, TKey>>();
-            var spec = new KyrolusEfSeekQuerySpecification<TResponse, TResponse>(
+            // Uses GetPagedAsync (which applies Skip/Take at the SQL level - see KyrolusEfPagedQuerySpecification
+            // below and how KyrolusRepositoryAsync.GetPagedAsync builds it) rather than QueryAsync,
+            // whose specification-based query has no limit concept at all: QueryAsync would pull
+            // every row matching the cursor filter into memory before the Take() that used to run
+            // here ever discarded the rest - the opposite of what seek pagination exists to avoid on
+            // a large table. Page 1 with size query.PageSize over the cursor-filtered, seek-ordered
+            // query is exactly one page of results, which is all this handler ever needs per call.
+            var spec = new KyrolusEfPagedQuerySpecification<TResponse>(
                 new SpecificationInputs<TResponse, TResponse>(
                     Filter: effectiveFilter,
                     OrderBy: orderBy,
@@ -60,10 +67,11 @@ public sealed class GetSeekQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
                     Selector: query.Selector ?? (static entity => entity),
                     UseSplitQuery: query.UseSplitQuery ?? false,
                     IncludeDeleted: query.IncludeDeleted
-                ));
-            items = (await repo.QueryAsync(spec, cancellationToken).ConfigureAwait(false))
-                .Take(query.PageSize)
-                .ToList();
+                ),
+                pageNumber: 1,
+                pageSize: query.PageSize);
+            var (pagedItems, _) = await repo.GetPagedAsync(spec, cancellationToken).ConfigureAwait(false);
+            items = [.. pagedItems];
         }
 
         var nextToken = BuildNextToken(items, seekProperties, query.Descending);
@@ -121,21 +129,33 @@ public sealed class GetSeekQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
         if (soft is null)
         {
             var repo = unitOfWork.GetRepository<IKyrolusRepositoryAsync<TDbcontext, TResponse, TKey>>();
-            var spec = new KyrolusEfSeekQuerySpecification<TResponse, TResponse>(
+            // Same GetPagedAsync substitution as the non-deleted path above, and for the same reason
+            // (QueryAsync has no DB-level limit). Also uses `filter` (the caller's effectiveFilter,
+            // which already combines query.Filter with the cursor predicate) rather than the bare
+            // `query.Filter` this used to read: reading query.Filter here silently dropped the cursor
+            // predicate for any entity with no soft-delete repository configured, so requesting page
+            // 2+ with IncludeDeleted=true re-returned the same rows as page 1 instead of the next batch.
+            var spec = new KyrolusEfPagedQuerySpecification<TResponse>(
                 new SpecificationInputs<TResponse, TResponse>(
-                    Filter: query.Filter,
+                    Filter: filter,
                     OrderBy: orderBy,
                     AsNoTracking: query.AsNoTracking ?? false,
                     UseSplitQuery: query.UseSplitQuery ?? false,
                     Includes: KyrolusIncludeMerge.MergeExpressions(query.IncludeProperties, query.IncludeGraph, query.IncludeExpressions) ?? [],
                     IncludeDeleted: query.IncludeDeleted,
                     Selector: query.Selector ?? (static entity => entity)
-                ));
-            return (await repo.QueryAsync(spec, cancellationToken).ConfigureAwait(false))
-                .Take(query.PageSize)
-                .ToList();
+                ),
+                pageNumber: 1,
+                pageSize: query.PageSize);
+            var (pagedItems, _) = await repo.GetPagedAsync(spec, cancellationToken).ConfigureAwait(false);
+            return [.. pagedItems];
         }
 
+        // Unlike the two branches above, this path cannot be switched to a DB-level LIMIT from
+        // within this project: IKyrolusSoftDeleteRepository.GetAllIncludingDeletedAsync (in
+        // KyrolusSous.Repositories.EF.Abstractions) has no paged/limited overload, only this one,
+        // which always materializes every matching row. Fixing that requires adding a paged variant
+        // to the Repositories library itself, outside this project's scope.
         var graph = KyrolusIncludeMerge.MergeGraph(query.IncludeGraph, query.IncludeExpressions);
         var items = await soft.GetAllIncludingDeletedAsync(
             filter,
@@ -155,7 +175,7 @@ public sealed class GetSeekQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
         {
             return unitOfWork.GetRepository<IKyrolusSingleKeySoftDeleteRepository<TResponse, TKey>>();
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex) when (ex.IsRepositoryNotRegistered())
         {
             return null;
         }

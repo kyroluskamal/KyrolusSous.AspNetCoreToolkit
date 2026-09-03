@@ -29,7 +29,7 @@ public sealed class SoftDeleteByIdCommandHandler<TSession, TResponse, TKey>(IKyr
         {
             repo = unitOfWork.GetRepository<IKyrolusMartenSoftDeleteRepositoryAsync<TSession, TResponse, TKey>>();
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex) when (ex.IsRepositoryNotRegistered())
         {
             return false;
         }

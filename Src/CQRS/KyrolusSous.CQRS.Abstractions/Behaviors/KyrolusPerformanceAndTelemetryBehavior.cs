@@ -1,9 +1,3 @@
-using System.Diagnostics;
-using KyrolusSous.CQRS.Abstractions.Telemetry;
-using KyrolusSous.Mediator.Abstractions.Attributes;
-using KyrolusSous.Mediator.Abstractions.Interfaces;
-using Microsoft.Extensions.Logging;
-
 namespace KyrolusSous.CQRS.Abstractions.Behaviors;
 
 /// <summary>

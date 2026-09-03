@@ -85,7 +85,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Elasticsearch - Unit | unit | 12 | none | yes |
 | Resilience - Unit | unit | 24 | none | yes |
 | Mapping - Unit | unit | 54 | none | yes |
-| CQRS - Unit | unit | 89 | none | yes |
+| CQRS - Unit | unit | 106 | none | yes |
 | Auth - Unit<br><sub>Core runtime, principal factory, pbkdf2 hasher, external logins, and OpenIddict endpoints integration.</sub> | unit | 128 | none | yes |
 | Auth.ApiKey - Unit | unit | 11 | none | yes |
 | Auth.EntityFramework - Unit | unit | 8 | none | yes |
@@ -106,7 +106,7 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | DataProtection - Unit | unit | 33 | none | yes |
 | Payments - Unit | unit | 57 | none | yes |
 | Localization - Unit | unit | 53 | none | yes |
-| **Total** | | **2557** | | |
+| **Total** | | **2574** | | |
 
 <!-- END:GENERATED:test-suites -->
 

@@ -1,11 +1,9 @@
-using Microsoft.Extensions.Logging;
-
 namespace KyrolusSous.CQRS.Abstractions.Audit;
 
 /// <summary>
 /// Default audit sink that writes structured audit log entries via Microsoft.Extensions.Logging.
 /// </summary>
-public sealed class LoggerAuditSink(ILogger<LoggerAuditSink> logger) : IAuditSink
+public sealed class LoggerAuditSink(ILogger<LoggerAuditSink> logger) : IKyrolusAuditSink
 {
     private readonly ILogger _logger = logger;
 

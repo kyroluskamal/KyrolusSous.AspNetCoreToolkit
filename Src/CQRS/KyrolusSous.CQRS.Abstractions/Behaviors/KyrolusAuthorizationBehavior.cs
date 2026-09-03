@@ -1,12 +1,3 @@
-using System.Collections.Concurrent;
-using System.Reflection;
-using KyrolusSous.CQRS.Abstractions.Attributes;
-using KyrolusSous.CQRS.Abstractions.Interfaces;
-using KyrolusSous.CQRS.Abstractions.Security;
-using KyrolusSous.Mediator.Abstractions.Attributes;
-using KyrolusSous.Mediator.Abstractions.Interfaces;
-using Microsoft.Extensions.Logging;
-
 namespace KyrolusSous.CQRS.Abstractions.Behaviors;
 
 /// <summary>
@@ -48,7 +39,7 @@ public sealed class KyrolusAuthorizationBehavior<TRequest, TResponse>(
 
         if (request is IAuthorizedRequest authorizedRequest)
         {
-            await ValidateProgrammaticAuthorizationAsync(authorizedRequest, context, request!, cancellationToken).ConfigureAwait(false);
+            await ValidateProgrammaticAuthorizationAsync(authorizedRequest, context, request, cancellationToken).ConfigureAwait(false);
         }
 
         return await next(cancellationToken).ConfigureAwait(false);

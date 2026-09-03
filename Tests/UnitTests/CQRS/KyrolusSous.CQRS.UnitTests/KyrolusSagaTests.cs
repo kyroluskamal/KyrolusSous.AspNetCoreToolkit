@@ -277,6 +277,40 @@ public sealed class KyrolusSagaTests
         instance.Error.ShouldBe("original diagnostic");
     }
 
+    [Fact(DisplayName = "Saga: a corrupt context on the forward (Running) path is marked Failed instead of retried forever")]
+    public async Task Saga_RunAsync_CorruptContext_MarksFailedInsteadOfStayingRunningForever()
+    {
+        var store = new InMemorySagaStore();
+        var saga = new TestSaga([new RecordingStep("Reserve")]);
+        var registry = new KyrolusSagaDefinitionRegistry([saga]);
+        var coordinator = new KyrolusSagaCoordinator(store, registry);
+
+        var corrupted = new KyrolusSagaInstance
+        {
+            SagaName = saga.SagaName,
+            ContextJson = "{not valid json", // deliberately corrupt
+            CurrentStepIndex = 0,
+            Status = KyrolusSagaStatus.Running
+        };
+        await store.SaveAsync(corrupted);
+
+        // First resume attempt: ResumeIncompleteAsync's own per-instance catch swallows the
+        // exception (proven by Saga_ResumeIncomplete_OneBadInstanceDoesNotBlockTheRest), so the
+        // only way to observe whether the instance got stuck is to check its persisted status
+        // afterward - it must be Failed, not still Running.
+        await coordinator.ResumeIncompleteAsync(CancellationToken.None);
+
+        var instance = await store.GetAsync(corrupted.Id);
+        instance.ShouldNotBeNull();
+        instance.Status.ShouldBe(KyrolusSagaStatus.Failed);
+        instance.Error.ShouldNotBeNull();
+
+        // Confirms it actually stopped being retried: a Failed instance is no longer "incomplete",
+        // so a second resume pass must not pick it up again.
+        var incompleteAfter = await store.GetIncompleteAsync(CancellationToken.None);
+        incompleteAfter.ShouldNotContain(i => i.Id == corrupted.Id);
+    }
+
     [Fact(DisplayName = "Saga: ResumeIncompleteAsync resumes every other instance even when one fails to resume")]
     public async Task Saga_ResumeIncomplete_OneBadInstanceDoesNotBlockTheRest()
     {

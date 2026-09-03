@@ -202,8 +202,12 @@ public sealed class KyrolusReviewFixesTests
         var repo = Substitute.For<IKyrolusRepositoryAsync<DummyDbContext, StubEntity, int>>();
         uow.GetRepository<IKyrolusRepositoryAsync<DummyDbContext, StubEntity, int>>().Returns(repo);
 
-        repo.QueryAsync(Arg.Any<IKyrolusQuerySpecification<StubEntity, StubEntity>>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new List<StubEntity>()));
+        // Seek queries go through GetPagedAsync now (page 1, size = the clamped PageSize), not
+        // QueryAsync - QueryAsync has no Skip/Take at the SQL level and used to materialize every
+        // matching row before an in-memory Take() discarded the rest, defeating the point of seek
+        // pagination on a large table.
+        repo.GetPagedAsync(Arg.Any<IKyrolusPagedQuerySpecification<StubEntity, StubEntity>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<(IReadOnlyList<StubEntity> Items, int TotalCount)>(([], 0)));
 
         var handler = new EfQuery.GetSeekQueryHandler<DummyDbContext, StubEntity, int>(uow);
         var query = new EfQuery.GetSeekQuery<StubEntity, int>(pageSize: int.MaxValue) { SeekPropertyNames = ["Id"] };

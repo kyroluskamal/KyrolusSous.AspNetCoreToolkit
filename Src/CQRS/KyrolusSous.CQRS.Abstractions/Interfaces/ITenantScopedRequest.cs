@@ -2,7 +2,7 @@ namespace KyrolusSous.CQRS.Abstractions.Interfaces;
 
 /// <summary>
 /// Marks a request that carries an explicit tenant identifier, so
-/// <see cref="Behaviors.KyrolusTenantScopingBehavior{TRequest, TResponse}"/> can verify it matches the
+/// <see cref="KyrolusTenantScopingBehavior{TRequest, TResponse}"/> can verify it matches the
 /// current user's tenant before the handler runs.
 /// </summary>
 /// <remarks>

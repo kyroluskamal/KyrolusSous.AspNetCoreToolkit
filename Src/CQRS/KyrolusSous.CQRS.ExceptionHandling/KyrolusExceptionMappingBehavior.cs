@@ -28,6 +28,14 @@ public sealed class KyrolusExceptionMappingBehavior<TRequest, TResponse>(
         {
             return await next(cancellationToken).ConfigureAwait(false);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Cancellation is not a failure a mapper should get to translate into an ordinary mapped
+            // response - a mapper broad enough to match Exception in general (a common "catch-all"
+            // implementation) would otherwise silently turn a cancelled request into a normal-looking
+            // result instead of letting the cancellation propagate to whoever asked for it.
+            throw;
+        }
         catch (Exception ex)
         {
             foreach (var mapper in _mappers)

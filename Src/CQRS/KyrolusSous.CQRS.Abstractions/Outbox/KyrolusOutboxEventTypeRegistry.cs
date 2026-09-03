@@ -1,6 +1,3 @@
-using System.Reflection;
-using KyrolusSous.Mediator.Abstractions.Interfaces;
-
 namespace KyrolusSous.CQRS.Abstractions.Outbox;
 
 /// <summary>

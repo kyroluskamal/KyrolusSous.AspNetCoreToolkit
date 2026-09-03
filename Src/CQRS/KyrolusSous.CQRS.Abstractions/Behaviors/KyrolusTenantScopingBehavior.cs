@@ -1,9 +1,3 @@
-using KyrolusSous.CQRS.Abstractions.Interfaces;
-using KyrolusSous.CQRS.Abstractions.Security;
-using KyrolusSous.Mediator.Abstractions.Attributes;
-using KyrolusSous.Mediator.Abstractions.Interfaces;
-using Microsoft.Extensions.Logging;
-
 namespace KyrolusSous.CQRS.Abstractions.Behaviors;
 
 /// <summary>
