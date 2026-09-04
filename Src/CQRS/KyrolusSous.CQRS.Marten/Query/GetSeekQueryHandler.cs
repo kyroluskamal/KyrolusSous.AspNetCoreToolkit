@@ -40,8 +40,12 @@ public sealed class GetSeekQueryHandler<TSession, TResponse, TKey>(IKyrolusMarte
         var effectiveFilter = CombineFilters(query.Filter, cursorFilter);
         var orderBy = BuildOrderBy(seekProperties, query.Descending);
         var options = BuildOptions(query, effectiveFilter, orderBy);
+        // Count against query.Filter alone, not effectiveFilter - effectiveFilter also carries the
+        // cursor predicate ("rows after the last seen row"), which would make TotalCount shrink on
+        // every subsequent page instead of staying constant across the whole seek. Mirrors the EF
+        // provider's GetSeekQueryHandler.ResolveTotalCountAsync.
         var total = query.IncludeTotalCount
-            ? await ResolveTotalCountAsync(query, options, cancellationToken).ConfigureAwait(false)
+            ? await ResolveTotalCountAsync(query, BuildOptions(query, query.Filter, orderBy), cancellationToken).ConfigureAwait(false)
             : null;
 
         IEnumerable<TResponse> items;
@@ -290,32 +294,59 @@ public sealed class GetSeekQueryHandler<TSession, TResponse, TKey>(IKyrolusMarte
     {
         error = null;
         comparison = null!;
-        Expression left = member;
-        Expression? right = null;
-        Expression? notNull = null;
 
         var underlying = Nullable.GetUnderlyingType(memberType);
         if (underlying is not null)
         {
-            left = Expression.Property(member, nameof(Nullable<int>.Value));
-            right = Expression.Constant(ConvertKeyValue(value, underlying), underlying);
-            notNull = Expression.Property(member, nameof(Nullable<int>.HasValue));
-            memberType = underlying;
+            // A null cursor value for a nullable column (e.g. DateTime?) can't be represented as
+            // Expression.Constant(null, underlying) - the CLR rejects a null constant typed as a
+            // non-nullable value type ("Argument types do not match"). Typing the constant as the
+            // nullable member type itself and comparing via Nullable.Compare (rather than unwrapping
+            // .Value and guarding with a separate HasValue check) sidesteps that and handles every
+            // HasValue combination - including a null cursor value against a non-null member -
+            // without a separate runtime crash.
+            if (underlying.GetMethod("CompareTo", new[] { underlying }) is null)
+            {
+                error = $"Type '{underlying.Name}' does not support ordering.";
+                return false;
+            }
+
+            var nullableConstant = Expression.Constant(ConvertKeyValue(value, underlying), memberType);
+            var nullableCompareMethod = typeof(Nullable).GetMethod(nameof(Nullable.Compare))!.MakeGenericMethod(underlying);
+            var nullableCompareCall = Expression.Call(nullableCompareMethod, member, nullableConstant);
+            var nullableZero = Expression.Constant(0);
+            comparison = descending
+                ? Expression.LessThan(nullableCompareCall, nullableZero)
+                : Expression.GreaterThan(nullableCompareCall, nullableZero);
+            return true;
         }
-        else if (!memberType.IsValueType)
+
+        Expression? notNull = null;
+        if (!memberType.IsValueType)
         {
             notNull = Expression.NotEqual(member, Expression.Constant(null, memberType));
         }
-        right ??= Expression.Constant(ConvertKeyValue(value, memberType), memberType);
 
-        var compareMethod = memberType.GetMethod("CompareTo", new[] { memberType });
-        if (compareMethod is null)
+        // memberType.GetMethod("CompareTo", new[] { memberType }) can resolve to an inherited
+        // CompareTo(object) overload instead of a same-signature one - e.g. Enum implements only
+        // the non-generic IComparable, not IComparable<TEnum> - and Expression.Call then throws
+        // ("Expression of type '...' cannot be used for parameter of type 'System.Object'")
+        // because `right` is typed as memberType, not object. Comparer<T>.Default.Compare handles
+        // this correctly at runtime (it falls back to non-generic IComparable when IComparable<T>
+        // isn't implemented), so route the comparison through it instead of the type's own
+        // possibly-mismatched CompareTo.
+        if (!typeof(IComparable).IsAssignableFrom(memberType) && !typeof(IComparable<>).MakeGenericType(memberType).IsAssignableFrom(memberType))
         {
             error = $"Type '{memberType.Name}' does not support ordering.";
             return false;
         }
 
-        var compareCall = Expression.Call(left, compareMethod, right);
+        var right = Expression.Constant(ConvertKeyValue(value, memberType), memberType);
+        var comparerType = typeof(Comparer<>).MakeGenericType(memberType);
+        var comparerDefault = Expression.Property(null, comparerType.GetProperty(nameof(Comparer<object>.Default))!);
+        var compareMethod = comparerType.GetMethod(nameof(Comparer<object>.Compare), new[] { memberType, memberType })!;
+
+        var compareCall = Expression.Call(comparerDefault, compareMethod, member, right);
         var zero = Expression.Constant(0);
         comparison = descending
             ? Expression.LessThan(compareCall, zero)

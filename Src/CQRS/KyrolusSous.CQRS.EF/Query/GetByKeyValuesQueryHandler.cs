@@ -12,7 +12,11 @@ public class GetByKeyValuesQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
 {
     public async Task<TResponse?> Handle(GetByKeyValuesQuery<TResponse, TKey> query, CancellationToken cancellationToken)
     {
-        var mergedExpressions = KyrolusIncludeMerge.MergeExpressions(query.IncludeExpressions, query.IncludeGraph);
+        // Single-pass merge of all three include sources - a two-step merge (IncludeExpressions +
+        // IncludeGraph first, IncludeProperties folded in only when that came out empty) silently
+        // dropped IncludeProperties whenever it was combined with the other two, and re-merging
+        // IncludeGraph into an already-merged array duplicated its entries.
+        var includes = KyrolusIncludeMerge.MergeExpressions(query.IncludeProperties, query.IncludeGraph, query.IncludeExpressions) ?? [];
         if (query.IncludeDeleted)
         {
             IKyrolusCompositeKeySoftDeleteRepository<TResponse>? softRepo = null;
@@ -27,7 +31,6 @@ public class GetByKeyValuesQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
 
             if (softRepo is not null)
             {
-                var includes = KyrolusIncludeMerge.MergeExpressions(query.IncludeProperties, query.IncludeGraph, mergedExpressions) ?? [];
                 return await softRepo.GetByIdIncludingDeletedAsync(
                     query.KeyValues,
                     query.AsNoTracking,
@@ -38,14 +41,14 @@ public class GetByKeyValuesQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
         }
 
         var repo = unitOfWork.GetRepository<IKyrolusCompositeKeyRepositoryAsync<TDbcontext, TResponse, TKey>>();
-        if (mergedExpressions is not null && mergedExpressions.Length > 0)
+        if (includes.Length > 0)
         {
             return await repo.GetByIdAsync(
                 query.KeyValues,
                 query.AsNoTracking,
                 query.UseSplitQuery,
                 cancellationToken,
-                mergedExpressions);
+                includes);
         }
 
         return await repo.GetByIdAsync(

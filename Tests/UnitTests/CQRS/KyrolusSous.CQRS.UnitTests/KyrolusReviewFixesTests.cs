@@ -39,10 +39,19 @@ public sealed class KyrolusReviewFixesTests
         public string Name { get; set; } = string.Empty;
     }
 
+    public enum SeekableStatus
+    {
+        Draft,
+        Active,
+        Archived
+    }
+
     public sealed class GuidKeyedEntity
     {
         public Guid Id { get; set; }
         public string Name { get; set; } = string.Empty;
+        public DateTime? LastSeenAt { get; set; }
+        public SeekableStatus Status { get; set; }
     }
 
     // ==========================================
@@ -295,6 +304,163 @@ public sealed class KyrolusReviewFixesTests
         var page2 = await handler.Handle(page2Query, CancellationToken.None);
 
         page2.ShouldNotBeNull();
+    }
+
+    // ==========================================
+    // Bugfix: Marten seek pagination must work for an Enum-typed sort column instead of throwing
+    // via a mismatched CompareTo(object) resolved by reflection.
+    // ==========================================
+
+    [Fact(DisplayName = "Bugfix Marten: seek pagination past page 1 for an Enum-typed sort column does not throw")]
+    public async Task MartenGetSeekQueryHandler_EnumColumn_Page2ViaCursor_DoesNotThrow()
+    {
+        var martenUow = Substitute.For<IKyrolusMartenUnitOfWork<IDocumentSession>>();
+        var repo = Substitute.For<IKyrolusMartenRepositoryAsync<IDocumentSession, GuidKeyedEntity, Guid>>();
+        martenUow.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, GuidKeyedEntity, Guid>>().Returns(repo);
+
+        var item = new GuidKeyedEntity { Id = Guid.NewGuid(), Name = "A", Status = SeekableStatus.Active };
+        repo.QueryAsync<GuidKeyedEntity>(
+                Arg.Any<MartenQueryOptions<GuidKeyedEntity>?>(),
+                Arg.Any<Func<IMartenQueryable<GuidKeyedEntity>, IMartenQueryable<GuidKeyedEntity>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IEnumerable<GuidKeyedEntity>>([item]));
+
+        var handler = new MartenQuery.GetSeekQueryHandler<IDocumentSession, GuidKeyedEntity, Guid>(martenUow);
+
+        var page1Query = new MartenQuery.GetSeekQuery<GuidKeyedEntity, Guid>(pageSize: 1) { SeekPropertyNames = ["Status"] };
+        var page1 = await handler.Handle(page1Query, CancellationToken.None);
+        page1.NextToken.ShouldNotBeNull();
+
+        var page2Query = new MartenQuery.GetSeekQuery<GuidKeyedEntity, Guid>(pageSize: 1, cursor: page1.NextToken) { SeekPropertyNames = ["Status"] };
+
+        // Before the fix, memberType.GetMethod("CompareTo", new[]{memberType}) resolved via the
+        // reflection binder to the inherited Enum.CompareTo(object) (Enum implements only the
+        // non-generic IComparable, not IComparable<TEnum>) - Expression.Call(member, compareMethod,
+        // right) then threw ArgumentException("Expression of type '...' cannot be used for
+        // parameter of type 'System.Object'") because `right` is typed as the enum, not object.
+        var page2 = await handler.Handle(page2Query, CancellationToken.None);
+
+        page2.ShouldNotBeNull();
+    }
+
+    // ==========================================
+    // Bugfix: Marten seek pagination must accept a null cursor value for a nullable sort/cursor
+    // column (e.g. DateTime?) instead of throwing when building the continuation predicate.
+    // ==========================================
+
+    [Fact(DisplayName = "Bugfix Marten: seek pagination past page 1 with a null cursor value on a nullable column does not throw")]
+    public async Task MartenGetSeekQueryHandler_NullableColumnNullCursorValue_DoesNotThrow()
+    {
+        var martenUow = Substitute.For<IKyrolusMartenUnitOfWork<IDocumentSession>>();
+        var repo = Substitute.For<IKyrolusMartenRepositoryAsync<IDocumentSession, GuidKeyedEntity, Guid>>();
+        martenUow.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, GuidKeyedEntity, Guid>>().Returns(repo);
+
+        var item = new GuidKeyedEntity { Id = Guid.NewGuid(), Name = "A", LastSeenAt = null };
+        repo.QueryAsync<GuidKeyedEntity>(
+                Arg.Any<MartenQueryOptions<GuidKeyedEntity>?>(),
+                Arg.Any<Func<IMartenQueryable<GuidKeyedEntity>, IMartenQueryable<GuidKeyedEntity>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IEnumerable<GuidKeyedEntity>>([item]));
+
+        var handler = new MartenQuery.GetSeekQueryHandler<IDocumentSession, GuidKeyedEntity, Guid>(martenUow);
+
+        var page1Query = new MartenQuery.GetSeekQuery<GuidKeyedEntity, Guid>(pageSize: 1) { SeekPropertyNames = ["LastSeenAt"] };
+        var page1 = await handler.Handle(page1Query, CancellationToken.None);
+        page1.NextToken.ShouldNotBeNull();
+
+        var page2Query = new MartenQuery.GetSeekQuery<GuidKeyedEntity, Guid>(pageSize: 1, cursor: page1.NextToken) { SeekPropertyNames = ["LastSeenAt"] };
+
+        // Before the fix, TryBuildCompare built Expression.Constant(null, underlying) for the null
+        // cursor value on this DateTime? column - underlying (DateTime) is a non-nullable value type,
+        // and the CLR rejects a null constant typed as one ("Argument types do not match").
+        var page2 = await handler.Handle(page2Query, CancellationToken.None);
+
+        page2.ShouldNotBeNull();
+    }
+
+    // ==========================================
+    // Bugfix: Marten seek pagination's TotalCount must reflect the base filter only, not
+    // filter+cursor, so it stays constant across pages instead of shrinking on every page after
+    // the first.
+    // ==========================================
+
+    [Fact(DisplayName = "Bugfix Marten: GetSeekQueryHandler total count uses the base filter only, not filter+cursor")]
+    public async Task MartenGetSeekQueryHandler_TotalCount_UsesBaseFilterOnly()
+    {
+        var martenUow = Substitute.For<IKyrolusMartenUnitOfWork<IDocumentSession>>();
+        var repo = Substitute.For<IKyrolusMartenRepositoryAsync<IDocumentSession, GuidKeyedEntity, Guid>>();
+        martenUow.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, GuidKeyedEntity, Guid>>().Returns(repo);
+
+        var firstId = Guid.NewGuid();
+        var firstItem = new GuidKeyedEntity { Id = firstId, Name = "match" };
+        repo.QueryAsync<GuidKeyedEntity>(
+                Arg.Any<MartenQueryOptions<GuidKeyedEntity>?>(),
+                Arg.Any<Func<IMartenQueryable<GuidKeyedEntity>, IMartenQueryable<GuidKeyedEntity>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IEnumerable<GuidKeyedEntity>>([firstItem]));
+
+        Expression<Func<GuidKeyedEntity, bool>>? capturedCountFilter = null;
+        repo.GetPageAsync(Arg.Any<MartenQueryOptions<GuidKeyedEntity>?>(), Arg.Any<MartenPageRequest?>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                capturedCountFilter = ((MartenQueryOptions<GuidKeyedEntity>)callInfo[0]!).Filter;
+                return Task.FromResult(new PageResult<GuidKeyedEntity>([], 1, 1, 1));
+            });
+
+        var handler = new MartenQuery.GetSeekQueryHandler<IDocumentSession, GuidKeyedEntity, Guid>(martenUow);
+        var page1Query = new MartenQuery.GetSeekQuery<GuidKeyedEntity, Guid>(pageSize: 1) { SeekPropertyNames = ["Id"] };
+        var page1 = await handler.Handle(page1Query, CancellationToken.None);
+
+        var page2Query = new MartenQuery.GetSeekQuery<GuidKeyedEntity, Guid>(pageSize: 1, cursor: page1.NextToken)
+        {
+            SeekPropertyNames = ["Id"],
+            Filter = x => x.Name == "match",
+            IncludeTotalCount = true,
+        };
+        await handler.Handle(page2Query, CancellationToken.None);
+
+        capturedCountFilter.ShouldNotBeNull();
+        var compiled = capturedCountFilter!.Compile();
+
+        // Before the fix, the count's filter was effectiveFilter (query.Filter AndAlso the cursor's
+        // "Id > firstId" continuation predicate), so a row whose Id equals the cursor's last-seen Id
+        // was excluded from the count even though it satisfies query.Filter alone - TotalCount would
+        // shrink on every page after the first instead of staying constant.
+        compiled(new GuidKeyedEntity { Id = firstId, Name = "match" }).ShouldBeTrue();
+    }
+
+    // ==========================================
+    // Bugfix: Marten CountQueryHandler must resolve the soft-delete repository when IncludeDeleted
+    // is set, matching every other Marten query handler (GetAllQueryHandler, GetByIdQueryHandler,
+    // GetByKeyValuesQueryHandler, GetSeekQueryHandler).
+    // ==========================================
+
+    [Fact(DisplayName = "Bugfix Marten: CountQueryHandler counts via the soft-delete repository when IncludeDeleted is set")]
+    public async Task MartenCountQueryHandler_IncludeDeleted_UsesSoftDeleteRepository()
+    {
+        var martenUow = Substitute.For<IKyrolusMartenUnitOfWork<IDocumentSession>>();
+        var repo = Substitute.For<IKyrolusMartenRepositoryAsync<IDocumentSession, GuidKeyedEntity, Guid>>();
+        var softRepo = Substitute.For<IKyrolusMartenSoftDeleteRepositoryAsync<IDocumentSession, GuidKeyedEntity, Guid>>();
+        martenUow.GetRepository<IKyrolusMartenRepositoryAsync<IDocumentSession, GuidKeyedEntity, Guid>>().Returns(repo);
+        martenUow.GetRepository<IKyrolusMartenSoftDeleteRepositoryAsync<IDocumentSession, GuidKeyedEntity, Guid>>().Returns(softRepo);
+
+        softRepo.GetAllIncludingDeletedAsync(Arg.Any<MartenQueryOptions<GuidKeyedEntity>?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IEnumerable<GuidKeyedEntity>>([
+                new GuidKeyedEntity { Id = Guid.NewGuid() },
+                new GuidKeyedEntity { Id = Guid.NewGuid() },
+                new GuidKeyedEntity { Id = Guid.NewGuid() },
+            ]));
+
+        var handler = new MartenQuery.CountQueryHandler<IDocumentSession, GuidKeyedEntity, Guid>(martenUow);
+        var query = new MartenQuery.CountQuery<GuidKeyedEntity> { IncludeDeleted = true };
+
+        var count = await handler.Handle(query, CancellationToken.None);
+
+        // Before the fix, CountQueryHandler never resolved the soft-delete repository - it always
+        // called repo.GetPageAsync (unconfigured here, so it would return default/null and blow up,
+        // or simply ignore IncludeDeleted entirely against a real repository).
+        count.ShouldBe(3L);
+        await repo.DidNotReceive().GetPageAsync(Arg.Any<MartenQueryOptions<GuidKeyedEntity>?>(), Arg.Any<MartenPageRequest?>(), Arg.Any<CancellationToken>());
     }
 
     // ==========================================

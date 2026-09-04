@@ -11,8 +11,8 @@ namespace KyrolusSous.CQRS.Caching;
 /// </remarks>
 [PipelineOrder(-560)]
 public sealed class KyrolusCommandCacheInvalidationBehavior<TRequest, TResponse>(
-    IKyrolusCacheProvider cacheProvider,
-    IKyrolusCacheKeyProvider cacheKeyProvider)
+    IKyrolusCacheKeyProvider cacheKeyProvider,
+    IKyrolusCacheProvider? cacheProvider = null)
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
     public async Task<TResponse> Handle(
@@ -22,7 +22,10 @@ public sealed class KyrolusCommandCacheInvalidationBehavior<TRequest, TResponse>
     {
         var response = await next(cancellationToken).ConfigureAwait(false);
 
-        if (request is not IKyrolusCommandBase)
+        // No real provider registered (an app that never called the caching-provider extension) -
+        // nothing to invalidate, and this must not throw, since AddKyrolusCqrsCaching registers this
+        // behavior for every request type regardless of whether a provider was also registered.
+        if (cacheProvider is null || request is not IKyrolusCommandBase)
         {
             return response;
         }

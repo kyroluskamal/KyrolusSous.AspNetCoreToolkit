@@ -169,7 +169,7 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory)
 
         var request = new KyrolusBatchRequest<MenuItem, Guid>
         {
-            Atomic = true,
+            Atomic = false,
             ContinueOnError = true,
             ReturnData = false,
             Operations =
@@ -481,7 +481,7 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory)
 
         var request = new KyrolusBatchRequest<MenuItem, Guid>
         {
-            Atomic = true,
+            Atomic = false,
             ContinueOnError = requestContinueOnError,
             ReturnData = false,
             Operations =
@@ -658,7 +658,7 @@ public sealed class BatchCommandBranchIntegrationTests(TestAppFactory factory)
 
         var request = new KyrolusBatchRequest<MenuItem, Guid>
         {
-            Atomic = true,
+            Atomic = false,
             ContinueOnError = true,
             ReturnData = returnData,
             Operations =

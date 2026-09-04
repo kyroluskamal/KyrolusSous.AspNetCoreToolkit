@@ -9,7 +9,8 @@ namespace KyrolusSous.CQRS.Elasticsearch.Projections;
 public class KyrolusElasticReadModelProjector<TDocument, TId>(
     IKyrolusElasticRepository<TDocument, TId> repository,
     ILogger<KyrolusElasticReadModelProjector<TDocument, TId>>? logger = null)
-    : IReadModelProjector<TDocument>
+    : IKyrolusReadModelProjector
+<TDocument>
     where TDocument : class
 {
     public async Task ProjectAsync(TDocument model, CancellationToken cancellationToken = default)

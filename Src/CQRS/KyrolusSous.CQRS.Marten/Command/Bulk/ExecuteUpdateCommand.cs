@@ -21,6 +21,7 @@ public sealed class ExecuteUpdateCommand<TResponse, TKey>(
     /// </summary>
     public Expression<Func<TResponse, bool>> Filter { get; init; } = filter ?? throw new ArgumentNullException(nameof(filter), "An update filter is required; pass 'x => true' explicitly to update every document.");
     public Dictionary<string, object> Updates { get; set; } = updates;
+    // Currently a no-op for this provider - see the remark on ExecuteDeleteCommand.UseSplitQuery.
     public bool? UseSplitQuery { get; set; } = useSplitQuery;
     public string? TenantId { get; set; }
 

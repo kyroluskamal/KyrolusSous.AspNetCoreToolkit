@@ -3,7 +3,7 @@ namespace KyrolusSous.CQRS.Abstractions.Outbox;
 /// <summary>
 /// Status of an outbox message in the transactional outbox pipeline.
 /// </summary>
-public enum OutboxMessageStatus
+public enum KyrolusOutboxMessageStatus
 {
     Pending = 0,
     Processing = 1,
@@ -14,7 +14,7 @@ public enum OutboxMessageStatus
 /// <summary>
 /// Contract representing an outbox message destined for asynchronous publication.
 /// </summary>
-public interface IOutboxMessage
+public interface IKyrolusOutboxMessage
 {
     Guid Id { get; }
     string? CorrelationId { get; }
@@ -24,5 +24,5 @@ public interface IOutboxMessage
     DateTimeOffset? ProcessedOnUtc { get; }
     string? Error { get; }
     int RetryCount { get; }
-    OutboxMessageStatus Status { get; }
+    KyrolusOutboxMessageStatus Status { get; }
 }

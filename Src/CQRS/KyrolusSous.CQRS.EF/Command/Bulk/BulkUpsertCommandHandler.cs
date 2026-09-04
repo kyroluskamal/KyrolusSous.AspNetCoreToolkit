@@ -30,6 +30,16 @@ public sealed class BulkUpsertCommandHandler<TDbcontext, TResponse, TKey>(IKyrol
     {
         var entities = command.Entities?.Where(static e => e is not null).ToList() ?? [];
         if (entities.Count == 0) return entities;
+        if (entities.Count > KyrolusBulkLimits.MaxBatchSize)
+        {
+            // The existence-check query below builds one OR-branch (with its own parameters) per
+            // entity rather than a SQL IN(...), so SQL Server's ~2100-parameter-per-query ceiling
+            // caps how many entities a single upsert can carry. Thrown, not clamped: silently
+            // dropping entities from a bulk write would be data loss.
+            throw new InvalidOperationException(
+                $"[Kyrolus CQRS] Bulk upsert batch of {entities.Count} entities exceeds the maximum of " +
+                $"{KyrolusBulkLimits.MaxBatchSize}. Split the batch into smaller chunks.");
+        }
         if (command.KeyPropertyNames is null || command.KeyPropertyNames.Count == 0)
         {
             throw new InvalidOperationException("KeyPropertyNames is required for upsert.");

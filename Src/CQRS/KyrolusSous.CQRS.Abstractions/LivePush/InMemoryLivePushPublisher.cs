@@ -3,7 +3,7 @@ namespace KyrolusSous.CQRS.Abstractions.LivePush;
 /// <summary>
 /// Default live push publisher that logs real-time broadcast events.
 /// </summary>
-public sealed class LoggerLivePushPublisher(ILogger<LoggerLivePushPublisher> logger) : ILivePushPublisher
+public sealed class KyrolusLoggerLivePushPublisher(ILogger<KyrolusLoggerLivePushPublisher> logger) : IKyrolusLivePushPublisher
 {
     private readonly ILogger _logger = logger;
 
@@ -17,7 +17,7 @@ public sealed class LoggerLivePushPublisher(ILogger<LoggerLivePushPublisher> log
 /// <summary>
 /// In-memory live push publisher for testing and verification.
 /// </summary>
-public sealed class InMemoryLivePushPublisher : ILivePushPublisher
+public sealed class InMemoryLivePushPublisher : IKyrolusLivePushPublisher
 {
     private readonly ConcurrentBag<(string Channel, object? Data)> _messages = [];
 

@@ -13,6 +13,7 @@ public sealed class GetPagedQuery<TResponse, TKey>(int pageNumber, int pageSize,
     public List<string>? IncludeProperties { get; set; }
     public Expression<Func<TResponse, object?>>[]? IncludeExpressions { get; set; }
     public IncludeGraph<TResponse>? IncludeGraph { get; set; }
+    // Currently no-ops for this provider - see the remark on GetAllQuery<TResponse>.AsNoTracking.
     public bool? AsNoTracking { get; set; }
     public bool? UseSplitQuery { get; set; }
     public int PageNumber { get; set; } = pageNumber;

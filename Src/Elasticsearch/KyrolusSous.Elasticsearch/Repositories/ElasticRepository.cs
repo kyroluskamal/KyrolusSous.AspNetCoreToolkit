@@ -170,7 +170,7 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
         return result.Documents;
     }
 
-    public async Task<bool> UpdateAsync(TDocument document, TId id, CancellationToken cancellationToken = default)
+    public async Task<bool> UpdateAsync(TDocument document, TId id, long? ifSeqNo = null, long? ifPrimaryTerm = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(id);
@@ -183,18 +183,20 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
         var idString = id.ToString()!;
         var response = await _client.UpdateAsync<TDocument, TDocument>(_indexName, idString, descriptor => descriptor
             .Doc(document)
-            .DocAsUpsert(false),
+            .DocAsUpsert(false)
+            .IfSeqNo(ifSeqNo)
+            .IfPrimaryTerm(ifPrimaryTerm),
             cancellationToken);
 
         if (!response.IsValidResponse)
         {
-            _logger?.LogError("Elasticsearch update failed for document '{Id}' in index '{Index}': {Error}", idString, _indexName, response.DebugInformation);
+            LogWriteFailure("update", idString, response);
         }
 
         return response.IsValidResponse;
     }
 
-    public async Task<bool> UpdatePartialAsync(TId id, object partialDocument, CancellationToken cancellationToken = default)
+    public async Task<bool> UpdatePartialAsync(TId id, object partialDocument, long? ifSeqNo = null, long? ifPrimaryTerm = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(id);
         ArgumentNullException.ThrowIfNull(partialDocument);
@@ -207,12 +209,14 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
         var idString = id.ToString()!;
         var response = await _client.UpdateAsync<TDocument, object>(_indexName, idString, descriptor => descriptor
             .Doc(partialDocument)
-            .DocAsUpsert(false),
+            .DocAsUpsert(false)
+            .IfSeqNo(ifSeqNo)
+            .IfPrimaryTerm(ifPrimaryTerm),
             cancellationToken);
 
         if (!response.IsValidResponse)
         {
-            _logger?.LogError("Elasticsearch partial update failed for document '{Id}' in index '{Index}': {Error}", idString, _indexName, response.DebugInformation);
+            LogWriteFailure("partial update", idString, response);
         }
 
         return response.IsValidResponse;
@@ -259,7 +263,7 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
         return response.IsValidResponse;
     }
 
-    public async Task<bool> DeleteAsync(TId id, CancellationToken cancellationToken = default)
+    public async Task<bool> DeleteAsync(TId id, long? ifSeqNo = null, long? ifPrimaryTerm = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(id);
 
@@ -269,11 +273,16 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
         activity?.SetTag("elasticsearch.index", _indexName);
 
         var idString = id.ToString()!;
-        var response = await _client.DeleteAsync(new DeleteRequest(_indexName, idString), cancellationToken);
+        var request = new DeleteRequest(_indexName, idString)
+        {
+            IfSeqNo = ifSeqNo,
+            IfPrimaryTerm = ifPrimaryTerm
+        };
+        var response = await _client.DeleteAsync(request, cancellationToken);
 
         if (!response.IsValidResponse && response.Result != Result.NotFound)
         {
-            _logger?.LogError("Elasticsearch delete failed for document '{Id}' in index '{Index}': {Error}", idString, _indexName, response.DebugInformation);
+            LogWriteFailure("delete", idString, response);
         }
 
         return response.IsValidResponse;
@@ -1001,6 +1010,29 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
             {
                 try { await ClosePointInTimeAsync(pitId, CancellationToken.None); } catch { /* Ignore */ }
             }
+        }
+    }
+
+    /// <summary>
+    /// Logs a failed write, distinguishing an optimistic-concurrency version conflict (expected outcome of a
+    /// caller-supplied <c>ifSeqNo</c>/<c>ifPrimaryTerm</c> losing a race - logged at Debug, not an error) from
+    /// every other failure (logged at Error, as before). Elasticsearch reports a version conflict as HTTP 409;
+    /// the client surfaces that as <see cref="Elastic.Transport.Products.Elasticsearch.ElasticsearchResponse.ElasticsearchServerError"/>
+    /// with <c>Status == 409</c>.
+    /// </summary>
+    private void LogWriteFailure(string operation, string idString, Elastic.Transport.Products.Elasticsearch.ElasticsearchResponse response)
+    {
+        if (response.ElasticsearchServerError?.Status == 409)
+        {
+            _logger?.LogDebug(
+                "Elasticsearch {Operation} for document '{Id}' in index '{Index}' lost an optimistic concurrency race - the document's seq_no/primary_term no longer matched.",
+                operation, idString, _indexName);
+        }
+        else
+        {
+            _logger?.LogError(
+                "Elasticsearch {Operation} failed for document '{Id}' in index '{Index}': {Error}",
+                operation, idString, _indexName, response.DebugInformation);
         }
     }
 

@@ -349,6 +349,159 @@ public sealed class KyrolusSagaTests
         finished.Status.ShouldBe(KyrolusSagaStatus.Completed);
     }
 
+    /// <summary>
+    /// Decorates a store so that every caller of <see cref="GetAsync"/> (or every caller of
+    /// <see cref="GetIncompleteAsync"/>) blocks until a second concurrent caller arrives at the same
+    /// method, then releases both together. Used to force the exact race the version check has to
+    /// survive - two callers reading the same version before either writes - deterministically,
+    /// instead of hoping two Tasks happen to interleave that way under real timing.
+    /// </summary>
+    private sealed class RendezvousReadStore(IKyrolusSagaStore inner) : IKyrolusSagaStore
+    {
+        private readonly SemaphoreSlim _gate = new(0, 2);
+        private int _arrived;
+
+        public async Task<KyrolusSagaInstance?> GetAsync(Guid sagaId, CancellationToken cancellationToken = default)
+        {
+            var result = await inner.GetAsync(sagaId, cancellationToken);
+            await RendezvousAsync();
+            return result;
+        }
+
+        public async Task<IReadOnlyList<KyrolusSagaInstance>> GetIncompleteAsync(CancellationToken cancellationToken = default)
+        {
+            var result = await inner.GetIncompleteAsync(cancellationToken);
+            await RendezvousAsync();
+            return result;
+        }
+
+        public Task<bool> SaveAsync(KyrolusSagaInstance instance, CancellationToken cancellationToken = default)
+            => inner.SaveAsync(instance, cancellationToken);
+
+        private async Task RendezvousAsync()
+        {
+            if (Interlocked.Increment(ref _arrived) >= 2)
+                _gate.Release(2);
+            else
+                await _gate.WaitAsync();
+        }
+    }
+
+    private sealed class CountingStep(string name) : IKyrolusSagaStep<TestSagaContext>
+    {
+        public string Name => name;
+        public int ExecuteCount;
+
+        public Task ExecuteAsync(TestSagaContext context, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref ExecuteCount);
+            context.Log.Add($"execute:{name}");
+            return Task.CompletedTask;
+        }
+
+        public Task CompensateAsync(TestSagaContext context, CancellationToken cancellationToken)
+        {
+            context.Log.Add($"compensate:{name}");
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class CountingFlakyCompensateStep(string name, Func<bool> shouldFail) : IKyrolusSagaStep<TestSagaContext>
+    {
+        public string Name => name;
+        public int CompensateCount;
+
+        public Task ExecuteAsync(TestSagaContext context, CancellationToken cancellationToken)
+        {
+            context.Log.Add($"execute:{name}");
+            return Task.CompletedTask;
+        }
+
+        public Task CompensateAsync(TestSagaContext context, CancellationToken cancellationToken)
+        {
+            if (shouldFail()) throw new InvalidOperationException($"{name} compensate failed");
+            Interlocked.Increment(ref CompensateCount);
+            context.Log.Add($"compensate:{name}");
+            return Task.CompletedTask;
+        }
+    }
+
+    [Fact(DisplayName = "Saga: two concurrent RetryCompensationAsync calls for the same failed instance compensate exactly once, not twice")]
+    public async Task Saga_RetryCompensation_ConcurrentCalls_CompensatesExactlyOnce()
+    {
+        var innerStore = new InMemorySagaStore();
+        var chargeShouldFail = true;
+        var chargeStep = new CountingFlakyCompensateStep("Charge", () => chargeShouldFail);
+        var saga = new TestSaga([new RecordingStep("Reserve"), chargeStep, new RecordingStep("Ship", failExecute: true)]);
+        var registry = new KyrolusSagaDefinitionRegistry([saga]);
+
+        // Set up an instance stuck Failed (Charge's compensation failed) via an ordinary, uncontended
+        // run - only the retry below needs to race.
+        var setupCoordinator = new KyrolusSagaCoordinator(innerStore, registry);
+        var sagaId = await setupCoordinator.StartAsync(saga, new TestSagaContext(), CancellationToken.None);
+        (await innerStore.GetAsync(sagaId))!.Status.ShouldBe(KyrolusSagaStatus.Failed);
+
+        chargeShouldFail = false;
+
+        var racingStore = new RendezvousReadStore(innerStore);
+        var coordinator = new KyrolusSagaCoordinator(racingStore, registry);
+
+        // A double-click on "retry", or two app instances both processing the same failed saga: both
+        // read Status == Failed at the same version before either can flip it to Compensating.
+        var callA = coordinator.RetryCompensationAsync(sagaId, CancellationToken.None);
+        var callB = coordinator.RetryCompensationAsync(sagaId, CancellationToken.None);
+        await Task.WhenAll(callA, callB);
+
+        // The unguarded bug would run Charge's compensation (e.g. a refund) twice in parallel.
+        chargeStep.CompensateCount.ShouldBe(1);
+
+        var final = await innerStore.GetAsync(sagaId);
+        final.ShouldNotBeNull();
+        final.Status.ShouldBe(KyrolusSagaStatus.Compensated);
+    }
+
+    [Fact(DisplayName = "Saga: two concurrent ResumeIncompleteAsync calls resume the same instance's next step exactly once, not twice")]
+    public async Task Saga_ResumeIncomplete_ConcurrentCalls_ExecutesNextStepExactlyOnce()
+    {
+        var innerStore = new InMemorySagaStore();
+        var reserveStep = new RecordingStep("Reserve");
+        var chargeStep = new CountingStep("Charge");
+        var shipStep = new CountingStep("Ship");
+        var saga = new TestSaga([reserveStep, chargeStep, shipStep]);
+        var registry = new KyrolusSagaDefinitionRegistry([saga]);
+
+        // Seed an instance left Running after Reserve, as if a process crashed right after it - same
+        // setup as Saga_ResumeIncomplete_ContinuesFromPersistedStep, just without going through
+        // StartAsync (which would also execute Charge/Ship on the setup coordinator).
+        var context = new TestSagaContext { Log = ["execute:Reserve"] };
+        var crashedInstance = new KyrolusSagaInstance
+        {
+            SagaName = saga.SagaName,
+            ContextJson = saga.SerializeContext(context),
+            CurrentStepIndex = 1,
+            Status = KyrolusSagaStatus.Running
+        };
+        await innerStore.SaveAsync(crashedInstance);
+
+        var racingStore = new RendezvousReadStore(innerStore);
+        var coordinator = new KyrolusSagaCoordinator(racingStore, registry);
+
+        // Two overlapping resume passes (two app instances, or an overlapping timer tick) both fetch
+        // the same incomplete instance at the same version before either can claim it.
+        var resumeA = coordinator.ResumeIncompleteAsync(CancellationToken.None);
+        var resumeB = coordinator.ResumeIncompleteAsync(CancellationToken.None);
+        var results = await Task.WhenAll(resumeA, resumeB);
+
+        // The unguarded bug would execute Charge (and then Ship) a second time in the losing call.
+        chargeStep.ExecuteCount.ShouldBe(1);
+        shipStep.ExecuteCount.ShouldBe(1);
+        results.Sum().ShouldBe(1); // only the winning call counts the instance as resumed
+
+        var final = await innerStore.GetAsync(crashedInstance.Id);
+        final.ShouldNotBeNull();
+        final.Status.ShouldBe(KyrolusSagaStatus.Completed);
+    }
+
     [Fact(DisplayName = "InMemorySagaStore: a caller's own instance object mutated after SaveAsync does not affect the stored snapshot")]
     public async Task InMemorySagaStore_SaveAsync_StoresIndependentSnapshot()
     {
@@ -372,6 +525,32 @@ public sealed class KyrolusSagaTests
         stored.ShouldNotBeNull();
         stored.CurrentStepIndex.ShouldBe(0);
         stored.Status.ShouldBe(KyrolusSagaStatus.Running);
+    }
+
+    [Fact(DisplayName = "InMemorySagaStore: SaveAsync rejects a write whose Version is behind the stored one, and leaves the stored row untouched")]
+    public async Task InMemorySagaStore_SaveAsync_RejectsStaleVersion()
+    {
+        var store = new InMemorySagaStore();
+        var instance = new KyrolusSagaInstance { SagaName = "S", ContextJson = "{}" };
+
+        (await store.SaveAsync(instance)).ShouldBeTrue(); // Version 0 -> 1, instance.Version updated in place
+        instance.Version.ShouldBe(1);
+
+        // A second, independent read of the same row - its own copy at the version that was current
+        // before the first caller's write landed.
+        var staleReader = await store.GetAsync(instance.Id);
+        staleReader.ShouldNotBeNull();
+
+        instance.CurrentStepIndex = 1;
+        (await store.SaveAsync(instance)).ShouldBeTrue(); // Version 1 -> 2, still the only writer so far
+
+        staleReader.CurrentStepIndex = 99;
+        (await store.SaveAsync(staleReader)).ShouldBeFalse(); // still carries Version 1; store is at 2
+
+        var current = await store.GetAsync(instance.Id);
+        current.ShouldNotBeNull();
+        current.Version.ShouldBe(2);
+        current.CurrentStepIndex.ShouldBe(1); // the rejected write's CurrentStepIndex = 99 never applied
     }
 
     [Fact(DisplayName = "Saga registry: two definitions registered under the same name throw at construction")]

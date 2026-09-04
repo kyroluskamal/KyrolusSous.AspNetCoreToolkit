@@ -129,7 +129,7 @@ namespace KyrolusSous.RabbitMQ.Runtime.Config
             this IServiceCollection services,
             TimeSpan? pollInterval = null)
         {
-            services.TryAddSingleton<Abstractions.Outbox.IKyrolusOutboxStore, Outbox.KyrolusInMemoryOutboxStore>();
+            services.TryAddSingleton<Abstractions.Outbox.IKyrolusOutboxStore, Outbox.KyrolusKyrolusInMemoryOutboxStore>();
             services.AddHostedService(sp => new Outbox.KyrolusOutboxPublisherWorker(
                 sp.GetRequiredService<Abstractions.Outbox.IKyrolusOutboxStore>(),
                 sp.GetRequiredService<IKyrolusRabbitMQUtils>(),

@@ -58,10 +58,27 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// Registers the CQRS Audit Trail pipeline behavior with the specified sink.
     /// </summary>
-    public static IServiceCollection AddKyrolusCqrsAudit<TSink>(this IServiceCollection services)
+    /// <param name="services">The service collection.</param>
+    /// <param name="configureSanitization">
+    /// Optional callback to extend the built-in sensitive-keyword list used to redact audit payloads
+    /// (see <see cref="Audit.KyrolusAuditSanitizationOptions"/>). To source the list from
+    /// <c>appsettings.json</c> instead of hard-coding it, bind the options inside the callback:
+    /// <c>configureSanitization: opts =&gt; configuration.GetSection("Kyrolus:Cqrs:Audit:Sanitization").Bind(opts)</c>.
+    /// </param>
+    public static IServiceCollection AddKyrolusCqrsAudit<TSink>(
+        this IServiceCollection services,
+        Action<Audit.KyrolusAuditSanitizationOptions>? configureSanitization = null)
         where TSink : class, Audit.IKyrolusAuditSink
     {
         services.TryAddScoped<Audit.IKyrolusAuditSink, TSink>();
+
+        if (configureSanitization is not null)
+        {
+            var sanitizationOptions = new Audit.KyrolusAuditSanitizationOptions();
+            configureSanitization(sanitizationOptions);
+            services.TryAddSingleton(sanitizationOptions);
+        }
+
         services.AddTransient(typeof(IKyrolusPipelineBehavior<,>), typeof(KyrolusAuditBehavior<,>));
         return services;
     }
@@ -69,8 +86,12 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// Registers the CQRS Audit Trail pipeline behavior with the default <see cref="Audit.LoggerAuditSink"/>.
     /// </summary>
-    public static IServiceCollection AddKyrolusCqrsAudit(this IServiceCollection services)
-        => services.AddKyrolusCqrsAudit<Audit.LoggerAuditSink>();
+    /// <param name="services">The service collection.</param>
+    /// <param name="configureSanitization">See <see cref="AddKyrolusCqrsAudit{TSink}"/>.</param>
+    public static IServiceCollection AddKyrolusCqrsAudit(
+        this IServiceCollection services,
+        Action<Audit.KyrolusAuditSanitizationOptions>? configureSanitization = null)
+        => services.AddKyrolusCqrsAudit<Audit.LoggerAuditSink>(configureSanitization);
 
     /// <summary>
     /// Registers the CQRS Transactional Outbox store and processor.
@@ -87,7 +108,7 @@ public static class ServiceCollectionExtensions
     /// Registers the CQRS Transactional Outbox with the in-memory store.
     /// </summary>
     public static IServiceCollection AddKyrolusCqrsOutbox(this IServiceCollection services)
-        => services.AddKyrolusCqrsOutbox<Outbox.InMemoryOutboxStore>();
+        => services.AddKyrolusCqrsOutbox<Outbox.KyrolusInMemoryOutboxStore>();
 
     /// <summary>
     /// Registers the CQRS Read-Model Projection pipeline behavior.
@@ -102,18 +123,18 @@ public static class ServiceCollectionExtensions
     /// Registers the CQRS Real-Time Live Push pipeline behavior with the specified publisher.
     /// </summary>
     public static IServiceCollection AddKyrolusCqrsLivePush<TPublisher>(this IServiceCollection services)
-        where TPublisher : class, LivePush.ILivePushPublisher
+        where TPublisher : class, LivePush.IKyrolusLivePushPublisher
     {
-        services.TryAddScoped<LivePush.ILivePushPublisher, TPublisher>();
+        services.TryAddScoped<LivePush.IKyrolusLivePushPublisher, TPublisher>();
         services.AddTransient(typeof(IKyrolusPipelineBehavior<,>), typeof(KyrolusLivePushBehavior<,>));
         return services;
     }
 
     /// <summary>
-    /// Registers the CQRS Real-Time Live Push pipeline behavior with the default <see cref="LivePush.LoggerLivePushPublisher"/>.
+    /// Registers the CQRS Real-Time Live Push pipeline behavior with the default <see cref="LivePush.KyrolusLoggerLivePushPublisher"/>.
     /// </summary>
     public static IServiceCollection AddKyrolusCqrsLivePush(this IServiceCollection services)
-        => services.AddKyrolusCqrsLivePush<LivePush.LoggerLivePushPublisher>();
+        => services.AddKyrolusCqrsLivePush<LivePush.KyrolusLoggerLivePushPublisher>();
 
     /// <summary>
     /// Registers the CQRS Multi-Tenancy guard, which rejects a request implementing

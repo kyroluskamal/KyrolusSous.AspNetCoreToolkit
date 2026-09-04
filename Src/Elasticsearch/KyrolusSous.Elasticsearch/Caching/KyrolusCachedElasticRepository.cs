@@ -121,9 +121,9 @@ public class KyrolusCachedElasticRepository<TDocument, TId> : IKyrolusElasticRep
         return results;
     }
 
-    public async Task<bool> UpdateAsync(TDocument document, TId id, CancellationToken cancellationToken = default)
+    public async Task<bool> UpdateAsync(TDocument document, TId id, long? ifSeqNo = null, long? ifPrimaryTerm = null, CancellationToken cancellationToken = default)
     {
-        var result = await _inner.UpdateAsync(document, id, cancellationToken);
+        var result = await _inner.UpdateAsync(document, id, ifSeqNo, ifPrimaryTerm, cancellationToken);
         if (result && _cacheProvider is not null)
         {
             await InvalidateDocCacheAsync(id, cancellationToken);
@@ -131,9 +131,9 @@ public class KyrolusCachedElasticRepository<TDocument, TId> : IKyrolusElasticRep
         return result;
     }
 
-    public async Task<bool> UpdatePartialAsync(TId id, object partialDocument, CancellationToken cancellationToken = default)
+    public async Task<bool> UpdatePartialAsync(TId id, object partialDocument, long? ifSeqNo = null, long? ifPrimaryTerm = null, CancellationToken cancellationToken = default)
     {
-        var result = await _inner.UpdatePartialAsync(id, partialDocument, cancellationToken);
+        var result = await _inner.UpdatePartialAsync(id, partialDocument, ifSeqNo, ifPrimaryTerm, cancellationToken);
         if (result && _cacheProvider is not null)
         {
             await InvalidateDocCacheAsync(id, cancellationToken);
@@ -151,9 +151,9 @@ public class KyrolusCachedElasticRepository<TDocument, TId> : IKyrolusElasticRep
         return result;
     }
 
-    public async Task<bool> DeleteAsync(TId id, CancellationToken cancellationToken = default)
+    public async Task<bool> DeleteAsync(TId id, long? ifSeqNo = null, long? ifPrimaryTerm = null, CancellationToken cancellationToken = default)
     {
-        var result = await _inner.DeleteAsync(id, cancellationToken);
+        var result = await _inner.DeleteAsync(id, ifSeqNo, ifPrimaryTerm, cancellationToken);
         if (result && _cacheProvider is not null)
         {
             await InvalidateDocCacheAsync(id, cancellationToken);

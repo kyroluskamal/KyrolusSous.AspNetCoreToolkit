@@ -4,7 +4,7 @@ namespace KyrolusSous.CQRS.Abstractions.Projections;
 /// Handles synchronization and projection updates for a given read-model type.
 /// </summary>
 /// <typeparam name="TReadModel">The read model type being projected.</typeparam>
-public interface IReadModelProjector<in TReadModel>
+public interface IKyrolusReadModelProjector<in TReadModel>
 {
     /// <summary>
     /// Projects or updates the read model in its secondary store (e.g. Elasticsearch, Redis, or read database).

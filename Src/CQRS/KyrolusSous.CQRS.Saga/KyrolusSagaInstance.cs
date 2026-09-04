@@ -64,4 +64,13 @@ public sealed class KyrolusSagaInstance
 
     /// <summary>Optional caller-supplied correlation id, for tracing this saga alongside the request that started it.</summary>
     public string? CorrelationId { get; set; }
+
+    /// <summary>
+    /// Optimistic-concurrency token. 0 for an instance never yet persisted; <see cref="IKyrolusSagaStore.SaveAsync"/>
+    /// bumps it by one on every successful write and rejects a write whose <see cref="Version"/> does
+    /// not match what is currently stored - two callers that both read the same version cannot both
+    /// win, which is what stops the same saga instance being advanced (or compensated) twice in
+    /// parallel.
+    /// </summary>
+    public int Version { get; set; }
 }

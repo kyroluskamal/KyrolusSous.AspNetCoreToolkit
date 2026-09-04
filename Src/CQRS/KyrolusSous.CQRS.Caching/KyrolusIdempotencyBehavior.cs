@@ -65,7 +65,7 @@ public sealed class KyrolusIdempotencyBehavior<TRequest, TResponse>(
             return await next(cancellationToken).ConfigureAwait(false);
         }
 
-        var cacheKey = $"idempotency:{typeof(TRequest).Name}:{idempotencyKey}";
+        var cacheKey = $"idempotency:{typeof(TRequest).FullName ?? typeof(TRequest).Name}:{idempotencyKey}";
         var options = new KyrolusCacheEntryOptions
         {
             AbsoluteExpirationRelativeToNow = idempotencyTtl ?? TimeSpan.FromHours(24)
@@ -104,6 +104,13 @@ public sealed class KyrolusIdempotencyBehavior<TRequest, TResponse>(
                 .SetAsync(cacheKey, new KyrolusIdempotencyRecord<TResponse> { Completed = true, Response = response }, options, cancellationToken)
                 .ConfigureAwait(false);
             return response;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The handler may already have finished its real work by the time cancellation surfaced
+            // (the caller gave up waiting for the response, not before it happened) - releasing the
+            // claim here would let a retry with the same key run it again.
+            throw;
         }
         catch
         {

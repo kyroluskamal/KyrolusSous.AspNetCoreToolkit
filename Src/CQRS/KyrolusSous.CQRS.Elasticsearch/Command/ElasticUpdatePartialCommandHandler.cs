@@ -19,6 +19,6 @@ public sealed class ElasticUpdatePartialCommandHandler<TDocument, TId>(
             typeof(TDocument).Name,
             command.Id);
 
-        return await repository.UpdatePartialAsync(command.Id, command.PartialDocument, cancellationToken).ConfigureAwait(false);
+        return await repository.UpdatePartialAsync(command.Id, command.PartialDocument, command.ExpectedSeqNo, command.ExpectedPrimaryTerm, cancellationToken).ConfigureAwait(false);
     }
 }

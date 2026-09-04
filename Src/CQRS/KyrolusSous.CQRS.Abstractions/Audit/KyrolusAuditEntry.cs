@@ -19,16 +19,25 @@ public sealed record KyrolusAuditEntry
     /// Gets the username or display name of the actor.
     /// </summary>
     public string? UserName { get; init; }
-
     /// <summary>
     /// Gets the tenant ID associated with the execution context.
     /// </summary>
     public string? TenantId { get; init; }
 
     /// <summary>
-    /// Gets the business action name (e.g. "CreateOrder").
+    /// Gets the technical or developer action name (e.g. "CreateOrderCommand" or custom action name).
     /// </summary>
     public required string Action { get; init; }
+
+    /// <summary>
+    /// Gets the business action code or localization key (e.g. "Orders.Create" or "Payroll.Disburse").
+    /// </summary>
+    public string? BusinessAction { get; init; }
+
+    /// <summary>
+    /// Gets the localized business action description evaluated at execution time using the active culture (e.g. "صرف الرواتب الشهرية").
+    /// </summary>
+    public string? LocalizedAction { get; init; }
 
     /// <summary>
     /// Gets the optional audit category or domain module.
@@ -36,14 +45,14 @@ public sealed record KyrolusAuditEntry
     public string? Category { get; init; }
 
     /// <summary>
-    /// Gets the full type name of the request.
+    /// Gets the short C# class name of the executed command (e.g. "CreateOrderCommand").
     /// </summary>
-    public required string RequestType { get; init; }
+    public required string CommandName { get; init; }
 
     /// <summary>
-    /// Gets the short name of the request.
+    /// Gets the full C# type name of the executed command including its namespace (e.g. "MyProject.Orders.Commands.CreateOrderCommand").
     /// </summary>
-    public required string RequestName { get; init; }
+    public required string CommandFullName { get; init; }
 
     /// <summary>
     /// Gets the serialized or captured request payload, if enabled.

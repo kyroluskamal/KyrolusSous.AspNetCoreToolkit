@@ -49,6 +49,15 @@ public sealed class KyrolusOutboxProcessor(
 
             try
             {
+                // Claim before touching the message: without this, an overlapping pass (a slow prior
+                // run still in flight, or another instance against a shared store) could read and
+                // publish the same message a second time.
+                if (!await _outboxStore.TryClaimAsync(message.Id, cancellationToken).ConfigureAwait(false))
+                {
+                    RecordOutcome(activity, message.EventType, "skipped-already-claimed");
+                    continue;
+                }
+
                 if (!_typeRegistry.Value.TryResolve(message.EventType, out var eventType) || eventType is null)
                 {
                     await _outboxStore.MarkFailedAsync(

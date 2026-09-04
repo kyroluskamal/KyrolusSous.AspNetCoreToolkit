@@ -259,9 +259,18 @@ public sealed class GetSeekQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
         var underlying = Nullable.GetUnderlyingType(memberType);
         if (underlying is not null)
         {
-            left = Expression.Property(member, nameof(Nullable<int>.Value));
-            right = Expression.Constant(ConvertKeyValue(value, underlying), underlying);
             notNull = Expression.Property(member, nameof(Nullable<int>.HasValue));
+            var convertedValue = ConvertKeyValue(value, underlying);
+            if (convertedValue is null)
+            {
+                // Last-seen value for this column was null. Under nulls-first default ordering,
+                // anything non-null sorts after null, and nothing sorts before it.
+                comparison = descending ? Expression.Constant(false) : notNull;
+                return true;
+            }
+
+            left = Expression.Property(member, nameof(Nullable<int>.Value));
+            right = Expression.Constant(convertedValue, underlying);
             memberType = underlying;
         }
         else if (!memberType.IsValueType)
@@ -269,6 +278,18 @@ public sealed class GetSeekQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUni
             notNull = Expression.NotEqual(member, Expression.Constant(null, memberType));
         }
         right ??= Expression.Constant(ConvertKeyValue(value, memberType), memberType);
+
+        if (memberType.IsEnum)
+        {
+            // Enum doesn't implement IComparable<TEnum> - GetMethod("CompareTo", [enumType]) below
+            // resolves to the inherited Enum.CompareTo(object), and Expression.Call then rejects an
+            // enum-typed (not object-typed) argument for it. Compare on the underlying integral type
+            // instead, which has its own real CompareTo(self).
+            var enumUnderlying = Enum.GetUnderlyingType(memberType);
+            left = Expression.Convert(left, enumUnderlying);
+            right = Expression.Convert(right, enumUnderlying);
+            memberType = enumUnderlying;
+        }
 
         var compareMethod = memberType.GetMethod("CompareTo", new[] { memberType });
         if (compareMethod is null)

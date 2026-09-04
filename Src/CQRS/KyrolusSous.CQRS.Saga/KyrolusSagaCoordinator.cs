@@ -36,7 +36,9 @@ public sealed class KyrolusSagaCoordinator(
             Status = KyrolusSagaStatus.Running
         };
 
-        await _store.SaveAsync(instance, cancellationToken).ConfigureAwait(false);
+        // A brand new id cannot conceivably lose the version race below (nothing else has ever
+        // written it), so the result needs no handling beyond persisting the initial state.
+        await TrySaveAsync(instance, cancellationToken).ConfigureAwait(false);
         await RunAsync(definition, instance, cancellationToken).ConfigureAwait(false);
         return instance.Id;
     }
@@ -62,8 +64,17 @@ public sealed class KyrolusSagaCoordinator(
 
             try
             {
-                await RunAsync(definition, instance, cancellationToken).ConfigureAwait(false);
-                resumed++;
+                // Claims this instance before touching it: two concurrent ResumeIncompleteAsync calls
+                // (two app instances, or an overlapping timer tick) can both read the same incomplete
+                // instance from GetIncompleteAsync above before either writes. Only one of them can win
+                // this version-checked save; the loser must stop here, before RunAsync ever runs a step's
+                // side-effecting action a second time for it - re-executing it after the fact would be
+                // too late, the step would already have run twice.
+                if (!await TrySaveAsync(instance, cancellationToken).ConfigureAwait(false))
+                    continue;
+
+                if (await RunAsync(definition, instance, cancellationToken).ConfigureAwait(false))
+                    resumed++;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -110,12 +121,41 @@ public sealed class KyrolusSagaCoordinator(
 
         instance.Status = KyrolusSagaStatus.Compensating;
         instance.Error = null;
-        await _store.SaveAsync(instance, cancellationToken).ConfigureAwait(false);
+
+        // This is the claim: two concurrent RetryCompensationAsync calls for the same sagaId can both
+        // read Status == Failed above before either writes. Only one of them can win this version-checked
+        // save; the loser must stop here rather than proceed into CompensateAsync - otherwise both would
+        // run the same compensating step (e.g. the same refund) in parallel.
+        if (!await TrySaveAsync(instance, cancellationToken).ConfigureAwait(false))
+            return;
 
         await CompensateAsync(definition, instance, context, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task RunAsync(IKyrolusSagaDefinition definition, KyrolusSagaInstance instance, CancellationToken cancellationToken)
+    /// <summary>
+    /// Saves through the store's version check and, on a lost race, logs and reports it rather than
+    /// throwing - losing this race means another caller already claimed <paramref name="instance"/>
+    /// and is handling it, which is an expected outcome under concurrent access, not an error.
+    /// </summary>
+    private async Task<bool> TrySaveAsync(KyrolusSagaInstance instance, CancellationToken cancellationToken)
+    {
+        if (await _store.SaveAsync(instance, cancellationToken).ConfigureAwait(false))
+            return true;
+
+        _logger?.LogInformation(
+            "[Kyrolus Saga] Lost a concurrent write race for saga '{SagaName}' (instance {SagaId}); " +
+            "another caller already advanced it past the version this call read - treating it as already handled and skipping.",
+            instance.SagaName,
+            instance.Id);
+        return false;
+    }
+
+    /// <returns>
+    /// <see langword="false"/> if this call lost a version race partway through and stopped instead of
+    /// running to a natural conclusion (a terminal status, or a business failure recorded as such);
+    /// <see langword="true"/> otherwise.
+    /// </returns>
+    private async Task<bool> RunAsync(IKyrolusSagaDefinition definition, KyrolusSagaInstance instance, CancellationToken cancellationToken)
     {
         object context;
         try
@@ -132,17 +172,18 @@ public sealed class KyrolusSagaCoordinator(
             // compensation step already does, at least makes it stop being silently retried forever
             // and turns it into something discoverable that needs a human (a schema-drifted TContext,
             // corrupt JSON, or similar) rather than an invisible zombie.
+            //
+            // The save's outcome is not checked: this throws either way, since the deserialize
+            // failure is the real problem here - a lost race just means someone else's write is left
+            // standing instead of being overwritten with this diagnostic, which is fine.
             instance.Status = KyrolusSagaStatus.Failed;
             instance.Error = $"Failed to deserialize stored context: {ex.Message}";
-            await _store.SaveAsync(instance, cancellationToken).ConfigureAwait(false);
+            await TrySaveAsync(instance, cancellationToken).ConfigureAwait(false);
             throw;
         }
 
         if (instance.Status == KyrolusSagaStatus.Compensating)
-        {
-            await CompensateAsync(definition, instance, context, cancellationToken).ConfigureAwait(false);
-            return;
-        }
+            return await CompensateAsync(definition, instance, context, cancellationToken).ConfigureAwait(false);
 
         for (var stepIndex = instance.CurrentStepIndex; stepIndex < definition.StepCount; stepIndex++)
         {
@@ -175,10 +216,10 @@ public sealed class KyrolusSagaCoordinator(
                 instance.CurrentStepIndex = stepIndex;
                 instance.Error = ex.Message;
                 instance.ContextJson = definition.SerializeContext(context);
-                await _store.SaveAsync(instance, cancellationToken).ConfigureAwait(false);
+                if (!await TrySaveAsync(instance, cancellationToken).ConfigureAwait(false))
+                    return false;
 
-                await CompensateAsync(definition, instance, context, cancellationToken).ConfigureAwait(false);
-                return;
+                return await CompensateAsync(definition, instance, context, cancellationToken).ConfigureAwait(false);
             }
 
             // Re-serialized after every step, not only on failure: a step routinely writes into the
@@ -186,15 +227,21 @@ public sealed class KyrolusSagaCoordinator(
             // steps must not lose that write - resuming has to see it too.
             instance.CurrentStepIndex = stepIndex + 1;
             instance.ContextJson = definition.SerializeContext(context);
-            await _store.SaveAsync(instance, cancellationToken).ConfigureAwait(false);
+            if (!await TrySaveAsync(instance, cancellationToken).ConfigureAwait(false))
+                return false;
         }
 
         instance.Status = KyrolusSagaStatus.Completed;
         instance.CompletedAtUtc = DateTimeOffset.UtcNow;
-        await _store.SaveAsync(instance, cancellationToken).ConfigureAwait(false);
+        return await TrySaveAsync(instance, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task CompensateAsync(
+    /// <returns>
+    /// <see langword="false"/> if this call lost a version race partway through and stopped instead of
+    /// running to a natural conclusion (Compensated, or Failed with the compensation error recorded);
+    /// <see langword="true"/> otherwise.
+    /// </returns>
+    private async Task<bool> CompensateAsync(
         IKyrolusSagaDefinition definition,
         KyrolusSagaInstance instance,
         object context,
@@ -232,17 +279,17 @@ public sealed class KyrolusSagaCoordinator(
                 instance.CurrentStepIndex = stepIndex + 1; // steps [0..stepIndex] still need compensating
                 instance.Error = $"Compensation failed at step {stepIndex}: {ex.Message}";
                 instance.ContextJson = definition.SerializeContext(context);
-                await _store.SaveAsync(instance, cancellationToken).ConfigureAwait(false);
-                return;
+                return await TrySaveAsync(instance, cancellationToken).ConfigureAwait(false);
             }
 
             instance.CurrentStepIndex = stepIndex; // steps [0..stepIndex-1] still need compensating
             instance.ContextJson = definition.SerializeContext(context);
-            await _store.SaveAsync(instance, cancellationToken).ConfigureAwait(false);
+            if (!await TrySaveAsync(instance, cancellationToken).ConfigureAwait(false))
+                return false;
         }
 
         instance.Status = KyrolusSagaStatus.Compensated;
         instance.CompletedAtUtc = DateTimeOffset.UtcNow;
-        await _store.SaveAsync(instance, cancellationToken).ConfigureAwait(false);
+        return await TrySaveAsync(instance, cancellationToken).ConfigureAwait(false);
     }
 }

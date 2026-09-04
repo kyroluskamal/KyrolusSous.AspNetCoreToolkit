@@ -18,6 +18,6 @@ public sealed class ElasticDeleteDocumentCommandHandler<TDocument, TId>(
             typeof(TDocument).Name,
             command.Id);
 
-        return await repository.DeleteAsync(command.Id, cancellationToken).ConfigureAwait(false);
+        return await repository.DeleteAsync(command.Id, command.ExpectedSeqNo, command.ExpectedPrimaryTerm, cancellationToken).ConfigureAwait(false);
     }
 }

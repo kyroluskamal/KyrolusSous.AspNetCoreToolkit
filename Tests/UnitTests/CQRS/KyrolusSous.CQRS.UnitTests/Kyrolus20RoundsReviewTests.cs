@@ -81,7 +81,7 @@ public class Kyrolus20RoundsReviewTests
     [Fact(DisplayName = "Round3 Outbox should resolve allow-listed notification types")]
     public async Task Round3_Outbox_should_resolve_types_from_appdomain()
     {
-        var store = new InMemoryOutboxStore();
+        var store = new KyrolusInMemoryOutboxStore();
         var publisher = Substitute.For<IKyrolusMediatorPublisher>();
         var processor = new KyrolusOutboxProcessor(store, publisher);
 
@@ -99,7 +99,7 @@ public class Kyrolus20RoundsReviewTests
     [Fact(DisplayName = "Outbox should refuse an event type outside the allow-list rather than resolve it")]
     public async Task Outbox_should_reject_event_type_not_in_registry()
     {
-        var store = new InMemoryOutboxStore();
+        var store = new KyrolusInMemoryOutboxStore();
         var publisher = Substitute.For<IKyrolusMediatorPublisher>();
         // An explicit, empty allow-list - Round3Event exists and is loadable, but is not in it.
         var registry = new KyrolusOutboxEventTypeRegistry([]);
@@ -115,7 +115,7 @@ public class Kyrolus20RoundsReviewTests
 
         processed.ShouldBe(0);
         await publisher.DidNotReceive().PublishAsync(Arg.Any<object>(), Arg.Any<CancellationToken>());
-        store.AllMessages.Single().Status.ShouldBe(OutboxMessageStatus.Failed);
+        store.AllMessages.Single().Status.ShouldBe(KyrolusOutboxMessageStatus.Failed);
         store.AllMessages.Single().Error.ShouldNotBeNull();
         store.AllMessages.Single().Error!.ShouldContain("not in the outbox type registry's allow-list");
     }
@@ -217,7 +217,8 @@ public class Kyrolus20RoundsReviewTests
         public TestReadModel? ToReadModel() => new(Data);
     }
 
-    private sealed class TestProjector : IReadModelProjector<TestReadModel>
+    private sealed class TestProjector : IKyrolusReadModelProjector
+<TestReadModel>
     {
         public List<TestReadModel> Projected { get; } = [];
         public Task ProjectAsync(TestReadModel model, CancellationToken cancellationToken = default)
@@ -232,7 +233,8 @@ public class Kyrolus20RoundsReviewTests
     {
         var services = new ServiceCollection();
         var projector = new TestProjector();
-        services.AddSingleton<IReadModelProjector<TestReadModel>>(projector);
+        services.AddSingleton<IKyrolusReadModelProjector
+<TestReadModel>>(projector);
         var sp = services.BuildServiceProvider();
 
         var behavior = new KyrolusReadModelProjectionBehavior<DummyCmd, ResponseProjectableEntity>(sp);

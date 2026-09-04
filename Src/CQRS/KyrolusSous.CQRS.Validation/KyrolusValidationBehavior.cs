@@ -4,18 +4,21 @@ using KyrolusSous.Validation.Abstractions;
 
 namespace KyrolusSous.CQRS.Validation;
 
-// Runs right after Authorization/PreProcessor (-1000) and before Performance(-900), Audit(-850),
-// Idempotency(-800) and Throttling(-750), so a malformed request is rejected before it is audited,
-// consumes an idempotency slot, or is throttle-counted as if it were a legitimate attempt.
+// Runs after Audit(-2050), Authorization(-1050) and TenantScoping(-1040) - so Audit still wraps and
+// records a validation rejection on an auditable command - and before PropertyAllowList(-940),
+// Performance(-900), Idempotency(-800) and Throttling(-750), so a malformed request is rejected
+// before it consumes an idempotency slot or is throttle-counted as if it were a legitimate attempt.
 [PipelineOrder(-950)]
 public sealed class KyrolusValidationBehavior<TRequest, TResponse>(
     IEnumerable<IKyrolusRequestValidator<TRequest>>? validators = null,
-    IKyrolusValidationEngine? engine = null)
+    IKyrolusValidationEngine? engine = null,
+    KyrolusValidationBehaviorOptions? options = null)
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
     private readonly IReadOnlyList<IKyrolusRequestValidator<TRequest>> _validators =
         validators as IReadOnlyList<IKyrolusRequestValidator<TRequest>> ?? (validators is not null ? [.. validators] : []);
     private readonly IKyrolusValidationEngine? _engine = engine;
+    private readonly KyrolusValidationSeverity _minimumBlockingSeverity = options?.MinimumBlockingSeverity ?? KyrolusValidationSeverity.Error;
 
     public async Task<TResponse> Handle(
         TRequest request,
@@ -57,9 +60,15 @@ public sealed class KyrolusValidationBehavior<TRequest, TResponse>(
             }
         }
 
-        if (collected.Count > 0)
+        // Info/Warning failures are documented as non-blocking hints (see KyrolusValidationSeverity);
+        // only failures at or above the configured threshold should actually reject the request.
+        var blocking = collected.Count == 0
+            ? collected
+            : collected.Where(f => f.Severity >= _minimumBlockingSeverity).ToList();
+
+        if (blocking.Count > 0)
         {
-            throw new KyrolusValidationException(collected);
+            throw new KyrolusValidationException(blocking);
         }
 
         return await next(cancellationToken).ConfigureAwait(false);

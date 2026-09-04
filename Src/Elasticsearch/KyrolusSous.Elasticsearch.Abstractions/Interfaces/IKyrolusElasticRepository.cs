@@ -20,13 +20,24 @@ public interface IKyrolusElasticRepository<TDocument, TId> where TDocument : cla
 
     Task<IReadOnlyList<TDocument>> GetManyAsync(IEnumerable<TId> ids, CancellationToken cancellationToken = default);
 
-    Task<bool> UpdateAsync(TDocument document, TId id, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Replaces the document. When <paramref name="ifSeqNo"/> and <paramref name="ifPrimaryTerm"/> are both
+    /// supplied (Elasticsearch's own optimistic-concurrency primitive - captured from a prior read of the
+    /// same document), the write is a compare-and-swap: Elasticsearch performs it atomically and rejects it
+    /// with a version conflict if the document changed since, surfaced here as a <see langword="false"/>
+    /// return rather than an unconditional overwrite. Both must be supplied together, or neither - a lone
+    /// value is rejected by Elasticsearch itself. Omitting both (the default) is unconditional, matching
+    /// prior behavior exactly.
+    /// </summary>
+    Task<bool> UpdateAsync(TDocument document, TId id, long? ifSeqNo = null, long? ifPrimaryTerm = null, CancellationToken cancellationToken = default);
 
-    Task<bool> UpdatePartialAsync(TId id, object partialDocument, CancellationToken cancellationToken = default);
+    /// <inheritdoc cref="UpdateAsync(TDocument, TId, long?, long?, CancellationToken)"/>
+    Task<bool> UpdatePartialAsync(TId id, object partialDocument, long? ifSeqNo = null, long? ifPrimaryTerm = null, CancellationToken cancellationToken = default);
 
     Task<bool> UpdateByScriptAsync(TId id, string script, Dictionary<string, object>? parameters = null, CancellationToken cancellationToken = default);
 
-    Task<bool> DeleteAsync(TId id, CancellationToken cancellationToken = default);
+    /// <inheritdoc cref="UpdateAsync(TDocument, TId, long?, long?, CancellationToken)"/>
+    Task<bool> DeleteAsync(TId id, long? ifSeqNo = null, long? ifPrimaryTerm = null, CancellationToken cancellationToken = default);
 
     Task<long> DeleteManyAsync(IEnumerable<TId> ids, CancellationToken cancellationToken = default);
 

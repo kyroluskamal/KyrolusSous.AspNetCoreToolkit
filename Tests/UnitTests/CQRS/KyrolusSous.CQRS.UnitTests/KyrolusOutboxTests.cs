@@ -36,7 +36,7 @@ public class KyrolusOutboxTests
     [Fact(DisplayName = "Outbox processor should dispatch pending messages and mark processed")]
     public async Task Outbox_processor_should_dispatch_pending_messages_and_mark_processed()
     {
-        var store = new InMemoryOutboxStore();
+        var store = new KyrolusInMemoryOutboxStore();
         var publisher = new FakePublisher();
         var processor = new KyrolusOutboxProcessor(store, publisher);
 
@@ -47,7 +47,7 @@ public class KyrolusOutboxTests
             CorrelationId = "corr-1",
             EventType = typeof(OrderPlacedIntegrationEvent).AssemblyQualifiedName!,
             Payload = JsonSerializer.Serialize(domainEvent),
-            Status = OutboxMessageStatus.Pending
+            Status = KyrolusOutboxMessageStatus.Pending
         };
 
         await store.SaveAsync(msg);
@@ -59,7 +59,7 @@ public class KyrolusOutboxTests
         publisher.PublishedEvents.First().ShouldBeOfType<OrderPlacedIntegrationEvent>();
 
         var all = store.AllMessages.ToList();
-        all[0].Status.ShouldBe(OutboxMessageStatus.Processed);
+        all[0].Status.ShouldBe(KyrolusOutboxMessageStatus.Processed);
         all[0].ProcessedOnUtc.ShouldNotBeNull();
         all[0].Error.ShouldBeNull();
     }
@@ -67,7 +67,7 @@ public class KyrolusOutboxTests
     [Fact(DisplayName = "Outbox processor should handle invalid event type and mark failed")]
     public async Task Outbox_processor_should_handle_invalid_event_type_and_mark_failed()
     {
-        var store = new InMemoryOutboxStore();
+        var store = new KyrolusInMemoryOutboxStore();
         var publisher = new FakePublisher();
         var processor = new KyrolusOutboxProcessor(store, publisher);
 
@@ -76,7 +76,7 @@ public class KyrolusOutboxTests
             Id = Guid.NewGuid(),
             EventType = "NonExistent.EventType, SomeAssembly",
             Payload = "{}",
-            Status = OutboxMessageStatus.Pending
+            Status = KyrolusOutboxMessageStatus.Pending
         };
 
         await store.SaveAsync(msg);
@@ -87,7 +87,7 @@ public class KyrolusOutboxTests
         publisher.PublishedEvents.ShouldBeEmpty();
 
         var all = store.AllMessages.ToList();
-        all[0].Status.ShouldBe(OutboxMessageStatus.Failed);
+        all[0].Status.ShouldBe(KyrolusOutboxMessageStatus.Failed);
         all[0].Error.ShouldNotBeNull();
         all[0].Error!.ShouldContain("not in the outbox type registry's allow-list");
     }

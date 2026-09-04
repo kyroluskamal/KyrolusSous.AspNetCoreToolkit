@@ -1,5 +1,8 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Globalization;
 using System.Text.Json;
+using KyrolusSous.CQRS.Abstractions.Security;
 using Microsoft.EntityFrameworkCore.Query;
 
 namespace KyrolusSous.CQRS.EF.Command.Bulk;
@@ -46,6 +49,17 @@ public sealed class ExecuteUpdateCommandHandler<TDbcontext, TResponse, TKey>(IKy
                     throw new InvalidOperationException($"Property '{name}' not found on '{typeof(TResponse).Name}'.");
                 }
 
+                // Always-on, independent of IKyrolusPropertyUpdateRequest.AllowedProperties (which is
+                // opt-in and does nothing when a caller never sets it): a key, concurrency-token, or
+                // DB-computed column must never be writable through ExecuteUpdate regardless of
+                // allow-list configuration.
+                if (IsProtectedFromUpdate(prop))
+                {
+                    throw new KyrolusSecurityException(
+                        $"[Kyrolus CQRS Security] Property '{prop.Name}' on '{typeof(TResponse).Name}' is a key, " +
+                        "concurrency-token, or database-generated column and cannot be updated via ExecuteUpdate.");
+                }
+
                 var value = ConvertValue(rawValue, prop.PropertyType);
                 var parameter = Expression.Parameter(typeof(TResponse), "e");
                 var propertyAccess = Expression.Property(parameter, prop);
@@ -67,6 +81,15 @@ public sealed class ExecuteUpdateCommandHandler<TDbcontext, TResponse, TKey>(IKy
                 generic.Invoke(setters, new[] { propertyLambda, value });
             }
         };
+    }
+
+    private static bool IsProtectedFromUpdate(PropertyInfo prop)
+    {
+        if (prop.IsDefined(typeof(KeyAttribute), inherit: true)) return true;
+        if (prop.IsDefined(typeof(TimestampAttribute), inherit: true)) return true;
+        if (prop.IsDefined(typeof(ConcurrencyCheckAttribute), inherit: true)) return true;
+        var generated = prop.GetCustomAttribute<DatabaseGeneratedAttribute>(inherit: true);
+        return generated is { DatabaseGeneratedOption: DatabaseGeneratedOption.Computed };
     }
 
     private static object? ConvertValue(object? rawValue, Type propertyType)

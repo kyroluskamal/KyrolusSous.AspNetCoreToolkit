@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Security.Claims;
 using KyrolusSous.CQRS.Abstractions.Audit;
 using KyrolusSous.CQRS.Abstractions.Behaviors;
 using KyrolusSous.CQRS.Abstractions.Interfaces;
 using KyrolusSous.CQRS.Abstractions.Security;
+using KyrolusSous.Localization.Abstractions;
 using KyrolusSous.Mediator.Abstractions.Interfaces;
 using Shouldly;
 using Xunit;
@@ -115,5 +117,60 @@ public class KyrolusAuditBehaviorTests
 
         response.ShouldBe("done");
         sink.Entries.ShouldBeEmpty();
+    }
+
+    public sealed record LocalizedPayrollCommand(decimal Amount, int EmployeeCount)
+        : IKyrolusCommand<string>, IKyrolusAuditableCommand
+    {
+        public string? AuditAction => "PayrollCommand";
+        public string? BusinessAction => "Payroll.Disburse";
+        public object? BusinessActionArgs => new Dictionary<string, object?> { ["count"] = EmployeeCount };
+    }
+
+    private sealed class TestLocalizer : IKyrolusLocalizer
+    {
+        public KyrolusLocalizationResult GetString(string key, CultureInfo? culture = null)
+        {
+            if (key == "Payroll.Disburse")
+                return new KyrolusLocalizationResult("صرف الرواتب الشهرية", ResourceNotFound: false);
+
+            return new KyrolusLocalizationResult(key, ResourceNotFound: true);
+        }
+
+        public KyrolusLocalizationResult GetString(string key, object? arguments, CultureInfo? culture = null)
+        {
+            if (key == "Payroll.Disburse")
+            {
+                var formatted = Format("صرف الرواتب لعدد {count} موظف", arguments);
+                return new KyrolusLocalizationResult(formatted, ResourceNotFound: false);
+            }
+
+            return new KyrolusLocalizationResult(key, ResourceNotFound: true);
+        }
+
+        public string Format(string template, object? arguments) => KyrolusLocalizationFormatter.Format(template, arguments);
+    }
+
+    [Fact(DisplayName = "Audited command populates Action, BusinessAction, and LocalizedAction correctly with localizer")]
+    public async Task Audited_command_populates_action_businessaction_and_localizedaction()
+    {
+        var sink = new KyrolusInMemoryAuditSink();
+        var localizer = new TestLocalizer();
+        var behavior = new KyrolusAuditBehavior<LocalizedPayrollCommand, string>(sink, localizer: localizer);
+
+        var response = await behavior.Handle(
+            new LocalizedPayrollCommand(50000m, 25),
+            ct => Task.FromResult("Disbursed"),
+            CancellationToken.None);
+
+        response.ShouldBe("Disbursed");
+        sink.Entries.Count.ShouldBe(1);
+
+        var entry = sink.Entries.First();
+        entry.Action.ShouldBe("PayrollCommand"); // Tech action preserved
+        entry.BusinessAction.ShouldBe("Payroll.Disburse"); // Business code preserved
+        entry.LocalizedAction.ShouldBe("صرف الرواتب لعدد 25 موظف"); // Localized text evaluated
+        entry.CommandName.ShouldBe("LocalizedPayrollCommand");
+        entry.IsSuccess.ShouldBeTrue();
     }
 }

@@ -21,12 +21,18 @@ namespace KyrolusSous.CQRS.Abstractions.Behaviors;
 public sealed class KyrolusAuditBehavior<TRequest, TResponse>(
     IKyrolusAuditSink? auditSink = null,
     IKyrolusCurrentUserContext? userContext = null,
-    ILogger<KyrolusAuditBehavior<TRequest, TResponse>>? logger = null)
+    IKyrolusLocalizer? localizer = null,
+    ILogger<KyrolusAuditBehavior<TRequest, TResponse>>? logger = null,
+    KyrolusAuditSanitizationOptions? sanitizationOptions = null)
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
     private readonly IKyrolusAuditSink? _auditSink = auditSink;
     private readonly IKyrolusCurrentUserContext? _userContext = userContext;
+    private readonly IKyrolusLocalizer? _localizer = localizer;
     private readonly ILogger? _logger = logger;
+    private readonly string[] _extraSensitiveKeywords = sanitizationOptions?.AdditionalSensitiveKeywords is { Count: > 0 } extra
+        ? [.. extra]
+        : [];
 
     public async Task<TResponse> Handle(
         TRequest request,
@@ -42,6 +48,8 @@ public sealed class KyrolusAuditBehavior<TRequest, TResponse>(
         var sw = Stopwatch.StartNew();
         var requestType = typeof(TRequest);
         var actionName = !string.IsNullOrWhiteSpace(auditable.AuditAction) ? auditable.AuditAction : requestType.Name;
+        var businessAction = !string.IsNullOrWhiteSpace(auditable.BusinessAction) ? auditable.BusinessAction : auditable.AuditAction;
+        var localizedAction = ResolveLocalizedAction(businessAction ?? actionName, auditable.BusinessActionArgs);
         var context = _userContext ?? new KyrolusDefaultCurrentUserContext();
 
         try
@@ -55,9 +63,11 @@ public sealed class KyrolusAuditBehavior<TRequest, TResponse>(
                 UserName = context.UserName,
                 TenantId = context.TenantId,
                 Action = actionName,
+                BusinessAction = businessAction,
+                LocalizedAction = localizedAction,
                 Category = auditable.AuditCategory,
-                RequestType = requestType.FullName ?? requestType.Name,
-                RequestName = requestType.Name,
+                CommandName = requestType.Name,
+                CommandFullName = requestType.FullName ?? requestType.Name,
                 Payload = auditable.IncludePayload ? SanitizePayload(request) : null,
                 DurationMs = sw.ElapsedMilliseconds,
                 IsSuccess = true
@@ -76,9 +86,11 @@ public sealed class KyrolusAuditBehavior<TRequest, TResponse>(
                 UserName = context.UserName,
                 TenantId = context.TenantId,
                 Action = actionName,
+                BusinessAction = businessAction,
+                LocalizedAction = localizedAction,
                 Category = auditable.AuditCategory,
-                RequestType = requestType.FullName ?? requestType.Name,
-                RequestName = requestType.Name,
+                CommandName = requestType.Name,
+                CommandFullName = requestType.FullName ?? requestType.Name,
                 Payload = auditable.IncludePayload ? SanitizePayload(request) : null,
                 DurationMs = sw.ElapsedMilliseconds,
                 IsSuccess = false,
@@ -90,12 +102,27 @@ public sealed class KyrolusAuditBehavior<TRequest, TResponse>(
         }
     }
 
+    private string? ResolveLocalizedAction(string? key, object? args)
+    {
+        if (_localizer is null || string.IsNullOrWhiteSpace(key))
+            return null;
+
+        var result = args is not null
+            ? _localizer.GetString(key, args)
+            : _localizer.GetString(key);
+
+        return result.ResourceNotFound ? null : result.Value;
+    }
+
     /// <summary>Bounds recursion into nested objects - deep enough for realistic DTO graphs, shallow enough that a self-referencing or pathological graph cannot recurse indefinitely.</summary>
     private const int MaxSanitizeDepth = 6;
 
-    private static object? SanitizePayload(object? payload) => SanitizePayload(payload, depth: 0);
+    private const string RedactedPlaceholder = "***REDACTED***";
+    private const string UnavailablePlaceholder = "***UNAVAILABLE***";
 
-    private static object? SanitizePayload(object? payload, int depth)
+    private object? SanitizePayload(object? payload) => SanitizePayload(payload, depth: 0);
+
+    private object? SanitizePayload(object? payload, int depth)
     {
         if (payload is null) return null;
 
@@ -105,28 +132,60 @@ public sealed class KyrolusAuditBehavior<TRequest, TResponse>(
         // sink logs, defeating the point of sanitizing at all.
         if (depth >= MaxSanitizeDepth || IsSimpleType(payload.GetType())) return payload;
 
-        try
-        {
-            if (payload is System.Collections.IEnumerable enumerable and not string)
-                return SanitizeEnumerable(enumerable, depth);
+        // A dictionary (e.g. the Updates bag on a Patch/BulkPatch/ExecuteUpdate command) is also
+        // IEnumerable<KeyValuePair<,>>, so this check must run before the general IEnumerable branch
+        // below - otherwise each entry gets reflected as a KeyValuePair and IsSensitive is checked
+        // against the literal names "Key"/"Value" instead of the entry's actual key (e.g. "Password"),
+        // and the real key never gets redacted at all.
+        if (payload is System.Collections.IDictionary dictionary)
+            return SanitizeDictionary(dictionary, depth);
 
-            return SanitizeObject(payload, depth);
-        }
-        catch
-        {
-            return payload;
-        }
+        if (payload is System.Collections.IEnumerable enumerable and not string)
+            return SanitizeEnumerable(enumerable, depth);
+
+        return SanitizeObject(payload, depth);
     }
 
-    private static List<object?> SanitizeEnumerable(System.Collections.IEnumerable enumerable, int depth)
+    private List<object?> SanitizeEnumerable(System.Collections.IEnumerable enumerable, int depth)
     {
         var items = new List<object?>();
         foreach (var item in enumerable)
-            items.Add(SanitizePayload(item, depth + 1));
+        {
+            // One pathological item (a lazy/computed value that throws on enumeration or on its own
+            // sanitization) must not discard every other item already sanitized in this collection.
+            try
+            {
+                items.Add(SanitizePayload(item, depth + 1));
+            }
+            catch
+            {
+                items.Add(UnavailablePlaceholder);
+            }
+        }
         return items;
     }
 
-    private static object SanitizeObject(object payload, int depth)
+    private object SanitizeDictionary(System.Collections.IDictionary dictionary, int depth)
+    {
+        var result = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Collections.DictionaryEntry entry in dictionary)
+        {
+            var key = entry.Key?.ToString() ?? "null";
+            try
+            {
+                result[key] = IsSensitive(key)
+                    ? RedactedPlaceholder
+                    : SanitizePayload(entry.Value, depth + 1);
+            }
+            catch
+            {
+                result[key] = UnavailablePlaceholder;
+            }
+        }
+        return result;
+    }
+
+    private object SanitizeObject(object payload, int depth)
     {
         var props = payload.GetType().GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
         if (props.Length == 0) return payload;
@@ -137,9 +196,23 @@ public sealed class KyrolusAuditBehavior<TRequest, TResponse>(
             if (prop.GetIndexParameters().Length > 0) continue; // skip indexers
 
             var name = prop.Name;
-            dict[name] = IsSensitive(name)
-                ? "***REDACTED***"
-                : SanitizePayload(prop.GetValue(payload), depth + 1);
+            if (IsSensitive(name))
+            {
+                dict[name] = RedactedPlaceholder;
+                continue;
+            }
+
+            // A single property whose getter throws (a computed property touching a disposed
+            // DbContext navigation, say) must not force the entire object to fall back to being
+            // logged raw - that would re-expose every sensitive property already redacted above it.
+            try
+            {
+                dict[name] = SanitizePayload(prop.GetValue(payload), depth + 1);
+            }
+            catch
+            {
+                dict[name] = UnavailablePlaceholder;
+            }
         }
         return dict;
     }
@@ -156,14 +229,24 @@ public sealed class KyrolusAuditBehavior<TRequest, TResponse>(
         || type == typeof(Uri)
         || (Nullable.GetUnderlyingType(type) is { } underlying && IsSimpleType(underlying));
 
-    private static bool IsSensitive(string name)
+    private static readonly string[] BuiltInSensitiveKeywords =
+    [
+        "password", "secret", "token", "pin", "cvv", "cardnumber", "apikey"
+    ];
+
+    private bool IsSensitive(string name)
     {
-        return name.Contains("password", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("secret", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("token", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("pin", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("cvv", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("cardnumber", StringComparison.OrdinalIgnoreCase);
+        foreach (var keyword in BuiltInSensitiveKeywords)
+        {
+            if (name.Contains(keyword, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+
+        foreach (var keyword in _extraSensitiveKeywords)
+        {
+            if (!string.IsNullOrWhiteSpace(keyword) && name.Contains(keyword, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+
+        return false;
     }
 
     private async Task EmitQuietlyAsync(KyrolusAuditEntry entry, CancellationToken cancellationToken)

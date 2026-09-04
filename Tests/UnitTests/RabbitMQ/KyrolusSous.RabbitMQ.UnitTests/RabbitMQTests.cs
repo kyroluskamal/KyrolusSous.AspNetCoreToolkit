@@ -284,7 +284,7 @@ public class RabbitMQTests
     [Fact(DisplayName = "Outbox Store Add And Retrieve Pending Messages Successfully")]
     public async Task OutboxStore_AddAndRetrievePendingMessages_Successfully()
     {
-        var store = new KyrolusSous.RabbitMQ.Runtime.Outbox.KyrolusInMemoryOutboxStore();
+        var store = new KyrolusSous.RabbitMQ.Runtime.Outbox.KyrolusKyrolusInMemoryOutboxStore();
         var msg = new KyrolusSous.RabbitMQ.Abstractions.Outbox.KyrolusOutboxMessage
         {
             Exchange = "orders.exchange",
@@ -715,7 +715,7 @@ public class RabbitMQTests
     [Fact(DisplayName = "Outbox Store Purge Processed Messages Deletes Older Messages")]
     public async Task OutboxStore_PurgeProcessedMessages_DeletesOlderMessages()
     {
-        var store = new KyrolusSous.RabbitMQ.Runtime.Outbox.KyrolusInMemoryOutboxStore();
+        var store = new KyrolusSous.RabbitMQ.Runtime.Outbox.KyrolusKyrolusInMemoryOutboxStore();
         var msg1 = new KyrolusSous.RabbitMQ.Abstractions.Outbox.KyrolusOutboxMessage
         {
             Id = "msg-1",

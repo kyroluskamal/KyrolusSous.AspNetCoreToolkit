@@ -12,7 +12,6 @@ public class GetAllQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUnitOfWork 
 {
     public async Task<IEnumerable<TResponse>> Handle(GetAllQuery<TResponse> query, CancellationToken cancellationToken)
     {
-        var mergedExpressions = KyrolusIncludeMerge.MergeExpressions(query.IncludeExpressions, query.IncludeGraph);
         if (query.IncludeDeleted || query.DeletedOnly)
         {
             IKyrolusSingleKeySoftDeleteRepository<TResponse, TKey>? softRepo = null;
@@ -27,7 +26,9 @@ public class GetAllQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUnitOfWork 
 
             if (softRepo is not null)
             {
-                var graph = KyrolusIncludeMerge.MergeGraph(query.IncludeGraph, mergedExpressions);
+                // IncludeProperties is passed separately below, so only IncludeGraph + IncludeExpressions
+                // belong in this merge - folding IncludeProperties in here too would duplicate it.
+                var graph = KyrolusIncludeMerge.MergeGraph(query.IncludeGraph, query.IncludeExpressions);
                 return query.DeletedOnly
                     ? await softRepo.GetDeletedOnlyAsync(
                         query.Filter,
@@ -54,9 +55,12 @@ public class GetAllQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUnitOfWork 
         }
 
         var repo = unitOfWork.GetRepository<IKyrolusRepositoryAsync<TDbcontext, TResponse, TKey>>();
+        // Single-pass merge of all three include sources - a two-step merge (IncludeExpressions +
+        // IncludeGraph first, IncludeProperties folded in only when that came out empty) silently
+        // dropped IncludeProperties whenever it was combined with the other two.
+        var includes = KyrolusIncludeMerge.MergeExpressions(query.IncludeProperties, query.IncludeGraph, query.IncludeExpressions) ?? [];
         if (query.Selector is not null)
         {
-            var includes = KyrolusIncludeMerge.MergeExpressions(query.IncludeProperties, query.IncludeGraph, mergedExpressions) ?? [];
             var spec = new KyrolusEfQuerySpecification<TResponse, TResponse>(
                 new SpecificationInputs<TResponse, TResponse>(
                     Filter: query.Filter,
@@ -70,7 +74,7 @@ public class GetAllQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUnitOfWork 
             return await repo.QueryAsync(spec, cancellationToken);
         }
 
-        if (mergedExpressions is not null && mergedExpressions.Length > 0)
+        if (includes.Length > 0)
         {
             return await repo.GetAllAsync(
                 query.Filter,
@@ -78,7 +82,7 @@ public class GetAllQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUnitOfWork 
                 query.AsNoTracking,
                 query.UseSplitQuery,
                 cancellationToken,
-                mergedExpressions);
+                includes);
         }
 
         return await repo.GetAllAsync(

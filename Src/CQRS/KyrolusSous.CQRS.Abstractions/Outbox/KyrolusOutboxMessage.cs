@@ -3,7 +3,7 @@ namespace KyrolusSous.CQRS.Abstractions.Outbox;
 /// <summary>
 /// Default entity model representing a transactional outbox message.
 /// </summary>
-public sealed class KyrolusOutboxMessage : IOutboxMessage
+public sealed class KyrolusOutboxMessage : IKyrolusOutboxMessage
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string? CorrelationId { get; set; }
@@ -13,5 +13,5 @@ public sealed class KyrolusOutboxMessage : IOutboxMessage
     public DateTimeOffset? ProcessedOnUtc { get; set; }
     public string? Error { get; set; }
     public int RetryCount { get; set; }
-    public OutboxMessageStatus Status { get; set; } = OutboxMessageStatus.Pending;
+    public KyrolusOutboxMessageStatus Status { get; set; } = KyrolusOutboxMessageStatus.Pending;
 }

@@ -35,7 +35,25 @@ public sealed class KyrolusReadModelProjectionBehavior<TRequest, TResponse>(
     {
         foreach (var projectableInterface in GetProjectableInterfaces(request))
         {
-            var readModel = GetReadModel(request, projectableInterface);
+            object? readModel;
+            try
+            {
+                // By the time this runs, next() has already returned successfully - the primary
+                // write is done. A throwing ToReadModel() (a mapping bug, say) must not turn an
+                // already-successful command into a failed response to the caller; it is handled the
+                // same way a throwing projector is just below.
+                readModel = GetReadModel(request, projectableInterface);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(
+                    ex,
+                    "[Kyrolus CQRS Projection] Failed to build read model via '{Interface}' on '{RequestType}'",
+                    projectableInterface.Name,
+                    request.GetType().Name);
+                continue;
+            }
+
             if (readModel is null) continue;
 
             await ProjectReadModelAsync(readModel, projectableInterface, cancellationToken).ConfigureAwait(false);
@@ -63,7 +81,8 @@ public sealed class KyrolusReadModelProjectionBehavior<TRequest, TResponse>(
     private async Task ProjectReadModelAsync(object readModel, Type projectableInterface, CancellationToken cancellationToken)
     {
         var readModelType = projectableInterface.GetGenericArguments()[0];
-        var projectorType = typeof(IReadModelProjector<>).MakeGenericType(readModelType);
+        var projectorType = typeof(IKyrolusReadModelProjector
+<>).MakeGenericType(readModelType);
         var projectors = _serviceProvider.GetServices(projectorType);
 
         foreach (var projector in projectors)
@@ -85,7 +104,8 @@ public sealed class KyrolusReadModelProjectionBehavior<TRequest, TResponse>(
     {
         try
         {
-            var projectMethod = projectorType.GetMethod(nameof(IReadModelProjector<object>.ProjectAsync));
+            var projectMethod = projectorType.GetMethod(nameof(IKyrolusReadModelProjector
+<object>.ProjectAsync));
             if (projectMethod is null)
                 return;
 

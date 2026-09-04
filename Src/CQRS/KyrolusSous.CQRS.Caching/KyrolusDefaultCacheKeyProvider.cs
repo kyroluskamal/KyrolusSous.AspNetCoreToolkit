@@ -110,6 +110,15 @@ public sealed class KyrolusDefaultCacheKeyProvider : IKyrolusCacheKeyProvider
             }
         }
 
+        // Non-generic IKyrolusCommand ("mutates something, returns nothing") has no TResponse to
+        // resolve an entity type from - fall back to the command's own type so a pattern can still
+        // be derived instead of GetCachePattern silently returning null (and invalidation never
+        // firing) for every command shaped this way.
+        if (request is IKyrolusCommand)
+        {
+            return requestType;
+        }
+
         return null;
     }
 

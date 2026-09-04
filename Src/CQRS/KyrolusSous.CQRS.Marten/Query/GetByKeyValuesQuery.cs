@@ -9,6 +9,7 @@ public class GetByKeyValuesQuery<TResponse, TKey>(object?[] keyValues, bool cach
     public List<string>? IncludeProperties { get; set; }
     public Expression<Func<TResponse, object?>>[]? IncludeExpressions { get; set; }
     public IncludeGraph<TResponse>? IncludeGraph { get; set; }
+    // Currently no-ops for this provider - see the remark on GetAllQuery<TResponse>.AsNoTracking.
     public bool? AsNoTracking { get; set; }
     public bool? UseSplitQuery { get; set; }
     public object?[] KeyValues { get; set; } = keyValues;

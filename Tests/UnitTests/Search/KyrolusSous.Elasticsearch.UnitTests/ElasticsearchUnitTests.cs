@@ -1,7 +1,9 @@
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
+using System.Text;
 using Elastic.Clients.Elasticsearch;
 using Elastic.Clients.Elasticsearch.Aggregations;
+using Elastic.Transport;
 using KyrolusSous.Caching.Abstractions;
 using KyrolusSous.Elasticsearch;
 using Microsoft.Extensions.Configuration;
@@ -50,6 +52,82 @@ public class TestTenantProvider : IKyrolusTenantProvider
 
 public class ElasticsearchUnitTests
 {
+    #region Test infrastructure: a real ElasticsearchClient wired to Elastic.Transport's InMemoryRequestInvoker
+
+    // These tests run KyrolusElasticRepository<TDocument, TId> against a real ElasticsearchClient whose
+    // transport never touches the network - Elastic.Transport.InMemoryRequestInvoker returns a canned
+    // response instead. CapturingRequestInvoker wraps it to also record the exact outgoing request
+    // (path + query string, and body) so tests can assert on what the client actually would have sent to
+    // a cluster - e.g. that a query body contains "simple_query_string" and not "query_string" (Fix 1),
+    // or that an update/delete request's query string does/doesn't carry if_seq_no/if_primary_term
+    // (Fix 4). This is not a live-cluster integration test; it verifies request construction only.
+    private sealed class CapturingRequestInvoker(IRequestInvoker inner) : IRequestInvoker
+    {
+        public string? LastPathAndQuery { get; private set; }
+        public byte[]? LastRequestBody { get; private set; }
+
+        public ResponseFactory ResponseFactory => inner.ResponseFactory;
+
+        public TResponse Request<TResponse>(Endpoint endpoint, BoundConfiguration boundConfiguration, PostData? postData)
+            where TResponse : TransportResponse, new()
+        {
+            Capture(endpoint, boundConfiguration, postData);
+            return inner.Request<TResponse>(endpoint, boundConfiguration, postData);
+        }
+
+        public async Task<TResponse> RequestAsync<TResponse>(Endpoint endpoint, BoundConfiguration boundConfiguration, PostData? postData, CancellationToken cancellationToken)
+            where TResponse : TransportResponse, new()
+        {
+            Capture(endpoint, boundConfiguration, postData);
+            return await inner.RequestAsync<TResponse>(endpoint, boundConfiguration, postData, cancellationToken);
+        }
+
+        public void Dispose() => inner.Dispose();
+
+        private void Capture(Endpoint endpoint, BoundConfiguration boundConfiguration, PostData? postData)
+        {
+            LastPathAndQuery = endpoint.PathAndQuery;
+            if (postData is null)
+            {
+                LastRequestBody = null;
+                return;
+            }
+
+            using var ms = new MemoryStream();
+            postData.Write(ms, boundConfiguration.ConnectionSettings, boundConfiguration.DisableDirectStreaming);
+            LastRequestBody = ms.ToArray();
+        }
+    }
+
+    private const string EmptySearchResponseJson =
+        """{"took":1,"timed_out":false,"_shards":{"total":1,"successful":1,"skipped":0,"failed":0},"hits":{"total":{"value":0,"relation":"eq"},"max_score":null,"hits":[]}}""";
+
+    private const string UpdateSuccessResponseJson =
+        """{"_index":"products","_id":"doc-1","_version":2,"result":"updated","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":5,"_primary_term":1}""";
+
+    private const string DeleteSuccessResponseJson =
+        """{"_index":"products","_id":"doc-1","_version":3,"result":"deleted","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":6,"_primary_term":1}""";
+
+    private const string VersionConflictResponseJson =
+        """{"error":{"root_cause":[{"type":"version_conflict_engine_exception","reason":"version conflict"}],"type":"version_conflict_engine_exception","reason":"version conflict, required seqNo does not match","status":409},"status":409}""";
+
+    private static (KyrolusElasticRepository<TestProductDocument, string> Repo, CapturingRequestInvoker Capture) CreateRepoWithCannedResponse(
+        string responseJson,
+        int statusCode = 200)
+    {
+        var headers = new Dictionary<string, IEnumerable<string>> { ["x-elastic-product"] = ["Elasticsearch"] };
+        var inMemory = new InMemoryRequestInvoker(Encoding.UTF8.GetBytes(responseJson), statusCode: statusCode, headers: headers);
+        var capturing = new CapturingRequestInvoker(inMemory);
+        var settings = new ElasticsearchClientSettings(new SingleNodePool(new Uri("http://localhost:9200")), capturing)
+            .DefaultIndex("products")
+            .DisableDirectStreaming();
+        var client = new ElasticsearchClient(settings);
+        var repo = new KyrolusElasticRepository<TestProductDocument, string>(client, Options.Create(new KyrolusElasticsearchOptions()));
+        return (repo, capturing);
+    }
+
+    #endregion
+
     [Fact(DisplayName = "Elastic Index Attribute Reads Properties Correctly")]
     public void ElasticIndexAttribute_ReadsPropertiesCorrectly()
     {
@@ -333,6 +411,56 @@ public class ElasticsearchUnitTests
         Should.NotThrow(() => builder.Apply(updateDescriptor));
     }
 
+    [Fact(DisplayName = "Regression (Fix 1 - query_string injection/DoS): a free-text search with no fields specified uses simple_query_string, not the injectable query_string")]
+    public async Task SmartSearchBuilder_NoFieldsSearch_UsesSimpleQueryString_NotInjectableQueryString()
+    {
+        // KyrolusSmartSearchBuilder<T>.Search(text) with no field arguments falls into the "no _searchFields"
+        // branch of Apply(). query_string parses its input as a Lucene mini-query-language (field:value
+        // scoping, wildcards/regex, boosting, _exists_:field...) so raw end-user search text must never reach
+        // it unescaped. simple_query_string never throws on malformed input and does not support that
+        // dangerous syntax - it treats the whole payload as plain text/terms instead of a query language.
+        var (repo, capture) = CreateRepoWithCannedResponse(EmptySearchResponseJson);
+
+        await repo.SmartSearchAsync(b => b.Search("field_not_meant_to_be_searchable:leaked OR admin:true", Array.Empty<string>()));
+
+        capture.LastRequestBody.ShouldNotBeNull();
+        var body = Encoding.UTF8.GetString(capture.LastRequestBody!);
+        body.ShouldContain("\"simple_query_string\"");
+        body.ShouldNotContain("\"query_string\"");
+    }
+
+    [Fact(DisplayName = "Regression (Fix 1 - query_string injection/DoS): DeleteByQuery with no fields specified also uses simple_query_string")]
+    public async Task SmartSearchBuilder_ApplyToDeleteByQuery_NoFieldsSearch_UsesSimpleQueryString_NotInjectableQueryString()
+    {
+        // DeleteByQuery is the higher-stakes half of Fix 1: an injected query_string here changes which
+        // documents get deleted, not just which get returned.
+        const string deleteByQueryResponseJson =
+            """{"took":1,"timed_out":false,"total":0,"deleted":0,"batches":1,"version_conflicts":0,"noops":0,"retries":{"bulk":0,"search":0},"throttled_millis":0,"requests_per_second":-1.0,"throttled_until_millis":0,"failures":[]}""";
+        var (repo, capture) = CreateRepoWithCannedResponse(deleteByQueryResponseJson);
+
+        await repo.DeleteByQueryAsync(b => b.Search("field_not_meant_to_be_searchable:leaked OR admin:true", Array.Empty<string>()));
+
+        capture.LastRequestBody.ShouldNotBeNull();
+        var body = Encoding.UTF8.GetString(capture.LastRequestBody!);
+        body.ShouldContain("\"simple_query_string\"");
+        body.ShouldNotContain("\"query_string\"");
+    }
+
+    [Fact(DisplayName = "Regression (Fix 1 - query_string injection/DoS): UpdateByQuery with no fields specified also uses simple_query_string")]
+    public async Task SmartSearchBuilder_ApplyToUpdateByQuery_NoFieldsSearch_UsesSimpleQueryString_NotInjectableQueryString()
+    {
+        const string updateByQueryResponseJson =
+            """{"took":1,"timed_out":false,"total":0,"updated":0,"batches":1,"version_conflicts":0,"noops":0,"retries":{"bulk":0,"search":0},"throttled_millis":0,"requests_per_second":-1.0,"throttled_until_millis":0,"failures":[]}""";
+        var (repo, capture) = CreateRepoWithCannedResponse(updateByQueryResponseJson);
+
+        await repo.UpdateByQueryAsync(b => b.Search("field_not_meant_to_be_searchable:leaked OR admin:true", Array.Empty<string>()), "ctx._source.price = 0");
+
+        capture.LastRequestBody.ShouldNotBeNull();
+        var body = Encoding.UTF8.GetString(capture.LastRequestBody!);
+        body.ShouldContain("\"simple_query_string\"");
+        body.ShouldNotContain("\"query_string\"");
+    }
+
     [Fact(DisplayName = "Cached Elastic Repository Caches Get By Id And Invalidates On Mutation")]
     public async Task CachedElasticRepository_CachesGetById_AndInvalidatesOnMutation()
     {
@@ -386,6 +514,118 @@ public class ElasticsearchUnitTests
 
         await Should.NotThrowAsync(() => buffer.FlushAsync());
     }
+
+    #region Regression (Fix 4 - no optimistic concurrency on write paths)
+
+    // These tests verify request construction (via CapturingRequestInvoker, see the "Test infrastructure"
+    // region above) and the repository's translation of Elasticsearch's HTTP 409 version-conflict response
+    // into a `false` return - not a genuine two-writer race against a live cluster/document, which this
+    // project has no fixture for. That is called out explicitly in each test's own comments.
+
+    [Fact(DisplayName = "Regression (Fix 4 - optimistic concurrency): UpdateAsync omits if_seq_no/if_primary_term when neither is supplied (unchanged default behavior)")]
+    public async Task UpdateAsync_NoConcurrencyTokens_OmitsIfSeqNoAndIfPrimaryTermFromRequest()
+    {
+        var (repo, capture) = CreateRepoWithCannedResponse(UpdateSuccessResponseJson);
+
+        var ok = await repo.UpdateAsync(new TestProductDocument { Id = "doc-1", Title = "Updated" }, "doc-1");
+
+        ok.ShouldBeTrue();
+        capture.LastPathAndQuery.ShouldNotBeNull();
+        capture.LastPathAndQuery.ShouldNotContain("if_seq_no");
+        capture.LastPathAndQuery.ShouldNotContain("if_primary_term");
+    }
+
+    [Fact(DisplayName = "Regression (Fix 4 - optimistic concurrency): UpdateAsync carries if_seq_no/if_primary_term on the request when both are supplied")]
+    public async Task UpdateAsync_WithConcurrencyTokens_CarriesIfSeqNoAndIfPrimaryTermOnRequest()
+    {
+        var (repo, capture) = CreateRepoWithCannedResponse(UpdateSuccessResponseJson);
+
+        var ok = await repo.UpdateAsync(new TestProductDocument { Id = "doc-1", Title = "Updated" }, "doc-1", ifSeqNo: 5, ifPrimaryTerm: 1);
+
+        ok.ShouldBeTrue();
+        capture.LastPathAndQuery.ShouldNotBeNull();
+        capture.LastPathAndQuery.ShouldContain("if_seq_no=5");
+        capture.LastPathAndQuery.ShouldContain("if_primary_term=1");
+    }
+
+    [Fact(DisplayName = "Regression (Fix 4 - optimistic concurrency): UpdatePartialAsync omits if_seq_no/if_primary_term when neither is supplied (unchanged default behavior)")]
+    public async Task UpdatePartialAsync_NoConcurrencyTokens_OmitsIfSeqNoAndIfPrimaryTermFromRequest()
+    {
+        var (repo, capture) = CreateRepoWithCannedResponse(UpdateSuccessResponseJson);
+
+        var ok = await repo.UpdatePartialAsync("doc-1", new { Title = "Updated" });
+
+        ok.ShouldBeTrue();
+        capture.LastPathAndQuery.ShouldNotBeNull();
+        capture.LastPathAndQuery.ShouldNotContain("if_seq_no");
+        capture.LastPathAndQuery.ShouldNotContain("if_primary_term");
+    }
+
+    [Fact(DisplayName = "Regression (Fix 4 - optimistic concurrency): UpdatePartialAsync carries if_seq_no/if_primary_term on the request when both are supplied")]
+    public async Task UpdatePartialAsync_WithConcurrencyTokens_CarriesIfSeqNoAndIfPrimaryTermOnRequest()
+    {
+        var (repo, capture) = CreateRepoWithCannedResponse(UpdateSuccessResponseJson);
+
+        var ok = await repo.UpdatePartialAsync("doc-1", new { Title = "Updated" }, ifSeqNo: 5, ifPrimaryTerm: 1);
+
+        ok.ShouldBeTrue();
+        capture.LastPathAndQuery.ShouldNotBeNull();
+        capture.LastPathAndQuery.ShouldContain("if_seq_no=5");
+        capture.LastPathAndQuery.ShouldContain("if_primary_term=1");
+    }
+
+    [Fact(DisplayName = "Regression (Fix 4 - optimistic concurrency): DeleteAsync omits if_seq_no/if_primary_term when neither is supplied (unchanged default behavior)")]
+    public async Task DeleteAsync_NoConcurrencyTokens_OmitsIfSeqNoAndIfPrimaryTermFromRequest()
+    {
+        var (repo, capture) = CreateRepoWithCannedResponse(DeleteSuccessResponseJson);
+
+        var ok = await repo.DeleteAsync("doc-1");
+
+        ok.ShouldBeTrue();
+        capture.LastPathAndQuery.ShouldNotBeNull();
+        capture.LastPathAndQuery.ShouldNotContain("if_seq_no");
+        capture.LastPathAndQuery.ShouldNotContain("if_primary_term");
+    }
+
+    [Fact(DisplayName = "Regression (Fix 4 - optimistic concurrency): DeleteAsync carries if_seq_no/if_primary_term on the request when both are supplied")]
+    public async Task DeleteAsync_WithConcurrencyTokens_CarriesIfSeqNoAndIfPrimaryTermOnRequest()
+    {
+        var (repo, capture) = CreateRepoWithCannedResponse(DeleteSuccessResponseJson);
+
+        var ok = await repo.DeleteAsync("doc-1", ifSeqNo: 6, ifPrimaryTerm: 1);
+
+        ok.ShouldBeTrue();
+        capture.LastPathAndQuery.ShouldNotBeNull();
+        capture.LastPathAndQuery.ShouldContain("if_seq_no=6");
+        capture.LastPathAndQuery.ShouldContain("if_primary_term=1");
+    }
+
+    [Fact(DisplayName = "Regression (Fix 4 - optimistic concurrency): a stale seq_no/primary_term is rejected as a version conflict (false), not silently applied as an overwrite")]
+    public async Task UpdatePartialAsync_StaleConcurrencyTokens_ReturnsFalse_NotSilentOverwrite()
+    {
+        // No live Elasticsearch cluster is available in this test project, so a genuine two-writer race
+        // (both readers fetching the same seq_no/primary_term, one writing, the second losing) cannot be
+        // reproduced end-to-end here. What IS verified: (1) a "first write" call against a repo wired to
+        // return 200 succeeds, simulating the winner of the race using the seq_no/primary_term it captured
+        // before either write; (2) a "second write" call using that SAME now-stale pair, against a repo wired
+        // to return Elasticsearch's real version_conflict_engine_exception/409 shape, returns false rather
+        // than throwing or silently reporting success - proving the lost-update problem described in Fix 4
+        // (two concurrent partial updates silently overwriting each other) no longer happens once a caller
+        // opts in to supplying ifSeqNo/ifPrimaryTerm.
+        var (firstWriterRepo, _) = CreateRepoWithCannedResponse(UpdateSuccessResponseJson);
+        var firstWriteSucceeded = await firstWriterRepo.UpdatePartialAsync("doc-1", new { Price = 100m }, ifSeqNo: 5, ifPrimaryTerm: 1);
+        firstWriteSucceeded.ShouldBeTrue();
+
+        var (secondWriterRepo, secondCapture) = CreateRepoWithCannedResponse(VersionConflictResponseJson, statusCode: 409);
+        var secondWriteSucceeded = await secondWriterRepo.UpdatePartialAsync("doc-1", new { Price = 200m }, ifSeqNo: 5, ifPrimaryTerm: 1);
+
+        secondWriteSucceeded.ShouldBeFalse();
+        secondCapture.LastPathAndQuery.ShouldNotBeNull();
+        secondCapture.LastPathAndQuery.ShouldContain("if_seq_no=5");
+        secondCapture.LastPathAndQuery.ShouldContain("if_primary_term=1");
+    }
+
+    #endregion
 }
 
 public sealed class TestMockCacheProvider : IKyrolusCacheProvider
@@ -450,10 +690,10 @@ public sealed class TestMockElasticRepository<TDocument, TId>(string indexName) 
     public Task<KyrolusBulkResult> BulkIndexAsync(IEnumerable<(TDocument Document, TId Id)> items, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusBulkResult { IndexedCount = items.Count() });
     public Task<TDocument?> GetByIdAsync(TId id, CancellationToken cancellationToken = default) => Task.FromResult<TDocument?>(new TDocument());
     public Task<IReadOnlyList<TDocument>> GetManyAsync(IEnumerable<TId> ids, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TDocument>>([]);
-    public Task<bool> UpdateAsync(TDocument document, TId id, CancellationToken cancellationToken = default) => Task.FromResult(true);
-    public Task<bool> UpdatePartialAsync(TId id, object partialDocument, CancellationToken cancellationToken = default) => Task.FromResult(true);
+    public Task<bool> UpdateAsync(TDocument document, TId id, long? ifSeqNo = null, long? ifPrimaryTerm = null, CancellationToken cancellationToken = default) => Task.FromResult(true);
+    public Task<bool> UpdatePartialAsync(TId id, object partialDocument, long? ifSeqNo = null, long? ifPrimaryTerm = null, CancellationToken cancellationToken = default) => Task.FromResult(true);
     public Task<bool> UpdateByScriptAsync(TId id, string script, Dictionary<string, object>? parameters = null, CancellationToken cancellationToken = default) => Task.FromResult(true);
-    public Task<bool> DeleteAsync(TId id, CancellationToken cancellationToken = default) => Task.FromResult(true);
+    public Task<bool> DeleteAsync(TId id, long? ifSeqNo = null, long? ifPrimaryTerm = null, CancellationToken cancellationToken = default) => Task.FromResult(true);
     public Task<long> DeleteManyAsync(IEnumerable<TId> ids, CancellationToken cancellationToken = default) => Task.FromResult((long)ids.Count());
     public Task<KyrolusBulkResult> BulkDeleteAsync(IEnumerable<TId> ids, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusBulkResult { IndexedCount = ids.Count() });
     public Task<long> CountAsync(CancellationToken cancellationToken = default) => Task.FromResult(1L);

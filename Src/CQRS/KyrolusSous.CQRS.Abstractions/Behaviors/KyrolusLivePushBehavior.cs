@@ -20,11 +20,11 @@ namespace KyrolusSous.CQRS.Abstractions.Behaviors;
 /// </remarks>
 [PipelineOrder(-660)]
 public sealed class KyrolusLivePushBehavior<TRequest, TResponse>(
-    ILivePushPublisher? publisher = null,
+    IKyrolusLivePushPublisher? publisher = null,
     ILogger<KyrolusLivePushBehavior<TRequest, TResponse>>? logger = null)
     : IKyrolusPipelineBehavior<TRequest, TResponse>
 {
-    private readonly ILivePushPublisher? _publisher = publisher;
+    private readonly IKyrolusLivePushPublisher? _publisher = publisher;
     private readonly ILogger? _logger = logger;
 
     public async Task<TResponse> Handle(

@@ -6,7 +6,8 @@ namespace KyrolusSous.CQRS.Abstractions.Outbox;
 /// </summary>
 public sealed class KyrolusOutboxEventTypeRegistry : IKyrolusOutboxEventTypeRegistry
 {
-    private readonly IReadOnlyDictionary<string, Type> _byName;
+    private readonly IReadOnlyDictionary<string, Type> _byQualifiedOrFullName;
+    private readonly IReadOnlyDictionary<string, Type> _byShortName;
 
     public KyrolusOutboxEventTypeRegistry(IEnumerable<Type> allowedEventTypes)
     {
@@ -26,27 +27,37 @@ public sealed class KyrolusOutboxEventTypeRegistry : IKyrolusOutboxEventTypeRegi
         // not anything meaningful), with no error. A name involved in a collision is dropped from the
         // map entirely instead - a message stored under that bare name fails to resolve rather than
         // resolving to the wrong type; it still resolves fine via its AssemblyQualifiedName/FullName.
-        var map = new Dictionary<string, Type>(StringComparer.Ordinal);
+        //
+        // Kept in a dictionary separate from the qualified/full-name map: a top-level type's short
+        // Name and FullName are the same literal string (no namespace to prefix), so writing that
+        // type's FullName into a shared map could silently overwrite a *different* type's legitimate
+        // short-name entry at the very same key - and since that overwrite happens before this type's
+        // own short-name collision check runs, the check would find its own just-written entry and
+        // conclude (wrongly) that no collision occurred, erasing the ambiguity trail. Two dictionaries
+        // means a FullName write can never clobber short-name bookkeeping.
+        var byQualifiedOrFullName = new Dictionary<string, Type>(StringComparer.Ordinal);
+        var byShortName = new Dictionary<string, Type>(StringComparer.Ordinal);
         var ambiguousNames = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var type in allowedEventTypes)
         {
-            if (type.AssemblyQualifiedName is { } aqn) map[aqn] = type;
-            if (type.FullName is { } fullName) map[fullName] = type;
+            if (type.AssemblyQualifiedName is { } aqn) byQualifiedOrFullName[aqn] = type;
+            if (type.FullName is { } fullName) byQualifiedOrFullName[fullName] = type;
 
             if (ambiguousNames.Contains(type.Name)) continue;
 
-            if (map.TryGetValue(type.Name, out var existingByShortName) && existingByShortName != type)
+            if (byShortName.TryGetValue(type.Name, out var existingByShortName) && existingByShortName != type)
             {
-                map.Remove(type.Name);
+                byShortName.Remove(type.Name);
                 ambiguousNames.Add(type.Name);
                 continue;
             }
 
-            map[type.Name] = type;
+            byShortName[type.Name] = type;
         }
 
-        _byName = map;
+        _byQualifiedOrFullName = byQualifiedOrFullName;
+        _byShortName = byShortName;
     }
 
     /// <summary>
@@ -69,7 +80,8 @@ public sealed class KyrolusOutboxEventTypeRegistry : IKyrolusOutboxEventTypeRegi
 
     /// <inheritdoc />
     public bool TryResolve(string eventTypeName, out Type? eventType)
-        => _byName.TryGetValue(eventTypeName, out eventType);
+        => _byQualifiedOrFullName.TryGetValue(eventTypeName, out eventType)
+        || _byShortName.TryGetValue(eventTypeName, out eventType);
 
     private static IEnumerable<Type> GetLoadableTypes(Assembly assembly)
     {

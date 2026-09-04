@@ -3,7 +3,7 @@ namespace KyrolusSous.CQRS.Abstractions.LivePush;
 /// <summary>
 /// Defines a real-time push notification provider (e.g. SignalR Hub, WebSockets, or Server-Sent Events).
 /// </summary>
-public interface ILivePushPublisher
+public interface IKyrolusLivePushPublisher
 {
     /// <summary>
     /// Broadcasts data to the specified real-time channel or group.

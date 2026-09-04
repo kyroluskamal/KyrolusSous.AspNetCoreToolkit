@@ -18,7 +18,7 @@ public class KyrolusLivePushBehaviorTests
 
     public sealed record PlainCommand(string Action) : IKyrolusCommand<string>;
 
-    private sealed class ThrowingPushPublisher : ILivePushPublisher
+    private sealed class ThrowingPushPublisher : IKyrolusLivePushPublisher
     {
         public Task PublishLiveAsync(string channel, object? data, CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("WebSocket closed");

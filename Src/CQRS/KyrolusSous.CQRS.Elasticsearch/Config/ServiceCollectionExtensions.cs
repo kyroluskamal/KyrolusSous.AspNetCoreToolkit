@@ -55,7 +55,8 @@ public static class ServiceCollectionExtensions
             ElasticUpdatePartialCommandHandler<TDocument, TId>>();
 
         // Read Model Projector
-        services.TryAddTransient<IReadModelProjector<TDocument>,
+        services.TryAddTransient<IKyrolusReadModelProjector
+<TDocument>,
             KyrolusElasticReadModelProjector<TDocument, TId>>();
 
         return services;

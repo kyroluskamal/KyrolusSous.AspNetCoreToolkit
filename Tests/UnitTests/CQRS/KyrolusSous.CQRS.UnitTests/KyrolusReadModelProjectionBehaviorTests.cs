@@ -20,7 +20,14 @@ public class KyrolusReadModelProjectionBehaviorTests
 
     public sealed record PlainCommand(string Text) : IKyrolusCommand<string>;
 
-    private sealed class FakeProductProjector : IReadModelProjector<ProductReadModel>
+    public sealed record ThrowingToReadModelCommand(int Id)
+        : IKyrolusCommand<int>, IKyrolusProjectableCommand<ProductReadModel>
+    {
+        public ProductReadModel? ToReadModel() => throw new InvalidOperationException("Mapping bug");
+    }
+
+    private sealed class FakeProductProjector : IKyrolusReadModelProjector
+<ProductReadModel>
     {
         public List<ProductReadModel> ProjectedModels { get; } = [];
 
@@ -31,7 +38,8 @@ public class KyrolusReadModelProjectionBehaviorTests
         }
     }
 
-    private sealed class ThrowingProjector : IReadModelProjector<ProductReadModel>
+    private sealed class ThrowingProjector : IKyrolusReadModelProjector
+<ProductReadModel>
     {
         public Task ProjectAsync(ProductReadModel model, CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("Projection sync failed");
@@ -42,7 +50,8 @@ public class KyrolusReadModelProjectionBehaviorTests
     {
         var services = new ServiceCollection();
         var projector = new FakeProductProjector();
-        services.AddSingleton<IReadModelProjector<ProductReadModel>>(projector);
+        services.AddSingleton<IKyrolusReadModelProjector
+<ProductReadModel>>(projector);
         var sp = services.BuildServiceProvider();
 
         var behavior = new KyrolusReadModelProjectionBehavior<UpdateProductCommand, int>(sp);
@@ -60,7 +69,8 @@ public class KyrolusReadModelProjectionBehaviorTests
     public async Task Projector_exception_should_be_isolated_and_not_throw()
     {
         var services = new ServiceCollection();
-        services.AddSingleton<IReadModelProjector<ProductReadModel>>(new ThrowingProjector());
+        services.AddSingleton<IKyrolusReadModelProjector
+<ProductReadModel>>(new ThrowingProjector());
         var sp = services.BuildServiceProvider();
 
         var behavior = new KyrolusReadModelProjectionBehavior<UpdateProductCommand, int>(sp);
@@ -71,12 +81,31 @@ public class KyrolusReadModelProjectionBehaviorTests
         result.ShouldBe(10);
     }
 
+    [Fact(DisplayName = "ToReadModel exception should be isolated and not fail an already-successful command")]
+    public async Task ToReadModel_exception_should_be_isolated_and_not_throw()
+    {
+        var services = new ServiceCollection();
+        var projector = new FakeProductProjector();
+        services.AddSingleton<IKyrolusReadModelProjector
+<ProductReadModel>>(projector);
+        var sp = services.BuildServiceProvider();
+
+        var behavior = new KyrolusReadModelProjectionBehavior<ThrowingToReadModelCommand, int>(sp);
+        var cmd = new ThrowingToReadModelCommand(10);
+
+        var result = await behavior.Handle(cmd, ct => Task.FromResult(10), CancellationToken.None);
+
+        result.ShouldBe(10);
+        projector.ProjectedModels.ShouldBeEmpty();
+    }
+
     [Fact(DisplayName = "Plain command should not invoke projectors")]
     public async Task Plain_command_should_not_invoke_projectors()
     {
         var services = new ServiceCollection();
         var projector = new FakeProductProjector();
-        services.AddSingleton<IReadModelProjector<ProductReadModel>>(projector);
+        services.AddSingleton<IKyrolusReadModelProjector
+<ProductReadModel>>(projector);
         var sp = services.BuildServiceProvider();
 
         var behavior = new KyrolusReadModelProjectionBehavior<PlainCommand, string>(sp);

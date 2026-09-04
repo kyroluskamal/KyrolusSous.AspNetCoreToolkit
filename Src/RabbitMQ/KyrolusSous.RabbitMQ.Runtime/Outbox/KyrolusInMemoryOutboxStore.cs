@@ -6,7 +6,7 @@ namespace KyrolusSous.RabbitMQ.Runtime.Outbox;
 /// <summary>
 /// Thread-safe in-memory store for transactional outbox messages with retention management.
 /// </summary>
-public class KyrolusInMemoryOutboxStore : IKyrolusOutboxStore
+public class KyrolusKyrolusInMemoryOutboxStore : IKyrolusOutboxStore
 {
     private readonly ConcurrentDictionary<string, IKyrolusOutboxMessage> _messages = new();
 

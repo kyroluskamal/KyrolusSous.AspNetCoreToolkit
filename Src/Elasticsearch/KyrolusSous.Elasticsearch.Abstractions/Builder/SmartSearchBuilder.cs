@@ -535,9 +535,18 @@ public sealed class KyrolusSmartSearchBuilder<TDocument> where TDocument : class
             }
             else
             {
-                mustQueries.Add(q => q.QueryString(qs => qs
-                    .Query(_queryText)
-                    .Fuzziness(new Fuzziness(_fuzziness))));
+                // Security (query_string injection / DoS): _queryText is raw end-user search input with no
+                // field restriction here. query_string parses its input as a Lucene mini-query-language -
+                // field:value scoping (e.g. "secretField:x"), boolean operators, wildcards/regex (which can be
+                // crafted to be expensive to evaluate), range syntax, boosting, _exists_:field - so passing
+                // untrusted text to it lets a caller search fields never meant to be searchable, or craft
+                // expensive patterns. simple_query_string is Elastic's own documented mitigation for exactly
+                // this: it never throws on malformed input and does not support that syntax, treating the
+                // whole payload as plain terms instead of a query language. It has no single "fuzziness"
+                // level equivalent to Match's AUTO/edit-distance setting (only FuzzyPrefixLength/
+                // FuzzyMaxExpansions/FuzzyTranspositions, a different knob), so that behavior is dropped here
+                // rather than approximated.
+                mustQueries.Add(q => q.SimpleQueryString(sqs => sqs.Query(_queryText)));
             }
         }
 
@@ -593,7 +602,10 @@ public sealed class KyrolusSmartSearchBuilder<TDocument> where TDocument : class
             }
             else
             {
-                mustQueries.Add(q => q.QueryString(qs => qs.Query(_queryText)));
+                // Security (query_string injection / DoS) - see the identical comment in the SearchRequestDescriptor
+                // overload above. This branch is the higher-stakes one: an injected query here changes which
+                // documents get deleted/mutated, not just which get returned.
+                mustQueries.Add(q => q.SimpleQueryString(sqs => sqs.Query(_queryText)));
             }
         }
 
@@ -644,7 +656,10 @@ public sealed class KyrolusSmartSearchBuilder<TDocument> where TDocument : class
             }
             else
             {
-                mustQueries.Add(q => q.QueryString(qs => qs.Query(_queryText)));
+                // Security (query_string injection / DoS) - see the identical comment in the SearchRequestDescriptor
+                // overload above. This branch is the higher-stakes one: an injected query here changes which
+                // documents get deleted/mutated, not just which get returned.
+                mustQueries.Add(q => q.SimpleQueryString(sqs => sqs.Query(_queryText)));
             }
         }
 

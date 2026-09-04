@@ -1,7 +1,9 @@
 using System.Reflection;
 using Elastic.Clients.Elasticsearch;
+using KyrolusSous.CQRS.Abstractions.Behaviors;
 using KyrolusSous.CQRS.Abstractions.Interfaces;
 using KyrolusSous.CQRS.Abstractions.Projections;
+using KyrolusSous.CQRS.Abstractions.Security;
 using KyrolusSous.CQRS.Elasticsearch.Command;
 using KyrolusSous.CQRS.Elasticsearch.Config;
 using KyrolusSous.CQRS.Elasticsearch.Projections;
@@ -184,13 +186,14 @@ public class KyrolusCqrsElasticsearchTests
     public async Task ElasticDeleteDocumentCommandHandler_DeletesDocument()
     {
         var repo = Substitute.For<IKyrolusElasticRepository<TestProductDocument, string>>();
-        repo.DeleteAsync("del-1", Arg.Any<CancellationToken>()).Returns(Task.FromResult(true));
+        repo.DeleteAsync("del-1", Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(true));
 
         var handler = new ElasticDeleteDocumentCommandHandler<TestProductDocument, string>(repo);
         var success = await handler.Handle(new ElasticDeleteDocumentCommand<TestProductDocument, string>("del-1"), CancellationToken.None);
 
         success.ShouldBeTrue();
-        await repo.Received(1).DeleteAsync("del-1", Arg.Any<CancellationToken>());
+        // ExpectedSeqNo/ExpectedPrimaryTerm are null on this command, so the repository call carries nulls too.
+        await repo.Received(1).DeleteAsync("del-1", null, null, Arg.Any<CancellationToken>());
     }
 
     [Fact(DisplayName = "ElasticBulkIndexCommandHandler performs batch indexing")]
@@ -211,7 +214,69 @@ public class KyrolusCqrsElasticsearchTests
         var result = await handler.Handle(new ElasticBulkIndexCommand<TestProductDocument, string>(items), CancellationToken.None);
 
         result.IndexedCount.ShouldBe(2);
-        await repo.Received(1).BulkIndexAsync(items, Arg.Any<CancellationToken>());
+        // The handler now materializes command.Items into its own list (to count it for the Fix 3 batch-size
+        // check) before forwarding it, so this asserts sequence equality rather than reference equality.
+        await repo.Received(1).BulkIndexAsync(
+            Arg.Is<IEnumerable<(TestProductDocument Document, string Id)>>(actual => actual.SequenceEqual(items)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact(DisplayName = "Regression (Fix 3 - unbounded bulk batch): ElasticBulkIndexCommandHandler rejects a batch exceeding KyrolusElasticBulkLimits.MaxBatchSize")]
+    public async Task ElasticBulkIndexCommandHandler_ExceedsLimit_Throws()
+    {
+        var repo = Substitute.For<IKyrolusElasticRepository<TestProductDocument, string>>();
+        var handler = new ElasticBulkIndexCommandHandler<TestProductDocument, string>(repo);
+        var items = Enumerable.Range(0, KyrolusElasticBulkLimits.MaxBatchSize + 1)
+            .Select(i => (new TestProductDocument { Id = i.ToString() }, i.ToString()))
+            .ToList();
+
+        await Should.ThrowAsync<InvalidOperationException>(
+            () => handler.Handle(new ElasticBulkIndexCommand<TestProductDocument, string>(items), CancellationToken.None));
+
+        await repo.DidNotReceive().BulkIndexAsync(Arg.Any<IEnumerable<(TestProductDocument Document, string Id)>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact(DisplayName = "Regression (Fix 3 - unbounded bulk batch): ElasticBulkIndexCommandHandler accepts a batch exactly at KyrolusElasticBulkLimits.MaxBatchSize")]
+    public async Task ElasticBulkIndexCommandHandler_AtLimit_Succeeds()
+    {
+        var repo = Substitute.For<IKyrolusElasticRepository<TestProductDocument, string>>();
+        repo.BulkIndexAsync(Arg.Any<IEnumerable<(TestProductDocument Document, string Id)>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new KyrolusBulkResult { TotalCount = KyrolusElasticBulkLimits.MaxBatchSize, IndexedCount = KyrolusElasticBulkLimits.MaxBatchSize }));
+        var handler = new ElasticBulkIndexCommandHandler<TestProductDocument, string>(repo);
+        var items = Enumerable.Range(0, KyrolusElasticBulkLimits.MaxBatchSize)
+            .Select(i => (new TestProductDocument { Id = i.ToString() }, i.ToString()))
+            .ToList();
+
+        var result = await handler.Handle(new ElasticBulkIndexCommand<TestProductDocument, string>(items), CancellationToken.None);
+
+        result.IndexedCount.ShouldBe(KyrolusElasticBulkLimits.MaxBatchSize);
+    }
+
+    [Fact(DisplayName = "Regression (Fix 3 - unbounded bulk batch): ElasticBulkDeleteCommandHandler rejects a batch exceeding KyrolusElasticBulkLimits.MaxBatchSize")]
+    public async Task ElasticBulkDeleteCommandHandler_ExceedsLimit_Throws()
+    {
+        var repo = Substitute.For<IKyrolusElasticRepository<TestProductDocument, string>>();
+        var handler = new ElasticBulkDeleteCommandHandler<TestProductDocument, string>(repo);
+        var ids = Enumerable.Range(0, KyrolusElasticBulkLimits.MaxBatchSize + 1).Select(i => i.ToString()).ToList();
+
+        await Should.ThrowAsync<InvalidOperationException>(
+            () => handler.Handle(new ElasticBulkDeleteCommand<TestProductDocument, string>(ids), CancellationToken.None));
+
+        await repo.DidNotReceive().BulkDeleteAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact(DisplayName = "Regression (Fix 3 - unbounded bulk batch): ElasticBulkDeleteCommandHandler accepts a batch exactly at KyrolusElasticBulkLimits.MaxBatchSize")]
+    public async Task ElasticBulkDeleteCommandHandler_AtLimit_Succeeds()
+    {
+        var repo = Substitute.For<IKyrolusElasticRepository<TestProductDocument, string>>();
+        repo.BulkDeleteAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new KyrolusBulkResult { TotalCount = KyrolusElasticBulkLimits.MaxBatchSize, IndexedCount = KyrolusElasticBulkLimits.MaxBatchSize }));
+        var handler = new ElasticBulkDeleteCommandHandler<TestProductDocument, string>(repo);
+        var ids = Enumerable.Range(0, KyrolusElasticBulkLimits.MaxBatchSize).Select(i => i.ToString()).ToList();
+
+        var result = await handler.Handle(new ElasticBulkDeleteCommand<TestProductDocument, string>(ids), CancellationToken.None);
+
+        result.IndexedCount.ShouldBe(KyrolusElasticBulkLimits.MaxBatchSize);
     }
 
     [Fact(DisplayName = "ElasticBulkDeleteCommandHandler performs batch deletion")]
@@ -228,14 +293,83 @@ public class KyrolusCqrsElasticsearchTests
         var result = await handler.Handle(new ElasticBulkDeleteCommand<TestProductDocument, string>(ids), CancellationToken.None);
 
         result.IndexedCount.ShouldBe(3);
-        await repo.Received(1).BulkDeleteAsync(ids, Arg.Any<CancellationToken>());
+        // Same reasoning as the bulk-index test above: the handler now forwards its own materialized list.
+        await repo.Received(1).BulkDeleteAsync(
+            Arg.Is<IEnumerable<string>>(actual => actual.SequenceEqual(ids)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact(DisplayName = "Regression (Fix 2 - mass assignment): ElasticUpdatePartialCommand implements IKyrolusPropertyUpdateRequest so the global allow-list behavior (PipelineOrder -940) can intercept it")]
+    public void ElasticUpdatePartialCommand_ImplementsPropertyUpdateRequest()
+    {
+        // Root cause of the mass-assignment bug: ElasticUpdatePartialCommand<,> lets a caller (often built
+        // directly from a PATCH request body) write ANY property that happens to exist on the target object,
+        // with zero allow-listing - unlike the EF/Marten PatchCommand/ExecuteUpdateCommand equivalents, which
+        // are guarded by IKyrolusPropertyUpdateRequest + the already-registered KyrolusPropertyAllowListBehavior
+        // pipeline behavior. Without implementing the interface, that behavior's `request is IKyrolusPropertyUpdateRequest`
+        // pattern match never matches this command, so it is never even inspected, regardless of what
+        // AllowedProperties the caller thinks they configured.
+        typeof(ElasticUpdatePartialCommand<,>).GetInterfaces().ShouldContain(typeof(IKyrolusPropertyUpdateRequest));
+    }
+
+    [Fact(DisplayName = "Regression (Fix 2 - mass assignment): with no AllowedProperties configured, ElasticUpdatePartialCommand stays fully unrestricted (backward compatible)")]
+    public async Task ElasticUpdatePartialCommand_NoAllowListConfigured_RemainsUnrestricted()
+    {
+        var behavior = new KyrolusPropertyAllowListBehavior<ElasticUpdatePartialCommand<TestProductDocument, string>, bool>();
+        var command = new ElasticUpdatePartialCommand<TestProductDocument, string>("p-1", new { IsAdmin = true });
+
+        var result = await behavior.Handle(command, _ => Task.FromResult(true), CancellationToken.None);
+
+        result.ShouldBeTrue();
+    }
+
+    [Fact(DisplayName = "Regression (Fix 2 - mass assignment): with AllowedProperties configured, a disallowed property on an anonymous-object PartialDocument is rejected")]
+    public async Task ElasticUpdatePartialCommand_AllowListConfigured_RejectsDisallowedPropertyOnAnonymousObject()
+    {
+        var behavior = new KyrolusPropertyAllowListBehavior<ElasticUpdatePartialCommand<TestProductDocument, string>, bool>();
+        var command = new ElasticUpdatePartialCommand<TestProductDocument, string>("p-1", new { Title = "ok", IsAdmin = true })
+        {
+            AllowedProperties = new HashSet<string> { "Title" }
+        };
+
+        await Should.ThrowAsync<KyrolusSecurityException>(
+            () => behavior.Handle(command, _ => Task.FromResult(true), CancellationToken.None));
+    }
+
+    [Fact(DisplayName = "Regression (Fix 2 - mass assignment): with AllowedProperties configured, a listed property on an anonymous-object PartialDocument passes through")]
+    public async Task ElasticUpdatePartialCommand_AllowListConfigured_AllowsListedPropertyOnAnonymousObject()
+    {
+        var behavior = new KyrolusPropertyAllowListBehavior<ElasticUpdatePartialCommand<TestProductDocument, string>, bool>();
+        var command = new ElasticUpdatePartialCommand<TestProductDocument, string>("p-1", new { Title = "ok" })
+        {
+            AllowedProperties = new HashSet<string> { "Title" }
+        };
+
+        var result = await behavior.Handle(command, _ => Task.FromResult(true), CancellationToken.None);
+
+        result.ShouldBeTrue();
+    }
+
+    [Fact(DisplayName = "Regression (Fix 2 - mass assignment): with AllowedProperties configured, a dictionary-shaped PartialDocument is checked by its KEYS, not the dictionary's own type properties")]
+    public async Task ElasticUpdatePartialCommand_AllowListConfigured_ChecksDictionaryKeys()
+    {
+        var behavior = new KyrolusPropertyAllowListBehavior<ElasticUpdatePartialCommand<TestProductDocument, string>, bool>();
+        var command = new ElasticUpdatePartialCommand<TestProductDocument, string>(
+            "p-1",
+            new Dictionary<string, object> { ["Price"] = 999m, ["IsAdmin"] = true })
+        {
+            AllowedProperties = new HashSet<string> { "Price" }
+        };
+
+        await Should.ThrowAsync<KyrolusSecurityException>(
+            () => behavior.Handle(command, _ => Task.FromResult(true), CancellationToken.None));
     }
 
     [Fact(DisplayName = "ElasticUpdatePartialCommandHandler executes partial update")]
     public async Task ElasticUpdatePartialCommandHandler_ExecutesPartialUpdate()
     {
         var repo = Substitute.For<IKyrolusElasticRepository<TestProductDocument, string>>();
-        repo.UpdatePartialAsync("p-1", Arg.Any<object>(), Arg.Any<CancellationToken>())
+        repo.UpdatePartialAsync("p-1", Arg.Any<object>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(true));
 
         var handler = new ElasticUpdatePartialCommandHandler<TestProductDocument, string>(repo);
@@ -244,7 +378,8 @@ public class KyrolusCqrsElasticsearchTests
         var success = await handler.Handle(new ElasticUpdatePartialCommand<TestProductDocument, string>("p-1", partial), CancellationToken.None);
 
         success.ShouldBeTrue();
-        await repo.Received(1).UpdatePartialAsync("p-1", partial, Arg.Any<CancellationToken>());
+        // ExpectedSeqNo/ExpectedPrimaryTerm are null on this command, so the repository call carries nulls too.
+        await repo.Received(1).UpdatePartialAsync("p-1", partial, null, null, Arg.Any<CancellationToken>());
     }
 
     [Fact(DisplayName = "KyrolusElasticReadModelProjector auto-extracts Id and syncs document")]
@@ -300,7 +435,8 @@ public class KyrolusCqrsElasticsearchTests
             .ShouldNotBeNull();
 
         // Verify Read Model Projector
-        sp.GetService<IReadModelProjector<TestProductDocument>>()
+        sp.GetService<IKyrolusReadModelProjector
+<TestProductDocument>>()
             .ShouldNotBeNull();
     }
 }

@@ -12,6 +12,12 @@ public sealed class InMemorySagaStore : IKyrolusSagaStore
 {
     private readonly ConcurrentDictionary<Guid, KyrolusSagaInstance> _instances = new();
 
+    // Guards the check-then-set below: a ConcurrentDictionary makes each individual dictionary
+    // operation atomic, but "is the stored version still what the caller read, and if so replace it"
+    // is two operations that must happen as one, which is exactly what a plain lock buys here without
+    // needing anything fancier for a store this size.
+    private readonly Lock _gate = new();
+
     /// <summary>Every instance currently held, for inspection in tests.</summary>
     public IReadOnlyCollection<KyrolusSagaInstance> AllInstances => _instances.Values.Select(Clone).ToArray();
 
@@ -25,11 +31,24 @@ public sealed class InMemorySagaStore : IKyrolusSagaStore
     /// <see cref="KyrolusSagaInstance.ContextJson"/> has not been rewritten yet - even though no
     /// <see cref="SaveAsync"/> call for that state actually completed yet.
     /// </remarks>
-    public Task SaveAsync(KyrolusSagaInstance instance, CancellationToken cancellationToken = default)
+    public Task<bool> SaveAsync(KyrolusSagaInstance instance, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(instance);
-        _instances[instance.Id] = Clone(instance);
-        return Task.CompletedTask;
+
+        lock (_gate)
+        {
+            var currentVersion = _instances.TryGetValue(instance.Id, out var existing) ? existing.Version : 0;
+            if (currentVersion != instance.Version)
+                return Task.FromResult(false);
+
+            var newVersion = currentVersion + 1;
+            var stored = Clone(instance);
+            stored.Version = newVersion;
+            _instances[instance.Id] = stored;
+            instance.Version = newVersion; // caller keeps saving the same object across calls
+        }
+
+        return Task.FromResult(true);
     }
 
     /// <inheritdoc />
@@ -59,6 +78,7 @@ public sealed class InMemorySagaStore : IKyrolusSagaStore
         StartedAtUtc = source.StartedAtUtc,
         CompletedAtUtc = source.CompletedAtUtc,
         Error = source.Error,
-        CorrelationId = source.CorrelationId
+        CorrelationId = source.CorrelationId,
+        Version = source.Version
     };
 }
