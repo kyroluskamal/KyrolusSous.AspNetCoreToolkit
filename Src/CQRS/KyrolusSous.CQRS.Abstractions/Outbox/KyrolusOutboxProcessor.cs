@@ -19,12 +19,12 @@ namespace KyrolusSous.CQRS.Abstractions.Outbox;
 /// </para>
 /// </remarks>
 public sealed class KyrolusOutboxProcessor(
-    IOutboxStore outboxStore,
+    IKyrolusOutboxStore outboxStore,
     IKyrolusMediatorPublisher publisher,
     IKyrolusOutboxEventTypeRegistry? typeRegistry = null,
     ILogger<KyrolusOutboxProcessor>? logger = null)
 {
-    private readonly IOutboxStore _outboxStore = outboxStore ?? throw new ArgumentNullException(nameof(outboxStore));
+    private readonly IKyrolusOutboxStore _outboxStore = outboxStore ?? throw new ArgumentNullException(nameof(outboxStore));
     private readonly IKyrolusMediatorPublisher _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
     private readonly ILogger? _logger = logger;
     private readonly Lazy<IKyrolusOutboxEventTypeRegistry> _typeRegistry = new(

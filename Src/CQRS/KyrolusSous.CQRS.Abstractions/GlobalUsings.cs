@@ -18,5 +18,5 @@ global using System.Text.Json;
 global using System.Security.Claims;
 global using System.Diagnostics.Metrics;
 global using KyrolusSous.Localization.Abstractions;
-
+global using KyrolusSous.CQRS.Abstractions.Outbox;
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("KyrolusSous.CQRS.UnitTests")]

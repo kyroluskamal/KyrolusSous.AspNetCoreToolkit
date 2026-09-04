@@ -1,6 +1,3 @@
-using KyrolusSous.Mediator.Abstractions;
-using KyrolusSous.Mediator.Abstractions.Attributes;
-
 namespace KyrolusSous.CQRS.ExceptionHandling;
 
 // Must wrap OUTSIDE (more negative than) KyrolusRequestExceptionProcessorBehavior, which stays at
@@ -38,14 +35,7 @@ public sealed class KyrolusExceptionMappingBehavior<TRequest, TResponse>(
         }
         catch (Exception ex)
         {
-            foreach (var mapper in _mappers)
-            {
-                if (mapper.TryMap(ex, out var mapped))
-                {
-                    return mapped;
-                }
-            }
-
+            foreach (var mapper in _mappers) if (mapper.TryMap(ex, out var mapped)) return mapped;
             throw;
         }
     }

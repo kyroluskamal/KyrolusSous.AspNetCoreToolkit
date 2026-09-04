@@ -294,59 +294,53 @@ public sealed class GetSeekQueryHandler<TSession, TResponse, TKey>(IKyrolusMarte
     {
         error = null;
         comparison = null!;
+        Expression left = member;
+        Expression? right = null;
+        Expression? notNull = null;
 
         var underlying = Nullable.GetUnderlyingType(memberType);
         if (underlying is not null)
         {
-            // A null cursor value for a nullable column (e.g. DateTime?) can't be represented as
-            // Expression.Constant(null, underlying) - the CLR rejects a null constant typed as a
-            // non-nullable value type ("Argument types do not match"). Typing the constant as the
-            // nullable member type itself and comparing via Nullable.Compare (rather than unwrapping
-            // .Value and guarding with a separate HasValue check) sidesteps that and handles every
-            // HasValue combination - including a null cursor value against a non-null member -
-            // without a separate runtime crash.
-            if (underlying.GetMethod("CompareTo", new[] { underlying }) is null)
+            notNull = Expression.Property(member, nameof(Nullable<int>.HasValue));
+            var convertedValue = ConvertKeyValue(value, underlying);
+            if (convertedValue is null)
             {
-                error = $"Type '{underlying.Name}' does not support ordering.";
-                return false;
+                // Last-seen value for this column was null. Under nulls-first default ordering,
+                // anything non-null sorts after null, and nothing sorts before it.
+                comparison = descending ? Expression.Constant(false) : notNull;
+                return true;
             }
 
-            var nullableConstant = Expression.Constant(ConvertKeyValue(value, underlying), memberType);
-            var nullableCompareMethod = typeof(Nullable).GetMethod(nameof(Nullable.Compare))!.MakeGenericMethod(underlying);
-            var nullableCompareCall = Expression.Call(nullableCompareMethod, member, nullableConstant);
-            var nullableZero = Expression.Constant(0);
-            comparison = descending
-                ? Expression.LessThan(nullableCompareCall, nullableZero)
-                : Expression.GreaterThan(nullableCompareCall, nullableZero);
-            return true;
+            left = Expression.Property(member, nameof(Nullable<int>.Value));
+            right = Expression.Constant(convertedValue, underlying);
+            memberType = underlying;
         }
-
-        Expression? notNull = null;
-        if (!memberType.IsValueType)
+        else if (!memberType.IsValueType)
         {
             notNull = Expression.NotEqual(member, Expression.Constant(null, memberType));
         }
+        right ??= Expression.Constant(ConvertKeyValue(value, memberType), memberType);
 
-        // memberType.GetMethod("CompareTo", new[] { memberType }) can resolve to an inherited
-        // CompareTo(object) overload instead of a same-signature one - e.g. Enum implements only
-        // the non-generic IComparable, not IComparable<TEnum> - and Expression.Call then throws
-        // ("Expression of type '...' cannot be used for parameter of type 'System.Object'")
-        // because `right` is typed as memberType, not object. Comparer<T>.Default.Compare handles
-        // this correctly at runtime (it falls back to non-generic IComparable when IComparable<T>
-        // isn't implemented), so route the comparison through it instead of the type's own
-        // possibly-mismatched CompareTo.
-        if (!typeof(IComparable).IsAssignableFrom(memberType) && !typeof(IComparable<>).MakeGenericType(memberType).IsAssignableFrom(memberType))
+        if (memberType.IsEnum)
+        {
+            // Enum doesn't implement IComparable<TEnum> - GetMethod("CompareTo", [enumType]) below
+            // resolves to the inherited Enum.CompareTo(object), and Expression.Call then rejects an
+            // enum-typed (not object-typed) argument for it. Compare on the underlying integral type
+            // instead, which has its own real CompareTo(self).
+            var enumUnderlying = Enum.GetUnderlyingType(memberType);
+            left = Expression.Convert(left, enumUnderlying);
+            right = Expression.Convert(right, enumUnderlying);
+            memberType = enumUnderlying;
+        }
+
+        var compareMethod = memberType.GetMethod("CompareTo", new[] { memberType });
+        if (compareMethod is null)
         {
             error = $"Type '{memberType.Name}' does not support ordering.";
             return false;
         }
 
-        var right = Expression.Constant(ConvertKeyValue(value, memberType), memberType);
-        var comparerType = typeof(Comparer<>).MakeGenericType(memberType);
-        var comparerDefault = Expression.Property(null, comparerType.GetProperty(nameof(Comparer<object>.Default))!);
-        var compareMethod = comparerType.GetMethod(nameof(Comparer<object>.Compare), new[] { memberType, memberType })!;
-
-        var compareCall = Expression.Call(comparerDefault, compareMethod, member, right);
+        var compareCall = Expression.Call(left, compareMethod, right);
         var zero = Expression.Constant(0);
         comparison = descending
             ? Expression.LessThan(compareCall, zero)

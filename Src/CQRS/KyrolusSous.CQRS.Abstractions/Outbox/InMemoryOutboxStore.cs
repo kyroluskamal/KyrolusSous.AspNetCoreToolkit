@@ -1,9 +1,9 @@
 namespace KyrolusSous.CQRS.Abstractions.Outbox;
 
 /// <summary>
-/// In-memory implementation of <see cref="IOutboxStore"/> for testing and single-node applications.
+/// In-memory implementation of <see cref="IKyrolusOutboxStore"/> for testing and single-node applications.
 /// </summary>
-public sealed class KyrolusInMemoryOutboxStore : IOutboxStore
+public sealed class KyrolusInMemoryOutboxStore : IKyrolusOutboxStore
 {
     private readonly ConcurrentDictionary<Guid, KyrolusOutboxMessage> _messages = new();
 

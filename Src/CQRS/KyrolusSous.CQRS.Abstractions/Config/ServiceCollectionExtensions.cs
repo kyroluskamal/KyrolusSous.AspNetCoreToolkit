@@ -32,14 +32,14 @@ public static class ServiceCollectionExtensions
     /// Registers the CQRS Security &amp; Authorization pipeline behavior.
     /// </summary>
     /// <remarks>
-    /// This overload does not register an <see cref="Security.IKyrolusAuthorizationPolicyEvaluator"/>.
+    /// This overload does not register an <see cref="IKyrolusAuthorizationPolicyEvaluator"/>.
     /// A request that names a <c>Policy</c> will fail closed with a configuration error until one is
     /// registered - via the other overload, or directly with the container. Roles and permissions work
     /// without it.
     /// </remarks>
     public static IServiceCollection AddKyrolusCqrsAuthorization(this IServiceCollection services)
     {
-        services.TryAddScoped<Security.IKyrolusCurrentUserContext, Security.KyrolusDefaultCurrentUserContext>();
+        services.TryAddScoped<IKyrolusCurrentUserContext, KyrolusDefaultCurrentUserContext>();
         services.AddTransient(typeof(IKyrolusPipelineBehavior<,>), typeof(KyrolusAuthorizationBehavior<,>));
         return services;
     }
@@ -49,9 +49,9 @@ public static class ServiceCollectionExtensions
     /// evaluator (for example, a bridge to ASP.NET Core's <c>IAuthorizationService</c>).
     /// </summary>
     public static IServiceCollection AddKyrolusCqrsAuthorization<TPolicyEvaluator>(this IServiceCollection services)
-        where TPolicyEvaluator : class, Security.IKyrolusAuthorizationPolicyEvaluator
+        where TPolicyEvaluator : class, IKyrolusAuthorizationPolicyEvaluator
     {
-        services.TryAddScoped<Security.IKyrolusAuthorizationPolicyEvaluator, TPolicyEvaluator>();
+        services.TryAddScoped<IKyrolusAuthorizationPolicyEvaluator, TPolicyEvaluator>();
         return services.AddKyrolusCqrsAuthorization();
     }
 
@@ -61,20 +61,20 @@ public static class ServiceCollectionExtensions
     /// <param name="services">The service collection.</param>
     /// <param name="configureSanitization">
     /// Optional callback to extend the built-in sensitive-keyword list used to redact audit payloads
-    /// (see <see cref="Audit.KyrolusAuditSanitizationOptions"/>). To source the list from
+    /// (see <see cref="KyrolusAuditSanitizationOptions"/>). To source the list from
     /// <c>appsettings.json</c> instead of hard-coding it, bind the options inside the callback:
     /// <c>configureSanitization: opts =&gt; configuration.GetSection("Kyrolus:Cqrs:Audit:Sanitization").Bind(opts)</c>.
     /// </param>
     public static IServiceCollection AddKyrolusCqrsAudit<TSink>(
         this IServiceCollection services,
-        Action<Audit.KyrolusAuditSanitizationOptions>? configureSanitization = null)
-        where TSink : class, Audit.IKyrolusAuditSink
+        Action<KyrolusAuditSanitizationOptions>? configureSanitization = null)
+        where TSink : class, IKyrolusAuditSink
     {
-        services.TryAddScoped<Audit.IKyrolusAuditSink, TSink>();
+        services.TryAddScoped<IKyrolusAuditSink, TSink>();
 
         if (configureSanitization is not null)
         {
-            var sanitizationOptions = new Audit.KyrolusAuditSanitizationOptions();
+            var sanitizationOptions = new KyrolusAuditSanitizationOptions();
             configureSanitization(sanitizationOptions);
             services.TryAddSingleton(sanitizationOptions);
         }
@@ -84,23 +84,23 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers the CQRS Audit Trail pipeline behavior with the default <see cref="Audit.LoggerAuditSink"/>.
+    /// Registers the CQRS Audit Trail pipeline behavior with the default <see cref="LoggerAuditSink"/>.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configureSanitization">See <see cref="AddKyrolusCqrsAudit{TSink}"/>.</param>
     public static IServiceCollection AddKyrolusCqrsAudit(
         this IServiceCollection services,
-        Action<Audit.KyrolusAuditSanitizationOptions>? configureSanitization = null)
-        => services.AddKyrolusCqrsAudit<Audit.LoggerAuditSink>(configureSanitization);
+        Action<KyrolusAuditSanitizationOptions>? configureSanitization = null)
+        => services.AddKyrolusCqrsAudit<LoggerAuditSink>(configureSanitization);
 
     /// <summary>
     /// Registers the CQRS Transactional Outbox store and processor.
     /// </summary>
     public static IServiceCollection AddKyrolusCqrsOutbox<TStore>(this IServiceCollection services)
-        where TStore : class, Outbox.IOutboxStore
+        where TStore : class, IKyrolusOutboxStore
     {
-        services.TryAddSingleton<Outbox.IOutboxStore, TStore>();
-        services.TryAddTransient<Outbox.KyrolusOutboxProcessor>();
+        services.TryAddSingleton<IKyrolusOutboxStore, TStore>();
+        services.TryAddTransient<KyrolusOutboxProcessor>();
         return services;
     }
 
@@ -108,7 +108,7 @@ public static class ServiceCollectionExtensions
     /// Registers the CQRS Transactional Outbox with the in-memory store.
     /// </summary>
     public static IServiceCollection AddKyrolusCqrsOutbox(this IServiceCollection services)
-        => services.AddKyrolusCqrsOutbox<Outbox.KyrolusInMemoryOutboxStore>();
+        => services.AddKyrolusCqrsOutbox<KyrolusInMemoryOutboxStore>();
 
     /// <summary>
     /// Registers the CQRS Read-Model Projection pipeline behavior.
@@ -143,7 +143,7 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddKyrolusCqrsTenantScoping(this IServiceCollection services)
     {
-        services.TryAddScoped<Security.IKyrolusCurrentUserContext, Security.KyrolusDefaultCurrentUserContext>();
+        services.TryAddScoped<IKyrolusCurrentUserContext, KyrolusDefaultCurrentUserContext>();
         services.AddTransient(typeof(IKyrolusPipelineBehavior<,>), typeof(KyrolusTenantScopingBehavior<,>));
         return services;
     }

@@ -3,7 +3,7 @@ namespace KyrolusSous.CQRS.Abstractions.Outbox;
 /// <summary>
 /// Abstraction for storing, retrieving, and updating transactional outbox messages.
 /// </summary>
-public interface IOutboxStore
+public interface IKyrolusOutboxStore
 {
     /// <summary>
     /// Saves a new outbox message into the persistent store.

@@ -104,8 +104,7 @@ public sealed class KyrolusAuditBehavior<TRequest, TResponse>(
 
     private string? ResolveLocalizedAction(string? key, object? args)
     {
-        if (_localizer is null || string.IsNullOrWhiteSpace(key))
-            return null;
+        if (_localizer is null || string.IsNullOrWhiteSpace(key)) return null;
 
         var result = args is not null
             ? _localizer.GetString(key, args)

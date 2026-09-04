@@ -7,7 +7,7 @@ public sealed class KyrolusInMemoryAuditSink : IKyrolusAuditSink
 {
     private readonly ConcurrentBag<KyrolusAuditEntry> _entries = [];
 
-    public IReadOnlyCollection<KyrolusAuditEntry> Entries => _entries.ToArray();
+    public IReadOnlyCollection<KyrolusAuditEntry> Entries => [.. _entries];
 
     public Task EmitAsync(KyrolusAuditEntry entry, CancellationToken cancellationToken = default)
     {
