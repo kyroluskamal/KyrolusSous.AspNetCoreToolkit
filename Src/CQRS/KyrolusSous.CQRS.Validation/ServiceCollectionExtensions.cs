@@ -10,6 +10,7 @@ public static class ServiceCollectionExtensions
         configure?.Invoke(options);
         services.TryAddSingleton(options);
         services.TryAddEnumerable(ServiceDescriptor.Scoped(typeof(IKyrolusPipelineBehavior<,>), typeof(KyrolusValidationBehavior<,>)));
+        services.TryAddEnumerable(ServiceDescriptor.Scoped(typeof(IKyrolusPipelineBehavior<,>), typeof(KyrolusBatchValidationBehavior<,>)));
         return services;
     }
 }

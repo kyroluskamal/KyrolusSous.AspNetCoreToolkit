@@ -3,11 +3,11 @@ namespace KyrolusSous.Compression;
 /// <summary>
 /// Universal compressor utilizing standard Gzip algorithm.
 /// </summary>
-public sealed class GzipCompressor : ICompressor
+public sealed class GzipCompressor : IKyrolusCompressor
 {
     public static GzipCompressor Instance { get; } = new();
 
-    public CompressionAlgorithm Algorithm => CompressionAlgorithm.Gzip;
+    public KyrolusCompressionAlgorithm Algorithm => KyrolusCompressionAlgorithm.Gzip;
 
     public byte[] Compress(ReadOnlySpan<byte> data)
     {

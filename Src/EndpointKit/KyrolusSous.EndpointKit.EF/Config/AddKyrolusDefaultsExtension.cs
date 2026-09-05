@@ -8,12 +8,15 @@ using KyrolusSous.ExceptionHandling.ProblemDetails;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
+using KyrolusSous.EndpointKit.Core.Middleware;
+
 namespace KyrolusSous.EndpointKit.EF.Config;
 
 public static class AddKyrolusDefaultsExtension
 {
     public static IServiceCollection AddKyrolusDefaults(this IServiceCollection services)
     {
+        services.AddKyrolusCorrelation();
         services.AddOptions<KyrolusEndpointKitOptions>();
         services.AddKyrolusProblemDetailsWriter();
         services.AddSingleton<KyrolusModuleBuilder>();

@@ -42,7 +42,7 @@ public sealed class KyrolusRedisNearCacheProvider : IKyrolusCacheProvider, IDisp
         cacheOptions = cacheDependencies.Options;
         observer = cacheDependencies.Observer;
         l2 = new KyrolusRedisCacheProvider(multiplexer, cacheDependencies);
-        l1 = new L1CacheStore(memoryCache, options);
+        l1 = new L1CacheStore(memoryCache, options, cacheDependencies.Serializer);
 
         this.invalidationBus = invalidationBus ?? new KyrolusRedisInvalidationBus(
             multiplexer,
@@ -454,10 +454,30 @@ public sealed class KyrolusRedisNearCacheProvider : IKyrolusCacheProvider, IDisp
         return (region, tenantId);
     }
 
-    private sealed class L1CacheStore(IMemoryCache cache, KyrolusRedisNearCacheOptions options)
+    /// <remarks>
+    /// L1 must uphold the same cache invariant L2 gets "for free" from Redis: nothing a caller does to a value
+    /// returned from <see cref="TryGet{T}"/> can affect the cached entry or any other caller. Redis can only ever
+    /// hand back bytes, which <see cref="KyrolusRedisCacheProvider"/> deserializes into a brand-new instance on
+    /// every read - so two callers reading the same L2 key never share a reference. A naive in-memory L1 that
+    /// stores the caller's live object and hands the same reference back on every hit breaks that invariant: two
+    /// concurrent readers of the same L1 entry get the identical object, and if either mutates it (e.g. a
+    /// post-mapping enrichment step running against a shared-cache response), the other observes the mutation -
+    /// a race at best, a cross-tenant leak at worst when the cached data is shared across users.
+    /// <para>
+    /// The fix mirrors L2's own approach: route every L1 write and read through the same <see cref="IKyrolusCacheSerializer"/>
+    /// round-trip already used for Redis, so <see cref="Set{T}"/> stores an immutable <c>byte[]</c> snapshot and
+    /// <see cref="TryGet{T}"/> deserializes a fresh instance every time. A JSON round-trip is still orders of
+    /// magnitude cheaper than a network hop to Redis, so this preserves L1's entire reason for existing (avoiding
+    /// that hop) while closing the isolation gap. Types that cannot round-trip through the configured serializer
+    /// were never safe to cache via this provider in the first place, since the exact same requirement already
+    /// applies to L2.
+    /// </para>
+    /// </remarks>
+    private sealed class L1CacheStore(IMemoryCache cache, KyrolusRedisNearCacheOptions options, IKyrolusCacheSerializer serializer)
     {
         private readonly IMemoryCache cache = cache;
         private readonly KyrolusRedisNearCacheOptions options = options;
+        private readonly IKyrolusCacheSerializer serializer = serializer;
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> tagToKeys = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> keyToTags = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, byte> keys = new(StringComparer.Ordinal);
@@ -472,9 +492,11 @@ public sealed class KyrolusRedisNearCacheProvider : IKyrolusCacheProvider, IDisp
                     return true;
                 }
 
-                if (stored is T typed)
+                if (stored is byte[] payload)
                 {
-                    value = typed;
+                    // Deserialize a fresh instance on every hit - the stored payload is immutable bytes,
+                    // so no reader can ever observe or influence another reader's mutations.
+                    value = serializer.Deserialize<T>(payload);
                     return true;
                 }
             }
@@ -486,7 +508,8 @@ public sealed class KyrolusRedisNearCacheProvider : IKyrolusCacheProvider, IDisp
         public void Set<T>(string key, T value, TimeSpan expirationTime, KyrolusCacheEntryOptions? entryOptions)
         {
             var memoryOptions = BuildMemoryOptions(expirationTime, entryOptions);
-            cache.Set(key, value is null ? NullSentinel : value, memoryOptions);
+            object toStore = value is null ? NullSentinel : serializer.Serialize(value);
+            cache.Set(key, toStore, memoryOptions);
             keys[key] = 0;
             if (entryOptions?.Tags is { Count: > 0 } tags)
             {

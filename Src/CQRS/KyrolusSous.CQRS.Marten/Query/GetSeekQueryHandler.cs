@@ -48,18 +48,19 @@ public sealed class GetSeekQueryHandler<TSession, TResponse, TKey>(IKyrolusMarte
             ? await ResolveTotalCountAsync(query, BuildOptions(query, query.Filter, orderBy), cancellationToken).ConfigureAwait(false)
             : null;
 
-        IEnumerable<TResponse> items;
-        var repo = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<TSession, TResponse, TKey>>();
-        if (query.Selector is not null)
+        List<TResponse> list;
+        if (query.IncludeDeleted)
         {
-            items = await repo.QueryAsync<TResponse>(options, q => (global::Marten.Linq.IMartenQueryable<TResponse>)q.Select(query.Selector).Take(query.PageSize), cancellationToken).ConfigureAwait(false);
+            var soft = TryResolveSoftRepository();
+            list = soft is not null
+                ? await LoadIncludingDeletedAsync(soft, options, query, cancellationToken).ConfigureAwait(false)
+                : await FetchItemsAsync(unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<TSession, TResponse, TKey>>(), options, query, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            items = await repo.QueryAsync<TResponse>(options, q => (global::Marten.Linq.IMartenQueryable<TResponse>)q.Take(query.PageSize), cancellationToken).ConfigureAwait(false);
+            list = await FetchItemsAsync(unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<TSession, TResponse, TKey>>(), options, query, cancellationToken).ConfigureAwait(false);
         }
 
-        var list = items.ToList();
         var nextToken = BuildNextToken(list, seekProperties, query.Descending);
         // TotalCount is nullable (only populated when IncludeTotalCount is requested) — pass it
         // through as-is instead of force-unwrapping, which previously threw whenever the caller
@@ -120,6 +121,44 @@ public sealed class GetSeekQueryHandler<TSession, TResponse, TKey>(IKyrolusMarte
         {
             return null;
         }
+    }
+
+    private static async Task<List<TResponse>> FetchItemsAsync(
+        IKyrolusMartenRepositoryAsync<TSession, TResponse, TKey> repo,
+        MartenQueryOptions<TResponse> options,
+        GetSeekQuery<TResponse, TKey> query,
+        CancellationToken cancellationToken)
+    {
+        IEnumerable<TResponse> items = query.Selector is not null
+            ? await repo.QueryAsync<TResponse>(options, q => (global::Marten.Linq.IMartenQueryable<TResponse>)q.Select(query.Selector).Take(query.PageSize), cancellationToken).ConfigureAwait(false)
+            : await repo.QueryAsync<TResponse>(options, q => (global::Marten.Linq.IMartenQueryable<TResponse>)q.Take(query.PageSize), cancellationToken).ConfigureAwait(false);
+
+        return items.ToList();
+    }
+
+    /// <remarks>
+    /// <see cref="IKyrolusMartenSoftDeleteRepositoryAsync{TSession, TEntity, TKey}.GetAllIncludingDeletedAsync"/>
+    /// has no Take/selector overload the way the plain repo's <c>QueryAsync</c> does - only this one,
+    /// which always materializes every row matching Filter/OrderBy (already carrying the seek cursor
+    /// predicate and seek ordering via <paramref name="options"/>). Mirrors the EF provider's
+    /// <c>GetSeekQueryHandler.LoadIncludingDeletedAsync</c> fallback for the same "no paged variant on
+    /// the soft-delete repository" situation - PageSize and Selector are applied afterwards, in
+    /// memory, over the fully materialized, soft-delete-inclusive result set.
+    /// </remarks>
+    private static async Task<List<TResponse>> LoadIncludingDeletedAsync(
+        IKyrolusMartenSoftDeleteRepositoryAsync<TSession, TResponse, TKey> soft,
+        MartenQueryOptions<TResponse> options,
+        GetSeekQuery<TResponse, TKey> query,
+        CancellationToken cancellationToken)
+    {
+        var all = await soft.GetAllIncludingDeletedAsync(options, cancellationToken).ConfigureAwait(false);
+        IEnumerable<TResponse> limited = all.Take(query.PageSize);
+        if (query.Selector is not null)
+        {
+            limited = limited.Select(query.Selector.Compile());
+        }
+
+        return limited.ToList();
     }
 
     private static string? BuildNextToken(IReadOnlyList<TResponse> items, IReadOnlyList<string> properties, bool descending)

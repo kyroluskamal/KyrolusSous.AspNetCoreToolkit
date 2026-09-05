@@ -1,3 +1,5 @@
+using KyrolusSous.CQRS.Abstractions.Security;
+
 namespace KyrolusSous.CQRS.Elasticsearch.Query;
 
 /// <summary>
@@ -16,6 +18,27 @@ public sealed class ElasticAutocompleteQueryHandler<TDocument, TId>(
         if (string.IsNullOrWhiteSpace(query.Prefix))
         {
             return [];
+        }
+
+        // Opt-in guard, same shape as the write-side IKyrolusPropertyUpdateRequest.AllowedProperties
+        // check: a null AllowedFields (the default) is unrestricted, so existing callers are unaffected.
+        if (query.AllowedFields is { } allowedFields)
+        {
+            var isAllowed = false;
+            foreach (var candidate in allowedFields)
+            {
+                if (string.Equals(candidate, query.TargetField, StringComparison.OrdinalIgnoreCase))
+                {
+                    isAllowed = true;
+                    break;
+                }
+            }
+
+            if (!isAllowed)
+            {
+                throw new KyrolusSecurityException(
+                    $"[Kyrolus CQRS Security] Field '{query.TargetField}' is not in the allow-list for {nameof(ElasticAutocompleteQuery<TDocument>)}.");
+            }
         }
 
         var limit = Math.Clamp(query.MaxSuggestions, 1, 50);

@@ -10,12 +10,12 @@ public static class SnappyServiceCollectionExtensions
         Action<KyrolusResponseCompressionOptions>? configure = null)
     {
         KyrolusCompressionProvider.Instance.Register(SnappyCompressor.Instance);
-        services.TryAddSingleton<ICompressionProvider>(KyrolusCompressionProvider.Instance);
-        services.TryAddSingleton<ICompressor>(SnappyCompressor.Instance);
+        services.TryAddSingleton<IKyrolusCompressionProvider>(KyrolusCompressionProvider.Instance);
+        services.TryAddSingleton<IKyrolusCompressor>(SnappyCompressor.Instance);
 
         services.Configure<KyrolusResponseCompressionOptions>(options =>
         {
-            options.PreferredAlgorithm = CompressionAlgorithm.Snappy;
+            options.PreferredAlgorithm = KyrolusCompressionAlgorithm.Snappy;
             configure?.Invoke(options);
         });
 

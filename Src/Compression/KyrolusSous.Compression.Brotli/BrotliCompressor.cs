@@ -3,11 +3,11 @@ namespace KyrolusSous.Compression;
 /// <summary>
 /// High-efficiency compressor utilizing Google's Brotli algorithm.
 /// </summary>
-public sealed class BrotliCompressor : ICompressor
+public sealed class BrotliCompressor : IKyrolusCompressor
 {
     public static BrotliCompressor Instance { get; } = new();
 
-    public CompressionAlgorithm Algorithm => CompressionAlgorithm.Brotli;
+    public KyrolusCompressionAlgorithm Algorithm => KyrolusCompressionAlgorithm.Brotli;
 
     public byte[] Compress(ReadOnlySpan<byte> data)
     {

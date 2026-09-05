@@ -2,14 +2,14 @@ namespace KyrolusSous.Compression.UnitTests.Algorithms;
 
 public class ZstdCompressorTests : CompressorTestBase
 {
-    protected override ICompressor Compressor => ZstdCompressor.Instance;
-    protected override CompressionAlgorithm ExpectedAlgorithm => CompressionAlgorithm.Zstd;
+    protected override IKyrolusCompressor Compressor => ZstdCompressor.Instance;
+    protected override KyrolusCompressionAlgorithm ExpectedAlgorithm => KyrolusCompressionAlgorithm.Zstd;
 
     [Fact(DisplayName = "ZstdCompressor Instance singleton should not be null and have Zstd algorithm")]
     public void Instance_ShouldNotBeNull()
     {
         ZstdCompressor.Instance.ShouldNotBeNull();
-        ZstdCompressor.Instance.Algorithm.ShouldBe(CompressionAlgorithm.Zstd);
+        ZstdCompressor.Instance.Algorithm.ShouldBe(KyrolusCompressionAlgorithm.Zstd);
     }
 
     [Theory(DisplayName = "ZstdCompressor with different compression levels should compress and decompress correctly")]

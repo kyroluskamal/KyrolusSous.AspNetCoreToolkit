@@ -25,6 +25,19 @@ public sealed class ExecuteUpdateCommandHandler<TSession, TResponse, TKey>(IKyro
             return 0;
         }
 
+        // Always-on, independent of IKyrolusPropertyUpdateRequest.AllowedProperties (which is opt-in
+        // and does nothing when a caller never sets it): the document's identity and Marten's own
+        // concurrency/revision tracking must never be writable through PatchWhereAsync regardless of
+        // allow-list configuration. See MartenProtectedPropertyGuard, shared with Patch/BulkPatch.
+        foreach (var name in command.Updates.Keys)
+        {
+            var prop = typeof(TResponse).GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (prop is not null)
+            {
+                MartenProtectedPropertyGuard.ThrowIfProtected(prop, typeof(TResponse), "ExecuteUpdate");
+            }
+        }
+
         var repo = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<TSession, TResponse, TKey>>();
         var affected = await repo.PatchWhereAsync(command.Filter, command.Updates, command.TenantId, cancellationToken).ConfigureAwait(false);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

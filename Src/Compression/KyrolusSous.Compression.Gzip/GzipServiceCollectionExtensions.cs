@@ -10,12 +10,12 @@ public static class GzipServiceCollectionExtensions
         Action<KyrolusResponseCompressionOptions>? configure = null)
     {
         KyrolusCompressionProvider.Instance.Register(GzipCompressor.Instance);
-        services.TryAddSingleton<ICompressionProvider>(KyrolusCompressionProvider.Instance);
-        services.TryAddSingleton<ICompressor>(GzipCompressor.Instance);
+        services.TryAddSingleton<IKyrolusCompressionProvider>(KyrolusCompressionProvider.Instance);
+        services.TryAddSingleton<IKyrolusCompressor>(GzipCompressor.Instance);
 
         services.Configure<KyrolusResponseCompressionOptions>(options =>
         {
-            options.PreferredAlgorithm = CompressionAlgorithm.Gzip;
+            options.PreferredAlgorithm = KyrolusCompressionAlgorithm.Gzip;
             configure?.Invoke(options);
         });
 

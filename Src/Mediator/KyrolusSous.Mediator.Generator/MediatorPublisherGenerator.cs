@@ -30,6 +30,15 @@ namespace KyrolusSous.Mediator.Generator
         private const string NotificationInterfaceQualifiedName = "global::KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusNotification";
         private const string NotificationHandlerQualifiedName = "global::KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusNotificationHandler";
 
+        // For SMG006 (ComputeCandidateOrphanNotifications): the universal notification marker, and
+        // the interface every PublishAsync/Publish method - native or MediatR-compat - is ultimately
+        // declared (or, for the compat extension methods, receives its `this` parameter) on. Mirrors
+        // RequestBaseInterfaceFullName/MediatorSenderInterfaceFullName in MediatorImplementationGenerator.cs,
+        // duplicated here rather than shared - the same "duplicated or moved to a shared location"
+        // choice already made for the helpers below.
+        private const string NotificationBaseInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusNotification";
+        private const string MediatorPublisherInterfaceFullName = "KyrolusSous.Mediator.Abstractions.Interfaces.IKyrolusMediatorPublisher";
+
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
             // Pipeline to find concrete classes that might be notification handlers
@@ -44,8 +53,21 @@ namespace KyrolusSous.Mediator.Generator
             IncrementalValueProvider<(Compilation Compilation, ImmutableArray<INamedTypeSymbol> HandlerSymbols)> compilationAndNotificationHandlers
                 = context.CompilationProvider.Combine(notificationHandlerSymbols.Collect());
 
+            // Every notification type this project both declares and publishes through the mediator -
+            // candidates for SMG006 (see ComputeCandidateOrphanNotifications). Whether each one
+            // actually has a handler is decided in Execute, against the handler infos collected there,
+            // which this step has no access to; this step only answers "declared here and published
+            // here". Off the raw Compilation, not the per-class pipeline above, for the same reason as
+            // MediatorImplementationGenerator.cs's own ComputeCandidateOrphanRequests: correlating
+            // declarations against PublishAsync call sites needs live symbols across the whole
+            // compilation at once, which the per-class stage never sees together.
+            IncrementalValueProvider<ImmutableArray<CandidateOrphanNotification>> candidateOrphanNotifications
+                = context.CompilationProvider.Select(static (compilation, ct) => ComputeCandidateOrphanNotifications(compilation, ct));
+
             // Register the execution function to generate DI code
-            context.RegisterSourceOutput(compilationAndNotificationHandlers, Execute);
+            context.RegisterSourceOutput(
+                compilationAndNotificationHandlers.Combine(candidateOrphanNotifications),
+                static (spc, source) => Execute(spc, source.Left.Compilation, source.Left.HandlerSymbols, source.Right));
         }
 
         // Semantic filter: Check if the syntax represents a concrete (non-abstract, non-static) class symbol
@@ -63,11 +85,12 @@ namespace KyrolusSous.Mediator.Generator
         }
 
         // Execution method for this generator
-        private static void Execute(SourceProductionContext context, (Compilation Compilation, ImmutableArray<INamedTypeSymbol> HandlerSymbols) source)
+        private static void Execute(
+            SourceProductionContext context,
+            Compilation compilation,
+            ImmutableArray<INamedTypeSymbol> potentialHandlerSymbols,
+            ImmutableArray<CandidateOrphanNotification> candidateOrphanNotifications)
         {
-            var (compilation, potentialHandlerSymbols) = source;
-            if (potentialHandlerSymbols.IsDefaultOrEmpty) return;
-
             // --- Get required INotificationHandler<> definition symbol ---
             INamedTypeSymbol? notificationHandlerDef = compilation.GetTypeByMetadataName(NotificationHandlerInterfaceFullName);
 
@@ -86,26 +109,36 @@ namespace KyrolusSous.Mediator.Generator
             // Collect namespaces needed for the generated DI registration file
             var namespaces = new HashSet<string> { "System", "System.Collections.Generic", "Microsoft.Extensions.DependencyInjection", "Microsoft.Extensions.DependencyInjection.Extensions", "KyrolusSous.Mediator.Abstractions.Interfaces" };
 
-            foreach (var handlerSymbol in potentialHandlerSymbols)
+            // Populated even when there are no handlers at all - the same reasoning as
+            // MediatorImplementationGenerator.cs's Execute: that is exactly the case SMG006 below
+            // most needs to catch (a project that publishes notifications but implements no handlers
+            // for any of them), and the generation guarded further down still checks
+            // notificationHandlerInfos.Count > 0 on its own.
+            if (!potentialHandlerSymbols.IsDefaultOrEmpty)
             {
-                context.CancellationToken.ThrowIfCancellationRequested();
-                if (handlerSymbol.IsGenericType && handlerSymbol.TypeParameters.Length > 0)
+                foreach (var handlerSymbol in potentialHandlerSymbols)
                 {
-                    foreach (var openGeneric in TryGetOpenGenericNotificationHandlerInfos(handlerSymbol, notificationHandlerDef))
+                    context.CancellationToken.ThrowIfCancellationRequested();
+                    if (handlerSymbol.IsGenericType && handlerSymbol.TypeParameters.Length > 0)
                     {
-                        openGenericHandlerInfos.Add(openGeneric);
+                        foreach (var openGeneric in TryGetOpenGenericNotificationHandlerInfos(handlerSymbol, notificationHandlerDef))
+                        {
+                            openGenericHandlerInfos.Add(openGeneric);
+                        }
+                        continue;
                     }
-                    continue;
-                }
-                // Use the specific helper for notification handlers
-                foreach (var notifInfo in GetNotificationHandlerInfos(handlerSymbol, notificationHandlerDef))
-                {
-                    notificationHandlerInfos.Add(notifInfo);
-                    // Collect namespaces from handler and notification types
-                    CollectNamespaces(notifInfo.HandlerType, namespaces);
-                    CollectNamespaces(notifInfo.NotificationType, namespaces);
+                    // Use the specific helper for notification handlers
+                    foreach (var notifInfo in GetNotificationHandlerInfos(handlerSymbol, notificationHandlerDef))
+                    {
+                        notificationHandlerInfos.Add(notifInfo);
+                        // Collect namespaces from handler and notification types
+                        CollectNamespaces(notifInfo.HandlerType, namespaces);
+                        CollectNamespaces(notifInfo.NotificationType, namespaces);
+                    }
                 }
             }
+
+            ReportOrphanNotifications(context, notificationHandlerInfos, openGenericHandlerInfos, candidateOrphanNotifications);
 
             // The dispatch table calls into the runtime package; without it there is nothing to
             // implement and the file would not compile.
@@ -204,6 +237,175 @@ namespace KyrolusSous.Mediator.Generator
                     yield return new OpenGenericNotificationHandlerInfo(handlerSymbol.OriginalDefinition, iface.OriginalDefinition);
                 }
             }
+        }
+
+        /// <summary>One notification type SMG006 should consider: declared and published in this project.</summary>
+        private sealed record CandidateOrphanNotification(string NotificationFullName, Location Location);
+
+        /// <summary>
+        /// Finds every notification type this project both declares and publishes through the
+        /// mediator - candidates for SMG006. Whether each candidate actually has a handler is decided
+        /// later in <see cref="ReportOrphanNotifications"/>, against data (handler infos, open generic
+        /// handler infos) this method has no access to.
+        /// </summary>
+        /// <remarks>
+        /// Deliberately scoped to "declared here AND published here", mirroring
+        /// <c>ComputeCandidateOrphanRequests</c> in <c>MediatorImplementationGenerator.cs</c> exactly:
+        /// a notification declared in a shared contracts assembly and handled in a separate,
+        /// unreferenced handlers assembly is a legitimate, common split this method cannot see across
+        /// - the handler is real, just not visible to this compilation - so only asking "does this
+        /// project, entirely on its own, actually work" avoids flagging that split as a mistake.
+        /// </remarks>
+        private static ImmutableArray<CandidateOrphanNotification> ComputeCandidateOrphanNotifications(Compilation compilation, CancellationToken cancellationToken)
+        {
+            var notificationBaseDef = compilation.GetTypeByMetadataName(NotificationBaseInterfaceFullName);
+            var publisherDef = compilation.GetTypeByMetadataName(MediatorPublisherInterfaceFullName);
+            if (notificationBaseDef is null || publisherDef is null) return ImmutableArray<CandidateOrphanNotification>.Empty;
+
+            // 1. Every concrete notification type this project declares, keyed by symbol so the
+            //    "published here" pass below can look each one up by identity rather than by name.
+            var declared = new Dictionary<INamedTypeSymbol, Location>(SymbolEqualityComparer.Default);
+
+            foreach (var tree in compilation.SyntaxTrees)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var semanticModel = compilation.GetSemanticModel(tree);
+
+                // Notifications are declared `record Foo(...) : IKyrolusNotification;` at least as
+                // often as `class Foo`, so both shapes are scanned here.
+                foreach (var typeDeclaration in tree.GetRoot(cancellationToken).DescendantNodes().OfType<TypeDeclarationSyntax>())
+                {
+                    if (semanticModel.GetDeclaredSymbol(typeDeclaration, cancellationToken) is not INamedTypeSymbol symbol) continue;
+                    if (symbol.TypeKind is not (TypeKind.Class or TypeKind.Struct)) continue;
+                    if (symbol.IsAbstract || symbol.IsStatic || symbol.IsGenericType) continue;
+                    if (!ImplementsInterface(symbol, notificationBaseDef)) continue;
+
+                    declared[symbol] = typeDeclaration.Identifier.GetLocation();
+                }
+            }
+
+            if (declared.Count == 0) return ImmutableArray<CandidateOrphanNotification>.Empty;
+
+            // 2. Every notification type actually published through the mediator in this same
+            //    project - the other half of "declared here and published here".
+            var published = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+
+            foreach (var tree in compilation.SyntaxTrees)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var semanticModel = compilation.GetSemanticModel(tree);
+
+                foreach (var invocation in tree.GetRoot(cancellationToken).DescendantNodes().OfType<InvocationExpressionSyntax>())
+                {
+                    if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess) continue;
+                    if (memberAccess.Name.Identifier.Text is not ("PublishAsync" or "Publish")) continue;
+                    if (invocation.ArgumentList.Arguments.Count == 0) continue;
+
+                    if (semanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is not IMethodSymbol methodSymbol) continue;
+
+                    // The receiver must implement IKyrolusMediatorPublisher - the interface every one
+                    // of these methods (native or MediatR-compat) is ultimately declared on, or takes
+                    // as its `this` parameter - or this is an unrelated method that merely happens to
+                    // share a name.
+                    ITypeSymbol? receiverType;
+                    if (methodSymbol.IsExtensionMethod)
+                    {
+                        var original = methodSymbol.ReducedFrom ?? methodSymbol;
+                        if (original.Parameters.Length == 0) continue;
+                        receiverType = original.Parameters[0].Type;
+                    }
+                    else
+                    {
+                        receiverType = methodSymbol.ContainingType;
+                    }
+
+                    if (receiverType is null || !ImplementsInterface(receiverType, publisherDef)) continue;
+
+                    // The static type of the argument expression, e.g. `SomethingHappened` for
+                    // `publisher.PublishAsync(new SomethingHappened())`. Left alone (not added to
+                    // `published`) when it resolves to an interface or an abstract type -
+                    // `publisher.PublishAsync(notification)` for some `IKyrolusNotification notification`
+                    // names no specific type, so there is nothing concrete to hold this project to.
+                    if (semanticModel.GetTypeInfo(invocation.ArgumentList.Arguments[0].Expression, cancellationToken).Type is not INamedTypeSymbol argumentType) continue;
+                    if (argumentType.IsAbstract) continue;
+
+                    published.Add(argumentType);
+                }
+            }
+
+            if (published.Count == 0) return ImmutableArray<CandidateOrphanNotification>.Empty;
+
+            // 3. The intersection.
+            var candidates = ImmutableArray.CreateBuilder<CandidateOrphanNotification>();
+            foreach (var pair in declared)
+            {
+                if (!published.Contains(pair.Key)) continue;
+                candidates.Add(new CandidateOrphanNotification(
+                    pair.Key.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                    pair.Value));
+            }
+
+            return candidates.ToImmutable();
+        }
+
+        /// <summary>
+        /// Reports SMG006 for every candidate <see cref="ComputeCandidateOrphanNotifications"/> found -
+        /// a notification this project both declares and publishes through the mediator - that this
+        /// project has no handler for.
+        /// </summary>
+        /// <remarks>
+        /// A warning, not an error, for the same reason SMG005 is one rather than an error: a
+        /// notification declared here can genuinely be handled in a different project this compilation
+        /// does not reference, or only against the MediatR-compat <c>INotificationHandler&lt;&gt;</c>
+        /// interface without going through generation - both legitimate, both invisible from here.
+        /// </remarks>
+        private static void ReportOrphanNotifications(
+            SourceProductionContext context,
+            List<NotificationHandlerInfo> notificationHandlerInfos,
+            List<OpenGenericNotificationHandlerInfo> openGenericHandlerInfos,
+            ImmutableArray<CandidateOrphanNotification> candidateOrphanNotifications)
+        {
+            if (candidateOrphanNotifications.IsDefaultOrEmpty) return;
+
+            // An open generic handler might cover any notification shape, and confirming whether it
+            // actually covers this one needs the same constraint-satisfaction check ReportOrphanRequests'
+            // own analogous guard avoids paying for just to decide whether to print a warning. Staying
+            // silent whenever one exists trades a handful of missed warnings for zero false positives
+            // from this specific cause.
+            if (openGenericHandlerInfos.Count > 0) return;
+
+            var handledNotificationNames = new HashSet<string>(
+                notificationHandlerInfos.Select(info => info.NotificationType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)),
+                StringComparer.Ordinal);
+
+            var descriptor = new DiagnosticDescriptor(
+                id: "SMG006",
+                title: "Notification has no handler in this project",
+                messageFormat: "'{0}' is published through the mediator in this project, but the source generator found no handler for it in this project. If you have confirmed a handler for it is registered from a different project, or only against the MediatR-compat INotificationHandler<> interface, this is a false positive and safe to ignore - suppress it with '#pragma warning disable SMG006' around the declaration, or 'dotnet_diagnostic.SMG006.severity = none' in .editorconfig. Otherwise, publishing it will silently do nothing at runtime.",
+                category: "KyrolusSous.Mediator.Generator",
+                DiagnosticSeverity.Warning,
+                isEnabledByDefault: true,
+                description: "SMG006 only ever looks at this one project: it cannot see a handler registered from a different project the same solution builds, or one registered only against the MediatR-compat INotificationHandler<> interface without going through generation - both are legitimate reasons to suppress it rather than a bug to fix.");
+
+            foreach (var candidate in candidateOrphanNotifications)
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                if (handledNotificationNames.Contains(candidate.NotificationFullName)) continue;
+
+                context.ReportDiagnostic(Diagnostic.Create(descriptor, candidate.Location, candidate.NotificationFullName));
+            }
+        }
+
+        /// <summary>Whether <paramref name="type"/> is, or implements, <paramref name="interfaceDef"/>.</summary>
+        private static bool ImplementsInterface(ITypeSymbol type, INamedTypeSymbol interfaceDef)
+        {
+            if (SymbolEqualityComparer.Default.Equals(type, interfaceDef)) return true;
+
+            foreach (var iface in type.AllInterfaces)
+                if (SymbolEqualityComparer.Default.Equals(iface, interfaceDef))
+                    return true;
+
+            return false;
         }
 
         // Generates the DI extension method for registering notification handlers

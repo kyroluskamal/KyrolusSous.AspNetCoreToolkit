@@ -21,19 +21,66 @@ public sealed class KyrolusSagaCoordinator(
     private readonly ILogger? _logger = logger;
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// When <paramref name="correlationId"/> is supplied, this looks for an existing instance first
+    /// and, if one is found, returns its id directly without starting a new saga or re-running any
+    /// step - the same "claim once, return the same result on retry" philosophy
+    /// <c>KyrolusIdempotencyBehavior&lt;TRequest, TResponse&gt;</c> applies to
+    /// commands, just applied to starting a saga instead.
+    /// </para>
+    /// <para>
+    /// <b>The race this does NOT close:</b> two concurrent calls that both pass the SAME brand-new
+    /// <paramref name="correlationId"/> - one neither call's lookup has seen yet - can both miss
+    /// <see cref="IKyrolusSagaStore.GetByCorrelationIdAsync"/> and both proceed to create their own
+    /// instance. <see cref="TrySaveAsync"/>'s optimistic-concurrency check cannot catch this the way it
+    /// catches every other race in this class: that check only rejects a second writer of the SAME
+    /// <see cref="KyrolusSagaInstance.Id"/> that read the same <see cref="KyrolusSagaInstance.Version"/>,
+    /// and here each caller creates its OWN new id with <see cref="KyrolusSagaInstance.Version"/> 0 -
+    /// nothing about the two writes collides at the storage layer, so both succeed and two independent
+    /// sagas run. Closing this completely would need the store to expose an atomic "claim this
+    /// correlation id" primitive ahead of the general-purpose <see cref="IKyrolusSagaStore.SaveAsync"/>
+    /// path - a unique constraint in a database-backed store, say - which is a bigger change to
+    /// <see cref="IKyrolusSagaStore"/>'s contract than this purely additive feature takes on, and one
+    /// every existing store implementation would need to adopt to actually benefit from it. The lookup
+    /// is therefore done as late as possible, with nothing but object construction between it and the
+    /// first save, which narrows the window to one store round trip rather than eliminating it. A
+    /// caller for whom even that residual window is unacceptable should claim the correlation id one
+    /// layer up first (e.g. through the idempotency behavior referenced above, keyed on the same id).
+    /// </para>
+    /// </remarks>
     public async Task<Guid> StartAsync<TContext>(
         KyrolusSagaDefinition<TContext> definition,
         TContext context,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? correlationId = null)
+        where TContext : class
     {
         ArgumentNullException.ThrowIfNull(definition);
+
+        if (!string.IsNullOrWhiteSpace(correlationId))
+        {
+            var existing = await _store.GetByCorrelationIdAsync(correlationId, cancellationToken).ConfigureAwait(false);
+            if (existing is not null)
+            {
+                _logger?.LogInformation(
+                    "[Kyrolus Saga] StartAsync called again with correlation id '{CorrelationId}'; returning the " +
+                    "existing saga instance {SagaId} instead of starting a second one.",
+                    correlationId,
+                    existing.Id);
+                return existing.Id;
+            }
+        }
 
         var instance = new KyrolusSagaInstance
         {
             SagaName = definition.SagaName,
             ContextJson = definition.SerializeContext(context!),
             CurrentStepIndex = 0,
-            Status = KyrolusSagaStatus.Running
+            Status = KyrolusSagaStatus.Running,
+            CorrelationId = string.IsNullOrWhiteSpace(correlationId) ? null : correlationId,
+            StepCountAtStart = definition.StepCount,
+            StepSignatureAtStart = definition.StepSignature
         };
 
         // A brand new id cannot conceivably lose the version race below (nothing else has ever
@@ -180,6 +227,41 @@ public sealed class KyrolusSagaCoordinator(
             instance.Error = $"Failed to deserialize stored context: {ex.Message}";
             await TrySaveAsync(instance, cancellationToken).ConfigureAwait(false);
             throw;
+        }
+
+        // Guards against resuming a crashed/compensating instance against a step list that no
+        // longer has the shape it started against - see the <remarks> on
+        // KyrolusSagaInstance.StepSignatureAtStart for the exact failure this prevents (a shorter
+        // step list silently marking a saga Completed or Compensated without ever running or
+        // compensating the steps that no longer exist at their old indices). Skipped when
+        // StepSignatureAtStart is null: that means this instance predates the guard, or was built
+        // directly without setting it (as several existing tests do), and there is nothing to compare
+        // it against - treating "nothing recorded" as itself a mismatch would fail every saga already
+        // in flight the moment this guard shipped, which is exactly what the feature's "purely
+        // additive" requirement rules out. A freshly created instance always matches here: StartAsync
+        // captures both values from the same definition instance it immediately hands to RunAsync.
+        if (instance.StepSignatureAtStart is not null &&
+            (instance.StepCountAtStart != definition.StepCount || instance.StepSignatureAtStart != definition.StepSignature))
+        {
+            _logger?.LogError(
+                "[Kyrolus Saga] Saga '{SagaName}' (instance {SagaId}) started against {ExpectedStepCount} step(s) " +
+                "(signature '{ExpectedSignature}') but the current definition now has {ActualStepCount} step(s) " +
+                "(signature '{ActualSignature}'). Resuming would re-apply the persisted step index against a step " +
+                "list this instance never actually ran against, so it is being marked Failed instead of guessing.",
+                instance.SagaName,
+                instance.Id,
+                instance.StepCountAtStart,
+                instance.StepSignatureAtStart,
+                definition.StepCount,
+                definition.StepSignature);
+
+            instance.Status = KyrolusSagaStatus.Failed;
+            instance.Error = $"Saga step list changed shape since this instance started: expected " +
+                $"{instance.StepCountAtStart} step(s) (signature '{instance.StepSignatureAtStart}'), but the current " +
+                $"definition '{definition.SagaName}' has {definition.StepCount} step(s) (signature " +
+                $"'{definition.StepSignature}'). Resuming against a different step shape than the one this instance " +
+                "started against could re-run, skip, or misattribute steps, so this was refused rather than guessed.";
+            return await TrySaveAsync(instance, cancellationToken).ConfigureAwait(false);
         }
 
         if (instance.Status == KyrolusSagaStatus.Compensating)

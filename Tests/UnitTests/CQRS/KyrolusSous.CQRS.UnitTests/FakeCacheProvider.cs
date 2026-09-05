@@ -12,6 +12,7 @@ namespace KyrolusSous.CQRS.UnitTests;
 internal sealed class FakeCacheProvider : IKyrolusCacheProvider
 {
     private readonly ConcurrentDictionary<string, object?> _store = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, KyrolusCacheEntryOptions?> _optionsStore = new(StringComparer.Ordinal);
 
     public Task<T?> GetAsync<T>(string cacheKey, CancellationToken cancellationToken = default)
         => Task.FromResult(_store.TryGetValue(cacheKey, out var value) ? (T?)value : default);
@@ -25,8 +26,15 @@ internal sealed class FakeCacheProvider : IKyrolusCacheProvider
     public Task SetAsync<T>(string cacheKey, T value, KyrolusCacheEntryOptions? options, CancellationToken cancellationToken = default)
     {
         _store[cacheKey] = value;
+        _optionsStore[cacheKey] = options;
         return Task.CompletedTask;
     }
+
+    /// <summary>The <see cref="KyrolusCacheEntryOptions"/> passed to the most recent options-overload
+    /// <c>SetAsync</c> call for <paramref name="cacheKey"/> - used to assert on the TTL a caller wrote
+    /// without needing a mocking framework to intercept a default-interface method
+    /// (<c>SetIfNotExistsAsync</c> delegates to this same overload).</summary>
+    public KyrolusCacheEntryOptions? GetOptions(string cacheKey) => _optionsStore.GetValueOrDefault(cacheKey);
 
     public Task RemoveAsync(string cacheKey, CancellationToken cancellationToken = default)
     {

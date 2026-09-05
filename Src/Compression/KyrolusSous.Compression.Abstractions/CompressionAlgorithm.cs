@@ -3,7 +3,7 @@ namespace KyrolusSous.Compression;
 /// <summary>
 /// Supported compression algorithms across the Kyrolus compression ecosystem.
 /// </summary>
-public enum CompressionAlgorithm
+public enum KyrolusCompressionAlgorithm
 {
     /// <summary>
     /// Google's Brotli compression algorithm. High compression ratio, ideal for web payloads.

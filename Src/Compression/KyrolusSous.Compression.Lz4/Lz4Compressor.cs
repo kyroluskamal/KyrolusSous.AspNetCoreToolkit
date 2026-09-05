@@ -7,11 +7,11 @@ namespace KyrolusSous.Compression;
 /// <summary>
 /// Ultra-fast compressor utilizing the LZ4 algorithm for high-throughput real-time systems.
 /// </summary>
-public sealed class Lz4Compressor : ICompressor
+public sealed class Lz4Compressor : IKyrolusCompressor
 {
     public static Lz4Compressor Instance { get; } = new();
 
-    public CompressionAlgorithm Algorithm => CompressionAlgorithm.Lz4;
+    public KyrolusCompressionAlgorithm Algorithm => KyrolusCompressionAlgorithm.Lz4;
 
     public byte[] Compress(ReadOnlySpan<byte> data)
     {

@@ -25,7 +25,11 @@ public class KyrolusElasticReadModelProjector<TDocument, TId>(
             id,
             repository.IndexName);
 
-        var success = await repository.AddAsync(model, id, cancellationToken).ConfigureAwait(false);
+        // Unconditional overwrite is intentional here: a read-model projection must always reflect the
+        // latest write, never lose one to an optimistic-concurrency conflict, so the new ifSeqNo/
+        // ifPrimaryTerm parameters are deliberately omitted (named argument only to keep binding to
+        // cancellationToken, not the two long? parameters now ahead of it).
+        var success = await repository.AddAsync(model, id, cancellationToken: cancellationToken).ConfigureAwait(false);
         if (!success)
         {
             logger?.LogWarning(

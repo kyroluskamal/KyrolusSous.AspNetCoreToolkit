@@ -30,6 +30,15 @@ public sealed record ElasticSearchQuery<TDocument>(
     /// <summary>Optional custom configuration delegate for fine-grained filters, ranges, aggregations, or boosters.</summary>
     public Action<KyrolusSmartSearchBuilder<TDocument>>? CustomConfigure { get; init; }
 
+    /// <summary>
+    /// Optional allow-list restricting which field names <see cref="Fields"/> and <see cref="SortField"/>
+    /// may reference. <see langword="null"/> (the default) is unrestricted - existing callers who never
+    /// set it keep querying/sorting on whatever field names they always could. Mirrors
+    /// <c>IKyrolusPropertyUpdateRequest.AllowedProperties</c>'s write-side opt-in shape for this
+    /// read-side, caller-supplied field-name surface.
+    /// </summary>
+    public IReadOnlySet<string>? AllowedFields { get; init; }
+
     /// <inheritdoc />
     public bool Cacheable { get; set; }
 

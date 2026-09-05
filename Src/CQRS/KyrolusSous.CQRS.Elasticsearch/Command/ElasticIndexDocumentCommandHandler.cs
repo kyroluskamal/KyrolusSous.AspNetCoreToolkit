@@ -19,6 +19,6 @@ public sealed class ElasticIndexDocumentCommandHandler<TDocument, TId>(
             typeof(TDocument).Name,
             command.Id);
 
-        return await repository.AddAsync(command.Document, command.Id, cancellationToken).ConfigureAwait(false);
+        return await repository.AddAsync(command.Document, command.Id, command.ExpectedSeqNo, command.ExpectedPrimaryTerm, cancellationToken).ConfigureAwait(false);
     }
 }

@@ -23,9 +23,9 @@ public class KyrolusCachedElasticRepository<TDocument, TId> : IKyrolusElasticRep
         _defaultTtl = defaultTtl ?? TimeSpan.FromMinutes(5);
     }
 
-    public async Task<bool> AddAsync(TDocument document, TId id, CancellationToken cancellationToken = default)
+    public async Task<bool> AddAsync(TDocument document, TId id, long? ifSeqNo = null, long? ifPrimaryTerm = null, CancellationToken cancellationToken = default)
     {
-        var result = await _inner.AddAsync(document, id, cancellationToken);
+        var result = await _inner.AddAsync(document, id, ifSeqNo, ifPrimaryTerm, cancellationToken);
         if (result && _cacheProvider is not null)
         {
             await InvalidateDocCacheAsync(id, cancellationToken);

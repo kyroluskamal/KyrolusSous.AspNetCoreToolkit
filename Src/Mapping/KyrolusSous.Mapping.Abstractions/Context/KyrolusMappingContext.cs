@@ -19,6 +19,22 @@ namespace KyrolusSous.Mapping.Abstractions.Context;
 /// </remarks>
 public sealed class KyrolusMappingContext
 {
+    /// <summary>
+    /// Well-known <see cref="Items"/> key consulted by the in-place mapping engine's null-handling check
+    /// alongside a registered rule's <c>IgnoreNullValues</c> flag.
+    /// </summary>
+    /// <remarks>
+    /// Lets a call site opt into null-safe in-place mapping semantics (a source property left
+    /// <see langword="null"/> does not overwrite the corresponding non-null target value) for a single
+    /// call, without requiring a <c>.IgnoreNullValues()</c> rule to be registered for the type pair up
+    /// front. <c>KyrolusCqrsMappingExtensions.ApplyTo</c> sets this by default (unless the caller's own
+    /// context already sets it) because <c>ApplyTo</c> models a partial update, where an unset source
+    /// field should leave existing target data untouched rather than wipe it. Every other mapping call
+    /// path (<c>Map</c>, <c>Clone</c>, full in-place <c>Map(source, target)</c> calls outside
+    /// <c>ApplyTo</c>) is unaffected unless it explicitly sets this key itself.
+    /// </remarks>
+    public const string IgnoreNullValuesOnInPlaceMapKey = "Kyrolus.Mapping.IgnoreNullValuesOnInPlaceMap";
+
     private readonly struct ReferenceKey(object source, Type targetType) : IEquatable<ReferenceKey>
     {
         public object Source { get; } = source;
@@ -33,7 +49,7 @@ public sealed class KyrolusMappingContext
         {
             unchecked
             {
-                var hash = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(Source);
+                var hash = RuntimeHelpers.GetHashCode(Source);
                 return (hash * 397) ^ TargetType.GetHashCode();
             }
         }
@@ -93,10 +109,7 @@ public sealed class KyrolusMappingContext
     /// <param name="target">The newly constructed destination target object.</param>
     public void RegisterMapped(object source, object target)
     {
-        if (source is null || target is null)
-        {
-            return;
-        }
+        if (source is null || target is null)            return;
 
         var key = new ReferenceKey(source, target.GetType());
         _referenceMap[key] = target;
@@ -111,10 +124,7 @@ public sealed class KyrolusMappingContext
     /// <returns>The typed parameter value.</returns>
     public T? GetItem<T>(string key, T? defaultValue = default)
     {
-        if (_items is not null && _items.TryGetValue(key, out var val) && val is T typed)
-        {
-            return typed;
-        }
+        if (_items is not null && _items.TryGetValue(key, out var val) && val is T typed)            return typed;
 
         return defaultValue;
     }

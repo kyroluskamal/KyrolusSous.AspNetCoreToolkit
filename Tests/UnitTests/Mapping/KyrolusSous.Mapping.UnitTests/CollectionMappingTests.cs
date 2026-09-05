@@ -73,4 +73,38 @@ public sealed class CollectionMappingTests
         listResult.Count.ShouldBe(2);
         listResult[1].Title.ShouldBe("Desk");
     }
+
+    [Fact(DisplayName = "KyrolusObjectMapper: context-accepting MapList threads the given context through every item")]
+    public void ContextAwareMapList_ThreadsContextThroughEveryItem()
+    {
+        var config = new KyrolusMappingConfiguration();
+        config.CreateMap<Item, ItemDto>()
+            .ForMember(dest => dest.Title, opt => opt.MapFrom((src, ctx) => $"{src.Title}-{ctx.GetItem<string>("suffix", "none")}"));
+
+        var mapper = new KyrolusObjectMapper(config);
+        var items = new List<Item>
+        {
+            new() { Id = 1, Title = "Monitor" },
+            new() { Id = 2, Title = "Desk" }
+        };
+
+        var context = new KyrolusMappingContext();
+        context.SetItem("suffix", "tagged");
+
+        var result = mapper.MapList<Item, ItemDto>(items, context);
+
+        result.Count.ShouldBe(2);
+        result[0].Title.ShouldBe("Monitor-tagged");
+        result[1].Title.ShouldBe("Desk-tagged");
+    }
+
+    [Fact(DisplayName = "KyrolusObjectMapper: context-accepting MapList handles empty and null source")]
+    public void ContextAwareMapList_EmptyAndNull()
+    {
+        var mapper = new KyrolusObjectMapper();
+        var context = new KyrolusMappingContext();
+
+        mapper.MapList<Item, ItemDto>((IEnumerable<Item>)null!, context).ShouldBeEmpty();
+        mapper.MapList<Item, ItemDto>(Array.Empty<Item>(), context).ShouldBeEmpty();
+    }
 }

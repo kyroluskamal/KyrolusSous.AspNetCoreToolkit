@@ -5,11 +5,11 @@ namespace KyrolusSous.Compression;
 /// <summary>
 /// High-performance compressor utilizing Meta's Zstandard (Zstd) algorithm.
 /// </summary>
-public sealed class ZstdCompressor : ICompressor
+public sealed class ZstdCompressor : IKyrolusCompressor
 {
     public static ZstdCompressor Instance { get; } = new();
 
-    public CompressionAlgorithm Algorithm => CompressionAlgorithm.Zstd;
+    public KyrolusCompressionAlgorithm Algorithm => KyrolusCompressionAlgorithm.Zstd;
 
     public byte[] Compress(ReadOnlySpan<byte> data)
     {

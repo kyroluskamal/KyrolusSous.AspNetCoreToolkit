@@ -40,7 +40,7 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
         _indexName = ResolveIndexName();
     }
 
-    public async Task<bool> AddAsync(TDocument document, TId id, CancellationToken cancellationToken = default)
+    public async Task<bool> AddAsync(TDocument document, TId id, long? ifSeqNo = null, long? ifPrimaryTerm = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(id);
@@ -53,12 +53,14 @@ public class KyrolusElasticRepository<TDocument, TId> : IKyrolusElasticRepositor
         var idString = id.ToString()!;
         var response = await _client.IndexAsync(document, descriptor => descriptor
             .Index(_indexName)
-            .Id(idString),
+            .Id(idString)
+            .IfSeqNo(ifSeqNo)
+            .IfPrimaryTerm(ifPrimaryTerm),
             cancellationToken);
 
         if (!response.IsValidResponse)
         {
-            _logger?.LogError("Elasticsearch failed to index document with ID '{Id}' in index '{Index}': {Error}", idString, _indexName, response.DebugInformation);
+            LogWriteFailure("index", idString, response);
         }
 
         return response.IsValidResponse;

@@ -1,6 +1,8 @@
 using KyrolusSous.CQRS.Abstractions.Interfaces;
+using KyrolusSous.CQRS.Abstractions.Security;
 using KyrolusSous.CQRS.Caching;
 using KyrolusSous.Mediator.Abstractions.Interfaces;
+using NSubstitute;
 using Shouldly;
 using Xunit;
 
@@ -65,8 +67,9 @@ public sealed class KyrolusIdempotencyBehaviorTests
         var command = new CreateOrderCommand("ord-1", 100m, "key-123");
 
         // Simulate another in-flight caller: the key is claimed (SetIfNotExistsAsync already
-        // succeeded for them) but they have not finished, so no completed record exists yet.
-        cache.Seed($"idempotency:{typeof(CreateOrderCommand).FullName}:key-123", new KyrolusIdempotencyRecord<string> { Completed = false });
+        // succeeded for them) but they have not finished, so no completed record exists yet. No
+        // IKyrolusCurrentUserContext is supplied to the behavior below, so tenant/user resolve to "-".
+        cache.Seed($"tenant:-:user:-:idempotency:{typeof(CreateOrderCommand).FullName}:key-123", new KyrolusIdempotencyRecord<string> { Completed = false });
 
         var executionCount = 0;
         RequestHandlerDelegate<string> next = _ =>
@@ -193,9 +196,94 @@ public sealed class KyrolusIdempotencyBehaviorTests
             },
             CancellationToken.None);
 
-        // Before the FullName fix, both mapped to "idempotency:CollidingCommand:shared-key" - B would
-        // read A's completed record and return "A-result" without running its own handler at all.
+        // Before the FullName fix, both mapped to "tenant:-:user:-:idempotency:CollidingCommand:shared-key" -
+        // B would read A's completed record and return "A-result" without running its own handler at all.
         bExecutionCount.ShouldBe(1);
         resultB.ShouldBe("B-result");
+    }
+
+    private static IKyrolusCurrentUserContext MakeUserContext(string tenantId, string userId)
+    {
+        var context = Substitute.For<IKyrolusCurrentUserContext>();
+        context.TenantId.Returns(tenantId);
+        context.UserId.Returns(userId);
+        return context;
+    }
+
+    [Fact(DisplayName = "Idempotency: two different tenants submitting the same IdempotencyKey for the same command type are claimed and executed independently, not served a cross-tenant hit")]
+    public async Task Idempotency_SameKeyDifferentTenants_AreClaimedIndependently()
+    {
+        var cache = new FakeCacheProvider();
+        var tenantAContext = MakeUserContext("tenant-A", "user-1");
+        var tenantBContext = MakeUserContext("tenant-B", "user-2");
+        var behaviorA = new KyrolusIdempotencyBehavior<CreateOrderCommand, string>(cache, userContext: tenantAContext);
+        var behaviorB = new KyrolusIdempotencyBehavior<CreateOrderCommand, string>(cache, userContext: tenantBContext);
+
+        // Same request type, same client-supplied idempotency key - plausible when keys are derived
+        // from business identifiers (e.g. "invoice-1") that reset independently per tenant.
+        var commandA = new CreateOrderCommand("ord-1", 100m, "shared-idempotency-key");
+        var commandB = new CreateOrderCommand("ord-1", 100m, "shared-idempotency-key");
+
+        var resultA = await behaviorA.Handle(commandA, _ => Task.FromResult("Tenant-A-Result"), CancellationToken.None);
+
+        var executionCountB = 0;
+        var resultB = await behaviorB.Handle(
+            commandB,
+            _ =>
+            {
+                executionCountB++;
+                return Task.FromResult("Tenant-B-Result");
+            },
+            CancellationToken.None);
+
+        // Before tenant/user scoping, both mapped to the exact same cache key - tenant B would have
+        // been silently handed tenant A's cached command response without its own handler ever running.
+        resultA.ShouldBe("Tenant-A-Result");
+        resultB.ShouldBe("Tenant-B-Result");
+        executionCountB.ShouldBe(1);
+    }
+
+    [Fact(DisplayName = "Idempotency: two different tenants with the same key - a concurrent duplicate is still rejected within a tenant, not merely cross-tenant isolated")]
+    public async Task Idempotency_SameKeyDifferentTenants_ConcurrentDuplicateWithinTenantStillRejected()
+    {
+        var cache = new FakeCacheProvider();
+        var tenantAContext = MakeUserContext("tenant-A", "user-1");
+        var behavior = new KyrolusIdempotencyBehavior<CreateOrderCommand, string>(cache, userContext: tenantAContext);
+        var command = new CreateOrderCommand("ord-1", 100m, "shared-idempotency-key");
+
+        // Simulate another in-flight caller for the SAME tenant/user.
+        cache.Seed(
+            "tenant:tenant-A:user:user-1:idempotency:" + typeof(CreateOrderCommand).FullName + ":shared-idempotency-key",
+            new KyrolusIdempotencyRecord<string> { Completed = false });
+
+        await Should.ThrowAsync<KyrolusIdempotencyConflictException>(
+            () => behavior.Handle(command, _ => Task.FromResult("ShouldNotExecute"), CancellationToken.None));
+    }
+
+    [Fact(DisplayName = "Idempotency: a fresh claim uses the short in-progress TTL, and a successful completion re-writes it with the full IdempotencyTtl")]
+    public async Task Idempotency_ClaimTtl_IsShort_ThenReplacedWithFullTtlOnCompletion()
+    {
+        var cache = new FakeCacheProvider();
+        var behavior = new KyrolusIdempotencyBehavior<CreateOrderCommand, string>(cache);
+        var command = new CreateOrderCommand("ord-1", 100m, "key-ttl");
+        var cacheKey = "tenant:-:user:-:idempotency:" + typeof(CreateOrderCommand).FullName + ":key-ttl";
+
+        var claimTtlDuringHandler = default(TimeSpan?);
+        var result = await behavior.Handle(
+            command,
+            _ =>
+            {
+                // Captured while the claim is still in place, before completion re-writes it.
+                claimTtlDuringHandler = cache.GetOptions(cacheKey)?.AbsoluteExpirationRelativeToNow;
+                return Task.FromResult("OrderCreated:ord-1");
+            },
+            CancellationToken.None);
+
+        result.ShouldBe("OrderCreated:ord-1");
+        claimTtlDuringHandler.ShouldBe(KyrolusIdempotencyLimits.InProgressClaimTtl);
+
+        var completedTtl = cache.GetOptions(cacheKey)?.AbsoluteExpirationRelativeToNow;
+        completedTtl.ShouldBe(command.IdempotencyTtl);
+        completedTtl.ShouldNotBe(KyrolusIdempotencyLimits.InProgressClaimTtl);
     }
 }

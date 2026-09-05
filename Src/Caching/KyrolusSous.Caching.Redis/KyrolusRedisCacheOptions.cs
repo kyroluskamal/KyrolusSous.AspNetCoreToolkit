@@ -120,7 +120,7 @@ public sealed class KyrolusRedisCacheOptions
     /// <summary>
     /// Gets or sets the compression algorithm used when compression is enabled (Brotli, Zstd, LZ4, Snappy, Gzip, Deflate). Defaults to Brotli.
     /// </summary>
-    public CompressionAlgorithm CompressionAlgorithm { get; set; } = CompressionAlgorithm.Brotli;
+    public KyrolusCompressionAlgorithm KyrolusCompressionAlgorithm { get; set; } = KyrolusCompressionAlgorithm.Brotli;
 
     /// <summary>
     /// Gets or sets the minimum payload size in bytes before compression is applied. Defaults to 1024 bytes (1 KB).
@@ -258,12 +258,12 @@ public sealed class KyrolusRedisCacheOptions
     public KyrolusRedisCacheOptions WithCompression(
         int thresholdBytes = 1024,
         CompressionLevel level = CompressionLevel.Fastest,
-        CompressionAlgorithm algorithm = CompressionAlgorithm.Brotli)
+        KyrolusCompressionAlgorithm algorithm = KyrolusCompressionAlgorithm.Brotli)
     {
         EnableCompression = true;
         CompressionThresholdBytes = thresholdBytes;
         CompressionLevel = level;
-        CompressionAlgorithm = algorithm;
+        KyrolusCompressionAlgorithm = algorithm;
         return this;
     }
 
@@ -273,7 +273,7 @@ public sealed class KyrolusRedisCacheOptions
     public KyrolusRedisCacheOptions WithBrotliCompression(
         int thresholdBytes = 1024,
         CompressionLevel level = CompressionLevel.Fastest) =>
-        WithCompression(thresholdBytes, level, CompressionAlgorithm.Brotli);
+        WithCompression(thresholdBytes, level, KyrolusCompressionAlgorithm.Brotli);
 
     /// <summary>
     /// Enables and configures Facebook Zstandard (Zstd) payload compression.
@@ -281,7 +281,7 @@ public sealed class KyrolusRedisCacheOptions
     public KyrolusRedisCacheOptions WithZstdCompression(
         int thresholdBytes = 1024,
         CompressionLevel level = CompressionLevel.Fastest) =>
-        WithCompression(thresholdBytes, level, CompressionAlgorithm.Zstd);
+        WithCompression(thresholdBytes, level, KyrolusCompressionAlgorithm.Zstd);
 
     /// <summary>
     /// Enables and configures ultra-fast LZ4 payload compression.
@@ -289,7 +289,7 @@ public sealed class KyrolusRedisCacheOptions
     public KyrolusRedisCacheOptions WithLz4Compression(
         int thresholdBytes = 1024,
         CompressionLevel level = CompressionLevel.Fastest) =>
-        WithCompression(thresholdBytes, level, CompressionAlgorithm.Lz4);
+        WithCompression(thresholdBytes, level, KyrolusCompressionAlgorithm.Lz4);
 
     /// <summary>
     /// Enables and configures Google Snappy payload compression.
@@ -297,7 +297,7 @@ public sealed class KyrolusRedisCacheOptions
     public KyrolusRedisCacheOptions WithSnappyCompression(
         int thresholdBytes = 1024,
         CompressionLevel level = CompressionLevel.Fastest) =>
-        WithCompression(thresholdBytes, level, CompressionAlgorithm.Snappy);
+        WithCompression(thresholdBytes, level, KyrolusCompressionAlgorithm.Snappy);
 
     /// <summary>
     /// Enables and configures standard Gzip payload compression.
@@ -305,7 +305,7 @@ public sealed class KyrolusRedisCacheOptions
     public KyrolusRedisCacheOptions WithGzipCompression(
         int thresholdBytes = 1024,
         CompressionLevel level = CompressionLevel.Fastest) =>
-        WithCompression(thresholdBytes, level, CompressionAlgorithm.Gzip);
+        WithCompression(thresholdBytes, level, KyrolusCompressionAlgorithm.Gzip);
 
     /// <summary>
     /// Enables and configures AES symmetric payload encryption with raw byte keys.

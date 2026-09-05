@@ -25,6 +25,21 @@ public interface IKyrolusSagaDefinition
     /// <summary>The number of steps in this saga, in execution order.</summary>
     int StepCount { get; }
 
+    /// <summary>
+    /// A deterministic fingerprint of this saga's step names, in execution order - stable across
+    /// process restarts, unlike the runtime's built-in <see cref="string.GetHashCode()"/>, which is
+    /// randomized per process and would never compare equal between the process that started a
+    /// <see cref="KyrolusSagaInstance"/> and a different process resuming it after a redeploy.
+    /// </summary>
+    /// <remarks>
+    /// Persisted on <see cref="KyrolusSagaInstance.StepSignatureAtStart"/> and compared against this
+    /// property's CURRENT value whenever <see cref="KyrolusSagaCoordinator"/> resumes an instance, so
+    /// a step list that changed shape (added, removed, reordered or renamed steps) between when the
+    /// instance started and when it resumes is caught explicitly instead of being silently re-applied
+    /// against steps it never actually ran against.
+    /// </remarks>
+    string StepSignature { get; }
+
     /// <summary>Serializes a context instance for storage.</summary>
     string SerializeContext(object context);
 

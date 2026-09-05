@@ -109,6 +109,26 @@ public interface IKyrolusObjectMapper
     IReadOnlyList<TTarget> MapList<TSource, TTarget>(IReadOnlyCollection<TSource> source);
 
     /// <summary>
+    /// Maps a collection of source items into a pre-allocated <see cref="IReadOnlyList{TTarget}"/>, threading a
+    /// caller-supplied <see cref="KyrolusMappingContext"/> through every per-item mapping instead of building a
+    /// throwaway one internally.
+    /// </summary>
+    /// <typeparam name="TSource">The source element type.</typeparam>
+    /// <typeparam name="TTarget">The destination element type.</typeparam>
+    /// <param name="source">The collection of source elements.</param>
+    /// <param name="context">The contextual mapping state shared across every element of the collection.</param>
+    /// <returns>A pre-allocated read-only list of converted destination items.</returns>
+    /// <remarks>
+    /// Additive alongside the no-context overload: existing callers of
+    /// <see cref="MapList{TSource, TTarget}(IReadOnlyCollection{TSource})"/> are unaffected. This overload exists
+    /// so collection-shaped call sites (<c>ToDtoList</c>, <c>KyrolusPagedResult{T}.MapTo</c>,
+    /// <c>KyrolusSeekResult{T}.MapTo</c>) can honor a caller-provided context (e.g. a
+    /// <c>CreateMappingContext</c> override hook) the same way single-item <c>ToDto</c>/<c>ToEntity</c>/<c>ApplyTo</c>
+    /// already do, instead of silently discarding it.
+    /// </remarks>
+    IReadOnlyList<TTarget> MapList<TSource, TTarget>(IEnumerable<TSource> source, KyrolusMappingContext context);
+
+    /// <summary>
     /// Projects an <see cref="IQueryable"/> query directly into a destination model using an expression tree,
     /// enabling the database provider (e.g. EF Core) to generate optimized SQL <c>SELECT</c> queries.
     /// </summary>

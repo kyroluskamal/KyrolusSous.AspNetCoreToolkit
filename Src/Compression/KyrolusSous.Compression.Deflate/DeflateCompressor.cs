@@ -3,11 +3,11 @@ namespace KyrolusSous.Compression;
 /// <summary>
 /// Lightweight compressor utilizing raw Deflate algorithm.
 /// </summary>
-public sealed class DeflateCompressor : ICompressor
+public sealed class DeflateCompressor : IKyrolusCompressor
 {
     public static DeflateCompressor Instance { get; } = new();
 
-    public CompressionAlgorithm Algorithm => CompressionAlgorithm.Deflate;
+    public KyrolusCompressionAlgorithm Algorithm => KyrolusCompressionAlgorithm.Deflate;
 
     public byte[] Compress(ReadOnlySpan<byte> data)
     {

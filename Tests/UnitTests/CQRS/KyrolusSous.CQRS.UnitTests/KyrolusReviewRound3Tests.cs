@@ -106,6 +106,45 @@ public sealed class KyrolusReviewRound3Tests
 
         result.ShouldBe("mapped-generic-failure");
     }
+
+    private sealed class ThrowingMapper : IKyrolusExceptionMapper<string>
+    {
+        public bool TryMap(Exception exception, out string response)
+        {
+            response = "unreachable";
+            throw new InvalidOperationException("mapper itself is broken");
+        }
+    }
+
+    [Fact(DisplayName = "ExceptionMapping: a mapper that throws is skipped, and a later mapper that does not throw still gets a chance to map")]
+    public async Task ExceptionMapping_ThrowingMapper_IsSkipped_LaterMapperStillMaps()
+    {
+        var behavior = new KyrolusExceptionMappingBehavior<SomeCommand, string>([new ThrowingMapper(), new CatchAllMapper()]);
+
+        var result = await behavior.Handle(
+            new SomeCommand("x"),
+            _ => throw new InvalidOperationException("boom"),
+            CancellationToken.None);
+
+        // Before the fix, ThrowingMapper's own exception would propagate in place of "boom",
+        // discarding the original failure's identity and stack trace, and CatchAllMapper would never
+        // get a turn at all.
+        result.ShouldBe("mapped-generic-failure");
+    }
+
+    [Fact(DisplayName = "ExceptionMapping: when every mapper either declines or throws, the ORIGINAL exception propagates, not a mapper's own exception")]
+    public async Task ExceptionMapping_AllMappersThrowOrDecline_OriginalExceptionPropagates()
+    {
+        var behavior = new KyrolusExceptionMappingBehavior<SomeCommand, string>([new ThrowingMapper()]);
+
+        var original = await Should.ThrowAsync<InvalidOperationException>(() =>
+            behavior.Handle(
+                new SomeCommand("x"),
+                _ => throw new InvalidOperationException("boom"),
+                CancellationToken.None));
+
+        original.Message.ShouldBe("boom");
+    }
     #endregion
 
     #region Marten domain events: collection responses (AddRange/UpdateRange/BulkUpsert shape)

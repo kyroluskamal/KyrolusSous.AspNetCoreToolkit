@@ -66,6 +66,39 @@ public sealed class KyrolusSagaInstance
     public string? CorrelationId { get; set; }
 
     /// <summary>
+    /// The definition's <see cref="IKyrolusSagaDefinition.StepCount"/> at the moment this instance
+    /// was created. 0 for an instance created before this guard existed (or built directly, as
+    /// several existing tests do, without setting it) - see <see cref="StepSignatureAtStart"/> for
+    /// why that specific value is what tells "never recorded" apart from "genuinely zero steps".
+    /// </summary>
+    public int StepCountAtStart { get; set; }
+
+    /// <summary>
+    /// The definition's <see cref="IKyrolusSagaDefinition.StepSignature"/> at the moment this
+    /// instance was created, compared against the CURRENT definition's shape whenever a resume
+    /// re-enters step execution.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="KyrolusSagaCoordinator.RunAsync"/> re-applies <see cref="CurrentStepIndex"/>
+    /// against whatever the definition's steps happen to be at resume time - a 5-step saga that
+    /// crashed at step 4 (Running) but is redeployed with only 3 steps would otherwise fall straight
+    /// through the resume loop (<c>for (stepIndex = 4; stepIndex &lt; 3; ...)</c> never executes) and
+    /// get marked <see cref="KyrolusSagaStatus.Completed"/> with no error at all, even though step 4
+    /// never ran. Recording the shape the instance actually started against, and refusing to resume
+    /// silently against a different one, turns that into a discoverable
+    /// <see cref="KyrolusSagaStatus.Failed"/> instead.
+    /// <para>
+    /// <see langword="null"/> is deliberately never treated as a mismatch: an instance created before
+    /// this guard existed, or one built directly without setting this (several existing tests do,
+    /// constructing a "crashed" instance by hand), has nothing recorded to compare against, and
+    /// treating that as itself a mismatch would fail every saga already in flight the moment this
+    /// guard shipped - the exact kind of regression the "purely additive" requirement on this feature
+    /// exists to prevent.
+    /// </para>
+    /// </remarks>
+    public string? StepSignatureAtStart { get; set; }
+
+    /// <summary>
     /// Optimistic-concurrency token. 0 for an instance never yet persisted; <see cref="IKyrolusSagaStore.SaveAsync"/>
     /// bumps it by one on every successful write and rejects a write whose <see cref="Version"/> does
     /// not match what is currently stored - two callers that both read the same version cannot both

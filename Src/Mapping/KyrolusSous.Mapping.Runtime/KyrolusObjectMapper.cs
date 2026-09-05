@@ -120,6 +120,26 @@ public sealed class KyrolusObjectMapper : IKyrolusObjectMapper
     }
 
     /// <inheritdoc />
+    public IReadOnlyList<TTarget> MapList<TSource, TTarget>(IEnumerable<TSource> source, KyrolusMappingContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (source is null)
+        {
+            return [];
+        }
+
+        var list = source is IReadOnlyCollection<TSource> collection ? new List<TTarget>(collection.Count) : [];
+
+        foreach (var item in source)
+        {
+            list.Add(Map<TSource, TTarget>(item, context));
+        }
+
+        return list;
+    }
+
+    /// <inheritdoc />
     public T Clone<T>(T source)
     {
         var context = new KyrolusMappingContext();

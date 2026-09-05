@@ -10,12 +10,12 @@ public static class BrotliServiceCollectionExtensions
         Action<KyrolusResponseCompressionOptions>? configure = null)
     {
         KyrolusCompressionProvider.Instance.Register(BrotliCompressor.Instance);
-        services.TryAddSingleton<ICompressionProvider>(KyrolusCompressionProvider.Instance);
-        services.TryAddSingleton<ICompressor>(BrotliCompressor.Instance);
+        services.TryAddSingleton<IKyrolusCompressionProvider>(KyrolusCompressionProvider.Instance);
+        services.TryAddSingleton<IKyrolusCompressor>(BrotliCompressor.Instance);
 
         services.Configure<KyrolusResponseCompressionOptions>(options =>
         {
-            options.PreferredAlgorithm = CompressionAlgorithm.Brotli;
+            options.PreferredAlgorithm = KyrolusCompressionAlgorithm.Brotli;
             configure?.Invoke(options);
         });
 

@@ -5,11 +5,11 @@ namespace KyrolusSous.Compression;
 /// <summary>
 /// Fast compressor utilizing Google's Snappy algorithm.
 /// </summary>
-public sealed class SnappyCompressor : ICompressor
+public sealed class SnappyCompressor : IKyrolusCompressor
 {
     public static SnappyCompressor Instance { get; } = new();
 
-    public CompressionAlgorithm Algorithm => CompressionAlgorithm.Snappy;
+    public KyrolusCompressionAlgorithm Algorithm => KyrolusCompressionAlgorithm.Snappy;
 
     public byte[] Compress(ReadOnlySpan<byte> data)
     {

@@ -540,16 +540,29 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
         await InvalidateCacheAsync(id, tenantId, cancellationToken).ConfigureAwait(false);
         return new MartenEntityResult<TEntity>(entity, version);
     }
+    /// <remarks>
+    /// Marten's <c>session.Patch&lt;T&gt;(filter)</c> is deferred: it only executes against Postgres when the
+    /// caller's unit of work later calls <c>SaveChangesAsync</c>, so there is no Marten API that hands back a
+    /// database-accurate affected-row count synchronously the way EF Core's <c>ExecuteUpdateAsync</c> does.
+    /// To avoid silently lying with a hard-coded <c>0</c>, this method first runs an honest
+    /// <c>session.Query&lt;TEntity&gt;().Where(filter).CountAsync(...)</c> to see how many documents currently
+    /// match <paramref name="filter"/>, then queues the patch exactly as before. The count is therefore
+    /// best-effort, not transactionally atomic with the patch: a concurrent write against the same rows between
+    /// the count query and the eventual <c>SaveChangesAsync</c> can change what actually gets patched, so the
+    /// returned number can drift from the true affected-row count under concurrent load. Callers who need an
+    /// exact, atomic affected-row count should not rely on filter-based bulk patch for that guarantee on either
+    /// provider path that defers execution this way — use a per-entity update with optimistic concurrency instead.
+    /// </remarks>
     public async Task<int> PatchWhereAsync(Expression<Func<TEntity, bool>> filter, Dictionary<string, object> updates, string? tenantId = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(filter);
         ArgumentNullException.ThrowIfNull(updates);
         await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var session = ResolveSession(tenantId);
+        var matchCount = await session.Query<TEntity>().Where(filter).CountAsync(cancellationToken).ConfigureAwait(false);
         var patch = session.Patch<TEntity>(filter);
         foreach (var kv in updates) patch.Set(kv.Key, kv.Value);
-        // Marten executes on SaveChanges; return 0 as placeholder
-        return 0;
+        return matchCount;
     }
     public virtual async Task<bool> RemoveAsync(TEntity entity, Guid? expectedVersion = null, string? tenantId = null, CancellationToken cancellationToken = default)
     {
@@ -568,13 +581,26 @@ public class KyrolusMartenRepositoryAsync<TSession, TEntity, TKey>(TSession root
         await InvalidateCacheAsync(id, tenantId, cancellationToken).ConfigureAwait(false);
         return true;
     }
+    /// <remarks>
+    /// Like <see cref="PatchWhereAsync"/>, Marten's <c>session.DeleteWhere(filter)</c> is deferred until the
+    /// caller's unit of work calls <c>SaveChangesAsync</c>, so Marten has no synchronous API that returns a
+    /// database-accurate deleted-row count. This method reports an honest count by querying how many documents
+    /// currently match <paramref name="filter"/> via <c>session.Query&lt;TEntity&gt;().Where(filter).CountAsync(...)</c>
+    /// before queuing the delete, rather than the previous hard-coded <c>0</c> placeholder. The count is
+    /// best-effort, not atomic with the delete: a concurrent write against the same rows between the count query
+    /// and the eventual <c>SaveChangesAsync</c> can change what actually gets deleted. Callers who need an exact,
+    /// atomic affected-row count should not rely on filter-based bulk delete for that guarantee on either
+    /// provider path that defers execution this way — unlike EF Core's single-round-trip
+    /// <c>ExecuteDeleteAsync</c>, this is a two-step, non-transactional approximation.
+    /// </remarks>
     public virtual async Task<int> DeleteWhereAsync(Expression<Func<TEntity, bool>> filter, string? tenantId = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(filter);
         await EnsurePolicyInitializedAsync(cancellationToken).ConfigureAwait(false);
         var session = ResolveSession(tenantId);
+        var matchCount = await session.Query<TEntity>().Where(filter).CountAsync(cancellationToken).ConfigureAwait(false);
         session.DeleteWhere(filter);
-        return 0;
+        return matchCount;
     }
     public async Task<bool> RemoveRangeAsync(IEnumerable<TEntity> entities, string? tenantId = null, CancellationToken cancellationToken = default)
     {

@@ -102,6 +102,9 @@ public class ElasticsearchUnitTests
     private const string EmptySearchResponseJson =
         """{"took":1,"timed_out":false,"_shards":{"total":1,"successful":1,"skipped":0,"failed":0},"hits":{"total":{"value":0,"relation":"eq"},"max_score":null,"hits":[]}}""";
 
+    private const string IndexSuccessResponseJson =
+        """{"_index":"products","_id":"doc-1","_version":1,"result":"created","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1}""";
+
     private const string UpdateSuccessResponseJson =
         """{"_index":"products","_id":"doc-1","_version":2,"result":"updated","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":5,"_primary_term":1}""";
 
@@ -522,6 +525,54 @@ public class ElasticsearchUnitTests
     // into a `false` return - not a genuine two-writer race against a live cluster/document, which this
     // project has no fixture for. That is called out explicitly in each test's own comments.
 
+    [Fact(DisplayName = "Regression (optimistic concurrency): AddAsync omits if_seq_no/if_primary_term when neither is supplied (unchanged default behavior)")]
+    public async Task AddAsync_NoConcurrencyTokens_OmitsIfSeqNoAndIfPrimaryTermFromRequest()
+    {
+        var (repo, capture) = CreateRepoWithCannedResponse(IndexSuccessResponseJson);
+
+        var ok = await repo.AddAsync(new TestProductDocument { Id = "doc-1", Title = "New" }, "doc-1");
+
+        ok.ShouldBeTrue();
+        capture.LastPathAndQuery.ShouldNotBeNull();
+        capture.LastPathAndQuery.ShouldNotContain("if_seq_no");
+        capture.LastPathAndQuery.ShouldNotContain("if_primary_term");
+    }
+
+    [Fact(DisplayName = "Regression (optimistic concurrency): AddAsync carries if_seq_no/if_primary_term on the request when both are supplied")]
+    public async Task AddAsync_WithConcurrencyTokens_CarriesIfSeqNoAndIfPrimaryTermOnRequest()
+    {
+        var (repo, capture) = CreateRepoWithCannedResponse(IndexSuccessResponseJson);
+
+        var ok = await repo.AddAsync(new TestProductDocument { Id = "doc-1", Title = "New" }, "doc-1", ifSeqNo: 5, ifPrimaryTerm: 1);
+
+        ok.ShouldBeTrue();
+        capture.LastPathAndQuery.ShouldNotBeNull();
+        capture.LastPathAndQuery.ShouldContain("if_seq_no=5");
+        capture.LastPathAndQuery.ShouldContain("if_primary_term=1");
+    }
+
+    [Fact(DisplayName = "Regression (optimistic concurrency): a stale seq_no/primary_term on AddAsync is rejected as a version conflict (false), not silently applied as an overwrite")]
+    public async Task AddAsync_StaleConcurrencyTokens_ReturnsFalse_NotSilentOverwrite()
+    {
+        // Same rationale as UpdatePartialAsync_StaleConcurrencyTokens_ReturnsFalse_NotSilentOverwrite
+        // above, applied to AddAsync/the index API now that ElasticIndexDocumentCommand carries its own
+        // ExpectedSeqNo/ExpectedPrimaryTerm: a "first write" call succeeds and captures a seq_no/
+        // primary_term pair; a "second write" call reusing that now-stale pair, against a repo wired to
+        // return Elasticsearch's real version_conflict_engine_exception/409 shape, returns false rather
+        // than throwing or silently reporting success.
+        var (firstWriterRepo, _) = CreateRepoWithCannedResponse(IndexSuccessResponseJson);
+        var firstWriteSucceeded = await firstWriterRepo.AddAsync(new TestProductDocument { Id = "doc-1", Title = "First" }, "doc-1", ifSeqNo: 5, ifPrimaryTerm: 1);
+        firstWriteSucceeded.ShouldBeTrue();
+
+        var (secondWriterRepo, secondCapture) = CreateRepoWithCannedResponse(VersionConflictResponseJson, statusCode: 409);
+        var secondWriteSucceeded = await secondWriterRepo.AddAsync(new TestProductDocument { Id = "doc-1", Title = "Second" }, "doc-1", ifSeqNo: 5, ifPrimaryTerm: 1);
+
+        secondWriteSucceeded.ShouldBeFalse();
+        secondCapture.LastPathAndQuery.ShouldNotBeNull();
+        secondCapture.LastPathAndQuery.ShouldContain("if_seq_no=5");
+        secondCapture.LastPathAndQuery.ShouldContain("if_primary_term=1");
+    }
+
     [Fact(DisplayName = "Regression (Fix 4 - optimistic concurrency): UpdateAsync omits if_seq_no/if_primary_term when neither is supplied (unchanged default behavior)")]
     public async Task UpdateAsync_NoConcurrencyTokens_OmitsIfSeqNoAndIfPrimaryTermFromRequest()
     {
@@ -685,7 +736,7 @@ public sealed class TestMockElasticRepository<TDocument, TId>(string indexName) 
 {
     public string IndexName => indexName;
 
-    public Task<bool> AddAsync(TDocument document, TId id, CancellationToken cancellationToken = default) => Task.FromResult(true);
+    public Task<bool> AddAsync(TDocument document, TId id, long? ifSeqNo = null, long? ifPrimaryTerm = null, CancellationToken cancellationToken = default) => Task.FromResult(true);
     public Task<int> AddManyAsync(IEnumerable<(TDocument Document, TId Id)> items, CancellationToken cancellationToken = default) => Task.FromResult(items.Count());
     public Task<KyrolusBulkResult> BulkIndexAsync(IEnumerable<(TDocument Document, TId Id)> items, CancellationToken cancellationToken = default) => Task.FromResult(new KyrolusBulkResult { IndexedCount = items.Count() });
     public Task<TDocument?> GetByIdAsync(TId id, CancellationToken cancellationToken = default) => Task.FromResult<TDocument?>(new TDocument());

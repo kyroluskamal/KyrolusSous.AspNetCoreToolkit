@@ -856,9 +856,9 @@ public sealed class TestDataProtector : Microsoft.AspNetCore.DataProtection.IDat
     }
 }
 
-public sealed class TestMockCompressor : KyrolusSous.Compression.ICompressor
+public sealed class TestMockCompressor : KyrolusSous.Compression.IKyrolusCompressor
 {
-    public KyrolusSous.Compression.CompressionAlgorithm Algorithm => KyrolusSous.Compression.CompressionAlgorithm.Gzip;
+    public KyrolusSous.Compression.KyrolusCompressionAlgorithm Algorithm => KyrolusSous.Compression.KyrolusCompressionAlgorithm.Gzip;
 
     public byte[] Compress(ReadOnlySpan<byte> data) => data.ToArray();
     public byte[] Decompress(ReadOnlySpan<byte> compressedData) => compressedData.ToArray();

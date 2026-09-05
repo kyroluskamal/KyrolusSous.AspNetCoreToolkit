@@ -1,3 +1,5 @@
+using KyrolusSous.CQRS.Abstractions.Security;
+
 namespace KyrolusSous.CQRS.Elasticsearch.Query;
 
 /// <summary>
@@ -12,6 +14,24 @@ public sealed class ElasticSearchQueryHandler<TDocument, TId>(
     public async Task<KyrolusSearchResult<TDocument>> Handle(ElasticSearchQuery<TDocument> query, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
+
+        // Opt-in guard, same shape as the write-side IKyrolusPropertyUpdateRequest.AllowedProperties
+        // check: a null AllowedFields (the default) is unrestricted, so existing callers are unaffected.
+        if (query.AllowedFields is { } allowedFields)
+        {
+            if (query.Fields is { Count: > 0 } fieldsToCheck)
+            {
+                foreach (var field in fieldsToCheck)
+                {
+                    EnsureFieldAllowed(field, allowedFields);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.SortField))
+            {
+                EnsureFieldAllowed(query.SortField, allowedFields);
+            }
+        }
 
         var page = Math.Max(1, query.Page);
         var pageSize = Math.Clamp(query.PageSize, 1, 1000);
@@ -59,5 +79,24 @@ public sealed class ElasticSearchQueryHandler<TDocument, TId>(
 
             query.CustomConfigure?.Invoke(builder);
         }, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Case-insensitive membership check, matching <c>KyrolusPropertyAllowListBehavior</c>'s own
+    /// precedent: a caller could otherwise resubmit an allow-listed field name in different casing to
+    /// bypass an ordinally-cased comparison.
+    /// </summary>
+    private static void EnsureFieldAllowed(string fieldName, IReadOnlySet<string> allowedFields)
+    {
+        foreach (var candidate in allowedFields)
+        {
+            if (string.Equals(candidate, fieldName, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+        }
+
+        throw new KyrolusSecurityException(
+            $"[Kyrolus CQRS Security] Field '{fieldName}' is not in the allow-list for {nameof(ElasticSearchQuery<TDocument>)}.");
     }
 }

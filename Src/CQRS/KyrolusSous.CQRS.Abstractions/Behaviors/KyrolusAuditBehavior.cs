@@ -68,7 +68,7 @@ public sealed class KyrolusAuditBehavior<TRequest, TResponse>(
                 Category = auditable.AuditCategory,
                 CommandName = requestType.Name,
                 CommandFullName = requestType.FullName ?? requestType.Name,
-                Payload = auditable.IncludePayload ? SanitizePayload(request) : null,
+                Payload = auditable.IncludePayload ? KyrolusSensitiveDataRedactor.Sanitize(request, _extraSensitiveKeywords) : null,
                 DurationMs = sw.ElapsedMilliseconds,
                 IsSuccess = true
             };
@@ -91,7 +91,7 @@ public sealed class KyrolusAuditBehavior<TRequest, TResponse>(
                 Category = auditable.AuditCategory,
                 CommandName = requestType.Name,
                 CommandFullName = requestType.FullName ?? requestType.Name,
-                Payload = auditable.IncludePayload ? SanitizePayload(request) : null,
+                Payload = auditable.IncludePayload ? KyrolusSensitiveDataRedactor.Sanitize(request, _extraSensitiveKeywords) : null,
                 DurationMs = sw.ElapsedMilliseconds,
                 IsSuccess = false,
                 ErrorMessage = ex.Message
@@ -111,141 +111,6 @@ public sealed class KyrolusAuditBehavior<TRequest, TResponse>(
             : _localizer.GetString(key);
 
         return result.ResourceNotFound ? null : result.Value;
-    }
-
-    /// <summary>Bounds recursion into nested objects - deep enough for realistic DTO graphs, shallow enough that a self-referencing or pathological graph cannot recurse indefinitely.</summary>
-    private const int MaxSanitizeDepth = 6;
-
-    private const string RedactedPlaceholder = "***REDACTED***";
-    private const string UnavailablePlaceholder = "***UNAVAILABLE***";
-
-    private object? SanitizePayload(object? payload) => SanitizePayload(payload, depth: 0);
-
-    private object? SanitizePayload(object? payload, int depth)
-    {
-        if (payload is null) return null;
-
-        // A nested DTO's own sensitive properties (a PaymentDetails.CardNumber inside an order
-        // command, say) must be redacted the same as a top-level one - only inspecting top-level
-        // property names would pass nested sensitive data straight through to whatever the audit
-        // sink logs, defeating the point of sanitizing at all.
-        if (depth >= MaxSanitizeDepth || IsSimpleType(payload.GetType())) return payload;
-
-        // A dictionary (e.g. the Updates bag on a Patch/BulkPatch/ExecuteUpdate command) is also
-        // IEnumerable<KeyValuePair<,>>, so this check must run before the general IEnumerable branch
-        // below - otherwise each entry gets reflected as a KeyValuePair and IsSensitive is checked
-        // against the literal names "Key"/"Value" instead of the entry's actual key (e.g. "Password"),
-        // and the real key never gets redacted at all.
-        if (payload is System.Collections.IDictionary dictionary)
-            return SanitizeDictionary(dictionary, depth);
-
-        if (payload is System.Collections.IEnumerable enumerable and not string)
-            return SanitizeEnumerable(enumerable, depth);
-
-        return SanitizeObject(payload, depth);
-    }
-
-    private List<object?> SanitizeEnumerable(System.Collections.IEnumerable enumerable, int depth)
-    {
-        var items = new List<object?>();
-        foreach (var item in enumerable)
-        {
-            // One pathological item (a lazy/computed value that throws on enumeration or on its own
-            // sanitization) must not discard every other item already sanitized in this collection.
-            try
-            {
-                items.Add(SanitizePayload(item, depth + 1));
-            }
-            catch
-            {
-                items.Add(UnavailablePlaceholder);
-            }
-        }
-        return items;
-    }
-
-    private object SanitizeDictionary(System.Collections.IDictionary dictionary, int depth)
-    {
-        var result = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-        foreach (System.Collections.DictionaryEntry entry in dictionary)
-        {
-            var key = entry.Key?.ToString() ?? "null";
-            try
-            {
-                result[key] = IsSensitive(key)
-                    ? RedactedPlaceholder
-                    : SanitizePayload(entry.Value, depth + 1);
-            }
-            catch
-            {
-                result[key] = UnavailablePlaceholder;
-            }
-        }
-        return result;
-    }
-
-    private object SanitizeObject(object payload, int depth)
-    {
-        var props = payload.GetType().GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-        if (props.Length == 0) return payload;
-
-        var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var prop in props)
-        {
-            if (prop.GetIndexParameters().Length > 0) continue; // skip indexers
-
-            var name = prop.Name;
-            if (IsSensitive(name))
-            {
-                dict[name] = RedactedPlaceholder;
-                continue;
-            }
-
-            // A single property whose getter throws (a computed property touching a disposed
-            // DbContext navigation, say) must not force the entire object to fall back to being
-            // logged raw - that would re-expose every sensitive property already redacted above it.
-            try
-            {
-                dict[name] = SanitizePayload(prop.GetValue(payload), depth + 1);
-            }
-            catch
-            {
-                dict[name] = UnavailablePlaceholder;
-            }
-        }
-        return dict;
-    }
-
-    private static bool IsSimpleType(Type type)
-        => type.IsPrimitive
-        || type.IsEnum
-        || type == typeof(string)
-        || type == typeof(decimal)
-        || type == typeof(DateTime)
-        || type == typeof(DateTimeOffset)
-        || type == typeof(TimeSpan)
-        || type == typeof(Guid)
-        || type == typeof(Uri)
-        || (Nullable.GetUnderlyingType(type) is { } underlying && IsSimpleType(underlying));
-
-    private static readonly string[] BuiltInSensitiveKeywords =
-    [
-        "password", "secret", "token", "pin", "cvv", "cardnumber", "apikey"
-    ];
-
-    private bool IsSensitive(string name)
-    {
-        foreach (var keyword in BuiltInSensitiveKeywords)
-        {
-            if (name.Contains(keyword, StringComparison.OrdinalIgnoreCase)) return true;
-        }
-
-        foreach (var keyword in _extraSensitiveKeywords)
-        {
-            if (!string.IsNullOrWhiteSpace(keyword) && name.Contains(keyword, StringComparison.OrdinalIgnoreCase)) return true;
-        }
-
-        return false;
     }
 
     private async Task EmitQuietlyAsync(KyrolusAuditEntry entry, CancellationToken cancellationToken)

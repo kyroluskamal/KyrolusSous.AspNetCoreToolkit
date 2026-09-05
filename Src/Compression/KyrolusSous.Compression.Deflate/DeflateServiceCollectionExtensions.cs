@@ -10,12 +10,12 @@ public static class DeflateServiceCollectionExtensions
         Action<KyrolusResponseCompressionOptions>? configure = null)
     {
         KyrolusCompressionProvider.Instance.Register(DeflateCompressor.Instance);
-        services.TryAddSingleton<ICompressionProvider>(KyrolusCompressionProvider.Instance);
-        services.TryAddSingleton<ICompressor>(DeflateCompressor.Instance);
+        services.TryAddSingleton<IKyrolusCompressionProvider>(KyrolusCompressionProvider.Instance);
+        services.TryAddSingleton<IKyrolusCompressor>(DeflateCompressor.Instance);
 
         services.Configure<KyrolusResponseCompressionOptions>(options =>
         {
-            options.PreferredAlgorithm = CompressionAlgorithm.Deflate;
+            options.PreferredAlgorithm = KyrolusCompressionAlgorithm.Deflate;
             configure?.Invoke(options);
         });
 

@@ -58,6 +58,100 @@ public class KyrolusCqrsElasticsearchTests
         await repo.Received(1).SmartSearchAsync(Arg.Any<Action<KyrolusSmartSearchBuilder<TestProductDocument>>>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact(DisplayName = "ElasticSearchQueryHandler allows a Fields/SortField query when AllowedFields is null (regression)")]
+    public async Task ElasticSearchQueryHandler_AllowedFieldsNull_BehavesUnrestricted()
+    {
+        var repo = Substitute.For<IKyrolusElasticRepository<TestProductDocument, string>>();
+        repo.SmartSearchAsync(Arg.Any<Action<KyrolusSmartSearchBuilder<TestProductDocument>>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new KyrolusSearchResult<TestProductDocument>()));
+
+        var handler = new ElasticSearchQueryHandler<TestProductDocument, string>(repo);
+        var query = new ElasticSearchQuery<TestProductDocument>("Laptop")
+        {
+            Fields = ["title", "description"],
+            SortField = "price"
+            // AllowedFields left null - unrestricted, same as before this field ever existed.
+        };
+
+        await Should.NotThrowAsync(() => handler.Handle(query, CancellationToken.None));
+        await repo.Received(1).SmartSearchAsync(Arg.Any<Action<KyrolusSmartSearchBuilder<TestProductDocument>>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact(DisplayName = "ElasticSearchQueryHandler rejects a Fields entry outside AllowedFields")]
+    public async Task ElasticSearchQueryHandler_DisallowedField_Throws()
+    {
+        var repo = Substitute.For<IKyrolusElasticRepository<TestProductDocument, string>>();
+        var handler = new ElasticSearchQueryHandler<TestProductDocument, string>(repo);
+        var query = new ElasticSearchQuery<TestProductDocument>("Laptop")
+        {
+            Fields = ["title", "secret"],
+            AllowedFields = new HashSet<string> { "title", "description" }
+        };
+
+        await Should.ThrowAsync<KyrolusSecurityException>(() => handler.Handle(query, CancellationToken.None));
+        await repo.DidNotReceive().SmartSearchAsync(Arg.Any<Action<KyrolusSmartSearchBuilder<TestProductDocument>>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact(DisplayName = "ElasticSearchQueryHandler rejects a SortField outside AllowedFields")]
+    public async Task ElasticSearchQueryHandler_DisallowedSortField_Throws()
+    {
+        var repo = Substitute.For<IKyrolusElasticRepository<TestProductDocument, string>>();
+        var handler = new ElasticSearchQueryHandler<TestProductDocument, string>(repo);
+        var query = new ElasticSearchQuery<TestProductDocument>("Laptop")
+        {
+            SortField = "internalRank",
+            AllowedFields = new HashSet<string> { "title", "price" }
+        };
+
+        await Should.ThrowAsync<KyrolusSecurityException>(() => handler.Handle(query, CancellationToken.None));
+        await repo.DidNotReceive().SmartSearchAsync(Arg.Any<Action<KyrolusSmartSearchBuilder<TestProductDocument>>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact(DisplayName = "ElasticSearchQueryHandler allows a Fields/SortField entry present in AllowedFields regardless of case")]
+    public async Task ElasticSearchQueryHandler_AllowedField_DifferentCase_Passes()
+    {
+        var repo = Substitute.For<IKyrolusElasticRepository<TestProductDocument, string>>();
+        repo.SmartSearchAsync(Arg.Any<Action<KyrolusSmartSearchBuilder<TestProductDocument>>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new KyrolusSearchResult<TestProductDocument>()));
+
+        var handler = new ElasticSearchQueryHandler<TestProductDocument, string>(repo);
+        var query = new ElasticSearchQuery<TestProductDocument>("Laptop")
+        {
+            Fields = ["TITLE"],
+            SortField = "Price",
+            AllowedFields = new HashSet<string> { "title", "price" }
+        };
+
+        await Should.NotThrowAsync(() => handler.Handle(query, CancellationToken.None));
+    }
+
+    [Fact(DisplayName = "ElasticAutocompleteQueryHandler allows a TargetField query when AllowedFields is null (regression)")]
+    public async Task ElasticAutocompleteQueryHandler_AllowedFieldsNull_BehavesUnrestricted()
+    {
+        var repo = Substitute.For<IKyrolusElasticRepository<TestProductDocument, string>>();
+        repo.SearchAsync(Arg.Any<Action<SearchRequestDescriptor<TestProductDocument>>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new KyrolusSearchResult<TestProductDocument>()));
+
+        var handler = new ElasticAutocompleteQueryHandler<TestProductDocument, string>(repo);
+        var query = new ElasticAutocompleteQuery<TestProductDocument>("iPh", TargetField: "Title", Fuzzy: false);
+
+        await Should.NotThrowAsync(() => handler.Handle(query, CancellationToken.None));
+    }
+
+    [Fact(DisplayName = "ElasticAutocompleteQueryHandler rejects a TargetField outside AllowedFields")]
+    public async Task ElasticAutocompleteQueryHandler_DisallowedTargetField_Throws()
+    {
+        var repo = Substitute.For<IKyrolusElasticRepository<TestProductDocument, string>>();
+        var handler = new ElasticAutocompleteQueryHandler<TestProductDocument, string>(repo);
+        var query = new ElasticAutocompleteQuery<TestProductDocument>("iPh", TargetField: "InternalNotes")
+        {
+            AllowedFields = new HashSet<string> { "Title" }
+        };
+
+        await Should.ThrowAsync<KyrolusSecurityException>(() => handler.Handle(query, CancellationToken.None));
+        await repo.DidNotReceive().SearchAsync(Arg.Any<Action<SearchRequestDescriptor<TestProductDocument>>>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact(DisplayName = "ElasticAutocompleteQueryHandler returns suggestions matching prefix")]
     public async Task ElasticAutocompleteQueryHandler_ReturnsSuggestions()
     {
@@ -173,13 +267,33 @@ public class KyrolusCqrsElasticsearchTests
     {
         var repo = Substitute.For<IKyrolusElasticRepository<TestProductDocument, string>>();
         var doc = new TestProductDocument { Id = "doc-1", Title = "Tablet" };
-        repo.AddAsync(doc, "doc-1", Arg.Any<CancellationToken>()).Returns(Task.FromResult(true));
+        repo.AddAsync(doc, "doc-1", Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(true));
 
         var handler = new ElasticIndexDocumentCommandHandler<TestProductDocument, string>(repo);
         var success = await handler.Handle(new ElasticIndexDocumentCommand<TestProductDocument, string>(doc, "doc-1"), CancellationToken.None);
 
         success.ShouldBeTrue();
-        await repo.Received(1).AddAsync(doc, "doc-1", Arg.Any<CancellationToken>());
+        // ExpectedSeqNo/ExpectedPrimaryTerm are null on this command, so the repository call carries nulls too.
+        await repo.Received(1).AddAsync(doc, "doc-1", null, null, Arg.Any<CancellationToken>());
+    }
+
+    [Fact(DisplayName = "ElasticIndexDocumentCommandHandler forwards a stale ExpectedSeqNo/ExpectedPrimaryTerm and surfaces the version-conflict failure")]
+    public async Task ElasticIndexDocumentCommandHandler_StaleExpectedVersion_ReturnsFalse()
+    {
+        var repo = Substitute.For<IKyrolusElasticRepository<TestProductDocument, string>>();
+        var doc = new TestProductDocument { Id = "doc-1", Title = "Tablet" };
+        repo.AddAsync(doc, "doc-1", 5L, 1L, Arg.Any<CancellationToken>()).Returns(Task.FromResult(false));
+
+        var handler = new ElasticIndexDocumentCommandHandler<TestProductDocument, string>(repo);
+        var command = new ElasticIndexDocumentCommand<TestProductDocument, string>(doc, "doc-1")
+        {
+            ExpectedSeqNo = 5,
+            ExpectedPrimaryTerm = 1
+        };
+        var success = await handler.Handle(command, CancellationToken.None);
+
+        success.ShouldBeFalse();
+        await repo.Received(1).AddAsync(doc, "doc-1", 5L, 1L, Arg.Any<CancellationToken>());
     }
 
     [Fact(DisplayName = "ElasticDeleteDocumentCommandHandler deletes document by Id")]
@@ -387,7 +501,7 @@ public class KyrolusCqrsElasticsearchTests
     {
         var repo = Substitute.For<IKyrolusElasticRepository<TestProductDocument, string>>();
         repo.IndexName.Returns("test_products");
-        repo.AddAsync(Arg.Any<TestProductDocument>(), "prod-100", Arg.Any<CancellationToken>())
+        repo.AddAsync(Arg.Any<TestProductDocument>(), "prod-100", Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(true));
 
         var projector = new KyrolusElasticReadModelProjector<TestProductDocument, string>(repo);
@@ -395,7 +509,8 @@ public class KyrolusCqrsElasticsearchTests
 
         await projector.ProjectAsync(model, CancellationToken.None);
 
-        await repo.Received(1).AddAsync(model, "prod-100", Arg.Any<CancellationToken>());
+        // A projection must always reflect the latest write, so it never passes ifSeqNo/ifPrimaryTerm.
+        await repo.Received(1).AddAsync(model, "prod-100", null, null, Arg.Any<CancellationToken>());
     }
 
     [Fact(DisplayName = "AddKyrolusCqrsElasticsearch registers all queries, commands, and projectors")]

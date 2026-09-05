@@ -65,9 +65,28 @@ public sealed class KyrolusExpressionMappingEngine
         plan.ExecuteInPlace(source, target, context, mapper, this);
     }
 
-    private static bool IsDirectlyAssignable(Type sourceType, Type targetType) =>
-        (sourceType == typeof(string) || sourceType.IsPrimitive || sourceType.IsEnum || targetType == typeof(object)) &&
-        targetType.IsAssignableFrom(sourceType);
+    private static bool IsDirectlyAssignable(Type sourceType, Type targetType)
+    {
+        // Unwrap Nullable<T> so a nullable primitive/enum/struct round-trips through the fast path the
+        // same way its non-nullable form does, instead of falling through to reflection-based
+        // TypeMappingPlan (which finds no same-named properties on a scalar and silently produces a
+        // zeroed default).
+        var underlyingSource = Nullable.GetUnderlyingType(sourceType) ?? sourceType;
+
+        var isScalarKind =
+            underlyingSource == typeof(string) ||
+            underlyingSource.IsPrimitive ||
+            underlyingSource.IsEnum ||
+            underlyingSource == typeof(decimal) ||
+            underlyingSource == typeof(Guid) ||
+            underlyingSource == typeof(DateTime) ||
+            underlyingSource == typeof(DateTimeOffset) ||
+            underlyingSource == typeof(TimeSpan) ||
+            underlyingSource == typeof(DateOnly) ||
+            underlyingSource == typeof(TimeOnly);
+
+        return (isScalarKind || targetType == typeof(object)) && targetType.IsAssignableFrom(sourceType);
+    }
 
     private bool TryGetCircularReference(Type sourceType, Type targetType, object source, KyrolusMappingContext context, out object? existing)
     {
@@ -582,7 +601,7 @@ public sealed class KyrolusExpressionMappingEngine
                 }
 
                 var rawVal = sourceProp.GetValue(src);
-                if (ShouldIgnoreNull(sourceProp, targetProp, rawVal))
+                if (ShouldIgnoreNull(sourceProp, targetProp, rawVal, ctx))
                 {
                     return;
                 }
@@ -594,7 +613,7 @@ public sealed class KyrolusExpressionMappingEngine
                      KyrolusMemberFlatteningResolver.ResolveFlattenedPath(_sourceType, propName) is { } path)
             {
                 var rawVal = KyrolusMemberFlatteningResolver.EvaluatePath(path, src);
-                if (ShouldIgnoreNull(null, targetProp, rawVal))
+                if (ShouldIgnoreNull(null, targetProp, rawVal, ctx))
                 {
                     return;
                 }
@@ -614,7 +633,7 @@ public sealed class KyrolusExpressionMappingEngine
             return mapAttr?.SourceName ?? (_rule?.PropertyNameMappings.TryGetValue(propName, out var alias) == true ? alias : propName);
         }
 
-        private bool ShouldIgnoreNull(PropertyInfo? sourceProp, PropertyInfo targetProp, object? rawVal)
+        private bool ShouldIgnoreNull(PropertyInfo? sourceProp, PropertyInfo targetProp, object? rawVal, KyrolusMappingContext ctx)
         {
             if (rawVal is not null)
             {
@@ -622,6 +641,7 @@ public sealed class KyrolusExpressionMappingEngine
             }
 
             return (_rule?.IgnoreNullValues == true) ||
+                   ctx.GetItem<bool>(KyrolusMappingContext.IgnoreNullValuesOnInPlaceMapKey) ||
                    _sourceType.GetCustomAttribute<KyrolusIgnoreNullAttribute>() is not null ||
                    (sourceProp is not null && sourceProp.GetCustomAttribute<KyrolusIgnoreNullAttribute>() is not null) ||
                    targetProp.GetCustomAttribute<KyrolusIgnoreNullAttribute>() is not null;

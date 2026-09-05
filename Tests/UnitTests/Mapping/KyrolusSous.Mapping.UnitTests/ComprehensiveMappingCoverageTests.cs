@@ -251,4 +251,66 @@ public sealed class ComprehensiveMappingCoverageTests
         existing.Title.ShouldBe("OriginalTitle"); // Null value in source did not overwrite existing title
         existing.Secret.ShouldBe("NewSecret");
     }
+
+    [Fact(DisplayName = "ComprehensiveCoverage: In-place mapping honors the IgnoreNullValuesOnInPlaceMapKey context override with no registered rule")]
+    public void InPlaceMapping_ContextIgnoreNullKey_PreservesTargetWithoutRule()
+    {
+        // No CreateMap<SampleSource, SampleTarget>() registered at all - this is the reflection-only
+        // path ApplyTo relies on, so the context key must work without a rule to opt into.
+        var mapper = new KyrolusObjectMapper();
+        var patch = new SampleSource { Id = 300, Title = null!, Secret = "NewSecret2" };
+        var existing = new SampleTarget { Id = 20, Title = "KeepMe", Secret = "OldSecret2" };
+
+        var context = new KyrolusMappingContext();
+        context.SetItem(KyrolusMappingContext.IgnoreNullValuesOnInPlaceMapKey, true);
+
+        mapper.Map(patch, existing, context);
+
+        existing.Id.ShouldBe(300);
+        existing.Title.ShouldBe("KeepMe"); // Null source value did not overwrite existing target value
+        existing.Secret.ShouldBe("NewSecret2");
+    }
+
+    [Fact(DisplayName = "ComprehensiveCoverage: Map<decimal,decimal> round-trips the actual value at the top level")]
+    public void Map_Decimal_TopLevel_RoundTripsValue()
+    {
+        var mapper = new KyrolusObjectMapper();
+
+        var result = mapper.Map<decimal, decimal>(123.45m);
+
+        result.ShouldBe(123.45m);
+    }
+
+    [Fact(DisplayName = "ComprehensiveCoverage: Map<Guid,Guid> round-trips the actual value at the top level")]
+    public void Map_Guid_TopLevel_RoundTripsValue()
+    {
+        var mapper = new KyrolusObjectMapper();
+        var guid = Guid.NewGuid();
+
+        var result = mapper.Map<Guid, Guid>(guid);
+
+        result.ShouldBe(guid);
+    }
+
+    [Fact(DisplayName = "ComprehensiveCoverage: Map<DateTime,DateTime> round-trips the actual value at the top level")]
+    public void Map_DateTime_TopLevel_RoundTripsValue()
+    {
+        var mapper = new KyrolusObjectMapper();
+        var now = new DateTime(2026, 1, 1, 10, 30, 0, DateTimeKind.Utc);
+
+        var result = mapper.Map<DateTime, DateTime>(now);
+
+        result.ShouldBe(now);
+    }
+
+    [Fact(DisplayName = "ComprehensiveCoverage: Map<decimal?,decimal?> round-trips a nullable scalar at the top level")]
+    public void Map_NullableDecimal_TopLevel_RoundTripsValue()
+    {
+        var mapper = new KyrolusObjectMapper();
+        decimal? value = 9.99m;
+
+        var result = mapper.Map<decimal?, decimal?>(value);
+
+        result.ShouldBe(value);
+    }
 }

@@ -15,13 +15,13 @@ public class CompressionExtensionsTests
         var text = string.Concat(Enumerable.Repeat("Kyrolus JSON Payload with repetitive text fields: {\"id\":10,\"status\":\"active\"}; ", 50));
         var original = Encoding.UTF8.GetBytes(text);
 
-        var compressed = original.Compress(CompressionAlgorithm.Brotli);
+        var compressed = original.Compress(KyrolusCompressionAlgorithm.Brotli);
         compressed.ShouldNotBeEmpty();
 
         // Explicitly assert that compressed byte size is less than 30% of original
         compressed.Length.ShouldBeLessThan(original.Length / 3);
 
-        var decompressed = compressed.Decompress(CompressionAlgorithm.Brotli);
+        var decompressed = compressed.Decompress(KyrolusCompressionAlgorithm.Brotli);
         decompressed.ShouldBe(original);
     }
 
@@ -31,11 +31,11 @@ public class CompressionExtensionsTests
         var original = Encoding.UTF8.GetBytes("Testing ReadOnlySpan compression extension methods.");
         ReadOnlySpan<byte> span = original;
 
-        var compressed = span.Compress(CompressionAlgorithm.Gzip);
+        var compressed = span.Compress(KyrolusCompressionAlgorithm.Gzip);
         compressed.ShouldNotBeEmpty();
 
         ReadOnlySpan<byte> compressedSpan = compressed;
-        var decompressed = compressedSpan.Decompress(CompressionAlgorithm.Gzip);
+        var decompressed = compressedSpan.Decompress(KyrolusCompressionAlgorithm.Gzip);
         decompressed.ShouldBe(original);
     }
 
@@ -45,14 +45,14 @@ public class CompressionExtensionsTests
         var rawPattern = "Testing Base64 string compression extensions with Unicode: أهلاً وسهلاً بكم 🚀. ";
         var originalText = string.Concat(Enumerable.Repeat(rawPattern, 100));
 
-        var base64Compressed = originalText.CompressString(CompressionAlgorithm.Brotli);
+        var base64Compressed = originalText.CompressString(KyrolusCompressionAlgorithm.Brotli);
         base64Compressed.ShouldNotBeNullOrWhiteSpace();
 
         // Convert base64 back to compressed bytes to verify physical size shrunk significantly
         var compressedRawBytes = Convert.FromBase64String(base64Compressed);
         compressedRawBytes.Length.ShouldBeLessThan(Encoding.UTF8.GetByteCount(originalText) / 4);
 
-        var decompressedText = base64Compressed.DecompressString(CompressionAlgorithm.Brotli);
+        var decompressedText = base64Compressed.DecompressString(KyrolusCompressionAlgorithm.Brotli);
         decompressedText.ShouldBe(originalText);
     }
 
@@ -73,14 +73,14 @@ public class CompressionExtensionsTests
         using var source = new MemoryStream(original);
         using var destination = new MemoryStream();
 
-        await source.CompressToStreamAsync(destination, CompressionAlgorithm.Brotli);
+        await source.CompressToStreamAsync(destination, KyrolusCompressionAlgorithm.Brotli);
 
         // Verify compressed stream position/size is significantly smaller
         destination.Length.ShouldBeLessThan(original.Length / 3);
 
         destination.Position = 0;
         using var decompressed = new MemoryStream();
-        await destination.DecompressToStreamAsync(decompressed, CompressionAlgorithm.Brotli);
+        await destination.DecompressToStreamAsync(decompressed, KyrolusCompressionAlgorithm.Brotli);
 
         decompressed.ToArray().ShouldBe(original);
     }

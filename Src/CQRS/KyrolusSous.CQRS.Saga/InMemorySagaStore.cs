@@ -65,6 +65,21 @@ public sealed class InMemorySagaStore : IKyrolusSagaStore
         return Task.FromResult(incomplete);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// A plain linear scan: correlation-id lookups are rare relative to the store's other
+    /// operations (once per <see cref="KyrolusSagaCoordinator.StartAsync{TContext}"/> call with a
+    /// correlation id, not once per step), and this store exists for tests and single-node use, not
+    /// for a workload where that would matter. A database-backed store should index the column.
+    /// </remarks>
+    public Task<KyrolusSagaInstance?> GetByCorrelationIdAsync(string correlationId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+
+        var match = _instances.Values.FirstOrDefault(instance => instance.CorrelationId == correlationId);
+        return Task.FromResult(match is null ? null : Clone(match));
+    }
+
     /// <summary>Clears every stored instance (test resets).</summary>
     public void Clear() => _instances.Clear();
 
@@ -79,6 +94,8 @@ public sealed class InMemorySagaStore : IKyrolusSagaStore
         CompletedAtUtc = source.CompletedAtUtc,
         Error = source.Error,
         CorrelationId = source.CorrelationId,
+        StepCountAtStart = source.StepCountAtStart,
+        StepSignatureAtStart = source.StepSignatureAtStart,
         Version = source.Version
     };
 }

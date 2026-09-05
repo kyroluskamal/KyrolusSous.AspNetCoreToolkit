@@ -122,6 +122,11 @@ public sealed class KyrolusHttpLoggingMiddleware
 
     private string ResolveOrGenerateCorrelationId(HttpContext context)
     {
+        if (context.Items.TryGetValue("Kyrolus_CorrelationId", out var itemVal) && itemVal is string s && !string.IsNullOrWhiteSpace(s))
+        {
+            return s;
+        }
+
         if (context.Request.Headers.TryGetValue(_options.CorrelationHeaderName, out var headerVal) &&
             !string.IsNullOrWhiteSpace(headerVal))
         {

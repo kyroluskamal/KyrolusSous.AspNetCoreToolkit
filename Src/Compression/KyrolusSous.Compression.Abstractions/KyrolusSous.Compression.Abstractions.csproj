@@ -8,7 +8,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <RootNamespace>KyrolusSous.Compression</RootNamespace>
     <AssemblyName>KyrolusSous.Compression.Abstractions</AssemblyName>
-    <Description>Core abstractions and contracts for the Kyrolus compression ecosystem (ICompressor, ICompressionProvider, CompressionAlgorithm).</Description>
+    <Description>Core abstractions and contracts for the Kyrolus compression ecosystem (IKyrolusCompressor, IKyrolusCompressionProvider, KyrolusCompressionAlgorithm).</Description>
     <Authors>Kyrolus Sous</Authors>
     <PackageTags>compression;abstractions;contracts;interfaces</PackageTags>
   </PropertyGroup>

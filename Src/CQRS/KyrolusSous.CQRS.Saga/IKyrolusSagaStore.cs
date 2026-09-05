@@ -34,4 +34,19 @@ public interface IKyrolusSagaStore
     /// should pick back up.
     /// </summary>
     Task<IReadOnlyList<KyrolusSagaInstance>> GetIncompleteAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Retrieves the saga instance previously started with <paramref name="correlationId"/> as its
+    /// <see cref="KyrolusSagaInstance.CorrelationId"/>, or <see langword="null"/> if none exists.
+    /// </summary>
+    /// <remarks>
+    /// What <see cref="IKyrolusSagaCoordinator.StartAsync{TContext}"/> calls before starting a new
+    /// instance whenever a caller supplies a correlation id, so a retry that reuses the same id is
+    /// handed back the original instance instead of starting a second, independent saga for what
+    /// should be one logical operation. A database-backed implementation maps this onto an indexed
+    /// lookup (a non-unique index is enough, since more than one instance can theoretically share a
+    /// value if two callers raced to create the first one - see the coordinator's own remarks on that
+    /// race - in which case returning any one of them, deterministically, is an acceptable answer).
+    /// </remarks>
+    Task<KyrolusSagaInstance?> GetByCorrelationIdAsync(string correlationId, CancellationToken cancellationToken = default);
 }

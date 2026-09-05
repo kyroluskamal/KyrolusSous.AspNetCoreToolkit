@@ -10,12 +10,12 @@ public static class ZstdServiceCollectionExtensions
         Action<KyrolusResponseCompressionOptions>? configure = null)
     {
         KyrolusCompressionProvider.Instance.Register(ZstdCompressor.Instance);
-        services.TryAddSingleton<ICompressionProvider>(KyrolusCompressionProvider.Instance);
-        services.TryAddSingleton<ICompressor>(ZstdCompressor.Instance);
+        services.TryAddSingleton<IKyrolusCompressionProvider>(KyrolusCompressionProvider.Instance);
+        services.TryAddSingleton<IKyrolusCompressor>(ZstdCompressor.Instance);
 
         services.Configure<KyrolusResponseCompressionOptions>(options =>
         {
-            options.PreferredAlgorithm = CompressionAlgorithm.Zstd;
+            options.PreferredAlgorithm = KyrolusCompressionAlgorithm.Zstd;
             configure?.Invoke(options);
         });
 

@@ -7,7 +7,7 @@ public class KyrolusResponseCompressionOptionsTests
     {
         var options = new KyrolusResponseCompressionOptions();
 
-        options.PreferredAlgorithm.ShouldBe(CompressionAlgorithm.Brotli);
+        options.PreferredAlgorithm.ShouldBe(KyrolusCompressionAlgorithm.Brotli);
         options.CompressionLevel.ShouldBe(CompressionLevel.Fastest);
         options.MinSizeBytes.ShouldBe(1024);
         options.EnableForHttps.ShouldBeTrue();
@@ -32,7 +32,7 @@ public class KyrolusResponseCompressionOptionsTests
                .IncludeMimeType("application/custom-json")
                .ExcludeMimeType("text/plain")
                .WithMinSizeBytes(2048)
-               .WithPreferredAlgorithm(CompressionAlgorithm.Zstd);
+               .WithPreferredAlgorithm(KyrolusCompressionAlgorithm.Zstd);
 
         options.ExcludedPaths.ShouldContain("/api/stream");
         options.ExcludedPaths.ShouldContain("/hub/events");
@@ -40,7 +40,7 @@ public class KyrolusResponseCompressionOptionsTests
         options.IncludedMimeTypes.ShouldNotContain("text/plain");
         options.ExcludedMimeTypes.ShouldContain("text/plain");
         options.MinSizeBytes.ShouldBe(2048);
-        options.PreferredAlgorithm.ShouldBe(CompressionAlgorithm.Zstd);
+        options.PreferredAlgorithm.ShouldBe(KyrolusCompressionAlgorithm.Zstd);
     }
 
     [Fact(DisplayName = "Fluent configuration methods with invalid arguments should throw ArgumentException")]

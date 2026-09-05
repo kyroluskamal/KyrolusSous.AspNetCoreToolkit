@@ -76,7 +76,7 @@ public class KyrolusCompressionCachePayloadTransformer : IKyrolusCachePayloadTra
         var algorithmByte = payload[Header.Length + 1];
         var compressedSpan = payload.AsSpan(Header.Length + 2);
 
-        if (_provider is not null && _provider.TryGetCompressor((CompressionAlgorithm)algorithmByte, out var matchingCompressor) && matchingCompressor is not null)
+        if (_provider is not null && _provider.TryGetCompressor((KyrolusCompressionAlgorithm)algorithmByte, out var matchingCompressor) && matchingCompressor is not null)
         {
             return matchingCompressor.Decompress(compressedSpan);
         }

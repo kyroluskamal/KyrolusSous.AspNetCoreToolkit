@@ -16,14 +16,14 @@ public class KyrolusResponseCompressionMiddlewareTests
     }
 
     [Theory(DisplayName = "Middleware should compress response when client Accept-Encoding matches supported algorithm")]
-    [InlineData("br", "br", CompressionAlgorithm.Brotli)]
-    [InlineData("zstd", "zstd", CompressionAlgorithm.Zstd)]
-    [InlineData("gzip", "gzip", CompressionAlgorithm.Gzip)]
-    [InlineData("deflate", "deflate", CompressionAlgorithm.Deflate)]
+    [InlineData("br", "br", KyrolusCompressionAlgorithm.Brotli)]
+    [InlineData("zstd", "zstd", KyrolusCompressionAlgorithm.Zstd)]
+    [InlineData("gzip", "gzip", KyrolusCompressionAlgorithm.Gzip)]
+    [InlineData("deflate", "deflate", KyrolusCompressionAlgorithm.Deflate)]
     public async Task Middleware_ShouldCompressResponse_WhenEncodingIsSupported(
         string acceptEncoding,
         string expectedContentEncoding,
-        CompressionAlgorithm algorithm)
+        KyrolusCompressionAlgorithm algorithm)
     {
         var options = Options.Create(new KyrolusResponseCompressionOptions
         {
@@ -65,19 +65,19 @@ public class KyrolusResponseCompressionMiddlewareTests
     }
 
     [Theory(DisplayName = "Middleware fallback negotiation should select client supported algorithm when preferred is unsupported")]
-    [InlineData("br", "br", CompressionAlgorithm.Brotli)]
-    [InlineData("zstd", "zstd", CompressionAlgorithm.Zstd)]
-    [InlineData("gzip", "gzip", CompressionAlgorithm.Gzip)]
-    [InlineData("deflate", "deflate", CompressionAlgorithm.Deflate)]
+    [InlineData("br", "br", KyrolusCompressionAlgorithm.Brotli)]
+    [InlineData("zstd", "zstd", KyrolusCompressionAlgorithm.Zstd)]
+    [InlineData("gzip", "gzip", KyrolusCompressionAlgorithm.Gzip)]
+    [InlineData("deflate", "deflate", KyrolusCompressionAlgorithm.Deflate)]
     public async Task Middleware_FallbackNegotiation_WhenPreferredAlgorithmNotSupported(
         string acceptEncoding,
         string expectedContentEncoding,
-        CompressionAlgorithm expectedAlgorithm)
+        KyrolusCompressionAlgorithm expectedAlgorithm)
     {
         var options = Options.Create(new KyrolusResponseCompressionOptions
         {
             MinSizeBytes = 10,
-            PreferredAlgorithm = CompressionAlgorithm.Lz4
+            PreferredAlgorithm = KyrolusCompressionAlgorithm.Lz4
         });
 
         var payload = "{\"fallback\": true, \"data\": \"" + new string('F', 300) + "\"}";
@@ -446,7 +446,7 @@ public class KyrolusResponseCompressionMiddlewareTests
         var options = Options.Create(new KyrolusResponseCompressionOptions
         {
             MinSizeBytes = 10,
-            PreferredAlgorithm = CompressionAlgorithm.Brotli
+            PreferredAlgorithm = KyrolusCompressionAlgorithm.Brotli
         });
 
         var payloadBytes = Encoding.UTF8.GetBytes("Testing non async disposable stream disposal in FinishAsync.");
@@ -478,7 +478,7 @@ public class KyrolusResponseCompressionMiddlewareTests
         var options = Options.Create(new KyrolusResponseCompressionOptions
         {
             MinSizeBytes = 10,
-            PreferredAlgorithm = CompressionAlgorithm.Brotli
+            PreferredAlgorithm = KyrolusCompressionAlgorithm.Brotli
         });
 
         var payloadBytes = Encoding.UTF8.GetBytes("Testing Vary Accept-Encoding header generation on compressed responses.");
@@ -510,7 +510,7 @@ public class KyrolusResponseCompressionMiddlewareTests
         var options = Options.Create(new KyrolusResponseCompressionOptions
         {
             MinSizeBytes = 10,
-            PreferredAlgorithm = CompressionAlgorithm.Brotli
+            PreferredAlgorithm = KyrolusCompressionAlgorithm.Brotli
         });
 
         var payload = "Plain uncompressed text";
@@ -539,9 +539,9 @@ public class KyrolusResponseCompressionMiddlewareTests
         Encoding.UTF8.GetString(responseStream.ToArray()).ShouldBe(payload);
     }
 
-    private sealed class SynchronousOnlyCompressor : ICompressor
+    private sealed class SynchronousOnlyCompressor : IKyrolusCompressor
     {
-        public CompressionAlgorithm Algorithm => CompressionAlgorithm.Brotli;
+        public KyrolusCompressionAlgorithm Algorithm => KyrolusCompressionAlgorithm.Brotli;
         public byte[] Compress(ReadOnlySpan<byte> data) => data.ToArray();
         public byte[] Decompress(ReadOnlySpan<byte> compressedData) => compressedData.ToArray();
         public Task CompressAsync(Stream s, Stream d, CompressionLevel l = CompressionLevel.Fastest, CancellationToken ct = default) => s.CopyToAsync(d, ct);

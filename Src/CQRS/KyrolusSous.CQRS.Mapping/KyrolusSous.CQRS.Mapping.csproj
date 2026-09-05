@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\KyrolusSous.CQRS.Abstractions\KyrolusSous.CQRS.Abstractions.csproj" />
     <ProjectReference Include="..\..\Mapping\KyrolusSous.Mapping.Abstractions\KyrolusSous.Mapping.Abstractions.csproj" />
   </ItemGroup>
   <ItemGroup>

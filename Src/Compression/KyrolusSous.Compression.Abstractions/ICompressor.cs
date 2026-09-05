@@ -8,7 +8,7 @@ public interface IKyrolusCompressor
     /// <summary>
     /// Gets the algorithm implemented by this compressor instance.
     /// </summary>
-    CompressionAlgorithm Algorithm { get; }
+    KyrolusCompressionAlgorithm Algorithm { get; }
 
     /// <summary>
     /// Compresses uncompressed data into a compressed byte array.
@@ -69,11 +69,4 @@ public interface IKyrolusCompressor
     Stream CreateDecompressionStream(
         Stream inputStream,
         bool leaveOpen = false);
-}
-
-/// <summary>
-/// Backward-compatibility interface for <see cref="IKyrolusCompressor"/>.
-/// </summary>
-public interface ICompressor : IKyrolusCompressor
-{
 }

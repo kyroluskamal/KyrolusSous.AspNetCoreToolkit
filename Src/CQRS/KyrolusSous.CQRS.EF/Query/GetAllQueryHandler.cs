@@ -26,6 +26,19 @@ public class GetAllQueryHandler<TDbcontext, TResponse, TKey>(IKyrolusUnitOfWork 
 
             if (softRepo is not null)
             {
+                // Neither GetAllIncludingDeletedAsync nor GetDeletedOnlyAsync below has a projected
+                // overload, so query.Selector (potentially used to redact PII) would otherwise be
+                // silently dropped and full, un-projected entities returned instead - a
+                // silent-wrong-data outcome. Failing loudly here instead matches this codebase's
+                // "fail closed" precedent for a request this code path cannot honor.
+                if (query.Selector is not null)
+                {
+                    throw new InvalidOperationException(
+                        "[Kyrolus CQRS] GetAllQuery.Selector is not supported when browsing soft-deleted " +
+                        "records (IncludeDeleted/DeletedOnly) - drop the projection, or query without " +
+                        "IncludeDeleted/DeletedOnly.");
+                }
+
                 // IncludeProperties is passed separately below, so only IncludeGraph + IncludeExpressions
                 // belong in this merge - folding IncludeProperties in here too would duplicate it.
                 var graph = KyrolusIncludeMerge.MergeGraph(query.IncludeGraph, query.IncludeExpressions);

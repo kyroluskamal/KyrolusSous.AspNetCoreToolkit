@@ -41,9 +41,17 @@ public sealed class KyrolusValidationBehavior<TRequest, TResponse>(
         // branch rather than alongside it.
         List<KyrolusValidationFailure> collected = [];
 
+        // Opt-in per-request scoping (RuleSets/Groups/Profiles/MinimumSeverity) via
+        // IKyrolusValidationContextRequest - see that interface's remarks. A request that does not
+        // implement it, or returns a null context, falls straight through to the context-free
+        // overloads below exactly as before this feature existed.
+        var validationContext = (request as IKyrolusValidationContextRequest)?.ValidationContext;
+
         if (_engine is not null)
         {
-            var engineResult = await _engine.ValidateAsync(request, cancellationToken).ConfigureAwait(false);
+            var engineResult = validationContext is not null
+                ? await _engine.ValidateAsync(request, validationContext, cancellationToken).ConfigureAwait(false)
+                : await _engine.ValidateAsync(request, cancellationToken).ConfigureAwait(false);
             if (engineResult is not null && engineResult.Count > 0)
             {
                 collected.AddRange(engineResult);
@@ -53,7 +61,9 @@ public sealed class KyrolusValidationBehavior<TRequest, TResponse>(
         foreach (var validator in _validators)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var result = await validator.ValidateAsync(request, cancellationToken).ConfigureAwait(false);
+            var result = validationContext is not null && validator is IKyrolusRequestValidatorWithContext<TRequest> contextValidator
+                ? await contextValidator.ValidateAsync(request, validationContext, cancellationToken).ConfigureAwait(false)
+                : await validator.ValidateAsync(request, cancellationToken).ConfigureAwait(false);
             if (result is not null && result.Count > 0)
             {
                 collected.AddRange(result);

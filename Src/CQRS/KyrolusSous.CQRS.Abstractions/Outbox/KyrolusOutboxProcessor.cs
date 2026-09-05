@@ -35,6 +35,8 @@ public sealed class KyrolusOutboxProcessor(
     /// </summary>
     public async Task<int> ProcessPendingMessagesAsync(int batchSize = 50, CancellationToken cancellationToken = default)
     {
+        batchSize = Math.Clamp(batchSize, 1, KyrolusOutboxLimits.MaxBatchSize);
+
         var pending = await _outboxStore.GetPendingAsync(batchSize, cancellationToken).ConfigureAwait(false);
         if (pending.Count == 0) return 0;
 
@@ -87,9 +89,15 @@ public sealed class KyrolusOutboxProcessor(
             catch (Exception ex)
             {
                 _logger?.LogWarning(ex, "[Kyrolus CQRS Outbox] Failed to process outbox message {MessageId} ({EventType})", message.Id, message.EventType);
+
+                // Captured before MarkFailedAsync runs: some stores (KyrolusInMemoryOutboxStore
+                // included) hand back the same mutable instance they persist, so message.RetryCount
+                // would already reflect the post-increment value once the call below returns.
+                var willDeadLetter = message.RetryCount + 1 >= KyrolusOutboxLimits.MaxRetryCount;
+
                 await _outboxStore.MarkFailedAsync(message.Id, ex.Message, cancellationToken).ConfigureAwait(false);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                RecordOutcome(activity, message.EventType, "failed");
+                RecordOutcome(activity, message.EventType, willDeadLetter ? "dead-lettered" : "failed");
             }
         }
 

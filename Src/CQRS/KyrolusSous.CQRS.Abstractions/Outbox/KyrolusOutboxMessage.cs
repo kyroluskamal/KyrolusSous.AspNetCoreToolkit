@@ -14,4 +14,5 @@ public sealed class KyrolusOutboxMessage : IKyrolusOutboxMessage
     public string? Error { get; set; }
     public int RetryCount { get; set; }
     public KyrolusOutboxMessageStatus Status { get; set; } = KyrolusOutboxMessageStatus.Pending;
+    public DateTimeOffset? NextRetryAtUtc { get; set; }
 }

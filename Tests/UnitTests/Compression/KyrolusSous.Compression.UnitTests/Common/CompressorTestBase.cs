@@ -2,8 +2,8 @@ namespace KyrolusSous.Compression.UnitTests.Common;
 
 public abstract class CompressorTestBase
 {
-    protected abstract ICompressor Compressor { get; }
-    protected abstract CompressionAlgorithm ExpectedAlgorithm { get; }
+    protected abstract IKyrolusCompressor Compressor { get; }
+    protected abstract KyrolusCompressionAlgorithm ExpectedAlgorithm { get; }
 
     [Fact(DisplayName = "Algorithm should match the expected compression algorithm")]
     public void Algorithm_ShouldMatchExpectedAlgorithm()

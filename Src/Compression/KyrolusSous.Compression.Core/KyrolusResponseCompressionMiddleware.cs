@@ -2,15 +2,15 @@ namespace KyrolusSous.Compression;
 
 /// <summary>
 /// Middleware that automatically compresses HTTP response bodies based on MIME types, routes, and client Accept-Encoding.
-/// Decoupled from specific compressor implementations via <see cref="ICompressionProvider"/>.
+/// Decoupled from specific compressor implementations via <see cref="IKyrolusCompressionProvider"/>.
 /// </summary>
 public sealed class KyrolusResponseCompressionMiddleware(
     RequestDelegate next,
     IOptions<KyrolusResponseCompressionOptions> options,
-    ICompressionProvider? provider = null)
+    IKyrolusCompressionProvider? provider = null)
 {
     private readonly KyrolusResponseCompressionOptions _options = options?.Value ?? new KyrolusResponseCompressionOptions();
-    private readonly ICompressionProvider _provider = provider ?? KyrolusCompressionProvider.Instance;
+    private readonly IKyrolusCompressionProvider _provider = provider ?? KyrolusCompressionProvider.Instance;
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -74,7 +74,7 @@ public sealed class KyrolusResponseCompressionMiddleware(
         return true;
     }
 
-    private CompressionAlgorithm? DetermineAlgorithm(HttpContext context)
+    private KyrolusCompressionAlgorithm? DetermineAlgorithm(HttpContext context)
     {
         var acceptEncoding = context.Request.Headers.AcceptEncoding.ToString();
         if (string.IsNullOrWhiteSpace(acceptEncoding)) return null;
@@ -89,38 +89,38 @@ public sealed class KyrolusResponseCompressionMiddleware(
             return _options.PreferredAlgorithm;
 
         if (acceptEncoding.Contains("br", StringComparison.OrdinalIgnoreCase))
-            return CompressionAlgorithm.Brotli;
+            return KyrolusCompressionAlgorithm.Brotli;
 
         if (acceptEncoding.Contains("zstd", StringComparison.OrdinalIgnoreCase))
-            return CompressionAlgorithm.Zstd;
+            return KyrolusCompressionAlgorithm.Zstd;
 
         if (acceptEncoding.Contains("gzip", StringComparison.OrdinalIgnoreCase))
-            return CompressionAlgorithm.Gzip;
+            return KyrolusCompressionAlgorithm.Gzip;
 
         if (acceptEncoding.Contains("deflate", StringComparison.OrdinalIgnoreCase))
-            return CompressionAlgorithm.Deflate;
+            return KyrolusCompressionAlgorithm.Deflate;
 
         return null;
     }
 
-    private static bool IsEncodingSupported(string acceptEncoding, CompressionAlgorithm algorithm) => algorithm switch
+    private static bool IsEncodingSupported(string acceptEncoding, KyrolusCompressionAlgorithm algorithm) => algorithm switch
     {
-        CompressionAlgorithm.Brotli => acceptEncoding.Contains("br", StringComparison.OrdinalIgnoreCase),
-        CompressionAlgorithm.Zstd => acceptEncoding.Contains("zstd", StringComparison.OrdinalIgnoreCase),
-        CompressionAlgorithm.Gzip => acceptEncoding.Contains("gzip", StringComparison.OrdinalIgnoreCase),
-        CompressionAlgorithm.Deflate => acceptEncoding.Contains("deflate", StringComparison.OrdinalIgnoreCase),
+        KyrolusCompressionAlgorithm.Brotli => acceptEncoding.Contains("br", StringComparison.OrdinalIgnoreCase),
+        KyrolusCompressionAlgorithm.Zstd => acceptEncoding.Contains("zstd", StringComparison.OrdinalIgnoreCase),
+        KyrolusCompressionAlgorithm.Gzip => acceptEncoding.Contains("gzip", StringComparison.OrdinalIgnoreCase),
+        KyrolusCompressionAlgorithm.Deflate => acceptEncoding.Contains("deflate", StringComparison.OrdinalIgnoreCase),
         _ => false
     };
 
     private sealed class ResponseCompressionStreamWrapper(
         HttpContext context,
         Stream originalStream,
-        ICompressor compressor,
+        IKyrolusCompressor compressor,
         KyrolusResponseCompressionOptions options) : Stream
     {
         private readonly HttpContext _context = context;
         private readonly Stream _originalStream = originalStream;
-        private readonly ICompressor _compressor = compressor;
+        private readonly IKyrolusCompressor _compressor = compressor;
         private readonly KyrolusResponseCompressionOptions _options = options;
         private Stream? _compressorStream;
         private bool _headersEvaluated;
@@ -236,11 +236,11 @@ public sealed class KyrolusResponseCompressionMiddleware(
             return _options.IncludedMimeTypes.Contains(mimeType);
         }
 
-        private static string GetEncodingHeaderValue(CompressionAlgorithm algorithm) => algorithm switch
+        private static string GetEncodingHeaderValue(KyrolusCompressionAlgorithm algorithm) => algorithm switch
         {
-            CompressionAlgorithm.Zstd => "zstd",
-            CompressionAlgorithm.Gzip => "gzip",
-            CompressionAlgorithm.Deflate => "deflate",
+            KyrolusCompressionAlgorithm.Zstd => "zstd",
+            KyrolusCompressionAlgorithm.Gzip => "gzip",
+            KyrolusCompressionAlgorithm.Deflate => "deflate",
             _ => "br"
         };
 

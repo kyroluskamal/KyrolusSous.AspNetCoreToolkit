@@ -9,13 +9,13 @@ public class ServiceCollectionExtensionsTests
         services.AddKyrolusBrotliCompression(opt => opt.WithMinSizeBytes(512));
 
         var sp = services.BuildServiceProvider();
-        var compressor = sp.GetRequiredService<ICompressor>();
-        var provider = sp.GetRequiredService<ICompressionProvider>();
+        var compressor = sp.GetRequiredService<IKyrolusCompressor>();
+        var provider = sp.GetRequiredService<IKyrolusCompressionProvider>();
         var options = sp.GetRequiredService<IOptions<KyrolusResponseCompressionOptions>>().Value;
 
         compressor.ShouldBeSameAs(BrotliCompressor.Instance);
         provider.ShouldNotBeNull();
-        options.PreferredAlgorithm.ShouldBe(CompressionAlgorithm.Brotli);
+        options.PreferredAlgorithm.ShouldBe(KyrolusCompressionAlgorithm.Brotli);
         options.MinSizeBytes.ShouldBe(512);
     }
 
@@ -26,11 +26,11 @@ public class ServiceCollectionExtensionsTests
         services.AddKyrolusZstdCompression();
 
         var sp = services.BuildServiceProvider();
-        var compressor = sp.GetRequiredService<ICompressor>();
+        var compressor = sp.GetRequiredService<IKyrolusCompressor>();
         var options = sp.GetRequiredService<IOptions<KyrolusResponseCompressionOptions>>().Value;
 
         compressor.ShouldBeSameAs(ZstdCompressor.Instance);
-        options.PreferredAlgorithm.ShouldBe(CompressionAlgorithm.Zstd);
+        options.PreferredAlgorithm.ShouldBe(KyrolusCompressionAlgorithm.Zstd);
     }
 
     [Fact(DisplayName = "AddKyrolusLz4Compression should register Lz4Compressor and configure preferred algorithm to Lz4")]
@@ -40,11 +40,11 @@ public class ServiceCollectionExtensionsTests
         services.AddKyrolusLz4Compression();
 
         var sp = services.BuildServiceProvider();
-        var compressor = sp.GetRequiredService<ICompressor>();
+        var compressor = sp.GetRequiredService<IKyrolusCompressor>();
         var options = sp.GetRequiredService<IOptions<KyrolusResponseCompressionOptions>>().Value;
 
         compressor.ShouldBeSameAs(Lz4Compressor.Instance);
-        options.PreferredAlgorithm.ShouldBe(CompressionAlgorithm.Lz4);
+        options.PreferredAlgorithm.ShouldBe(KyrolusCompressionAlgorithm.Lz4);
     }
 
     [Fact(DisplayName = "AddKyrolusSnappyCompression should register SnappyCompressor and configure preferred algorithm to Snappy")]
@@ -54,11 +54,11 @@ public class ServiceCollectionExtensionsTests
         services.AddKyrolusSnappyCompression();
 
         var sp = services.BuildServiceProvider();
-        var compressor = sp.GetRequiredService<ICompressor>();
+        var compressor = sp.GetRequiredService<IKyrolusCompressor>();
         var options = sp.GetRequiredService<IOptions<KyrolusResponseCompressionOptions>>().Value;
 
         compressor.ShouldBeSameAs(SnappyCompressor.Instance);
-        options.PreferredAlgorithm.ShouldBe(CompressionAlgorithm.Snappy);
+        options.PreferredAlgorithm.ShouldBe(KyrolusCompressionAlgorithm.Snappy);
     }
 
     [Fact(DisplayName = "AddKyrolusGzipCompression should register GzipCompressor and configure preferred algorithm to Gzip")]
@@ -68,11 +68,11 @@ public class ServiceCollectionExtensionsTests
         services.AddKyrolusGzipCompression();
 
         var sp = services.BuildServiceProvider();
-        var compressor = sp.GetRequiredService<ICompressor>();
+        var compressor = sp.GetRequiredService<IKyrolusCompressor>();
         var options = sp.GetRequiredService<IOptions<KyrolusResponseCompressionOptions>>().Value;
 
         compressor.ShouldBeSameAs(GzipCompressor.Instance);
-        options.PreferredAlgorithm.ShouldBe(CompressionAlgorithm.Gzip);
+        options.PreferredAlgorithm.ShouldBe(KyrolusCompressionAlgorithm.Gzip);
     }
 
     [Fact(DisplayName = "AddKyrolusDeflateCompression should register DeflateCompressor and configure preferred algorithm to Deflate")]
@@ -82,10 +82,10 @@ public class ServiceCollectionExtensionsTests
         services.AddKyrolusDeflateCompression();
 
         var sp = services.BuildServiceProvider();
-        var compressor = sp.GetRequiredService<ICompressor>();
+        var compressor = sp.GetRequiredService<IKyrolusCompressor>();
         var options = sp.GetRequiredService<IOptions<KyrolusResponseCompressionOptions>>().Value;
 
         compressor.ShouldBeSameAs(DeflateCompressor.Instance);
-        options.PreferredAlgorithm.ShouldBe(CompressionAlgorithm.Deflate);
+        options.PreferredAlgorithm.ShouldBe(KyrolusCompressionAlgorithm.Deflate);
     }
 }

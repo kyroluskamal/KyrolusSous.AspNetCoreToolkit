@@ -190,8 +190,8 @@ public static class ServiceCollectionExtensions
 
         if (options.EnableCompression)
         {
-            var compressor = serviceProvider.GetService<ICompressor>();
-            var provider = serviceProvider.GetService<ICompressionProvider>();
+            var compressor = serviceProvider.GetService<IKyrolusCompressor>();
+            var provider = serviceProvider.GetService<IKyrolusCompressionProvider>();
 
             IKyrolusCachePayloadTransformer transformer;
             if (compressor is not null)
@@ -202,7 +202,7 @@ public static class ServiceCollectionExtensions
                     options.CompressionThresholdBytes,
                     options.CompressionLevel);
             }
-            else if (provider is not null && provider.TryGetCompressor(options.CompressionAlgorithm, out var resolvedComp) && resolvedComp is not null)
+            else if (provider is not null && provider.TryGetCompressor(options.KyrolusCompressionAlgorithm, out var resolvedComp) && resolvedComp is not null)
             {
                 transformer = new KyrolusCompressionCachePayloadTransformer(
                     resolvedComp,

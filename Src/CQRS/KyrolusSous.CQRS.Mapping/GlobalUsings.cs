@@ -1,3 +1,15 @@
+global using System.Collections.Generic;
+global using System.Reflection;
+global using System.Threading;
+global using System.Threading.Tasks;
+global using KyrolusSous.CQRS.Abstractions.Models;
+global using KyrolusSous.CQRS.Abstractions.Security;
 global using KyrolusSous.Mapping.Abstractions;
+global using KyrolusSous.Mapping.Abstractions.Context;
+global using KyrolusSous.Mapping.Abstractions.Contracts;
+global using KyrolusSous.Mediator.Abstractions.Attributes;
+global using KyrolusSous.Mediator.Abstractions.Interfaces;
 global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.DependencyInjection.Extensions;
+global using KyrolusSous.CQRS.Mapping.Extensions;
+global using KyrolusSous.CQRS.Mapping.Contracts;

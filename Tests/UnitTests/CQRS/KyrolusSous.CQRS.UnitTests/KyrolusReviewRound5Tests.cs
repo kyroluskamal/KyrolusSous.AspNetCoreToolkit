@@ -330,7 +330,9 @@ public sealed class KyrolusReviewRound5Tests
         await handler.Handle(command, CancellationToken.None);
 
         captured.ShouldNotBeNull();
-        Should.Throw<KyrolusSecurityException>(() => captured!(new UpdateSettersBuilder<ProtectedPropsEntity>()));
+#pragma warning disable EF1001 // UpdateSettersBuilder is an EF Core internal API used by this test.
+        _ = Should.Throw<KyrolusSecurityException>(() => captured!(new UpdateSettersBuilder<ProtectedPropsEntity>()));
+#pragma warning restore EF1001
     }
 
     [Fact(DisplayName = "Bug4 EF: ExecuteUpdateCommandHandler still allows an ordinary (non-protected) property")]
@@ -354,7 +356,9 @@ public sealed class KyrolusReviewRound5Tests
         await handler.Handle(command, CancellationToken.None);
 
         captured.ShouldNotBeNull();
+#pragma warning disable EF1001 // UpdateSettersBuilder is an EF Core internal API used by this test.
         Should.NotThrow(() => captured!(new UpdateSettersBuilder<ProtectedPropsEntity>()));
+#pragma warning restore EF1001
     }
 
     private static object GetSampleValue(string propertyName) => propertyName switch

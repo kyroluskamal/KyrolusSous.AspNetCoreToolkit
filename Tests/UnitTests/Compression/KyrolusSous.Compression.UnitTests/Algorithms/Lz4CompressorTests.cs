@@ -2,14 +2,14 @@ namespace KyrolusSous.Compression.UnitTests.Algorithms;
 
 public class Lz4CompressorTests : CompressorTestBase
 {
-    protected override ICompressor Compressor => Lz4Compressor.Instance;
-    protected override CompressionAlgorithm ExpectedAlgorithm => CompressionAlgorithm.Lz4;
+    protected override IKyrolusCompressor Compressor => Lz4Compressor.Instance;
+    protected override KyrolusCompressionAlgorithm ExpectedAlgorithm => KyrolusCompressionAlgorithm.Lz4;
 
     [Fact(DisplayName = "Lz4Compressor Instance singleton should not be null and have Lz4 algorithm")]
     public void Instance_ShouldNotBeNull()
     {
         Lz4Compressor.Instance.ShouldNotBeNull();
-        Lz4Compressor.Instance.Algorithm.ShouldBe(CompressionAlgorithm.Lz4);
+        Lz4Compressor.Instance.Algorithm.ShouldBe(KyrolusCompressionAlgorithm.Lz4);
     }
 
     [Fact(DisplayName = "Decompress truncated LZ4 payload less than 4 bytes should throw InvalidOperationException")]

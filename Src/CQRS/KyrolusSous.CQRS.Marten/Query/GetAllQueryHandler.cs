@@ -17,6 +17,7 @@ public class GetAllQueryHandler<TSession, TResponse, TKey>(IKyrolusMartenUnitOfW
             var soft = TryResolveSoftRepository();
             if (soft is not null)
             {
+                ThrowIfProjectionUnsupported(query);
                 return await soft.GetDeletedOnlyAsync(options, cancellationToken).ConfigureAwait(false);
             }
         }
@@ -26,6 +27,7 @@ public class GetAllQueryHandler<TSession, TResponse, TKey>(IKyrolusMartenUnitOfW
             var soft = TryResolveSoftRepository();
             if (soft is not null)
             {
+                ThrowIfProjectionUnsupported(query);
                 return await soft.GetAllIncludingDeletedAsync(options, cancellationToken).ConfigureAwait(false);
             }
         }
@@ -71,6 +73,24 @@ public class GetAllQueryHandler<TSession, TResponse, TKey>(IKyrolusMartenUnitOfW
         catch (InvalidOperationException ex) when (ex.IsRepositoryNotRegistered())
         {
             return null;
+        }
+    }
+
+    /// <remarks>
+    /// Neither <see cref="IKyrolusMartenSoftDeleteRepositoryAsync{TSession, TEntity, TKey}.GetAllIncludingDeletedAsync"/>
+    /// nor <c>GetDeletedOnlyAsync</c> has a projected overload, so a caller's <see cref="GetAllQuery{TResponse}.Selector"/>
+    /// (potentially used to redact PII) would otherwise be silently dropped and full, un-projected
+    /// entities returned instead - a silent-wrong-data outcome. Failing loudly here instead matches
+    /// this codebase's "fail closed" precedent for a request the current code path cannot honor.
+    /// </remarks>
+    private static void ThrowIfProjectionUnsupported(GetAllQuery<TResponse> query)
+    {
+        if (query.Selector is not null)
+        {
+            throw new InvalidOperationException(
+                "[Kyrolus CQRS] GetAllQuery.Selector is not supported when browsing soft-deleted " +
+                "records (IncludeDeleted/DeletedOnly) - drop the projection, or query without " +
+                "IncludeDeleted/DeletedOnly.");
         }
     }
 }

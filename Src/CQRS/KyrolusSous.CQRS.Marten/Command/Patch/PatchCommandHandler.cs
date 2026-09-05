@@ -1,3 +1,5 @@
+using KyrolusSous.CQRS.Marten.Command.Bulk;
+
 namespace KyrolusSous.CQRS.Marten.Command.Patch;
 
 public class PatchCommandHandler<TSession, TResponse, TKey>(IKyrolusMartenUnitOfWork<TSession> unitOfWork)
@@ -8,6 +10,20 @@ public class PatchCommandHandler<TSession, TResponse, TKey>(IKyrolusMartenUnitOf
 {
     public async Task<TResponse?> Handle(PatchCommand<TResponse, TKey> command, CancellationToken cancellationToken)
     {
+        // Always-on, independent of IKyrolusPropertyUpdateRequest.AllowedProperties (which is opt-in
+        // and does nothing when a caller never sets it): the document's identity and Marten's own
+        // concurrency/revision tracking must never be writable through Patch regardless of allow-list
+        // configuration. Mirrors ExecuteUpdateCommandHandler's guard for the same
+        // Dictionary<string, object> input shape - see MartenProtectedPropertyGuard.
+        foreach (var name in command.Updates.Keys)
+        {
+            var prop = typeof(TResponse).GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (prop is not null)
+            {
+                MartenProtectedPropertyGuard.ThrowIfProtected(prop, typeof(TResponse), "Patch");
+            }
+        }
+
         var repo = unitOfWork.GetRepository<IKyrolusMartenRepositoryAsync<TSession, TResponse, TKey>>();
         var result = await repo.PatchAsync(command.Id, command.Updates, command.TenantId, cancellationToken).ConfigureAwait(false);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

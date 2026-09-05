@@ -13,20 +13,20 @@ public sealed class KyrolusCompressionCachePayloadTransformerTests
     }
 
     [Theory(DisplayName = "KyrolusCompressionCachePayloadTransformer: Supported compressors MUST compress and physically reduce byte size")]
-    [InlineData(CompressionAlgorithm.Brotli)]
-    [InlineData(CompressionAlgorithm.Gzip)]
-    [InlineData(CompressionAlgorithm.Zstd)]
-    [InlineData(CompressionAlgorithm.Lz4)]
-    [InlineData(CompressionAlgorithm.Snappy)]
-    public void Compressors_Compress_And_PhysicallyReduceSize(CompressionAlgorithm algorithm)
+    [InlineData(KyrolusCompressionAlgorithm.Brotli)]
+    [InlineData(KyrolusCompressionAlgorithm.Gzip)]
+    [InlineData(KyrolusCompressionAlgorithm.Zstd)]
+    [InlineData(KyrolusCompressionAlgorithm.Lz4)]
+    [InlineData(KyrolusCompressionAlgorithm.Snappy)]
+    public void Compressors_Compress_And_PhysicallyReduceSize(KyrolusCompressionAlgorithm algorithm)
     {
-        ICompressor compressor = algorithm switch
+        IKyrolusCompressor compressor = algorithm switch
         {
-            CompressionAlgorithm.Brotli => new BrotliCompressor(),
-            CompressionAlgorithm.Gzip => new GzipCompressor(),
-            CompressionAlgorithm.Zstd => new ZstdCompressor(),
-            CompressionAlgorithm.Lz4 => new Lz4Compressor(),
-            CompressionAlgorithm.Snappy => new SnappyCompressor(),
+            KyrolusCompressionAlgorithm.Brotli => new BrotliCompressor(),
+            KyrolusCompressionAlgorithm.Gzip => new GzipCompressor(),
+            KyrolusCompressionAlgorithm.Zstd => new ZstdCompressor(),
+            KyrolusCompressionAlgorithm.Lz4 => new Lz4Compressor(),
+            KyrolusCompressionAlgorithm.Snappy => new SnappyCompressor(),
             _ => throw new ArgumentOutOfRangeException(nameof(algorithm))
         };
 
@@ -89,13 +89,13 @@ public sealed class KyrolusCompressionCachePayloadTransformerTests
     {
         var compressor = new BrotliCompressor();
         var transformer = new KyrolusCompressionCachePayloadTransformer(compressor);
-        var corrupted = new byte[] { (byte)'K', (byte)'Y', (byte)'C', (byte)'X', 99, (byte)CompressionAlgorithm.Brotli, 1, 2, 3 };
+        var corrupted = new byte[] { (byte)'K', (byte)'Y', (byte)'C', (byte)'X', 99, (byte)KyrolusCompressionAlgorithm.Brotli, 1, 2, 3 };
 
         var restored = transformer.Restore(corrupted);
         restored.ShouldBe(corrupted);
     }
 
-    [Fact(DisplayName = "KyrolusCompressionCachePayloadTransformer: Dynamic decompression via ICompressionProvider")]
+    [Fact(DisplayName = "KyrolusCompressionCachePayloadTransformer: Dynamic decompression via IKyrolusCompressionProvider")]
     public void DynamicDecompression_ViaProvider()
     {
         var provider = new KyrolusCompressionProvider();

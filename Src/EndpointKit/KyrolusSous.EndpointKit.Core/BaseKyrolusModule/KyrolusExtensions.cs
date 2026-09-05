@@ -1,3 +1,4 @@
+using KyrolusSous.EndpointKit.Core.Middleware;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -7,6 +8,8 @@ public static class KyrolusExtensions
 
     public static IServiceCollection AddKyrolus(this IServiceCollection services, Action<KyrolusModuleBuilder> configure)
     {
+        services.AddKyrolusCorrelation();
+
         var builder = new KyrolusModuleBuilder();
         configure(builder);
 

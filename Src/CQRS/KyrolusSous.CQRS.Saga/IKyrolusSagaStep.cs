@@ -16,8 +16,18 @@ namespace KyrolusSous.CQRS.Saga;
 /// way to undo "the card was charged" is to run code that refunds it. <see cref="ExecuteAsync"/> is
 /// that forward action; <see cref="CompensateAsync"/> is its undo, and the coordinator only ever calls
 /// it for a step whose <see cref="ExecuteAsync"/> already completed.
+/// <para>
+/// <typeparamref name="TContext"/> is constrained to <see langword="class"/> for the same reason
+/// <see cref="KyrolusSagaDefinition{TContext}"/> is: a step is only ever driven by
+/// <see cref="KyrolusSagaCoordinator"/>, which passes the one context instance through every step by
+/// reference and expects a step's in-place write to be visible to the step after it, and to whatever
+/// gets serialized once the step returns. A value-type <typeparamref name="TContext"/> would receive a
+/// stack copy in <see cref="ExecuteAsync"/>, so any mutation would vanish the moment the method
+/// returns - silently, with no exception.
+/// </para>
 /// </remarks>
 public interface IKyrolusSagaStep<TContext>
+    where TContext : class
 {
     /// <summary>A short, stable name for this step - used in logs and diagnostics.</summary>
     string Name { get; }

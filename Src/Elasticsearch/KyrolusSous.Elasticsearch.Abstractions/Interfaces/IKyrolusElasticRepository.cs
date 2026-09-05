@@ -10,7 +10,17 @@ public interface IKyrolusElasticRepository<TDocument, TId> where TDocument : cla
 {
     string IndexName { get; }
 
-    Task<bool> AddAsync(TDocument document, TId id, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Indexes (creates or fully replaces) the document. When <paramref name="ifSeqNo"/> and
+    /// <paramref name="ifPrimaryTerm"/> are both supplied (Elasticsearch's own optimistic-concurrency
+    /// primitive - captured from a prior read of the same document), the write is a compare-and-swap:
+    /// Elasticsearch performs it atomically and rejects it with a version conflict if the document
+    /// changed since, surfaced here as a <see langword="false"/> return rather than an unconditional
+    /// overwrite. Both must be supplied together, or neither - a lone value is rejected by
+    /// Elasticsearch itself. Omitting both (the default) is unconditional, matching prior behavior
+    /// exactly.
+    /// </summary>
+    Task<bool> AddAsync(TDocument document, TId id, long? ifSeqNo = null, long? ifPrimaryTerm = null, CancellationToken cancellationToken = default);
 
     Task<int> AddManyAsync(IEnumerable<(TDocument Document, TId Id)> items, CancellationToken cancellationToken = default);
 

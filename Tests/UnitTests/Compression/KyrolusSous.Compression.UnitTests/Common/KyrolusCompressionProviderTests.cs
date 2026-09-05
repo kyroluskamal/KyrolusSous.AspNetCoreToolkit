@@ -14,12 +14,12 @@ public class KyrolusCompressionProviderTests
         provider.Register(GzipCompressor.Instance);
         provider.Register(DeflateCompressor.Instance);
 
-        provider.GetCompressor(CompressionAlgorithm.Brotli).ShouldBeSameAs(BrotliCompressor.Instance);
-        provider.GetCompressor(CompressionAlgorithm.Zstd).ShouldBeSameAs(ZstdCompressor.Instance);
-        provider.GetCompressor(CompressionAlgorithm.Lz4).ShouldBeSameAs(Lz4Compressor.Instance);
-        provider.GetCompressor(CompressionAlgorithm.Snappy).ShouldBeSameAs(SnappyCompressor.Instance);
-        provider.GetCompressor(CompressionAlgorithm.Gzip).ShouldBeSameAs(GzipCompressor.Instance);
-        provider.GetCompressor(CompressionAlgorithm.Deflate).ShouldBeSameAs(DeflateCompressor.Instance);
+        provider.GetCompressor(KyrolusCompressionAlgorithm.Brotli).ShouldBeSameAs(BrotliCompressor.Instance);
+        provider.GetCompressor(KyrolusCompressionAlgorithm.Zstd).ShouldBeSameAs(ZstdCompressor.Instance);
+        provider.GetCompressor(KyrolusCompressionAlgorithm.Lz4).ShouldBeSameAs(Lz4Compressor.Instance);
+        provider.GetCompressor(KyrolusCompressionAlgorithm.Snappy).ShouldBeSameAs(SnappyCompressor.Instance);
+        provider.GetCompressor(KyrolusCompressionAlgorithm.Gzip).ShouldBeSameAs(GzipCompressor.Instance);
+        provider.GetCompressor(KyrolusCompressionAlgorithm.Deflate).ShouldBeSameAs(DeflateCompressor.Instance);
 
         provider.DefaultCompressor.ShouldBeSameAs(BrotliCompressor.Instance);
     }
@@ -29,7 +29,7 @@ public class KyrolusCompressionProviderTests
     {
         var provider = new KyrolusCompressionProvider();
 
-        provider.TryGetCompressor(CompressionAlgorithm.Zstd, out var compressor).ShouldBeFalse();
+        provider.TryGetCompressor(KyrolusCompressionAlgorithm.Zstd, out var compressor).ShouldBeFalse();
         compressor.ShouldBeNull();
     }
 
@@ -39,7 +39,7 @@ public class KyrolusCompressionProviderTests
         var provider = new KyrolusCompressionProvider();
         provider.Register(GzipCompressor.Instance);
 
-        provider.TryGetCompressor(CompressionAlgorithm.Gzip, out var compressor).ShouldBeTrue();
+        provider.TryGetCompressor(KyrolusCompressionAlgorithm.Gzip, out var compressor).ShouldBeTrue();
         compressor.ShouldBeSameAs(GzipCompressor.Instance);
     }
 
@@ -49,7 +49,7 @@ public class KyrolusCompressionProviderTests
         var provider = new KyrolusCompressionProvider();
 
         var ex = Should.Throw<NotSupportedException>(() =>
-            provider.GetCompressor(CompressionAlgorithm.Snappy));
+            provider.GetCompressor(KyrolusCompressionAlgorithm.Snappy));
 
         ex.Message.ShouldContain("Snappy");
     }

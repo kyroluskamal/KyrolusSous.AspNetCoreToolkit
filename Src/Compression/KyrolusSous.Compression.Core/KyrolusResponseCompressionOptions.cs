@@ -7,9 +7,9 @@ public sealed class KyrolusResponseCompressionOptions
 {
     /// <summary>
     /// Gets or sets the preferred compression algorithm when the client supports multiple encodings.
-    /// Default is <see cref="CompressionAlgorithm.Brotli"/>.
+    /// Default is <see cref="KyrolusCompressionAlgorithm.Brotli"/>.
     /// </summary>
-    public CompressionAlgorithm PreferredAlgorithm { get; set; } = CompressionAlgorithm.Brotli;
+    public KyrolusCompressionAlgorithm PreferredAlgorithm { get; set; } = KyrolusCompressionAlgorithm.Brotli;
 
     /// <summary>
     /// Gets or sets the default compression level to apply during response compression.
@@ -127,7 +127,7 @@ public sealed class KyrolusResponseCompressionOptions
     /// <summary>
     /// Fluent helper to configure the preferred algorithm.
     /// </summary>
-    public KyrolusResponseCompressionOptions WithPreferredAlgorithm(CompressionAlgorithm algorithm)
+    public KyrolusResponseCompressionOptions WithPreferredAlgorithm(KyrolusCompressionAlgorithm algorithm)
     {
         PreferredAlgorithm = algorithm;
         return this;

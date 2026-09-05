@@ -10,12 +10,26 @@ public interface IKyrolusSagaCoordinator
     /// Starts a new saga: persists its initial state, then runs its steps in order until one fails
     /// or all of them complete.
     /// </summary>
-    /// <returns>The id of the new saga instance. Check <see cref="IKyrolusSagaStore.GetAsync"/> with
-    /// it afterward to see whether the saga completed, was compensated, or needs attention.</returns>
+    /// <param name="definition">The saga to run.</param>
+    /// <param name="context">The saga's initial shared state.</param>
+    /// <param name="cancellationToken">Cancels the run. Does not cancel <paramref name="correlationId"/>'s claim.</param>
+    /// <param name="correlationId">
+    /// Optional caller-supplied id that makes starting this saga idempotent: a call that reuses an id
+    /// already seen returns the existing instance's <see cref="Guid"/> instead of starting a second,
+    /// independent saga for what should be one logical operation - a caller retry after a timeout on
+    /// an already-successful call, or at-least-once redelivery from a queue, would otherwise do
+    /// exactly that. <see langword="null"/> (the default) opts out entirely, matching every call site
+    /// written before this parameter existed.
+    /// </param>
+    /// <returns>The id of the new saga instance, or of the instance <paramref name="correlationId"/>
+    /// already identified. Check <see cref="IKyrolusSagaStore.GetAsync"/> with it afterward to see
+    /// whether the saga completed, was compensated, or needs attention.</returns>
     Task<Guid> StartAsync<TContext>(
         KyrolusSagaDefinition<TContext> definition,
         TContext context,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        string? correlationId = null)
+        where TContext : class;
 
     /// <summary>
     /// Finds every saga instance left <see cref="KyrolusSagaStatus.Running"/> or
