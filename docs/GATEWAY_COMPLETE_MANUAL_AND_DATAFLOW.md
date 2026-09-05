@@ -109,24 +109,7 @@ public interface IKyrolusDynamicRouteProvider
 ```
 - **ما هو؟**: العقد البرمجي لإدارة المسارات والعناقيد وتحديثها أثناء تشغيل السيرفر دون توقف (Zero Downtime).
 
-#### 6. [`KyrolusLoadBalancingPolicy.cs`](file:///d:/2%20Mylibraries/KyrolusSous.AspNetCoreToolkit/Src/Gateway/KyrolusSous.Gateway.Abstractions/KyrolusLoadBalancingPolicy.cs)
-```csharp
-public enum KyrolusLoadBalancingPolicy
-{
-    RoundRobin,
-    LeastRequests,
-    Random,
-    PowerOfTwoChoices,
-    Custom
-}
-```
-- **ما هو؟**: الـ Enum الذي يحدد خوارزمية توزيع الأحمال بأمان تام من أخطاء الـ Typo:
-  - `RoundRobin`: التوزيع الدوري العادل (طلب لسيرفر 1 ثم طلب لسيرفر 2 ثم سيرفر 3 بالتوالي).
-  - `LeastRequests`: توجيه الطلب إلى السيرفر الذي يعالج أقل عدد من الريكوستات في تلك اللحظة.
-  - `Random`: اختيار سيرفر عشوائياً.
-  - `PowerOfTwoChoices`: اختيار سيرفرين عشوائياً وتوجيه الريكوست للأقل حملاً بينهما.
-
-#### 7. [`KyrolusLoadBalancingPolicies.cs`](file:///d:/2%20Mylibraries/KyrolusSous.AspNetCoreToolkit/Src/Gateway/KyrolusSous.Gateway.Abstractions/KyrolusLoadBalancingPolicies.cs)
+#### 6. [`KyrolusLoadBalancingPolicies.cs`](file:///d:/2%20Mylibraries/KyrolusSous.AspNetCoreToolkit/Src/Gateway/KyrolusSous.Gateway.Abstractions/KyrolusLoadBalancingPolicies.cs)
 ```csharp
 public static class KyrolusLoadBalancingPolicies
 {
@@ -136,7 +119,29 @@ public static class KyrolusLoadBalancingPolicies
     public const string PowerOfTwoChoices = "PowerOfTwoChoices";
 }
 ```
-- **ما هو؟**: ثوابت نصية قياسية لمن يفضل استخدام الـ Strings المتوافقة مباشرة مع YARP.
+- **ما هو؟**: كلاس ثوابت نصية قياسية (String Constants) لخوارزميات توزيع الأحمال. تم اعتماده بدلاً من الـ Enum لمنع أي استهلاك غير ضروري للذاكرة (Zero Allocation) والتوافق 100% مع محرك YARP بدون الحاجة إلى `.ToString()`:
+  - `RoundRobin`: التوزيع الدوري العادل (طلب لسيرفر 1 ثم طلب لسيرفر 2 ثم سيرفر 3 بالتوالي).
+  - `LeastRequests`: توجيه الطلب إلى السيرفر الذي يعالج أقل عدد من الريكوستات في تلك اللحظة.
+  - `Random`: اختيار سيرفر عشوائياً.
+  - `PowerOfTwoChoices`: اختيار سيرفرين عشوائياً وتوجيه الريكوست للأقل حملاً بينهما.
+
+#### 7. [`KyrolusGatewayHttpMethods.cs`](file:///d:/2%20Mylibraries/KyrolusSous.AspNetCoreToolkit/Src/Gateway/KyrolusSous.Gateway.Abstractions/KyrolusGatewayHttpMethods.cs)
+```csharp
+public static class KyrolusGatewayHttpMethods
+{
+    public const string Get = "GET";
+    public const string Post = "POST";
+    public const string Put = "PUT";
+    public const string Delete = "DELETE";
+    public const string Patch = "PATCH";
+    public const string Head = "HEAD";
+    public const string Options = "OPTIONS";
+    public const string Trace = "TRACE";
+    public const string Connect = "CONNECT";
+}
+```
+- **ما هو؟**: كلاس ثوابت قياسية لجميع أنواع الـ HTTP Methods المستخدمة في مطابقة المسارات (`Route Matching`).
+- **الفائدة**: يمنع كتابة الـ Strings اليدوية مثل `"GET"` أو `"POST"` ويوفر أمان وقت الترجمة (Compile-time Safety) والـ Auto-completion في الـ IDE.
 
 ---
 
@@ -146,7 +151,7 @@ public static class KyrolusLoadBalancingPolicies
 #### 8. [`Configuration/KyrolusClusterBuilder.cs`](file:///d:/2%20Mylibraries/KyrolusSous.AspNetCoreToolkit/Src/Gateway/KyrolusSous.Gateway.Yarp/Configuration/KyrolusClusterBuilder.cs)
 - **ما هو؟**: كلاس البناء الانسيابي (Fluent Scoper) الذي يحل مشكلة تكرار `ClusterId`:
   - يستقبل `clusterId` مرة واحدة في الـ Constructor.
-  - يوفر دوال: `WithLoadBalancing(KyrolusLoadBalancingPolicy)`, `AddDestination(...)`, `AddRoute(...)`.
+  - يوفر دوال: `WithLoadBalancing(string policy)` (باستخدام `KyrolusLoadBalancingPolicies.*` أو سياسة مخصصة), `AddDestination(...)`, `AddRoute(...)`.
   - عند استدعاء `Build()`، ينتج كائن العنقود ويربط جميع المسارات بداخله بنفس الـ `ClusterId` تلقائياً.
 
 #### 9. [`Configuration/KyrolusCustomProxyConfig.cs`](file:///d:/2%20Mylibraries/KyrolusSous.AspNetCoreToolkit/Src/Gateway/KyrolusSous.Gateway.Yarp/Configuration/KyrolusCustomProxyConfig.cs)
@@ -186,7 +191,7 @@ public static class KyrolusLoadBalancingPolicies
 ---
 
 ### الأسلوب الأول: بالكود البرمجي الكامل (Fluent Scoped Builder)
-*وهو الأسلوب الأقوى الذي يمنع تكرار `ClusterId` ويستخدم الـ Enum بأعلى درجات الأمان من الأخطاء:*
+*وهو الأسلوب الأقوى الذي يمنع تكرار `ClusterId` ويستخدم كلاسات الثوابت القياسية `KyrolusLoadBalancingPolicies` و `KyrolusGatewayHttpMethods` بأعلى درجات الأمان والكفاءة:*
 
 ```csharp
 using KyrolusSous.Gateway.Abstractions;
@@ -200,18 +205,18 @@ builder.Services.AddKyrolusYarpGateway(gateway =>
     // عنقود خدمة الطلبات (Orders Service)
     gateway.AddCluster("orders-cluster", cluster =>
     {
-        cluster.WithLoadBalancing(KyrolusLoadBalancingPolicy.RoundRobin)
+        cluster.WithLoadBalancing(KyrolusLoadBalancingPolicies.RoundRobin)
                .AddDestination("srv-orders-1", "http://10.0.1.10:5001")
                .AddDestination("srv-orders-2", "http://10.0.1.11:5001")
-               .AddRoute("orders-get-all", "/api/orders", "GET")
-               .AddRoute("orders-create", "/api/orders", "POST")
+               .AddRoute("orders-get-all", "/api/orders", KyrolusGatewayHttpMethods.Get)
+               .AddRoute("orders-create", "/api/orders", KyrolusGatewayHttpMethods.Post)
                .AddRoute("orders-details", "/api/orders/{id}");
     });
 
     // عنقود خدمة الفواتير (Invoices Service)
     gateway.AddCluster("invoices-cluster", cluster =>
     {
-        cluster.WithLoadBalancing(KyrolusLoadBalancingPolicy.LeastRequests)
+        cluster.WithLoadBalancing(KyrolusLoadBalancingPolicies.LeastRequests)
                .AddDestination("srv-inv-1", "http://10.0.2.10:5002")
                .AddRoute("invoices-catchall", "/api/invoices/{**catch-all}");
     });

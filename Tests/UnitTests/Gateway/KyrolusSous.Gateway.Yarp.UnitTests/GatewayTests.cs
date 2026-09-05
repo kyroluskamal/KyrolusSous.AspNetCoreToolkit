@@ -23,7 +23,7 @@ public sealed class GatewayTests
             Match = new KyrolusGatewayRouteMatch
             {
                 Path = "/api/orders/{**catch-all}",
-                Methods = new[] { "GET", "POST" }
+                Methods = new[] { KyrolusGatewayHttpMethods.Get, KyrolusGatewayHttpMethods.Post }
             }
         });
 
@@ -57,12 +57,12 @@ public sealed class GatewayTests
         // Write cluster name ONCE and define all routes inside it without repeating ClusterId!
         provider.AddCluster("invoices-cluster", cluster =>
         {
-            cluster.WithLoadBalancing(KyrolusLoadBalancingPolicy.RoundRobin)
+            cluster.WithLoadBalancing(KyrolusLoadBalancingPolicies.RoundRobin)
                    .AddDestination("srv1", "http://192.168.1.50:5000")
                    .AddDestination("srv2", "http://192.168.1.51:5000")
                    .AddRoute("invoices-all", "/api/invoices/{**catch-all}")
-                   .AddRoute("invoices-reports", "/api/invoices/reports", "GET")
-                   .AddRoute("invoices-create", "/api/invoices/new", "POST");
+                   .AddRoute("invoices-reports", "/api/invoices/reports", KyrolusGatewayHttpMethods.Get)
+                   .AddRoute("invoices-create", "/api/invoices/new", KyrolusGatewayHttpMethods.Post);
         });
 
         var config = provider.GetConfig();
@@ -70,7 +70,7 @@ public sealed class GatewayTests
         config.Clusters.Count.ShouldBe(1);
         var cluster = config.Clusters[0];
         cluster.ClusterId.ShouldBe("invoices-cluster");
-        cluster.LoadBalancingPolicy.ShouldBe("RoundRobin");
+        cluster.LoadBalancingPolicy.ShouldBe(KyrolusLoadBalancingPolicies.RoundRobin);
         cluster.Destinations.ShouldNotBeNull();
         cluster.Destinations!.Count.ShouldBe(2);
 
@@ -83,16 +83,18 @@ public sealed class GatewayTests
 
         config.Routes[0].RouteId.ShouldBe("invoices-all");
         config.Routes[1].RouteId.ShouldBe("invoices-reports");
-        config.Routes[1].Match.Methods!.ShouldContain("GET");
+        config.Routes[1].Match.Methods!.ShouldContain(KyrolusGatewayHttpMethods.Get);
         config.Routes[2].RouteId.ShouldBe("invoices-create");
-        config.Routes[2].Match.Methods!.ShouldContain("POST");
+        config.Routes[2].Match.Methods!.ShouldContain(KyrolusGatewayHttpMethods.Post);
     }
 
-    [Theory(DisplayName = "WithLoadBalancing Accepts Both Enum And Constants Properly")]
-    [InlineData(KyrolusLoadBalancingPolicy.LeastRequests, "LeastRequests")]
-    [InlineData(KyrolusLoadBalancingPolicy.Random, "Random")]
-    [InlineData(KyrolusLoadBalancingPolicy.PowerOfTwoChoices, "PowerOfTwoChoices")]
-    public void WithLoadBalancing_AcceptsEnumAndConstants(KyrolusLoadBalancingPolicy policy, string expectedName)
+    [Theory(DisplayName = "WithLoadBalancing Accepts Constants Properly")]
+    [InlineData(KyrolusLoadBalancingPolicies.RoundRobin, "RoundRobin")]
+    [InlineData(KyrolusLoadBalancingPolicies.LeastRequests, "LeastRequests")]
+    [InlineData(KyrolusLoadBalancingPolicies.Random, "Random")]
+    [InlineData(KyrolusLoadBalancingPolicies.PowerOfTwoChoices, "PowerOfTwoChoices")]
+    [InlineData("CustomHashRingPolicy", "CustomHashRingPolicy")]
+    public void WithLoadBalancing_AcceptsPolicyConstantsProperly(string policy, string expectedName)
     {
         var provider = new KyrolusDynamicInMemoryRouteConfigProvider();
 
@@ -164,7 +166,7 @@ public sealed class GatewayTests
         {
             gateway.AddCluster("code-cluster", c =>
             {
-                c.WithLoadBalancing(KyrolusLoadBalancingPolicy.Random)
+                c.WithLoadBalancing(KyrolusLoadBalancingPolicies.Random)
                  .AddDestination("node", "https://code-service")
                  .AddRoute("code-route", "/from-code");
             });
@@ -261,5 +263,19 @@ public sealed class GatewayTests
         security.ShouldNotBeNull();
         tenant.ShouldNotBeNull();
         rateLimit.ShouldNotBeNull();
+    }
+
+    [Fact(DisplayName = "KyrolusGatewayHttpMethods Exposes Standard Verbs Correctly")]
+    public void KyrolusGatewayHttpMethods_ExposesStandardVerbs_Correctly()
+    {
+        KyrolusGatewayHttpMethods.Get.ShouldBe("GET");
+        KyrolusGatewayHttpMethods.Post.ShouldBe("POST");
+        KyrolusGatewayHttpMethods.Put.ShouldBe("PUT");
+        KyrolusGatewayHttpMethods.Delete.ShouldBe("DELETE");
+        KyrolusGatewayHttpMethods.Patch.ShouldBe("PATCH");
+        KyrolusGatewayHttpMethods.Head.ShouldBe("HEAD");
+        KyrolusGatewayHttpMethods.Options.ShouldBe("OPTIONS");
+        KyrolusGatewayHttpMethods.Trace.ShouldBe("TRACE");
+        KyrolusGatewayHttpMethods.Connect.ShouldBe("CONNECT");
     }
 }

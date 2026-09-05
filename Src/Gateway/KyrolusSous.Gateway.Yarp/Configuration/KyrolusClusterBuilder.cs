@@ -20,20 +20,13 @@ public sealed class KyrolusClusterBuilder
     }
 
     /// <summary>
-    /// Sets the load balancing policy using the strongly-typed enum.
+    /// Sets the load balancing policy for the cluster.
+    /// Use constants from <see cref="KyrolusLoadBalancingPolicies"/> (e.g. RoundRobin, LeastRequests, Random, PowerOfTwoChoices) or a custom policy name.
     /// </summary>
-    public KyrolusClusterBuilder WithLoadBalancing(KyrolusLoadBalancingPolicy policy)
+    public KyrolusClusterBuilder WithLoadBalancing(string policy)
     {
-        _loadBalancingPolicy = policy.ToString();
-        return this;
-    }
-
-    /// <summary>
-    /// Sets a custom load balancing policy by name.
-    /// </summary>
-    public KyrolusClusterBuilder WithLoadBalancing(string customPolicy)
-    {
-        _loadBalancingPolicy = customPolicy;
+        ArgumentException.ThrowIfNullOrWhiteSpace(policy);
+        _loadBalancingPolicy = policy;
         return this;
     }
 
