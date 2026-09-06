@@ -57,4 +57,31 @@ public sealed record KyrolusGatewayRoute
     /// Can be used by custom transform providers, security middlewares, or rate limiters.
     /// </summary>
     public IReadOnlyDictionary<string, string>? Metadata { get; init; }
+
+    /// <summary>
+    /// Gets the authorization policy name required to access this route.
+    /// Unauthenticated or unauthorized callers receive an immediate 401 or 403 at the gateway edge.
+    /// </summary>
+    public string? AuthorizationPolicy { get; init; }
+
+    /// <summary>
+    /// Gets the CORS policy name applied to this route, handling browser preflight OPTIONS requests.
+    /// </summary>
+    public string? CorsPolicy { get; init; }
+
+    /// <summary>
+    /// Gets the ASP.NET Core rate limiter policy name applied to this route.
+    /// Throttles abusive traffic at the gateway perimeter before reaching backend services.
+    /// </summary>
+    public string? RateLimiterPolicy { get; init; }
+
+    /// <summary>
+    /// Gets the timeout duration allocated for processing requests matching this route.
+    /// </summary>
+    public TimeSpan? Timeout { get; init; }
+
+    /// <summary>
+    /// Gets the list of route-level request/response transforms (e.g. PathRemovePrefix, PathPrefix, PathSet).
+    /// </summary>
+    public IReadOnlyList<IReadOnlyDictionary<string, string>>? Transforms { get; init; }
 }

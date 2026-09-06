@@ -19,7 +19,7 @@ public static class ServiceCollectionExtensions
     /// <item><description><see cref="KyrolusCorrelationTransformProvider"/>: Distributed tracing (<c>X-Correlation-ID</c>).</description></item>
     /// <item><description><see cref="KyrolusSecurityHeadersTransformProvider"/>: Edge protection headers (<c>nosniff</c>, <c>DENY</c>).</description></item>
     /// <item><description><see cref="KyrolusTenantRoutingTransformProvider"/>: Multi-tenant resolution with reserved subdomains filtering.</description></item>
-    /// <item><description><see cref="KyrolusRateLimitTransformProvider"/>: Gateway telemetry header injection.</description></item>
+    /// <item><description><see cref="KyrolusTelemetryHeadersTransformProvider"/>: Gateway telemetry header injection.</description></item>
     /// <item><description>YARP core reverse proxy engine via <c>AddReverseProxy()</c>.</description></item>
     /// </list>
     /// </para>
@@ -53,7 +53,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITransformProvider, KyrolusCorrelationTransformProvider>();
         services.AddSingleton<ITransformProvider, KyrolusSecurityHeadersTransformProvider>();
         services.AddSingleton<ITransformProvider, KyrolusTenantRoutingTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusRateLimitTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusTelemetryHeadersTransformProvider>();
         services.AddReverseProxy();
 
         return services;
@@ -112,7 +112,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITransformProvider, KyrolusCorrelationTransformProvider>();
         services.AddSingleton<ITransformProvider, KyrolusSecurityHeadersTransformProvider>();
         services.AddSingleton<ITransformProvider, KyrolusTenantRoutingTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusRateLimitTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusTelemetryHeadersTransformProvider>();
         services.AddReverseProxy();
 
         return services;

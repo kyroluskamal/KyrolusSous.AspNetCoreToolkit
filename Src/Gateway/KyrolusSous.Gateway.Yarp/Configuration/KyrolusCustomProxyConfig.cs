@@ -5,6 +5,7 @@ namespace KyrolusSous.Gateway.Yarp.Configuration;
 /// </summary>
 /// <param name="routes">The list of active YARP route configurations.</param>
 /// <param name="clusters">The list of active YARP cluster configurations.</param>
+/// <param name="changeToken">The change token that triggers when configuration updates occur. Defaults to a non-canceling token if null.</param>
 /// <remarks>
 /// <para>
 /// <b>Role in YARP Architecture:</b><br/>
@@ -12,7 +13,10 @@ namespace KyrolusSous.Gateway.Yarp.Configuration;
 /// This class holds the frozen snapshot of routes and clusters, alongside the <see cref="ChangeToken"/> used by YARP to listen for configuration reloads.
 /// </para>
 /// </remarks>
-internal sealed class KyrolusCustomProxyConfig(IReadOnlyList<RouteConfig> routes, IReadOnlyList<ClusterConfig> clusters) : IProxyConfig
+internal sealed class KyrolusCustomProxyConfig(
+    IReadOnlyList<RouteConfig> routes,
+    IReadOnlyList<ClusterConfig> clusters,
+    IChangeToken? changeToken = null) : IProxyConfig
 {
     /// <summary>
     /// Gets the frozen snapshot of active YARP route configurations.
@@ -27,5 +31,5 @@ internal sealed class KyrolusCustomProxyConfig(IReadOnlyList<RouteConfig> routes
     /// <summary>
     /// Gets the change token that triggers when configuration updates occur.
     /// </summary>
-    public IChangeToken ChangeToken { get; } = new CancellationChangeToken(CancellationToken.None);
+    public IChangeToken ChangeToken { get; } = changeToken ?? new CancellationChangeToken(CancellationToken.None);
 }

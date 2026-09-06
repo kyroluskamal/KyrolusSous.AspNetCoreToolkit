@@ -50,4 +50,20 @@ public sealed record KyrolusGatewayCluster
     /// Recommended values are available in <see cref="KyrolusLoadBalancingPolicies"/> (e.g. RoundRobin, LeastRequests, Random, PowerOfTwoChoices).
     /// </summary>
     public string? LoadBalancingPolicy { get; init; }
+
+    /// <summary>
+    /// Gets optional health check probing and observation options for the cluster destinations.
+    /// </summary>
+    public KyrolusHealthCheckOptions? HealthCheck { get; init; }
+
+    /// <summary>
+    /// Gets optional session affinity (sticky sessions) configuration for the cluster.
+    /// </summary>
+    public KyrolusSessionAffinityOptions? SessionAffinity { get; init; }
+
+    /// <summary>
+    /// Gets the HTTP activity/request timeout duration when communicating with backend destinations.
+    /// Defends against hung connections, thread pool starvation, and cascading microservice failures.
+    /// </summary>
+    public TimeSpan? HttpRequestTimeout { get; init; }
 }

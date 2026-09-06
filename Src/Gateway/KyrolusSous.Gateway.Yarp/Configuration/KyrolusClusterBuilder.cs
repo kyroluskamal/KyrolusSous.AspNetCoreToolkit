@@ -34,6 +34,9 @@ public sealed class KyrolusClusterBuilder
 {
     private readonly string _clusterId;
     private string? _loadBalancingPolicy;
+    private KyrolusHealthCheckOptions? _healthCheck;
+    private KyrolusSessionAffinityOptions? _sessionAffinity;
+    private TimeSpan? _httpRequestTimeout;
     private readonly Dictionary<string, KyrolusGatewayDestination> _destinations = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<KyrolusGatewayRoute> _routes = [];
 
@@ -58,6 +61,35 @@ public sealed class KyrolusClusterBuilder
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(policy);
         _loadBalancingPolicy = policy;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures health check monitoring policies (active probes and passive observation) for cluster destinations.
+    /// </summary>
+    public KyrolusClusterBuilder WithHealthCheck(KyrolusHealthCheckOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        _healthCheck = options;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures session affinity (sticky sessions) for cluster destinations.
+    /// </summary>
+    public KyrolusClusterBuilder WithSessionAffinity(KyrolusSessionAffinityOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        _sessionAffinity = options;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the HTTP request / activity timeout duration for outbound calls to backend destinations in this cluster.
+    /// </summary>
+    public KyrolusClusterBuilder WithTimeout(TimeSpan timeout)
+    {
+        _httpRequestTimeout = timeout;
         return this;
     }
 
@@ -154,6 +186,26 @@ public sealed class KyrolusClusterBuilder
     }
 
     /// <summary>
+    /// Adds a child route configured via a fluent <see cref="KyrolusRouteBuilder"/> delegate,
+    /// enabling route-level security policies (Authorization, CORS, RateLimiting), timeouts, and URL transforms.
+    /// </summary>
+    /// <param name="routeId">The unique route identifier.</param>
+    /// <param name="path">The URL path pattern to match on incoming requests.</param>
+    /// <param name="configureRoute">A delegate configuring the <see cref="KyrolusRouteBuilder"/>.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusClusterBuilder AddRoute(string routeId, string path, Action<KyrolusRouteBuilder> configureRoute)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(routeId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentNullException.ThrowIfNull(configureRoute);
+
+        var builder = new KyrolusRouteBuilder(routeId, _clusterId, path);
+        configureRoute(builder);
+        _routes.Add(builder.Build());
+        return this;
+    }
+
+    /// <summary>
     /// Builds and returns the configured <see cref="KyrolusGatewayCluster"/> alongside all associated <see cref="KyrolusGatewayRoute"/> instances.
     /// </summary>
     /// <returns>A tuple containing the immutable cluster and its associated child routes.</returns>
@@ -163,7 +215,10 @@ public sealed class KyrolusClusterBuilder
         {
             ClusterId = _clusterId,
             Destinations = _destinations,
-            LoadBalancingPolicy = _loadBalancingPolicy
+            LoadBalancingPolicy = _loadBalancingPolicy,
+            HealthCheck = _healthCheck,
+            SessionAffinity = _sessionAffinity,
+            HttpRequestTimeout = _httpRequestTimeout
         };
 
         return (cluster, _routes.AsReadOnly());
