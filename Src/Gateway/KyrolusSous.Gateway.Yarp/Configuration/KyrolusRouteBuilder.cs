@@ -13,7 +13,7 @@ public sealed class KyrolusRouteBuilder
     private readonly string _routeId;
     private readonly string _clusterId;
     private readonly string _path;
-    private readonly List<string> _methods = [];
+    private readonly List<KyrolusHttpMethod> _methods = [];
     private readonly List<string> _hosts = [];
     private readonly Dictionary<string, string> _metadata = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<KyrolusGatewayTransform> _transforms = [];
@@ -46,28 +46,41 @@ public sealed class KyrolusRouteBuilder
     }
 
     /// <summary>
-    /// Restricts this route to the specified HTTP methods.
-    /// Methods are automatically normalized to uppercase to conform with RFC 9110.
-    /// Use constants from <see cref="KyrolusGatewayHttpMethods"/>.
+    /// Restricts this route to the specified strongly-typed HTTP methods.
     /// </summary>
-    public KyrolusRouteBuilder WithMethods(params string[] methods)
+    /// <param name="methods">Allowed HTTP methods (use <see cref="KyrolusHttpMethod"/> properties like <see cref="KyrolusHttpMethod.Get"/>).</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithMethods(params KyrolusHttpMethod[] methods)
     {
         if (methods is { Length: > 0 })
         {
-            _methods.AddRange(methods.Where(m => !string.IsNullOrWhiteSpace(m)).Select(m => m.Trim().ToUpperInvariant()));
+            _methods.AddRange(methods);
         }
         return this;
     }
 
     /// <summary>
-    /// Restricts this route to the specified incoming client request hostnames / domains (e.g., <c>""api.example.com""</c>).
+    /// Restricts this route to the specified HTTP methods.
+    /// Methods are automatically normalized to uppercase to conform with RFC 9110.
+    /// Use constants from <see cref="KyrolusGatewayHttpMethods"/> or custom verb strings.
     /// </summary>
-    public KyrolusRouteBuilder WithHosts(params string[] hosts)
+    public KyrolusRouteBuilder WithMethods(params string[] methods)
     {
-        if (hosts is { Length: > 0 })
+        if (methods is { Length: > 0 })
         {
-            _hosts.AddRange(hosts);
+            _methods.AddRange(methods
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .Select(m => KyrolusHttpMethod.From(m)!.Value));
         }
+        return this;
+    }
+
+    /// <summary>
+    /// Restricts this route to the specified strongly-typed HTTP method.
+    /// </summary>
+    public KyrolusRouteBuilder WithMethod(KyrolusHttpMethod method)
+    {
+        _methods.Add(method);
         return this;
     }
 
@@ -78,20 +91,80 @@ public sealed class KyrolusRouteBuilder
     {
         if (!string.IsNullOrWhiteSpace(method))
         {
-            _methods.Add(method.Trim().ToUpperInvariant());
+            _methods.Add(KyrolusHttpMethod.From(method)!.Value);
+        }
+        return this;
+    }
+
+    /// <summary>Restricts this route to HTTP GET requests.</summary>
+    public KyrolusRouteBuilder WithGet() => WithMethod(KyrolusHttpMethod.Get);
+
+    /// <summary>Restricts this route to HTTP POST requests.</summary>
+    public KyrolusRouteBuilder WithPost() => WithMethod(KyrolusHttpMethod.Post);
+
+    /// <summary>Restricts this route to HTTP PUT requests.</summary>
+    public KyrolusRouteBuilder WithPut() => WithMethod(KyrolusHttpMethod.Put);
+
+    /// <summary>Restricts this route to HTTP DELETE requests.</summary>
+    public KyrolusRouteBuilder WithDelete() => WithMethod(KyrolusHttpMethod.Delete);
+
+    /// <summary>Restricts this route to HTTP PATCH requests.</summary>
+    public KyrolusRouteBuilder WithPatch() => WithMethod(KyrolusHttpMethod.Patch);
+
+    /// <summary>Restricts this route to HTTP HEAD requests.</summary>
+    public KyrolusRouteBuilder WithHead() => WithMethod(KyrolusHttpMethod.Head);
+
+    /// <summary>Restricts this route to HTTP OPTIONS requests.</summary>
+    public KyrolusRouteBuilder WithOptions() => WithMethod(KyrolusHttpMethod.Options);
+
+    /// <summary>
+    /// Restricts this route to the specified incoming client request hostnames / domains (e.g., <c>"api.example.com"</c>, <c>"*.example.com"</c>).
+    /// Hostnames are validated using RFC 1123, IPv4/IPv6, and YARP routing rules (rejects URI schemes, slashes, and query strings).
+    /// </summary>
+    public KyrolusRouteBuilder WithHosts(params string[] hosts)
+    {
+        if (hosts is { Length: > 0 })
+        {
+            foreach (var host in hosts)
+            {
+                if (!string.IsNullOrWhiteSpace(host))
+                {
+                    _hosts.Add(KyrolusHostValidator.Validate(host, nameof(hosts)));
+                }
+            }
         }
         return this;
     }
 
     /// <summary>
-    /// Restricts this route to the specified single incoming client request hostname / domain.
+    /// Restricts this route to the specified strongly-typed incoming client request hostnames / domains.
+    /// </summary>
+    public KyrolusRouteBuilder WithHosts(params KyrolusRouteHost[] hosts)
+    {
+        if (hosts is { Length: > 0 })
+        {
+            _hosts.AddRange(hosts.Select(h => h.Value));
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Restricts this route to the specified single incoming client request hostname / domain (e.g., <c>"api.example.com"</c>).
+    /// Hostnames are validated using RFC 1123, IPv4/IPv6, and YARP routing rules (rejects URI schemes, slashes, and query strings).
     /// </summary>
     public KyrolusRouteBuilder WithHost(string host)
     {
-        if (!string.IsNullOrWhiteSpace(host))
-        {
-            _hosts.Add(host.Trim());
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(host);
+        _hosts.Add(KyrolusHostValidator.Validate(host, nameof(host)));
+        return this;
+    }
+
+    /// <summary>
+    /// Restricts this route to the specified strongly-typed single incoming client request hostname / domain.
+    /// </summary>
+    public KyrolusRouteBuilder WithHost(KyrolusRouteHost host)
+    {
+        _hosts.Add(host.Value);
         return this;
     }
 
@@ -865,9 +938,9 @@ public sealed class KyrolusRouteBuilder
     /// </summary>
     public KyrolusGatewayRoute Build()
     {
-        if (_corsPolicy is not null && _autoAllowPreflight && _methods.Count > 0 && !_methods.Contains("OPTIONS", StringComparer.OrdinalIgnoreCase))
+        if (_corsPolicy is not null && _autoAllowPreflight && _methods.Count > 0 && !_methods.Contains(KyrolusHttpMethod.Options))
         {
-            _methods.Add("OPTIONS");
+            _methods.Add(KyrolusHttpMethod.Options);
         }
 
         return new KyrolusGatewayRoute

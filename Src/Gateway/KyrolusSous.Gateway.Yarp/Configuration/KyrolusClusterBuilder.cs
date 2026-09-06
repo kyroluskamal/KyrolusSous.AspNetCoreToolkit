@@ -322,6 +322,35 @@ public sealed class KyrolusClusterBuilder
     /// <summary>
     /// Adds a child route belonging directly to this cluster, automatically assigning the cluster identifier.
     /// </summary>
+    /// <summary>
+    /// Adds a child route belonging directly to this cluster with strongly-typed HTTP methods.
+    /// </summary>
+    /// <param name="routeId">The unique route identifier (e.g. <c>"get-orders-route"</c>).</param>
+    /// <param name="path">The URL path pattern to match on incoming requests (e.g. <c>"/api/orders/{**catch-all}"</c>).</param>
+    /// <param name="httpMethods">Optional list of allowed HTTP methods (use <see cref="KyrolusHttpMethod"/> properties). If omitted, matches all verbs.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusClusterBuilder AddRoute(string routeId, string path, params KyrolusHttpMethod[] httpMethods)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(routeId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        _routes.Add(new KyrolusGatewayRoute
+        {
+            RouteId = routeId,
+            ClusterId = _clusterId,
+            Match = new KyrolusGatewayRouteMatch
+            {
+                Path = path,
+                Methods = httpMethods is { Length: > 0 } ? httpMethods : null
+            }
+        });
+
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a child route belonging directly to this cluster, automatically assigning the cluster identifier.
+    /// </summary>
     /// <param name="routeId">The unique route identifier (e.g. <c>"get-orders-route"</c>).</param>
     /// <param name="path">The URL path pattern to match on incoming requests (e.g. <c>"/api/orders/{**catch-all}"</c>).</param>
     /// <param name="httpMethods">Optional list of allowed HTTP methods (use constants from <see cref="KyrolusGatewayHttpMethods"/>). If omitted, matches all verbs.</param>
@@ -332,7 +361,7 @@ public sealed class KyrolusClusterBuilder
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         var normalizedMethods = httpMethods.Length > 0
-            ? httpMethods.Where(m => !string.IsNullOrWhiteSpace(m)).Select(m => m.Trim().ToUpperInvariant()).ToArray()
+            ? httpMethods.Where(m => !string.IsNullOrWhiteSpace(m)).Select(m => KyrolusHttpMethod.From(m)!.Value).ToArray()
             : null;
 
         _routes.Add(new KyrolusGatewayRoute
@@ -370,7 +399,12 @@ public sealed class KyrolusClusterBuilder
 
         var normalizedMethods = methods?
             .Where(m => !string.IsNullOrWhiteSpace(m))
-            .Select(m => m.Trim().ToUpperInvariant())
+            .Select(m => KyrolusHttpMethod.From(m)!.Value)
+            .ToList();
+
+        var validatedHosts = hosts?
+            .Where(h => !string.IsNullOrWhiteSpace(h))
+            .Select(h => KyrolusHostValidator.Validate(h, nameof(hosts)))
             .ToList();
 
         _routes.Add(new KyrolusGatewayRoute
@@ -381,7 +415,36 @@ public sealed class KyrolusClusterBuilder
             {
                 Path = path,
                 Methods = normalizedMethods is { Count: > 0 } ? normalizedMethods : null,
-                Hosts = hosts
+                Hosts = validatedHosts is { Count: > 0 } ? validatedHosts : null
+            },
+            Metadata = metadata
+        });
+
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a child route with advanced matching criteria (strongly-typed hosts, methods, custom metadata) belonging directly to this cluster.
+    /// </summary>
+    public KyrolusClusterBuilder AddRoute(
+        string routeId,
+        string path,
+        IReadOnlyList<KyrolusHttpMethod>? methods,
+        IReadOnlyList<KyrolusRouteHost>? hosts = null,
+        IReadOnlyDictionary<string, string>? metadata = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(routeId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        _routes.Add(new KyrolusGatewayRoute
+        {
+            RouteId = routeId,
+            ClusterId = _clusterId,
+            Match = new KyrolusGatewayRouteMatch
+            {
+                Path = path,
+                Methods = methods is { Count: > 0 } ? methods : null,
+                Hosts = hosts is { Count: > 0 } ? hosts.Select(h => h.Value).ToList() : null
             },
             Metadata = metadata
         });

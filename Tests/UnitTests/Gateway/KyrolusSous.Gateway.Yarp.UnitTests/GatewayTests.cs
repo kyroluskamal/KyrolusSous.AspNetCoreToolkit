@@ -34,7 +34,7 @@ public sealed class GatewayTests
             Match = new KyrolusGatewayRouteMatch
             {
                 Path = "/api/orders/{**catch-all}",
-                Methods = new[] { KyrolusGatewayHttpMethods.Get, KyrolusGatewayHttpMethods.Post }
+                Methods = [KyrolusHttpMethod.Get, KyrolusHttpMethod.Post]
             }
         });
 
@@ -2449,9 +2449,9 @@ public sealed class GatewayTests
 
         var route = builder.Build();
         route.Match.Methods.ShouldNotBeNull();
-        route.Match.Methods.ShouldContain("GET");
-        route.Match.Methods.ShouldContain("POST");
-        route.Match.Methods.ShouldContain("OPTIONS");
+        route.Match.Methods.ShouldContain(KyrolusHttpMethod.Get);
+        route.Match.Methods.ShouldContain(KyrolusHttpMethod.Post);
+        route.Match.Methods.ShouldContain(KyrolusHttpMethod.Options);
 
         // 2. autoAllowPreflight = false
         var strictBuilder = new KyrolusRouteBuilder("strict-route", "cluster1", "/api/strict");
@@ -2460,8 +2460,8 @@ public sealed class GatewayTests
 
         var strictRoute = strictBuilder.Build();
         strictRoute.Match.Methods.ShouldNotBeNull();
-        strictRoute.Match.Methods.ShouldContain("GET");
-        strictRoute.Match.Methods.ShouldNotContain("OPTIONS");
+        strictRoute.Match.Methods.ShouldContain(KyrolusHttpMethod.Get);
+        strictRoute.Match.Methods.ShouldNotContain(KyrolusHttpMethod.Options);
     }
 
     [Fact(DisplayName = "ClusterBuilder: WithHttpVersion and Aliases configure outbound client and timeout")]

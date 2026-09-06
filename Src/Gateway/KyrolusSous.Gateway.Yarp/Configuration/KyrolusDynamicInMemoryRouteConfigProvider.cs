@@ -413,8 +413,14 @@ public sealed class KyrolusDynamicInMemoryRouteConfigProvider : IProxyConfigProv
     private static RouteMatch MapRouteMatch(KyrolusGatewayRoute r)
     {
         var normalizedMethods = r.Match.Methods?
+            .Select(m => m.Value)
             .Where(m => !string.IsNullOrWhiteSpace(m))
             .Select(m => m.Trim().ToUpperInvariant())
+            .ToList();
+
+        var validatedHosts = r.Match.Hosts?
+            .Where(h => !string.IsNullOrWhiteSpace(h))
+            .Select(h => KyrolusHostValidator.Validate(h))
             .ToList();
 
         var yarpHeaders = r.Match.Headers?.Select(h => new RouteHeader
@@ -437,7 +443,7 @@ public sealed class KyrolusDynamicInMemoryRouteConfigProvider : IProxyConfigProv
         {
             Path = r.Match.Path,
             Methods = normalizedMethods is { Count: > 0 } ? normalizedMethods : null,
-            Hosts = r.Match.Hosts,
+            Hosts = validatedHosts is { Count: > 0 } ? validatedHosts : null,
             Headers = yarpHeaders is { Count: > 0 } ? yarpHeaders : null,
             QueryParameters = yarpQueryParams is { Count: > 0 } ? yarpQueryParams : null
         };
@@ -846,8 +852,19 @@ public sealed class KyrolusDynamicInMemoryRouteConfigProvider : IProxyConfigProv
         var matchSec = routeSec.GetSection("Match");
         var path = matchSec["Path"] ?? string.Empty;
 
-        var methods = matchSec.GetSection("Methods").GetChildren().Select(c => c.Value).OfType<string>().ToList();
-        var hosts = matchSec.GetSection("Hosts").GetChildren().Select(c => c.Value).OfType<string>().ToList();
+        var methods = matchSec.GetSection("Methods").GetChildren()
+            .Select(c => c.Value)
+            .OfType<string>()
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Select(m => KyrolusHttpMethod.From(m)!.Value)
+            .ToList();
+
+        var hosts = matchSec.GetSection("Hosts").GetChildren()
+            .Select(c => c.Value)
+            .OfType<string>()
+            .Where(h => !string.IsNullOrWhiteSpace(h))
+            .Select(h => KyrolusHostValidator.Validate(h))
+            .ToList();
         var headers = ParseRouteHeaders(matchSec.GetSection("Headers"));
         var queryParams = ParseRouteQueryParams(matchSec.GetSection("QueryParameters"));
 

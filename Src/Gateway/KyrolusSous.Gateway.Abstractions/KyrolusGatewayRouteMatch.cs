@@ -33,11 +33,11 @@ public sealed record KyrolusGatewayRouteMatch
     public required string Path { get; init; }
 
     /// <summary>
-    /// Gets the optional list of allowed HTTP methods (e.g., <c>"GET"</c>, <c>"POST"</c>).
-    /// Recommended to use constants from <see cref="KyrolusGatewayHttpMethods"/>.
+    /// Gets the optional list of allowed HTTP methods (e.g., <see cref="KyrolusHttpMethod.Get"/>, <see cref="KyrolusHttpMethod.Post"/>).
+    /// Recommended to use <see cref="KyrolusHttpMethod"/> or constants from <see cref="KyrolusGatewayHttpMethods"/>.
     /// If null or empty, the route matches all HTTP methods.
     /// </summary>
-    public IReadOnlyList<string>? Methods { get; init; }
+    public IReadOnlyList<KyrolusHttpMethod>? Methods { get; init; }
 
     /// <summary>
     /// Gets the optional list of client request hostnames (domains) to match (e.g., <c>"api.mycompany.com"</c>).
