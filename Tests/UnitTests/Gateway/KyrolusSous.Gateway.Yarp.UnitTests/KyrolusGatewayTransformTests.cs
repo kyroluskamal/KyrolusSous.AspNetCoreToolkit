@@ -216,4 +216,49 @@ public class KyrolusGatewayTransformTests
         KyrolusSessionAffinityFailurePolicy error503 = KyrolusSessionAffinityFailurePolicy.Return503Error;
         error503.Value.ShouldBe("Return503Error");
     }
+
+    [Fact(DisplayName = "Authorization Policy Struct Supports Standard Values And Custom Values")]
+    public void AuthorizationPolicyStruct_SupportsStandardAndCustomValues()
+    {
+        KyrolusAuthorizationPolicy anon = KyrolusAuthorizationPolicy.Anonymous;
+        anon.Value.ShouldBe("anonymous");
+        (anon == "anonymous").ShouldBeTrue();
+
+        KyrolusAuthorizationPolicy def = KyrolusAuthorizationPolicy.Default;
+        def.Value.ShouldBe("default");
+
+        KyrolusAuthorizationPolicy custom = KyrolusAuthorizationPolicy.Custom("AdminOnly");
+        custom.Value.ShouldBe("AdminOnly");
+        string customStr = custom;
+        customStr.ShouldBe("AdminOnly");
+
+        KyrolusAuthorizationPolicy.From(null).ShouldBeNull();
+        KyrolusAuthorizationPolicy.From("anonymous").ShouldBe(KyrolusAuthorizationPolicy.Anonymous);
+    }
+
+    [Fact(DisplayName = "Cors And RateLimiter Policy Structs Support Standard Values And Builder Convenience Methods")]
+    public void CorsAndRateLimiterPolicyStructs_SupportStandardValuesAndBuilderMethods()
+    {
+        KyrolusCorsPolicy corsDisable = KyrolusCorsPolicy.Disable;
+        corsDisable.Value.ShouldBe("disable");
+        (corsDisable == "disable").ShouldBeTrue();
+
+        KyrolusRateLimiterPolicy rateDisable = KyrolusRateLimiterPolicy.Disable;
+        rateDisable.Value.ShouldBe("disable");
+
+        KyrolusOutputCachePolicy cachePolicy = KyrolusOutputCachePolicy.Custom("Expire5M");
+        cachePolicy.Value.ShouldBe("Expire5M");
+
+        var route = new KyrolusRouteBuilder("test-route", "test-cluster", "/api/test")
+            .WithAnonymousAuthorization()
+            .WithDisabledCors()
+            .WithDisabledRateLimiter()
+            .WithOutputCache(cachePolicy)
+            .Build();
+
+        route.AuthorizationPolicy.ShouldBe(KyrolusAuthorizationPolicy.Anonymous);
+        route.CorsPolicy.ShouldBe(KyrolusCorsPolicy.Disable);
+        route.RateLimiterPolicy.ShouldBe(KyrolusRateLimiterPolicy.Disable);
+        route.OutputCachePolicy.ShouldBe(cachePolicy);
+    }
 }

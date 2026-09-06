@@ -62,24 +62,24 @@ public sealed record KyrolusGatewayRoute
     /// Gets the authorization policy name required to access this route.
     /// Unauthenticated or unauthorized callers receive an immediate 401 or 403 at the gateway edge.
     /// </summary>
-    public string? AuthorizationPolicy { get; init; }
+    public KyrolusAuthorizationPolicy? AuthorizationPolicy { get; init; }
 
     /// <summary>
     /// Gets the CORS policy name applied to this route, handling browser preflight OPTIONS requests.
     /// </summary>
-    public string? CorsPolicy { get; init; }
+    public KyrolusCorsPolicy? CorsPolicy { get; init; }
 
     /// <summary>
     /// Gets the ASP.NET Core rate limiter policy name applied to this route.
     /// Throttles abusive traffic at the gateway perimeter before reaching backend services.
     /// </summary>
-    public string? RateLimiterPolicy { get; init; }
+    public KyrolusRateLimiterPolicy? RateLimiterPolicy { get; init; }
 
     /// <summary>
     /// Gets the ASP.NET Core output caching policy name applied to this route.
     /// Enables response caching at the gateway edge to reduce load on backend services.
     /// </summary>
-    public string? OutputCachePolicy { get; init; }
+    public KyrolusOutputCachePolicy? OutputCachePolicy { get; init; }
 
     /// <summary>
     /// Gets the timeout duration allocated for processing requests matching this route.

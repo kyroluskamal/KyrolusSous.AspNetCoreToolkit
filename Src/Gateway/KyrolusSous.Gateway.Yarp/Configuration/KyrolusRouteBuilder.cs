@@ -17,10 +17,10 @@ public sealed class KyrolusRouteBuilder
     private readonly List<string> _hosts = [];
     private readonly Dictionary<string, string> _metadata = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<KyrolusGatewayTransform> _transforms = [];
-    private string? _authorizationPolicy;
-    private string? _corsPolicy;
-    private string? _rateLimiterPolicy;
-    private string? _outputCachePolicy;
+    private KyrolusAuthorizationPolicy? _authorizationPolicy;
+    private KyrolusCorsPolicy? _corsPolicy;
+    private KyrolusRateLimiterPolicy? _rateLimiterPolicy;
+    private KyrolusOutputCachePolicy? _outputCachePolicy;
     private TimeSpan? _timeout;
     private long? _maxRequestBodySize;
     private int? _order;
@@ -277,38 +277,59 @@ public sealed class KyrolusRouteBuilder
     /// <summary>
     /// Enforces an ASP.NET Core authorization policy on this route at the gateway edge.
     /// </summary>
-    public KyrolusRouteBuilder WithAuthorization(string policy)
+    public KyrolusRouteBuilder WithAuthorization(KyrolusAuthorizationPolicy policy)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(policy);
         _authorizationPolicy = policy;
         return this;
     }
+
+    /// <summary>
+    /// Explicitly allows anonymous access to this route, bypassing default authorization.
+    /// </summary>
+    public KyrolusRouteBuilder WithAnonymousAuthorization()
+        => WithAuthorization(KyrolusAuthorizationPolicy.Anonymous);
+
+    /// <summary>
+    /// Enforces the default authorization policy requiring authenticated callers.
+    /// </summary>
+    public KyrolusRouteBuilder WithDefaultAuthorization()
+        => WithAuthorization(KyrolusAuthorizationPolicy.Default);
 
     /// <summary>
     /// Enforces an ASP.NET Core CORS policy on this route.
     /// When <paramref name="autoAllowPreflight"/> is <c>true</c> (default) and route HTTP methods are restricted,
     /// <c>"OPTIONS"</c> is automatically added to the allowed methods so CORS preflight requests are not rejected with HTTP 405.
     /// </summary>
-    /// <param name="policy">The CORS policy name.</param>
+    /// <param name="policy">The CORS policy.</param>
     /// <param name="autoAllowPreflight">Whether to automatically permit OPTIONS preflight requests when methods are restricted. Defaults to <c>true</c>.</param>
     /// <returns>The builder instance for fluent chaining.</returns>
-    public KyrolusRouteBuilder WithCors(string policy, bool autoAllowPreflight = true)
+    public KyrolusRouteBuilder WithCors(KyrolusCorsPolicy policy, bool autoAllowPreflight = true)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(policy);
         _corsPolicy = policy;
         _autoAllowPreflight = autoAllowPreflight;
         return this;
     }
 
     /// <summary>
+    /// Explicitly disables CORS processing on this route.
+    /// </summary>
+    public KyrolusRouteBuilder WithDisabledCors()
+        => WithCors(KyrolusCorsPolicy.Disable);
+
+    /// <summary>
     /// Enforces an ASP.NET Core rate limiter policy on this route at the gateway perimeter.
     /// </summary>
-    public KyrolusRouteBuilder WithRateLimiter(string policy)
+    public KyrolusRouteBuilder WithRateLimiter(KyrolusRateLimiterPolicy policy)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(policy);
         _rateLimiterPolicy = policy;
         return this;
     }
+
+    /// <summary>
+    /// Explicitly disables rate limiting on this route.
+    /// </summary>
+    public KyrolusRouteBuilder WithDisabledRateLimiter()
+        => WithRateLimiter(KyrolusRateLimiterPolicy.Disable);
 
     /// <summary>
     /// Sets a processing timeout for requests matching this route.
@@ -496,9 +517,8 @@ public sealed class KyrolusRouteBuilder
     /// </summary>
     /// <param name="policy">The named output cache policy.</param>
     /// <returns>The builder instance for fluent chaining.</returns>
-    public KyrolusRouteBuilder WithOutputCache(string policy)
+    public KyrolusRouteBuilder WithOutputCache(KyrolusOutputCachePolicy policy)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(policy);
         _outputCachePolicy = policy;
         return this;
     }
