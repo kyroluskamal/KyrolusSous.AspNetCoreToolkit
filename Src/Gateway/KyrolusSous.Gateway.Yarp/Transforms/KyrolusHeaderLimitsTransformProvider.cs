@@ -10,10 +10,28 @@ public sealed class KyrolusHeaderLimitsTransformProvider : ITransformProvider
     private const int DefaultMaxTotalHeaderLength = 32768; // 32 KB
 
     private static readonly byte[] HeaderFieldsTooLargeBytes =
-        """{"title":"Request Header Fields Too Large","status":431,"detail":"The request headers exceed the maximum allowable count or size limit."}"""u8.ToArray();
+        """{"type":"https://httpstatuses.com/431","title":"Request Header Fields Too Large","status":431,"detail":"The request headers exceed the maximum allowable count or size limit."}"""u8.ToArray();
 
     /// <inheritdoc />
-    public void ValidateRoute(TransformRouteValidationContext context) { }
+    public void ValidateRoute(TransformRouteValidationContext context)
+    {
+        if (context.Route.Metadata is { } metadata)
+        {
+            if (metadata.TryGetValue("Kyrolus:Headers:MaxCount", out var maxCountRaw) &&
+                !string.IsNullOrWhiteSpace(maxCountRaw) &&
+                (!int.TryParse(maxCountRaw, out var parsedCount) || parsedCount <= 0))
+            {
+                context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid metadata 'Kyrolus:Headers:MaxCount' value '{maxCountRaw}'. Must be a positive integer."));
+            }
+
+            if (metadata.TryGetValue("Kyrolus:Headers:MaxTotalLength", out var maxLengthRaw) &&
+                !string.IsNullOrWhiteSpace(maxLengthRaw) &&
+                (!int.TryParse(maxLengthRaw, out var parsedLength) || parsedLength <= 0))
+            {
+                context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid metadata 'Kyrolus:Headers:MaxTotalLength' value '{maxLengthRaw}'. Must be a positive integer."));
+            }
+        }
+    }
 
     /// <inheritdoc />
     public void ValidateCluster(TransformClusterValidationContext context) { }

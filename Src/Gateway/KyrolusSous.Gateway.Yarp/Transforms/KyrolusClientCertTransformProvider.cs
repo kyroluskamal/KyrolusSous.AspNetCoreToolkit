@@ -17,7 +17,15 @@ public sealed class KyrolusClientCertTransformProvider : ITransformProvider
     ];
 
     /// <inheritdoc />
-    public void ValidateRoute(TransformRouteValidationContext context) { }
+    public void ValidateRoute(TransformRouteValidationContext context)
+    {
+        if (context.Route.Metadata?.TryGetValue("Kyrolus:ClientCert:Forward", out var val) == true &&
+            !string.IsNullOrWhiteSpace(val) &&
+            !bool.TryParse(val, out _))
+        {
+            context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid metadata 'Kyrolus:ClientCert:Forward' value '{val}'. Expected 'true' or 'false'."));
+        }
+    }
 
     /// <inheritdoc />
     public void ValidateCluster(TransformClusterValidationContext context) { }
@@ -40,33 +48,42 @@ public sealed class KyrolusClientCertTransformProvider : ITransformProvider
                 return ValueTask.CompletedTask;
             }
 
-            // 1. Defend against spoofing: Strip untrusted client-supplied headers
-            for (var i = 0; i < UntrustedCertHeaders.Length; i++)
+            StripUntrustedHeaders(transformContext.ProxyRequest);
+
+            if (forwardClientCert)
             {
-                transformContext.ProxyRequest.Headers.Remove(UntrustedCertHeaders[i]);
-            }
-
-            // 2. If client cert forwarding is enabled and the TLS connection has a client certificate, inject authentic details
-            var clientCert = transformContext.HttpContext.Connection.ClientCertificate;
-            if (forwardClientCert && clientCert is not null)
-            {
-                if (!string.IsNullOrWhiteSpace(clientCert.Thumbprint))
-                {
-                    transformContext.ProxyRequest.Headers.Add("X-Client-Cert-Thumbprint", clientCert.Thumbprint);
-                }
-
-                if (!string.IsNullOrWhiteSpace(clientCert.Subject))
-                {
-                    transformContext.ProxyRequest.Headers.Add("X-Client-Cert-Subject", clientCert.Subject);
-                }
-
-                if (!string.IsNullOrWhiteSpace(clientCert.Issuer))
-                {
-                    transformContext.ProxyRequest.Headers.Add("X-Client-Cert-Issuer", clientCert.Issuer);
-                }
+                InjectClientCertificateHeaders(transformContext.ProxyRequest, transformContext.HttpContext.Connection.ClientCertificate);
             }
 
             return ValueTask.CompletedTask;
         });
+    }
+
+    private static void StripUntrustedHeaders(HttpRequestMessage proxyRequest)
+    {
+        for (var i = 0; i < UntrustedCertHeaders.Length; i++)
+        {
+            proxyRequest.Headers.Remove(UntrustedCertHeaders[i]);
+        }
+    }
+
+    private static void InjectClientCertificateHeaders(HttpRequestMessage proxyRequest, System.Security.Cryptography.X509Certificates.X509Certificate2? clientCert)
+    {
+        if (clientCert is null)
+        {
+            return;
+        }
+
+        AddHeaderIfNotEmpty(proxyRequest, "X-Client-Cert-Thumbprint", clientCert.Thumbprint);
+        AddHeaderIfNotEmpty(proxyRequest, "X-Client-Cert-Subject", clientCert.Subject);
+        AddHeaderIfNotEmpty(proxyRequest, "X-Client-Cert-Issuer", clientCert.Issuer);
+    }
+
+    private static void AddHeaderIfNotEmpty(HttpRequestMessage request, string name, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            request.Headers.Add(name, value);
+        }
     }
 }

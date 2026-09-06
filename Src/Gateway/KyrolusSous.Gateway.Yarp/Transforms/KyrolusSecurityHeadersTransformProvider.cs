@@ -19,6 +19,19 @@ namespace KyrolusSous.Gateway.Yarp.Transforms;
 /// </remarks>
 public sealed class KyrolusSecurityHeadersTransformProvider : ITransformProvider
 {
+    private static readonly string[] SensitiveServerHeaders =
+    [
+        "Server",
+        "X-Powered-By",
+        "X-AspNet-Version",
+        "X-AspNetMvc-Version",
+        "X-Runtime",
+        "X-SourceFiles",
+        "X-Generated-By",
+        "X-Backend-Server",
+        "X-Backend-Host"
+    ];
+
     /// <inheritdoc />
     public void ValidateRoute(TransformRouteValidationContext context) { }
 
@@ -32,34 +45,10 @@ public sealed class KyrolusSecurityHeadersTransformProvider : ITransformProvider
     public void Apply(TransformBuilderContext context)
     {
         var metadata = context.Route?.Metadata;
-
-        string? customCsp = null;
-        string? customFrameOptions = null;
-        string? customReferrerPolicy = null;
-        string? customHsts = null;
-
-        if (metadata != null)
-        {
-            if (metadata.TryGetValue("Kyrolus:SecurityHeaders:CSP", out var csp) && !string.IsNullOrWhiteSpace(csp))
-            {
-                customCsp = csp;
-            }
-
-            if (metadata.TryGetValue("Kyrolus:SecurityHeaders:FrameOptions", out var fo) && !string.IsNullOrWhiteSpace(fo))
-            {
-                customFrameOptions = fo;
-            }
-
-            if (metadata.TryGetValue("Kyrolus:SecurityHeaders:ReferrerPolicy", out var rp) && !string.IsNullOrWhiteSpace(rp))
-            {
-                customReferrerPolicy = rp;
-            }
-
-            if (metadata.TryGetValue("Kyrolus:SecurityHeaders:HSTS", out var hsts) && !string.IsNullOrWhiteSpace(hsts))
-            {
-                customHsts = hsts;
-            }
-        }
+        var customCsp = GetMetadataValue(metadata, "Kyrolus:SecurityHeaders:CSP");
+        var customFrameOptions = GetMetadataValue(metadata, "Kyrolus:SecurityHeaders:FrameOptions");
+        var customReferrerPolicy = GetMetadataValue(metadata, "Kyrolus:SecurityHeaders:ReferrerPolicy");
+        var customHsts = GetMetadataValue(metadata, "Kyrolus:SecurityHeaders:HSTS");
 
         context.AddResponseTransform(transformContext =>
         {
@@ -69,35 +58,41 @@ public sealed class KyrolusSecurityHeadersTransformProvider : ITransformProvider
             }
 
             var headers = transformContext.HttpContext.Response.Headers;
-            headers["X-Content-Type-Options"] = "nosniff";
-            headers["X-Frame-Options"] = customFrameOptions ?? "DENY";
-            headers["Referrer-Policy"] = customReferrerPolicy ?? "strict-origin-when-cross-origin";
-            headers["Permissions-Policy"] = "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()";
-            headers["X-XSS-Protection"] = "0";
-            headers["X-Permitted-Cross-Domain-Policies"] = "none";
-
-            if (customCsp != null)
-            {
-                headers["Content-Security-Policy"] = customCsp;
-            }
+            InjectDefaultSecurityHeaders(headers, customFrameOptions, customReferrerPolicy, customCsp);
 
             if (transformContext.HttpContext.Request.IsHttps)
             {
                 headers["Strict-Transport-Security"] = customHsts ?? "max-age=31536000; includeSubDomains";
             }
 
-            // Information Disclosure Defense (CWE-200): Strip sensitive backend server identifiers
-            headers.Remove("Server");
-            headers.Remove("X-Powered-By");
-            headers.Remove("X-AspNet-Version");
-            headers.Remove("X-AspNetMvc-Version");
-            headers.Remove("X-Runtime");
-            headers.Remove("X-SourceFiles");
-            headers.Remove("X-Generated-By");
-            headers.Remove("X-Backend-Server");
-            headers.Remove("X-Backend-Host");
-
+            StripSensitiveServerHeaders(headers);
             return ValueTask.CompletedTask;
         });
+    }
+
+    private static string? GetMetadataValue(IReadOnlyDictionary<string, string>? metadata, string key) =>
+        metadata != null && metadata.TryGetValue(key, out var val) && !string.IsNullOrWhiteSpace(val) ? val : null;
+
+    private static void InjectDefaultSecurityHeaders(IHeaderDictionary headers, string? frameOptions, string? referrerPolicy, string? csp)
+    {
+        headers["X-Content-Type-Options"] = "nosniff";
+        headers["X-Frame-Options"] = frameOptions ?? "DENY";
+        headers["Referrer-Policy"] = referrerPolicy ?? "strict-origin-when-cross-origin";
+        headers["Permissions-Policy"] = "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()";
+        headers["X-XSS-Protection"] = "0";
+        headers["X-Permitted-Cross-Domain-Policies"] = "none";
+
+        if (csp != null)
+        {
+            headers["Content-Security-Policy"] = csp;
+        }
+    }
+
+    private static void StripSensitiveServerHeaders(IHeaderDictionary headers)
+    {
+        for (var i = 0; i < SensitiveServerHeaders.Length; i++)
+        {
+            headers.Remove(SensitiveServerHeaders[i]);
+        }
     }
 }

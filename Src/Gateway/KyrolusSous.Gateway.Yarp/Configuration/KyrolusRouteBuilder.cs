@@ -5,13 +5,18 @@ namespace KyrolusSous.Gateway.Yarp.Configuration;
 /// </summary>
 public sealed class KyrolusRouteBuilder
 {
+    private const string TrueLiteral = "true";
+    private const string FalseLiteral = "false";
+    private const string AppendAction = "Append";
+    private const string SetAction = "Set";
+
     private readonly string _routeId;
     private readonly string _clusterId;
     private readonly string _path;
     private readonly List<string> _methods = [];
     private readonly List<string> _hosts = [];
     private readonly Dictionary<string, string> _metadata = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<IReadOnlyDictionary<string, string>> _transforms = [];
+    private readonly List<KyrolusGatewayTransform> _transforms = [];
     private string? _authorizationPolicy;
     private string? _corsPolicy;
     private string? _rateLimiterPolicy;
@@ -19,6 +24,7 @@ public sealed class KyrolusRouteBuilder
     private TimeSpan? _timeout;
     private long? _maxRequestBodySize;
     private int? _order;
+    private bool _autoAllowPreflight = true;
     private readonly List<KyrolusRouteHeader> _headers = [];
     private readonly List<KyrolusRouteQueryParameter> _queryParameters = [];
     private bool _requireTenant;
@@ -61,6 +67,30 @@ public sealed class KyrolusRouteBuilder
         if (hosts is { Length: > 0 })
         {
             _hosts.AddRange(hosts);
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Restricts this route to the specified single HTTP method.
+    /// </summary>
+    public KyrolusRouteBuilder WithMethod(string method)
+    {
+        if (!string.IsNullOrWhiteSpace(method))
+        {
+            _methods.Add(method.Trim().ToUpperInvariant());
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Restricts this route to the specified single incoming client request hostname / domain.
+    /// </summary>
+    public KyrolusRouteBuilder WithHost(string host)
+    {
+        if (!string.IsNullOrWhiteSpace(host))
+        {
+            _hosts.Add(host.Trim());
         }
         return this;
     }
@@ -159,7 +189,7 @@ public sealed class KyrolusRouteBuilder
     public KyrolusRouteBuilder WithRequireTenant(bool require = true)
     {
         _requireTenant = require;
-        _metadata["Kyrolus:Tenant:Required"] = require ? "true" : "false";
+        _metadata["Kyrolus:Tenant:Required"] = require ? TrueLiteral : FalseLiteral;
         return this;
     }
 
@@ -188,15 +218,59 @@ public sealed class KyrolusRouteBuilder
     /// <param name="prefixAction">Action for X-Forwarded-Prefix (<c>"Set"</c>, <c>"Append"</c>, <c>"Off"</c>). Defaults to <c>"Set"</c>.</param>
     /// <returns>The builder instance for fluent chaining.</returns>
     public KyrolusRouteBuilder WithTransformForwarded(
-        string forAction = "Set",
-        string protoAction = "Set",
-        string hostAction = "Set",
-        string prefixAction = "Set")
+        string forAction = SetAction,
+        string protoAction = SetAction,
+        string hostAction = SetAction,
+        string prefixAction = SetAction)
     {
         _transforms.Add(new Dictionary<string, string>
         {
             ["X-Forwarded"] = $"{forAction},{protoAction},{hostAction},{prefixAction}"
         });
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a forwarded transform configuring proxy forwarding headers (X-Forwarded-* or RFC 7239 Forwarded).
+    /// </summary>
+    /// <param name="useXForwarded">Whether to use legacy <c>X-Forwarded-*</c> headers instead of RFC 7239 <c>Forwarded</c>. Defaults to <c>true</c>.</param>
+    /// <param name="forFormat">Format for the For header (e.g. <c>"Random"</c>, <c>"Ip"</c>, <c>"IpAndPort"</c>). If null, preserves existing.</param>
+    /// <param name="byFormat">Format for the By header (e.g. <c>"Random"</c>, <c>"Ip"</c>). If null, preserves existing.</param>
+    /// <param name="host">Whether to enable Host forwarding transform action.</param>
+    /// <param name="proto">Whether to enable Proto / Scheme forwarding transform action.</param>
+    /// <param name="prefix">Custom header prefix (e.g. <c>"X-Forwarded"</c> or <c>"Forwarded"</c>).</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithTransformForwarded(
+        bool useXForwarded = true,
+        string? forFormat = null,
+        string? byFormat = null,
+        bool host = true,
+        bool proto = true,
+        string? prefix = null)
+    {
+        var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var key = prefix ?? (useXForwarded ? "X-Forwarded" : "Forwarded");
+        var parts = new List<string>();
+        if (proto) parts.Add("proto");
+        if (host) parts.Add("host");
+        if (forFormat != null) parts.Add("for");
+        if (byFormat != null) parts.Add("by");
+
+        dict[key] = string.Join(",", parts);
+        if (forFormat != null)
+        {
+            dict["ForFormat"] = forFormat;
+        }
+        if (byFormat != null)
+        {
+            dict["ByFormat"] = byFormat;
+        }
+        if (prefix != null)
+        {
+            dict["Prefix"] = prefix;
+        }
+
+        _transforms.Add(dict);
         return this;
     }
 
@@ -212,11 +286,17 @@ public sealed class KyrolusRouteBuilder
 
     /// <summary>
     /// Enforces an ASP.NET Core CORS policy on this route.
+    /// When <paramref name="autoAllowPreflight"/> is <c>true</c> (default) and route HTTP methods are restricted,
+    /// <c>"OPTIONS"</c> is automatically added to the allowed methods so CORS preflight requests are not rejected with HTTP 405.
     /// </summary>
-    public KyrolusRouteBuilder WithCors(string policy)
+    /// <param name="policy">The CORS policy name.</param>
+    /// <param name="autoAllowPreflight">Whether to automatically permit OPTIONS preflight requests when methods are restricted. Defaults to <c>true</c>.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithCors(string policy, bool autoAllowPreflight = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(policy);
         _corsPolicy = policy;
+        _autoAllowPreflight = autoAllowPreflight;
         return this;
     }
 
@@ -236,6 +316,70 @@ public sealed class KyrolusRouteBuilder
     public KyrolusRouteBuilder WithTimeout(TimeSpan timeout)
     {
         _timeout = timeout;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures this route for real-time streaming, Server-Sent Events (SSE), or WebSockets.
+    /// Extends the route timeout to prevent premature connection drop and marks the route for unbuffered response delivery.
+    /// </summary>
+    /// <param name="timeout">Optional custom streaming activity timeout. Defaults to 1 hour.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithStreaming(TimeSpan? timeout = null)
+    {
+        _timeout = timeout ?? TimeSpan.FromHours(1);
+        _metadata["Kyrolus:Streaming:Enabled"] = TrueLiteral;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures whether dangerous HTTP verbs (<c>TRACE</c>, <c>TRACK</c>, <c>CONNECT</c>) should be blocked on this route.
+    /// Defends against Cross-Site Tracing (XST - CWE-693) and unauthorized proxy tunneling.
+    /// </summary>
+    /// <param name="block">Whether to block dangerous verbs. Defaults to <c>true</c>.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithBlockDangerousVerbs(bool block = true)
+    {
+        _metadata["Kyrolus:Verbs:BlockDangerous"] = block ? TrueLiteral : FalseLiteral;
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a strongly-typed transform to this route.
+    /// </summary>
+    /// <param name="transform">The gateway transform to apply.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithTransform(KyrolusGatewayTransform transform)
+    {
+        _transforms.Add(transform);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds multiple strongly-typed transforms to this route.
+    /// </summary>
+    /// <param name="transforms">The gateway transforms to apply.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithTransforms(params KyrolusGatewayTransform[] transforms)
+    {
+        if (transforms is { Length: > 0 })
+        {
+            _transforms.AddRange(transforms);
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Adds multiple strongly-typed transforms to this route.
+    /// </summary>
+    /// <param name="transforms">The collection of gateway transforms to apply.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithTransforms(IEnumerable<KyrolusGatewayTransform> transforms)
+    {
+        if (transforms is not null)
+        {
+            _transforms.AddRange(transforms);
+        }
         return this;
     }
 
@@ -261,6 +405,92 @@ public sealed class KyrolusRouteBuilder
     }
 
     /// <summary>
+    /// Adds or replaces an HTTP request header forwarded to the upstream backend.
+    /// </summary>
+    /// <param name="headerName">The name of the header.</param>
+    /// <param name="value">The header value to inject.</param>
+    /// <param name="action">The transform action: <c>"Set"</c> (default) or <c>"Append"</c>.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithRequestHeader(string headerName, string value, string action = SetAction)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(headerName);
+        ArgumentNullException.ThrowIfNull(value);
+        _transforms.Add(new Dictionary<string, string>
+        {
+            ["RequestHeader"] = headerName,
+            [action] = value
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Strips the specified HTTP request header before forwarding the request to the upstream backend.
+    /// </summary>
+    /// <param name="headerName">The name of the header to remove.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithRemoveRequestHeader(string headerName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(headerName);
+        _transforms.Add(new Dictionary<string, string>
+        {
+            ["RequestHeaderRemove"] = headerName
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Adds or replaces an HTTP response header returned to the downstream client.
+    /// </summary>
+    /// <param name="headerName">The name of the header.</param>
+    /// <param name="value">The header value to inject.</param>
+    /// <param name="action">The transform action: <c>"Set"</c> (default) or <c>"Append"</c>.</param>
+    /// <param name="when">When to apply the transform: <c>"Always"</c> (default) or <c>"Success"</c>.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithResponseHeader(string headerName, string value, string action = SetAction, string when = "Always")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(headerName);
+        ArgumentNullException.ThrowIfNull(value);
+        _transforms.Add(new Dictionary<string, string>
+        {
+            ["ResponseHeaderValue"] = headerName,
+            [action] = value,
+            ["When"] = when
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Strips the specified HTTP response header before returning the response to the downstream client.
+    /// </summary>
+    /// <param name="headerName">The name of the header to remove.</param>
+    /// <param name="when">When to apply the removal: <c>"Always"</c> (default) or <c>"Success"</c>.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithRemoveResponseHeader(string headerName, string when = "Always")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(headerName);
+        _transforms.Add(new Dictionary<string, string>
+        {
+            ["ResponseHeaderRemove"] = headerName,
+            ["When"] = when
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Configures whether the original client <c>Host</c> header is preserved when proxying to the upstream backend.
+    /// </summary>
+    /// <param name="useOriginal">Whether to forward the original Host header. Defaults to <c>true</c>.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithOriginalHostHeader(bool useOriginal = true)
+    {
+        _transforms.Add(new Dictionary<string, string>
+        {
+            ["RequestHeaderOriginalHost"] = useOriginal ? TrueLiteral : FalseLiteral
+        });
+        return this;
+    }
+
+    /// <summary>
     /// Enforces an ASP.NET Core output caching policy on this route at the gateway edge.
     /// Responses matching this route will be cached at the reverse proxy perimeter according to the policy rules.
     /// </summary>
@@ -281,7 +511,7 @@ public sealed class KyrolusRouteBuilder
     /// <returns>The builder instance for fluent chaining.</returns>
     public KyrolusRouteBuilder WithSuppressTelemetryHeader(bool suppress = true)
     {
-        _metadata["Kyrolus:SuppressTelemetryHeader"] = suppress ? "true" : "false";
+        _metadata["Kyrolus:SuppressTelemetryHeader"] = suppress ? TrueLiteral : FalseLiteral;
         return this;
     }
 
@@ -293,7 +523,7 @@ public sealed class KyrolusRouteBuilder
     /// <returns>The builder instance for fluent chaining.</returns>
     public KyrolusRouteBuilder WithAllowMethodOverride(bool allow = true)
     {
-        _metadata["Kyrolus:MethodOverride:Allowed"] = allow ? "true" : "false";
+        _metadata["Kyrolus:MethodOverride:Allowed"] = allow ? TrueLiteral : FalseLiteral;
         return this;
     }
 
@@ -305,7 +535,7 @@ public sealed class KyrolusRouteBuilder
     /// <returns>The builder instance for fluent chaining.</returns>
     public KyrolusRouteBuilder WithClientCertForwarding(bool enable = true)
     {
-        _metadata["Kyrolus:ClientCert:Forward"] = enable ? "true" : "false";
+        _metadata["Kyrolus:ClientCert:Forward"] = enable ? TrueLiteral : FalseLiteral;
         return this;
     }
 
@@ -357,7 +587,7 @@ public sealed class KyrolusRouteBuilder
         _transforms.Add(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["RequestHeader"] = "Host",
-            ["Set"] = host
+            [SetAction] = host
         });
         return this;
     }
@@ -375,7 +605,7 @@ public sealed class KyrolusRouteBuilder
         _transforms.Add(new Dictionary<string, string>
         {
             ["RequestHeader"] = headerName,
-            [append ? "Append" : "Set"] = value ?? string.Empty
+            [append ? AppendAction : SetAction] = value ?? string.Empty
         });
         return this;
     }
@@ -386,11 +616,7 @@ public sealed class KyrolusRouteBuilder
     /// <param name="headerName">The header name to strip.</param>
     /// <returns>The builder instance for fluent chaining.</returns>
     public KyrolusRouteBuilder WithTransformRequestHeaderRemove(string headerName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(headerName);
-        _transforms.Add(new Dictionary<string, string> { ["RequestHeaderRemove"] = headerName });
-        return this;
-    }
+        => WithRemoveRequestHeader(headerName);
 
     /// <summary>
     /// Adds a response header transform that sets or appends a header on responses returned to the client.
@@ -405,7 +631,7 @@ public sealed class KyrolusRouteBuilder
         _transforms.Add(new Dictionary<string, string>
         {
             ["ResponseHeader"] = headerName,
-            [append ? "Append" : "Set"] = value ?? string.Empty
+            [append ? AppendAction : SetAction] = value ?? string.Empty
         });
         return this;
     }
@@ -449,7 +675,7 @@ public sealed class KyrolusRouteBuilder
         _transforms.Add(new Dictionary<string, string>
         {
             ["QueryValueParameter"] = queryKey,
-            [append ? "Append" : "Set"] = value ?? string.Empty
+            [append ? AppendAction : SetAction] = value ?? string.Empty
         });
         return this;
     }
@@ -468,7 +694,7 @@ public sealed class KyrolusRouteBuilder
         _transforms.Add(new Dictionary<string, string>
         {
             ["QueryRouteParameter"] = queryKey,
-            [append ? "Append" : "Set"] = routeKey
+            [append ? AppendAction : SetAction] = routeKey
         });
         return this;
     }
@@ -480,50 +706,6 @@ public sealed class KyrolusRouteBuilder
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         _transforms.Add(new Dictionary<string, string> { ["PathSet"] = path });
-        return this;
-    }
-
-    /// <summary>
-    /// Adds a forwarded transform configuring proxy forwarding headers (X-Forwarded-* or RFC 7239 Forwarded).
-    /// </summary>
-    /// <param name="useXForwarded">Whether to use legacy <c>X-Forwarded-*</c> headers instead of RFC 7239 <c>Forwarded</c>. Defaults to <c>true</c>.</param>
-    /// <param name="forFormat">Format for the For header (e.g. <c>"Random"</c>, <c>"Ip"</c>, <c>"IpAndPort"</c>). If null, preserves existing.</param>
-    /// <param name="byFormat">Format for the By header (e.g. <c>"Random"</c>, <c>"Ip"</c>). If null, preserves existing.</param>
-    /// <param name="host">Whether to enable Host forwarding transform action.</param>
-    /// <param name="proto">Whether to enable Proto / Scheme forwarding transform action.</param>
-    /// <param name="prefix">Custom header prefix (e.g. <c>"X-Forwarded"</c> or <c>"Forwarded"</c>).</param>
-    /// <returns>The builder instance for fluent chaining.</returns>
-    public KyrolusRouteBuilder WithTransformForwarded(
-        bool useXForwarded = true,
-        string? forFormat = null,
-        string? byFormat = null,
-        bool host = true,
-        bool proto = true,
-        string? prefix = null)
-    {
-        var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var key = prefix ?? (useXForwarded ? "X-Forwarded" : "Forwarded");
-        var parts = new List<string>();
-        if (proto) parts.Add("proto");
-        if (host) parts.Add("host");
-        if (forFormat != null) parts.Add("for");
-        if (byFormat != null) parts.Add("by");
-
-        dict[key] = string.Join(",", parts);
-        if (forFormat != null)
-        {
-            dict["ForFormat"] = forFormat;
-        }
-        if (byFormat != null)
-        {
-            dict["ByFormat"] = byFormat;
-        }
-        if (prefix != null)
-        {
-            dict["Prefix"] = prefix;
-        }
-
-        _transforms.Add(dict);
         return this;
     }
 
@@ -663,6 +845,11 @@ public sealed class KyrolusRouteBuilder
     /// </summary>
     public KyrolusGatewayRoute Build()
     {
+        if (_corsPolicy is not null && _autoAllowPreflight && _methods.Count > 0 && !_methods.Contains("OPTIONS", StringComparer.OrdinalIgnoreCase))
+        {
+            _methods.Add("OPTIONS");
+        }
+
         return new KyrolusGatewayRoute
         {
             RouteId = _routeId,

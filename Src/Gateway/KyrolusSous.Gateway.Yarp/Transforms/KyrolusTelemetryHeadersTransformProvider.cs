@@ -37,9 +37,7 @@ public class KyrolusTelemetryHeadersTransformProvider : ITransformProvider
         context.AddResponseTransform(transformContext =>
         {
             if (transformContext.HttpContext.Response.HasStarted)
-            {
                 return ValueTask.CompletedTask;
-            }
 
             transformContext.HttpContext.Response.Headers["X-Kyrolus-Gateway"] = "Active";
             return ValueTask.CompletedTask;

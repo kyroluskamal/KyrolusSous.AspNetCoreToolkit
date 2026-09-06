@@ -47,9 +47,9 @@ public sealed record KyrolusGatewayCluster
 
     /// <summary>
     /// Gets the load balancing algorithm policy name used to distribute requests among destinations.
-    /// Recommended values are available in <see cref="KyrolusLoadBalancingPolicies"/> (e.g. RoundRobin, LeastRequests, Random, PowerOfTwoChoices).
+    /// Recommended values are available in <see cref="KyrolusLoadBalancingPolicy"/> (e.g. RoundRobin, LeastRequests, Random, PowerOfTwoChoices).
     /// </summary>
-    public string? LoadBalancingPolicy { get; init; }
+    public KyrolusLoadBalancingPolicy? LoadBalancingPolicy { get; init; }
 
     /// <summary>
     /// Gets optional health check probing and observation options for the cluster destinations.

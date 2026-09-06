@@ -218,8 +218,8 @@ public sealed class GatewayTests
             }
         };
 
-        provider.AddRoute(route);
-        provider.AddCluster(cluster);
+        await provider.AddRouteAsync(route);
+        await provider.AddClusterAsync(cluster);
 
         var routes = await provider.GetRoutesAsync();
         routes.Count.ShouldBe(1);
@@ -1352,20 +1352,20 @@ public sealed class GatewayTests
         route.Match.Headers.Count.ShouldBe(2);
         route.Match.Headers[0].Name.ShouldBe("X-Canary");
         route.Match.Headers[0].Values.ShouldBe(new[] { "beta", "pilot" });
-        route.Match.Headers[0].Mode.ShouldBe("ExactHeader");
+        route.Match.Headers[0].Mode.ShouldBe(KyrolusHeaderMatchMode.ExactHeader);
         route.Match.Headers[0].IsCaseSensitive.ShouldBeFalse();
 
         route.Match.Headers[1].Name.ShouldBe("X-Features");
-        route.Match.Headers[1].Mode.ShouldBe("Exists");
+        route.Match.Headers[1].Mode.ShouldBe(KyrolusHeaderMatchMode.Exists);
 
         route.Match.QueryParameters.ShouldNotBeNull();
         route.Match.QueryParameters.Count.ShouldBe(2);
         route.Match.QueryParameters[0].Name.ShouldBe("v");
         route.Match.QueryParameters[0].Values.ShouldBe(new[] { "2" });
-        route.Match.QueryParameters[0].Mode.ShouldBe("Exact");
+        route.Match.QueryParameters[0].Mode.ShouldBe(KyrolusQueryParamMatchMode.Exact);
 
         route.Match.QueryParameters[1].Name.ShouldBe("preview");
-        route.Match.QueryParameters[1].Mode.ShouldBe("Exists");
+        route.Match.QueryParameters[1].Mode.ShouldBe(KyrolusQueryParamMatchMode.Exists);
 
         var provider = new KyrolusDynamicInMemoryRouteConfigProvider();
         provider.AddRoute(route);
@@ -1388,7 +1388,7 @@ public sealed class GatewayTests
     {
         var builder = new KyrolusRouteBuilder("tenant-secure-route", "secure-cluster", "/api/secure");
         builder.WithRequireTenant(true)
-               .WithAllowedContentTypes(["application/json", "text/plain"]);
+               .WithAllowedContentTypes("application/json", "text/plain");
 
         var route = builder.Build();
         route.RequireTenant.ShouldBeTrue();
@@ -2279,5 +2279,626 @@ public sealed class GatewayTests
         httpContext.Response.Headers["Strict-Transport-Security"].ToString()
             .ShouldBe("max-age=63072000; includeSubDomains; preload");
     }
+
+    [Fact(DisplayName = "RequestSmugglingTransformProvider: Blocks conflicting CL and TE, differing CL, and malformed framing")]
+    public async Task RequestSmugglingTransformProvider_BlocksConflictingCLAndTE_AndMalformedFraming()
+    {
+        var provider = new KyrolusRequestSmugglingTransformProvider();
+        var routeConfig = new RouteConfig
+        {
+            RouteId = "smuggling-test-route",
+            ClusterId = "cluster1",
+            Match = new RouteMatch { Path = "/api/{**catch-all}" }
+        };
+
+        var builderContext = new TransformBuilderContext { Route = routeConfig };
+        provider.Apply(builderContext);
+        var transform = builderContext.RequestTransforms[0];
+
+        // 1. Conflicting CL and TE
+        var clTeContext = new DefaultHttpContext();
+        clTeContext.Response.Body = new MemoryStream();
+        clTeContext.Request.Headers["Transfer-Encoding"] = "chunked";
+        clTeContext.Request.Headers["Content-Length"] = "42";
+
+        await transform.ApplyAsync(new RequestTransformContext
+        {
+            HttpContext = clTeContext,
+            ProxyRequest = new HttpRequestMessage()
+        });
+
+        clTeContext.Response.StatusCode.ShouldBe(StatusCodes.Status400BadRequest);
+        clTeContext.Response.ContentType.ShouldBe("application/problem+json");
+        clTeContext.Response.Body.Seek(0, SeekOrigin.Begin);
+        var body = await new StreamReader(clTeContext.Response.Body).ReadToEndAsync();
+        body.ShouldContain("Conflicting or duplicate content transfer headers detected");
+
+        // 2. Differing duplicate Content-Length headers
+        var dupClContext = new DefaultHttpContext();
+        dupClContext.Response.Body = new MemoryStream();
+        dupClContext.Request.Headers.Append("Content-Length", "50");
+        dupClContext.Request.Headers.Append("Content-Length", "100");
+
+        await transform.ApplyAsync(new RequestTransformContext
+        {
+            HttpContext = dupClContext,
+            ProxyRequest = new HttpRequestMessage()
+        });
+
+        dupClContext.Response.StatusCode.ShouldBe(StatusCodes.Status400BadRequest);
+
+        // 3. TE with control characters
+        var ctrlContext = new DefaultHttpContext();
+        ctrlContext.Response.Body = new MemoryStream();
+        ctrlContext.Request.Headers["Transfer-Encoding"] = "chunked\r\ninvalid";
+
+        await transform.ApplyAsync(new RequestTransformContext
+        {
+            HttpContext = ctrlContext,
+            ProxyRequest = new HttpRequestMessage()
+        });
+
+        ctrlContext.Response.StatusCode.ShouldBe(StatusCodes.Status400BadRequest);
+
+        // 4. Clean legitimate request
+        var cleanContext = new DefaultHttpContext();
+        cleanContext.Response.Body = new MemoryStream();
+        cleanContext.Request.Headers["Content-Length"] = "25";
+
+        await transform.ApplyAsync(new RequestTransformContext
+        {
+            HttpContext = cleanContext,
+            ProxyRequest = new HttpRequestMessage()
+        });
+
+        cleanContext.Response.StatusCode.ShouldBe(200);
+    }
+
+    [Fact(DisplayName = "PathTraversalTransformProvider: Blocks mixed slash encodings and query string traversal")]
+    public async Task PathTraversalTransformProvider_BlocksMixedSlash_And_QueryString_Traversal()
+    {
+        var provider = new KyrolusPathTraversalTransformProvider();
+        var routeConfig = new RouteConfig
+        {
+            RouteId = "traversal-test-route",
+            ClusterId = "cluster1",
+            Match = new RouteMatch { Path = "/api/{**catch-all}" }
+        };
+
+        var builderContext = new TransformBuilderContext { Route = routeConfig };
+        provider.Apply(builderContext);
+        var transform = builderContext.RequestTransforms[0];
+
+        // 1. Mixed slash encoding: ..%2f
+        var mixedContext = new DefaultHttpContext();
+        mixedContext.Response.Body = new MemoryStream();
+        mixedContext.Request.Path = "/api/files/..%2fsecret";
+
+        await transform.ApplyAsync(new RequestTransformContext
+        {
+            HttpContext = mixedContext,
+            ProxyRequest = new HttpRequestMessage()
+        });
+
+        mixedContext.Response.StatusCode.ShouldBe(StatusCodes.Status400BadRequest);
+        mixedContext.Response.ContentType.ShouldBe("application/problem+json");
+
+        // 2. Windows mixed slash encoding: ..%5c
+        var winContext = new DefaultHttpContext();
+        winContext.Response.Body = new MemoryStream();
+        winContext.Request.Path = "/api/files/..%5cwindows";
+
+        await transform.ApplyAsync(new RequestTransformContext
+        {
+            HttpContext = winContext,
+            ProxyRequest = new HttpRequestMessage()
+        });
+
+        winContext.Response.StatusCode.ShouldBe(StatusCodes.Status400BadRequest);
+
+        // 3. Query string traversal: ?file=..%2f..%2fetc/passwd
+        var queryContext = new DefaultHttpContext();
+        queryContext.Response.Body = new MemoryStream();
+        queryContext.Request.Path = "/api/files";
+        queryContext.Request.QueryString = new QueryString("?file=..%2f..%2fetc/passwd");
+
+        await transform.ApplyAsync(new RequestTransformContext
+        {
+            HttpContext = queryContext,
+            ProxyRequest = new HttpRequestMessage()
+        });
+
+        queryContext.Response.StatusCode.ShouldBe(StatusCodes.Status400BadRequest);
+
+        // 4. Query string null byte: ?view=%00
+        var nullQueryContext = new DefaultHttpContext();
+        nullQueryContext.Response.Body = new MemoryStream();
+        nullQueryContext.Request.Path = "/api/data";
+        nullQueryContext.Request.QueryString = new QueryString("?view=%00");
+
+        await transform.ApplyAsync(new RequestTransformContext
+        {
+            HttpContext = nullQueryContext,
+            ProxyRequest = new HttpRequestMessage()
+        });
+
+        nullQueryContext.Response.StatusCode.ShouldBe(StatusCodes.Status400BadRequest);
+
+        // 5. Clean query string
+        var cleanContext = new DefaultHttpContext();
+        cleanContext.Response.Body = new MemoryStream();
+        cleanContext.Request.Path = "/api/items";
+        cleanContext.Request.QueryString = new QueryString("?page=1&size=20");
+
+        await transform.ApplyAsync(new RequestTransformContext
+        {
+            HttpContext = cleanContext,
+            ProxyRequest = new HttpRequestMessage()
+        });
+
+        cleanContext.Response.StatusCode.ShouldBe(200);
+    }
+
+    [Fact(DisplayName = "RouteBuilder: WithCors automatically adds OPTIONS method when methods are restricted")]
+    public void RouteBuilder_WithCors_AutomaticallyAddsOptionsMethod()
+    {
+        // 1. autoAllowPreflight = true (default)
+        var builder = new KyrolusRouteBuilder("orders-route", "cluster1", "/api/orders");
+        builder.WithMethods("GET", "POST")
+               .WithCors("DefaultPolicy");
+
+        var route = builder.Build();
+        route.Match.Methods.ShouldNotBeNull();
+        route.Match.Methods.ShouldContain("GET");
+        route.Match.Methods.ShouldContain("POST");
+        route.Match.Methods.ShouldContain("OPTIONS");
+
+        // 2. autoAllowPreflight = false
+        var strictBuilder = new KyrolusRouteBuilder("strict-route", "cluster1", "/api/strict");
+        strictBuilder.WithMethods("GET")
+                     .WithCors("DefaultPolicy", autoAllowPreflight: false);
+
+        var strictRoute = strictBuilder.Build();
+        strictRoute.Match.Methods.ShouldNotBeNull();
+        strictRoute.Match.Methods.ShouldContain("GET");
+        strictRoute.Match.Methods.ShouldNotContain("OPTIONS");
+    }
+
+    [Fact(DisplayName = "ClusterBuilder: WithHttpVersion and Aliases configure outbound client and timeout")]
+    public void ClusterBuilder_WithHttpVersion_AndAliases_ConfigureOutboundClient()
+    {
+        var builder = new KyrolusClusterBuilder("grpc-cluster");
+        builder.AddDestination("grpc-node", "https://10.0.1.20:50051")
+               .WithHttpVersion(HttpVersion.Version20, HttpVersionPolicy.RequestVersionExact)
+               .WithHttpRequestTimeout(TimeSpan.FromSeconds(25))
+               .WithAllowResponseBuffering(false);
+
+        var (cluster, _) = builder.Build();
+
+        cluster.HttpClient.ShouldNotBeNull();
+        cluster.HttpClient.DefaultVersion.ShouldBe(HttpVersion.Version20);
+        cluster.HttpClient.VersionPolicy.ShouldBe(HttpVersionPolicy.RequestVersionExact);
+        cluster.HttpRequestTimeout.ShouldBe(TimeSpan.FromSeconds(25));
+        cluster.AllowResponseBuffering.ShouldBe(false);
+    }
+
+    [Fact(DisplayName = "RateLimitPartitionKeys: GetClientIpKey with forwarded header extracts correct IP")]
+    public void RateLimitPartitionKeys_GetClientIpKey_WithForwardedHeader_ExtractsCorrectIp()
+    {
+        // 1. Custom CF-Connecting-IP
+        var cfContext = new DefaultHttpContext();
+        cfContext.Request.Headers["CF-Connecting-IP"] = "198.51.100.42";
+        cfContext.Connection.RemoteIpAddress = IPAddress.Parse("127.0.0.1");
+
+        var cfIp = KyrolusRateLimitPartitionKeys.GetClientIpKey(cfContext, "CF-Connecting-IP");
+        cfIp.ShouldBe("198.51.100.42");
+
+        // 2. Comma-separated X-Forwarded-For takes first IP
+        var xffContext = new DefaultHttpContext();
+        xffContext.Request.Headers["X-Forwarded-For"] = "203.0.113.195, 70.41.3.18, 150.172.238.178";
+        xffContext.Connection.RemoteIpAddress = IPAddress.Parse("127.0.0.1");
+
+        var xffIp = KyrolusRateLimitPartitionKeys.GetClientIpKey(xffContext, "X-Forwarded-For");
+        xffIp.ShouldBe("203.0.113.195");
+
+        // 3. Fallback to Connection.RemoteIpAddress when header absent
+        var fallbackContext = new DefaultHttpContext();
+        fallbackContext.Connection.RemoteIpAddress = IPAddress.Parse("10.0.0.5");
+
+        var fallbackIp = KyrolusRateLimitPartitionKeys.GetClientIpKey(fallbackContext, "CF-Connecting-IP");
+        fallbackIp.ShouldBe("10.0.0.5");
+    }
+
+    [Fact(DisplayName = "MethodOverrideTransform: Mutates ProxyRequest.Method when override is allowed and verb is valid")]
+    public async Task MethodOverrideTransform_MutatesProxyRequestMethod_WhenAllowedAndValid()
+    {
+        var provider = new KyrolusMethodOverrideTransformProvider();
+        var routeConfig = new RouteConfig
+        {
+            RouteId = "rest-route",
+            ClusterId = "cluster1",
+            Match = new RouteMatch
+            {
+                Path = "/api/orders/{id}",
+                Methods = ["POST", "PUT", "DELETE"]
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["Kyrolus:MethodOverride:Allowed"] = "true"
+            }
+        };
+
+        var builderContext = new TransformBuilderContext { Route = routeConfig };
+        provider.Apply(builderContext);
+        var transform = builderContext.RequestTransforms[0];
+
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Method = "POST";
+        httpContext.Request.Headers["X-HTTP-Method-Override"] = "DELETE";
+
+        var proxyReq = new HttpRequestMessage(HttpMethod.Post, "https://backend/api/orders/123");
+        proxyReq.Headers.Add("X-HTTP-Method-Override", "DELETE");
+
+        await transform.ApplyAsync(new RequestTransformContext
+        {
+            HttpContext = httpContext,
+            ProxyRequest = proxyReq
+        });
+
+        httpContext.Response.StatusCode.ShouldBe(200);
+        proxyReq.Method.ShouldBe(HttpMethod.Delete);
+        proxyReq.Headers.Contains("X-HTTP-Method-Override").ShouldBeFalse();
+    }
+
+    [Theory(DisplayName = "MethodOverrideTransform: Blocks dangerous verbs TRACE, TRACK, CONNECT with 405")]
+    [InlineData("TRACE")]
+    [InlineData("TRACK")]
+    [InlineData("CONNECT")]
+    public async Task MethodOverrideTransform_BlocksDangerousVerbs_With405ProblemDetails(string verb)
+    {
+        var provider = new KyrolusMethodOverrideTransformProvider();
+        var routeConfig = new RouteConfig
+        {
+            RouteId = "any-route",
+            ClusterId = "cluster1",
+            Match = new RouteMatch
+            {
+                Path = "/api/test",
+                Methods = ["POST", "TRACE", "TRACK", "CONNECT"]
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["Kyrolus:MethodOverride:Allowed"] = "true"
+            }
+        };
+
+        var builderContext = new TransformBuilderContext { Route = routeConfig };
+        provider.Apply(builderContext);
+        var transform = builderContext.RequestTransforms[0];
+
+        var httpContext = new DefaultHttpContext();
+        httpContext.Response.Body = new MemoryStream();
+        httpContext.Request.Method = "POST";
+        httpContext.Request.Headers["X-HTTP-Method-Override"] = verb;
+
+        var proxyReq = new HttpRequestMessage(HttpMethod.Post, "https://backend/api/test");
+
+        await transform.ApplyAsync(new RequestTransformContext
+        {
+            HttpContext = httpContext,
+            ProxyRequest = proxyReq
+        });
+
+        httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status405MethodNotAllowed);
+        httpContext.Response.ContentType.ShouldBe("application/problem+json");
+
+        httpContext.Response.Body.Seek(0, SeekOrigin.Begin);
+        var body = await new StreamReader(httpContext.Response.Body).ReadToEndAsync();
+        body.ShouldContain("https://httpstatuses.com/405");
+        body.ShouldContain("Method Not Allowed");
+    }
+
+    [Fact(DisplayName = "RouteBuilder: WithStreaming and WithBlockDangerousVerbs configure route properly")]
+    public void RouteBuilder_WithStreaming_And_WithBlockDangerousVerbs_ConfigureRoute()
+    {
+        var builder = new KyrolusRouteBuilder("stream-route", "cluster1", "/api/events/stream");
+        builder.WithStreaming(TimeSpan.FromMinutes(5))
+               .WithBlockDangerousVerbs(true);
+
+        var route = builder.Build();
+
+        route.Timeout.ShouldBe(TimeSpan.FromMinutes(5));
+        route.Metadata.ShouldNotBeNull();
+        route.Metadata["Kyrolus:Streaming:Enabled"].ShouldBe("true");
+        route.Metadata["Kyrolus:Verbs:BlockDangerous"].ShouldBe("true");
+    }
+
+    [Fact(DisplayName = "RateLimitPartitionKeys: GetClientIpKey with isTrustedProxy defends against IP spoofing")]
+    public void RateLimitPartitionKeys_GetClientIpKey_WithTrustedProxy_DefendsAgainstSpoofing()
+    {
+        // Scenario 1: Untrusted connecting remote IP -> spoofed header is ignored, Connection.RemoteIpAddress used
+        var untrustedContext = new DefaultHttpContext();
+        untrustedContext.Connection.RemoteIpAddress = IPAddress.Parse("198.51.100.55");
+        untrustedContext.Request.Headers["X-Forwarded-For"] = "10.0.0.1";
+
+        var untrustedResult = KyrolusRateLimitPartitionKeys.GetClientIpKey(
+            untrustedContext,
+            "X-Forwarded-For",
+            remoteIp => IPAddress.IsLoopback(remoteIp));
+
+        untrustedResult.ShouldBe("198.51.100.55");
+
+        // Scenario 2: Trusted connecting remote IP -> forwarded header IS accepted
+        var trustedContext = new DefaultHttpContext();
+        trustedContext.Connection.RemoteIpAddress = IPAddress.Parse("127.0.0.1");
+        trustedContext.Request.Headers["X-Forwarded-For"] = "203.0.113.195, 70.41.3.18";
+
+        var trustedResult = KyrolusRateLimitPartitionKeys.GetClientIpKey(
+            trustedContext,
+            "X-Forwarded-For",
+            remoteIp => IPAddress.IsLoopback(remoteIp));
+
+        trustedResult.ShouldBe("203.0.113.195");
+    }
+
+    [Fact(DisplayName = "TransformProviders: ValidateRoute reports errors on malformed metadata")]
+    public void TransformProviders_ValidateRoute_ReportsErrors_OnMalformedMetadata()
+    {
+        // 1. Tenant: Invalid bool
+        var tenantRoute = new RouteConfig
+        {
+            RouteId = "r-tenant",
+            Metadata = new Dictionary<string, string> { ["Kyrolus:Tenant:Required"] = "not_bool" }
+        };
+        var tenantCtx = new TransformRouteValidationContext { Route = tenantRoute };
+        new KyrolusTenantRoutingTransformProvider().ValidateRoute(tenantCtx);
+        tenantCtx.Errors.Count.ShouldBe(1);
+
+        // 2. Payload size: Negative or non-numeric
+        var payloadRoute = new RouteConfig
+        {
+            RouteId = "r-payload",
+            Metadata = new Dictionary<string, string> { ["Kyrolus:Payload:MaxSize"] = "-10" }
+        };
+        var payloadCtx = new TransformRouteValidationContext { Route = payloadRoute };
+        new KyrolusPayloadSizeTransformProvider().ValidateRoute(payloadCtx);
+        payloadCtx.Errors.Count.ShouldBe(1);
+
+        // 3. Header limits: Non-numeric
+        var headerRoute = new RouteConfig
+        {
+            RouteId = "r-headers",
+            Metadata = new Dictionary<string, string> { ["Kyrolus:Headers:MaxCount"] = "invalid" }
+        };
+        var headerCtx = new TransformRouteValidationContext { Route = headerRoute };
+        new KyrolusHeaderLimitsTransformProvider().ValidateRoute(headerCtx);
+        headerCtx.Errors.Count.ShouldBe(1);
+
+        // 4. IP filter: Invalid IP
+        var ipRoute = new RouteConfig
+        {
+            RouteId = "r-ip",
+            Metadata = new Dictionary<string, string> { ["Kyrolus:IpFilter:Allowed"] = "999.999.999.999" }
+        };
+        var ipCtx = new TransformRouteValidationContext { Route = ipRoute };
+        new KyrolusIpFilterTransformProvider().ValidateRoute(ipCtx);
+        ipCtx.Errors.Count.ShouldBe(1);
+
+        // 5. Content type: Missing slash in MIME
+        var contentTypeRoute = new RouteConfig
+        {
+            RouteId = "r-content-type",
+            Metadata = new Dictionary<string, string> { ["Kyrolus:ContentType:Allowed"] = "invalidmime" }
+        };
+        var contentTypeCtx = new TransformRouteValidationContext { Route = contentTypeRoute };
+        new KyrolusContentTypeTransformProvider().ValidateRoute(contentTypeCtx);
+        contentTypeCtx.Errors.Count.ShouldBe(1);
+
+        // 6. Method override: Invalid bool
+        var methodRoute = new RouteConfig
+        {
+            RouteId = "r-method",
+            Metadata = new Dictionary<string, string> { ["Kyrolus:MethodOverride:Allowed"] = "maybe" }
+        };
+        var methodCtx = new TransformRouteValidationContext { Route = methodRoute };
+        new KyrolusMethodOverrideTransformProvider().ValidateRoute(methodCtx);
+        methodCtx.Errors.Count.ShouldBe(1);
+    }
+
+    [Fact(DisplayName = "TransformProviders: ValidateRoute passes with zero errors on valid metadata")]
+    public void TransformProviders_ValidateRoute_Passes_OnValidMetadata()
+    {
+        var route = new RouteConfig
+        {
+            RouteId = "r-valid",
+            Metadata = new Dictionary<string, string>
+            {
+                ["Kyrolus:Tenant:Required"] = "true",
+                ["Kyrolus:Payload:MaxSize"] = "1048576",
+                ["Kyrolus:Headers:MaxCount"] = "50",
+                ["Kyrolus:Headers:MaxTotalLength"] = "16384",
+                ["Kyrolus:IpFilter:Allowed"] = "192.168.1.0/24, 10.0.0.1",
+                ["Kyrolus:ContentType:Allowed"] = "application/json, text/plain",
+                ["Kyrolus:MethodOverride:Allowed"] = "false"
+            }
+        };
+
+        var ctx = new TransformRouteValidationContext { Route = route };
+
+        new KyrolusTenantRoutingTransformProvider().ValidateRoute(ctx);
+        new KyrolusPayloadSizeTransformProvider().ValidateRoute(ctx);
+        new KyrolusHeaderLimitsTransformProvider().ValidateRoute(ctx);
+        new KyrolusIpFilterTransformProvider().ValidateRoute(ctx);
+        new KyrolusContentTypeTransformProvider().ValidateRoute(ctx);
+        new KyrolusMethodOverrideTransformProvider().ValidateRoute(ctx);
+
+        ctx.Errors.Count.ShouldBe(0);
+    }
+
+    [Fact(DisplayName = "RouteBuilder: Request and Response Header transforms are configured correctly")]
+    public void RouteBuilder_HeaderTransforms_ConfigureRequestAndResponseTransforms()
+    {
+        var builder = new KyrolusRouteBuilder("header-test-route", "cluster1", "/api/data");
+        builder.WithRequestHeader("X-Custom-Req", "MyReqVal")
+               .WithRemoveRequestHeader("X-Internal-Secret")
+               .WithResponseHeader("X-Custom-Resp", "MyRespVal")
+               .WithRemoveResponseHeader("Server")
+               .WithOriginalHostHeader(true);
+
+        var route = builder.Build();
+
+        route.Transforms.ShouldNotBeNull();
+        route.Transforms.Count.ShouldBe(5);
+
+        // 1. WithRequestHeader
+        route.Transforms.Any(t => t.TryGetValue("RequestHeader", out var h) && h == "X-Custom-Req" &&
+                                  t.TryGetValue("Set", out var v) && v == "MyReqVal").ShouldBeTrue();
+
+        // 2. WithRemoveRequestHeader
+        route.Transforms.Any(t => t.TryGetValue("RequestHeaderRemove", out var h) && h == "X-Internal-Secret").ShouldBeTrue();
+
+        // 3. WithResponseHeader
+        route.Transforms.Any(t => t.TryGetValue("ResponseHeaderValue", out var h) && h == "X-Custom-Resp" &&
+                                  t.TryGetValue("Set", out var v) && v == "MyRespVal" &&
+                                  t.TryGetValue("When", out var w) && w == "Always").ShouldBeTrue();
+
+        // 4. WithRemoveResponseHeader
+        route.Transforms.Any(t => t.TryGetValue("ResponseHeaderRemove", out var h) && h == "Server" &&
+                                  t.TryGetValue("When", out var w) && w == "Always").ShouldBeTrue();
+
+        // 5. WithOriginalHostHeader
+        route.Transforms.Any(t => t.TryGetValue("RequestHeaderOriginalHost", out var oh) && oh == "true").ShouldBeTrue();
+    }
+
+    [Fact(DisplayName = "ClusterBuilder: Outbound HttpClient options configure resilience and mTLS settings")]
+    public void ClusterBuilder_HttpClientOptions_ConfigureAdvancedSettings()
+    {
+        var builder = new KyrolusClusterBuilder("resilient-cluster");
+        builder.AddDestination("node1", "https://10.0.1.50:5001")
+               .WithDangerousAcceptAnyServerCertificate(true)
+               .WithMaxConnectionsPerServer(250)
+               .WithMultipleHttp2Connections(true);
+
+        var (cluster, _) = builder.Build();
+
+        cluster.HttpClient.ShouldNotBeNull();
+        cluster.HttpClient.DangerousAcceptAnyServerCertificate.ShouldBeTrue();
+        cluster.HttpClient.MaxConnectionsPerServer.ShouldBe(250);
+        cluster.HttpClient.EnableMultipleHttp2Connections.ShouldBe(true);
+    }
+
+    [Theory(DisplayName = "PathTraversalTransform: Blocks matrix parameter and semicolon traversal attempts")]
+    [InlineData("/api/files/..;/..;/etc/passwd")]
+    [InlineData("/api/files/..%3b/etc/passwd")]
+    [InlineData("/api/files/%3b../etc/passwd")]
+    [InlineData("/api/.;/test")]
+    public async Task PathTraversalTransform_Blocks_MatrixSemicolonTraversal(string path)
+    {
+        var provider = new KyrolusPathTraversalTransformProvider();
+        var routeConfig = new RouteConfig
+        {
+            RouteId = "traversal-route",
+            ClusterId = "cluster1",
+            Match = new RouteMatch { Path = "/api/{**catch-all}" }
+        };
+
+        var builderContext = new TransformBuilderContext { Route = routeConfig };
+        provider.Apply(builderContext);
+        var transform = builderContext.RequestTransforms[0];
+
+        var context = new DefaultHttpContext();
+        context.Response.Body = new MemoryStream();
+        context.Request.Path = path;
+
+        await transform.ApplyAsync(new RequestTransformContext
+        {
+            HttpContext = context,
+            ProxyRequest = new HttpRequestMessage()
+        });
+
+        context.Response.StatusCode.ShouldBe(StatusCodes.Status400BadRequest);
+        context.Response.ContentType.ShouldBe("application/problem+json");
+    }
+
+    [Fact(DisplayName = "StronglyTypedPolicies SupportStandardValuesCustomValuesAndStringConversions")]
+    public void StronglyTypedPolicies_SupportStandardValuesCustomValuesAndStringConversions()
+    {
+        // 1. ActiveHealthCheckPolicy
+        var activeDefault = KyrolusActiveHealthCheckPolicy.ConsecutiveFailures;
+        activeDefault.Value.ShouldBe("ConsecutiveFailures");
+        activeDefault.ToString().ShouldBe("ConsecutiveFailures");
+        string activeStr = activeDefault;
+        activeStr.ShouldBe("ConsecutiveFailures");
+        (activeDefault == "consecutivefailures").ShouldBeTrue();
+        (activeDefault != "other").ShouldBeTrue();
+
+        var activeCustom = KyrolusActiveHealthCheckPolicy.Custom("MyCustomActive");
+        activeCustom.Value.ShouldBe("MyCustomActive");
+        KyrolusActiveHealthCheckPolicy.From("consecutivefailures").ShouldBe(KyrolusActiveHealthCheckPolicy.ConsecutiveFailures);
+        KyrolusActiveHealthCheckPolicy.From("MyCustomActive")?.Value.ShouldBe("MyCustomActive");
+        KyrolusActiveHealthCheckPolicy.From(null).ShouldBeNull();
+
+        // 2. PassiveHealthCheckPolicy
+        var passiveDefault = KyrolusPassiveHealthCheckPolicy.TransportFailureRate;
+        passiveDefault.Value.ShouldBe("TransportFailureRate");
+        string passiveStr = passiveDefault;
+        passiveStr.ShouldBe("TransportFailureRate");
+        (passiveDefault == "transportfailurerate").ShouldBeTrue();
+
+        var passiveCustom = KyrolusPassiveHealthCheckPolicy.Custom("MyCustomPassive");
+        passiveCustom.Value.ShouldBe("MyCustomPassive");
+        KyrolusPassiveHealthCheckPolicy.From("transportfailurerate").ShouldBe(KyrolusPassiveHealthCheckPolicy.TransportFailureRate);
+        KyrolusPassiveHealthCheckPolicy.From(null).ShouldBeNull();
+
+        // 3. AvailableDestinationsPolicy
+        var destDefault = KyrolusAvailableDestinationsPolicy.HealthyOrUnspecified;
+        destDefault.Value.ShouldBe("HealthyOrUnspecified");
+        KyrolusAvailableDestinationsPolicy.HealthyAndUnknown.Value.ShouldBe("HealthyAndUnknown");
+        string destStr = destDefault;
+        destStr.ShouldBe("HealthyOrUnspecified");
+        (destDefault == "healthyorunspecified").ShouldBeTrue();
+
+        var destCustom = KyrolusAvailableDestinationsPolicy.Custom("StrictHealthyOnly");
+        destCustom.Value.ShouldBe("StrictHealthyOnly");
+        KyrolusAvailableDestinationsPolicy.From("healthyandunknown").ShouldBe(KyrolusAvailableDestinationsPolicy.HealthyAndUnknown);
+        KyrolusAvailableDestinationsPolicy.From(null).ShouldBeNull();
+
+        // 4. LoadBalancingPolicy
+        var lbDefault = KyrolusLoadBalancingPolicy.RoundRobin;
+        lbDefault.Value.ShouldBe("RoundRobin");
+        KyrolusLoadBalancingPolicy.LeastRequests.Value.ShouldBe("LeastRequests");
+        KyrolusLoadBalancingPolicy.Random.Value.ShouldBe("Random");
+        KyrolusLoadBalancingPolicy.PowerOfTwoChoices.Value.ShouldBe("PowerOfTwoChoices");
+        string lbStr = lbDefault;
+        lbStr.ShouldBe("RoundRobin");
+        (lbDefault == "roundrobin").ShouldBeTrue();
+
+        var lbCustom = KyrolusLoadBalancingPolicy.Custom("WeightedRoundRobin");
+        lbCustom.Value.ShouldBe("WeightedRoundRobin");
+        KyrolusLoadBalancingPolicy.From("leastrequests").ShouldBe(KyrolusLoadBalancingPolicy.LeastRequests);
+        KyrolusLoadBalancingPolicy.From("random").ShouldBe(KyrolusLoadBalancingPolicy.Random);
+        KyrolusLoadBalancingPolicy.From("poweroftwochoices").ShouldBe(KyrolusLoadBalancingPolicy.PowerOfTwoChoices);
+        KyrolusLoadBalancingPolicy.From(null).ShouldBeNull();
+    }
+
+    [Fact(DisplayName = "ClusterBuilder WithStronglyTypedPolicies ConfiguresClusterCorrectly")]
+    public void ClusterBuilder_WithStronglyTypedPolicies_ConfiguresClusterCorrectly()
+    {
+        var builder = new KyrolusClusterBuilder("typed-policy-cluster");
+        builder.AddDestination("node1", "https://10.0.1.50:5001")
+               .WithLoadBalancing(KyrolusLoadBalancingPolicy.PowerOfTwoChoices)
+               .WithActiveHealthCheck("/healthz", TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(2), KyrolusActiveHealthCheckPolicy.ConsecutiveFailures)
+               .WithPassiveHealthCheck(TimeSpan.FromSeconds(30), KyrolusPassiveHealthCheckPolicy.TransportFailureRate);
+
+        var (cluster, _) = builder.Build();
+
+        cluster.LoadBalancingPolicy.ShouldBe(KyrolusLoadBalancingPolicy.PowerOfTwoChoices);
+        cluster.HealthCheck.ShouldNotBeNull();
+        cluster.HealthCheck.Active!.Policy.ShouldBe(KyrolusActiveHealthCheckPolicy.ConsecutiveFailures);
+        cluster.HealthCheck.Passive!.Policy.ShouldBe(KyrolusPassiveHealthCheckPolicy.TransportFailureRate);
+        cluster.HealthCheck.AvailableDestinationsPolicy.ShouldBe(KyrolusAvailableDestinationsPolicy.HealthyOrUnspecified);
+    }
 }
+
+
 

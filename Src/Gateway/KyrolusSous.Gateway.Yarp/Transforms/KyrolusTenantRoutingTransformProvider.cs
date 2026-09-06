@@ -16,7 +16,7 @@ namespace KyrolusSous.Gateway.Yarp.Transforms;
 public sealed class KyrolusTenantRoutingTransformProvider : ITransformProvider
 {
     private static readonly byte[] TenantRequiredResponseBytes =
-        """{"title":"Unauthorized","status":401,"detail":"A valid tenant context is required to access this route."}"""u8.ToArray();
+        """{"type":"https://httpstatuses.com/401","title":"Unauthorized","status":401,"detail":"A valid tenant context is required to access this route."}"""u8.ToArray();
 
     private static readonly IKyrolusTenantResolver DefaultFallbackResolver = new KyrolusCompositeTenantResolver(
     [
@@ -25,7 +25,16 @@ public sealed class KyrolusTenantRoutingTransformProvider : ITransformProvider
     ]);
 
     /// <inheritdoc />
-    public void ValidateRoute(TransformRouteValidationContext context) { }
+    public void ValidateRoute(TransformRouteValidationContext context)
+    {
+        if (context.Route.Metadata is { } metadata &&
+            metadata.TryGetValue("Kyrolus:Tenant:Required", out var req) &&
+            !string.IsNullOrWhiteSpace(req) &&
+            !bool.TryParse(req, out _))
+        {
+            context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid metadata 'Kyrolus:Tenant:Required' value '{req}'. Expected 'true' or 'false'."));
+        }
+    }
 
     /// <inheritdoc />
     public void ValidateCluster(TransformClusterValidationContext context) { }
@@ -43,10 +52,7 @@ public sealed class KyrolusTenantRoutingTransformProvider : ITransformProvider
 
         context.AddRequestTransform(async transformContext =>
         {
-            if (transformContext.HttpContext.Response.HasStarted)
-            {
-                return;
-            }
+            if (transformContext.HttpContext.Response.HasStarted) return;
 
             var httpContext = transformContext.HttpContext;
 
@@ -80,27 +86,14 @@ public sealed class KyrolusTenantRoutingTransformProvider : ITransformProvider
 
             // 4. Inject the authoritative, sanitized tenant ID into upstream request headers
             if (!string.IsNullOrWhiteSpace(resolvedTenant) && IsValidTenantIdentifier(resolvedTenant))
-            {
                 transformContext.ProxyRequest.Headers.Add("X-Tenant-ID", resolvedTenant);
-            }
         });
     }
 
     private static bool IsValidTenantIdentifier(string value)
     {
-        if (string.IsNullOrWhiteSpace(value) || value.Length > 64)
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 64) return false;
 
-        foreach (var c in value)
-        {
-            if (!char.IsAsciiLetterOrDigit(c) && c != '-' && c != '_' && c != '.')
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return !value.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '-' && c != '_' && c != '.');
     }
 }

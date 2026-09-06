@@ -28,6 +28,9 @@ public sealed class KyrolusSecurityHeadersMiddlewareTests
         context.Response.Headers["X-Frame-Options"].ToString().ShouldBe("DENY");
         context.Response.Headers["X-XSS-Protection"].ToString().ShouldBe("1; mode=block");
         context.Response.Headers["Referrer-Policy"].ToString().ShouldBe("strict-origin-when-cross-origin");
+        context.Response.Headers["X-Permitted-Cross-Domain-Policies"].ToString().ShouldBe("none");
+        context.Response.Headers["Cross-Origin-Opener-Policy"].ToString().ShouldBe("same-origin");
+        context.Response.Headers["Cross-Origin-Resource-Policy"].ToString().ShouldBe("same-site");
         context.Response.Headers.ContainsKey("Content-Security-Policy").ShouldBeFalse();
         context.Response.Headers.ContainsKey("Permissions-Policy").ShouldBeFalse();
     }
@@ -40,7 +43,10 @@ public sealed class KyrolusSecurityHeadersMiddlewareTests
             FrameOptions = "SAMEORIGIN",
             ContentSecurityPolicy = "default-src 'self'",
             PermissionsPolicy = "geolocation=()",
-            XssProtection = null // Suppressed
+            XssProtection = null, // Suppressed
+            PermittedCrossDomainPolicies = "master-only",
+            CrossOriginOpenerPolicy = "same-origin-allow-popups",
+            CrossOriginResourcePolicy = "cross-origin"
         });
 
         RequestDelegate next = ctx => Task.CompletedTask;
@@ -54,6 +60,9 @@ public sealed class KyrolusSecurityHeadersMiddlewareTests
         context.Response.Headers["Content-Security-Policy"].ToString().ShouldBe("default-src 'self'");
         context.Response.Headers["Permissions-Policy"].ToString().ShouldBe("geolocation=()");
         context.Response.Headers.ContainsKey("X-XSS-Protection").ShouldBeFalse();
+        context.Response.Headers["X-Permitted-Cross-Domain-Policies"].ToString().ShouldBe("master-only");
+        context.Response.Headers["Cross-Origin-Opener-Policy"].ToString().ShouldBe("same-origin-allow-popups");
+        context.Response.Headers["Cross-Origin-Resource-Policy"].ToString().ShouldBe("cross-origin");
     }
 
     [Fact(DisplayName = "KyrolusSecurityHeadersMiddleware: Does not overwrite pre-existing header")]

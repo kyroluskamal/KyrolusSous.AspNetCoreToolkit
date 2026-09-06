@@ -89,7 +89,7 @@ public sealed record KyrolusGatewayRoute
     /// <summary>
     /// Gets the list of route-level request/response transforms (e.g. PathRemovePrefix, PathPrefix, PathSet).
     /// </summary>
-    public IReadOnlyList<IReadOnlyDictionary<string, string>>? Transforms { get; init; }
+    public IReadOnlyList<KyrolusGatewayTransform>? Transforms { get; init; }
 
     /// <summary>
     /// Gets the maximum allowed request body size in bytes for this route.

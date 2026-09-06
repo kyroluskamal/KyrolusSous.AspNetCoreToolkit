@@ -17,9 +17,9 @@ public sealed record KyrolusRouteQueryParameter
 
     /// <summary>
     /// Gets the comparison mode (<c>"Exact"</c>, <c>"Prefix"</c>, <c>"Exists"</c>, <c>"Contains"</c>, <c>"NotContains"</c>).
-    /// Defaults to <c>"Exact"</c>.
+    /// Defaults to <see cref="KyrolusQueryParamMatchMode.Exact"/>.
     /// </summary>
-    public string? Mode { get; init; } = "Exact";
+    public KyrolusQueryParamMatchMode? Mode { get; init; } = KyrolusQueryParamMatchMode.Exact;
 
     /// <summary>
     /// Gets whether the query parameter value comparison is case-sensitive. Defaults to <c>false</c>.

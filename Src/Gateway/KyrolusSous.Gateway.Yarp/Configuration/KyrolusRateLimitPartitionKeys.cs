@@ -1,7 +1,3 @@
-using System.Security.Claims;
-using KyrolusSous.Auth.MultiTenancy;
-using Microsoft.AspNetCore.Http;
-
 namespace KyrolusSous.Gateway.Yarp.Configuration;
 
 /// <summary>
@@ -15,10 +11,48 @@ public static class KyrolusRateLimitPartitionKeys
     /// </summary>
     /// <param name="context">The active HTTP context.</param>
     /// <returns>The remote IP string, or <c>"unknown_ip"</c> if unavailable.</returns>
-    public static string GetClientIpKey(HttpContext context)
+    public static string GetClientIpKey(HttpContext context) => GetClientIpKey(context, null);
+
+    /// <summary>
+    /// Resolves a partition key based on the client's remote IP address or a trusted forwarded header (e.g. <c>"CF-Connecting-IP"</c> or <c>"X-Forwarded-For"</c>).
+    /// </summary>
+    /// <param name="context">The active HTTP context.</param>
+    /// <param name="forwardedHeader">Optional custom header name to inspect for client IP before falling back to connection remote IP.</param>
+    /// <returns>The remote IP string, or <c>"unknown_ip"</c> if unavailable.</returns>
+    public static string GetClientIpKey(HttpContext context, string? forwardedHeader)
+        => GetClientIpKey(context, forwardedHeader, isTrustedProxy: null);
+
+    /// <summary>
+    /// Resolves a partition key based on the client's remote IP address or a trusted forwarded header (e.g. <c>"CF-Connecting-IP"</c> or <c>"X-Forwarded-For"</c>),
+    /// strictly requiring the direct connection remote IP to satisfy the <paramref name="isTrustedProxy"/> predicate before honoring the header.
+    /// Defends against rate limiter bypass via client IP spoofing (CWE-345 / CWE-290).
+    /// </summary>
+    /// <param name="context">The active HTTP context.</param>
+    /// <param name="forwardedHeader">Optional custom header name to inspect for client IP.</param>
+    /// <param name="isTrustedProxy">Optional predicate validating whether the immediate connecting remote IP is an authorized reverse proxy / CDN.</param>
+    /// <returns>The resolved client IP string, or <c>"unknown_ip"</c> if unavailable.</returns>
+    public static string GetClientIpKey(HttpContext context, string? forwardedHeader, Func<System.Net.IPAddress, bool>? isTrustedProxy)
     {
         ArgumentNullException.ThrowIfNull(context);
-        return context.Connection.RemoteIpAddress?.ToString() ?? "unknown_ip";
+
+        var remoteIp = context.Connection.RemoteIpAddress;
+        var isProxyTrusted = isTrustedProxy is null || (remoteIp is not null && isTrustedProxy(remoteIp));
+
+        if (isProxyTrusted &&
+            !string.IsNullOrWhiteSpace(forwardedHeader) &&
+            context.Request.Headers.TryGetValue(forwardedHeader, out var val) &&
+            !string.IsNullOrWhiteSpace(val))
+        {
+            var raw = val.ToString();
+            var commaIdx = raw.IndexOf(',');
+            var ipStr = commaIdx >= 0 ? raw[..commaIdx].Trim() : raw.Trim();
+            if (!string.IsNullOrWhiteSpace(ipStr))
+            {
+                return ipStr;
+            }
+        }
+
+        return remoteIp?.ToString() ?? "unknown_ip";
     }
 
     /// <summary>

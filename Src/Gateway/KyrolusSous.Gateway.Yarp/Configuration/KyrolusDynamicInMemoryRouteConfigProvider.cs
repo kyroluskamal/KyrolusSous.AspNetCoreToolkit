@@ -52,20 +52,6 @@ public sealed class KyrolusDynamicInMemoryRouteConfigProvider : IProxyConfigProv
     }
 
     /// <summary>
-    /// Adds or updates a raw gateway service cluster with its destinations and load balancing policy, then signals a reload.
-    /// </summary>
-    /// <param name="cluster">The gateway cluster to add or replace.</param>
-    public void AddCluster(KyrolusGatewayCluster cluster)
-    {
-        ArgumentNullException.ThrowIfNull(cluster);
-        lock (_syncLock)
-        {
-            _clusters[cluster.ClusterId] = cluster;
-            SignalChange();
-        }
-    }
-
-    /// <summary>
     /// Adds or updates multiple raw gateway routes in a single atomic batch operation, triggering a single reload notification.
     /// </summary>
     /// <param name="routes">The collection of routes to add or replace.</param>
@@ -83,18 +69,15 @@ public sealed class KyrolusDynamicInMemoryRouteConfigProvider : IProxyConfigProv
     }
 
     /// <summary>
-    /// Adds or updates multiple raw gateway clusters in a single atomic batch operation, triggering a single reload notification.
+    /// Adds or updates a raw gateway service cluster with its destinations and load balancing policy, then signals a reload.
     /// </summary>
-    /// <param name="clusters">The collection of clusters to add or replace.</param>
-    public void AddClusters(IEnumerable<KyrolusGatewayCluster> clusters)
+    /// <param name="cluster">The gateway cluster to add or replace.</param>
+    public void AddCluster(KyrolusGatewayCluster cluster)
     {
-        ArgumentNullException.ThrowIfNull(clusters);
+        ArgumentNullException.ThrowIfNull(cluster);
         lock (_syncLock)
         {
-            foreach (var cluster in clusters)
-            {
-                _clusters[cluster.ClusterId] = cluster;
-            }
+            _clusters[cluster.ClusterId] = cluster;
             SignalChange();
         }
     }
@@ -125,6 +108,23 @@ public sealed class KyrolusDynamicInMemoryRouteConfigProvider : IProxyConfigProv
         }
 
         return this;
+    }
+
+    /// <summary>
+    /// Adds or updates multiple raw gateway clusters in a single atomic batch operation, triggering a single reload notification.
+    /// </summary>
+    /// <param name="clusters">The collection of clusters to add or replace.</param>
+    public void AddClusters(IEnumerable<KyrolusGatewayCluster> clusters)
+    {
+        ArgumentNullException.ThrowIfNull(clusters);
+        lock (_syncLock)
+        {
+            foreach (var cluster in clusters)
+            {
+                _clusters[cluster.ClusterId] = cluster;
+            }
+            SignalChange();
+        }
     }
 
     /// <summary>
@@ -386,284 +386,376 @@ public sealed class KyrolusDynamicInMemoryRouteConfigProvider : IProxyConfigProv
 
     private KyrolusCustomProxyConfig BuildConfigSnapshot(IChangeToken changeToken)
     {
-        var yarpRoutes = _routes.Values.Select(r =>
+        var yarpRoutes = _routes.Values.Select(MapRoute).ToList();
+        var yarpClusters = _clusters.Values.Select(MapCluster).ToList();
+        return new KyrolusCustomProxyConfig(yarpRoutes, yarpClusters, changeToken);
+    }
+
+    private static RouteConfig MapRoute(KyrolusGatewayRoute r)
+    {
+        return new RouteConfig
         {
-            var metadata = r.Metadata != null
-                ? new Dictionary<string, string>(r.Metadata, StringComparer.OrdinalIgnoreCase)
-                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            RouteId = r.RouteId,
+            ClusterId = r.ClusterId,
+            Order = r.Order,
+            Match = MapRouteMatch(r),
+            Metadata = MapRouteMetadata(r),
+            AuthorizationPolicy = r.AuthorizationPolicy,
+            CorsPolicy = r.CorsPolicy,
+            RateLimiterPolicy = r.RateLimiterPolicy,
+            OutputCachePolicy = r.OutputCachePolicy,
+            Timeout = r.Timeout,
+            MaxRequestBodySize = r.MaxRequestBodySize,
+            Transforms = r.Transforms?.Select(t => (IReadOnlyDictionary<string, string>)t).ToList()
+        };
+    }
 
-            if (r.IpFilter != null)
-            {
-                if (r.IpFilter.AllowedIpsOrCidrs is { Count: > 0 } allowed)
-                {
-                    metadata["Kyrolus:IpFilter:Allowed"] = string.Join(",", allowed);
-                }
-                if (r.IpFilter.BlockedIpsOrCidrs is { Count: > 0 } blocked)
-                {
-                    metadata["Kyrolus:IpFilter:Blocked"] = string.Join(",", blocked);
-                }
-            }
+    private static RouteMatch MapRouteMatch(KyrolusGatewayRoute r)
+    {
+        var normalizedMethods = r.Match.Methods?
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Select(m => m.Trim().ToUpperInvariant())
+            .ToList();
 
-            if (r.RequireTenant)
-            {
-                metadata["Kyrolus:Tenant:Required"] = "true";
-            }
-
-            if (r.AllowedContentTypes is { Count: > 0 } allowedTypes)
-            {
-                metadata["Kyrolus:ContentType:Allowed"] = string.Join(",", allowedTypes);
-            }
-
-            var normalizedMethods = r.Match.Methods?
-                .Where(m => !string.IsNullOrWhiteSpace(m))
-                .Select(m => m.Trim().ToUpperInvariant())
-                .ToList();
-
-            var yarpHeaders = r.Match.Headers?.Select(h => new RouteHeader
-            {
-                Name = h.Name,
-                Values = h.Values,
-                Mode = ParseHeaderMatchMode(h.Mode),
-                IsCaseSensitive = h.IsCaseSensitive
-            }).ToList();
-
-            var yarpQueryParams = r.Match.QueryParameters?.Select(q => new RouteQueryParameter
-            {
-                Name = q.Name,
-                Values = q.Values,
-                Mode = ParseQueryParamMatchMode(q.Mode),
-                IsCaseSensitive = q.IsCaseSensitive
-            }).ToList();
-
-            return new RouteConfig
-            {
-                RouteId = r.RouteId,
-                ClusterId = r.ClusterId,
-                Order = r.Order,
-                Match = new RouteMatch
-                {
-                    Path = r.Match.Path,
-                    Methods = normalizedMethods is { Count: > 0 } ? normalizedMethods : null,
-                    Hosts = r.Match.Hosts,
-                    Headers = yarpHeaders is { Count: > 0 } ? yarpHeaders : null,
-                    QueryParameters = yarpQueryParams is { Count: > 0 } ? yarpQueryParams : null
-                },
-                Metadata = metadata.Count > 0 ? metadata : null,
-                AuthorizationPolicy = r.AuthorizationPolicy,
-                CorsPolicy = r.CorsPolicy,
-                RateLimiterPolicy = r.RateLimiterPolicy,
-                OutputCachePolicy = r.OutputCachePolicy,
-                Timeout = r.Timeout,
-                MaxRequestBodySize = r.MaxRequestBodySize,
-                Transforms = r.Transforms
-            };
+        var yarpHeaders = r.Match.Headers?.Select(h => new RouteHeader
+        {
+            Name = h.Name,
+            Values = h.Values,
+            Mode = ParseHeaderMatchMode(h.Mode),
+            IsCaseSensitive = h.IsCaseSensitive
         }).ToList();
 
-        var yarpClusters = _clusters.Values.Select(c => new ClusterConfig
+        var yarpQueryParams = r.Match.QueryParameters?.Select(q => new RouteQueryParameter
+        {
+            Name = q.Name,
+            Values = q.Values,
+            Mode = ParseQueryParamMatchMode(q.Mode),
+            IsCaseSensitive = q.IsCaseSensitive
+        }).ToList();
+
+        return new RouteMatch
+        {
+            Path = r.Match.Path,
+            Methods = normalizedMethods is { Count: > 0 } ? normalizedMethods : null,
+            Hosts = r.Match.Hosts,
+            Headers = yarpHeaders is { Count: > 0 } ? yarpHeaders : null,
+            QueryParameters = yarpQueryParams is { Count: > 0 } ? yarpQueryParams : null
+        };
+    }
+
+    private static Dictionary<string, string>? MapRouteMetadata(KyrolusGatewayRoute r)
+    {
+        var metadata = r.Metadata != null
+            ? new Dictionary<string, string>(r.Metadata, StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (r.IpFilter != null)
+        {
+            if (r.IpFilter.AllowedIpsOrCidrs is { Count: > 0 } allowed)
+            {
+                metadata["Kyrolus:IpFilter:Allowed"] = string.Join(",", allowed);
+            }
+            if (r.IpFilter.BlockedIpsOrCidrs is { Count: > 0 } blocked)
+            {
+                metadata["Kyrolus:IpFilter:Blocked"] = string.Join(",", blocked);
+            }
+        }
+
+        if (r.RequireTenant)
+        {
+            metadata["Kyrolus:Tenant:Required"] = "true";
+        }
+
+        if (r.AllowedContentTypes is { Count: > 0 } allowedTypes)
+        {
+            metadata["Kyrolus:ContentType:Allowed"] = string.Join(",", allowedTypes);
+        }
+
+        return metadata.Count > 0 ? metadata : null;
+    }
+
+    private static ClusterConfig MapCluster(KyrolusGatewayCluster c)
+    {
+        return new ClusterConfig
         {
             ClusterId = c.ClusterId,
             LoadBalancingPolicy = c.LoadBalancingPolicy,
             Destinations = c.Destinations.ToDictionary(
                 kv => kv.Key,
                 kv => new DestinationConfig { Address = kv.Value.Address }),
-            HealthCheck = c.HealthCheck is null ? null : new HealthCheckConfig
-            {
-                Active = c.HealthCheck.Active is null ? null : new ActiveHealthCheckConfig
-                {
-                    Enabled = c.HealthCheck.Active.Enabled,
-                    Interval = c.HealthCheck.Active.Interval,
-                    Timeout = c.HealthCheck.Active.Timeout,
-                    Policy = c.HealthCheck.Active.Policy,
-                    Path = NormalizeHealthCheckPath(c.HealthCheck.Active.Path)
-                },
-                Passive = c.HealthCheck.Passive is null ? null : new PassiveHealthCheckConfig
-                {
-                    Enabled = c.HealthCheck.Passive.Enabled,
-                    Policy = c.HealthCheck.Passive.Policy,
-                    ReactivationPeriod = c.HealthCheck.Passive.ReactivationPeriod
-                },
-                AvailableDestinationsPolicy = c.HealthCheck.AvailableDestinationsPolicy
-            },
-            SessionAffinity = c.SessionAffinity is null ? null : new SessionAffinityConfig
-            {
-                Enabled = c.SessionAffinity.Enabled,
-                Policy = c.SessionAffinity.Policy,
-                FailurePolicy = c.SessionAffinity.FailurePolicy,
-                AffinityKeyName = c.SessionAffinity.AffinityKeyName ?? ".KyrolusGateway.Affinity",
-                Cookie = MapSessionAffinityCookie(c.SessionAffinity.Cookie)
-            },
-            HttpClient = c.HttpClient is null ? null : new HttpClientConfig
-            {
-                DangerousAcceptAnyServerCertificate = c.HttpClient.DangerousAcceptAnyServerCertificate,
-                MaxConnectionsPerServer = c.HttpClient.MaxConnectionsPerServer,
-                EnableMultipleHttp2Connections = c.HttpClient.EnableMultipleHttp2Connections
-            },
-            HttpRequest = new ForwarderRequestConfig
-            {
-                ActivityTimeout = c.HttpRequestTimeout ?? TimeSpan.FromSeconds(60),
-                AllowResponseBuffering = c.AllowResponseBuffering,
-                Version = c.HttpClient?.DefaultVersion,
-                VersionPolicy = c.HttpClient?.VersionPolicy
-            }
-        }).ToList();
+            HealthCheck = MapHealthCheck(c.HealthCheck),
+            SessionAffinity = MapSessionAffinity(c.SessionAffinity),
+            HttpClient = MapHttpClient(c.HttpClient),
+            HttpRequest = MapForwarderRequest(c)
+        };
+    }
 
-        return new KyrolusCustomProxyConfig(yarpRoutes, yarpClusters, changeToken);
+    private static HealthCheckConfig? MapHealthCheck(KyrolusHealthCheckOptions? options)
+    {
+        if (options is null)
+        {
+            return null;
+        }
+
+        return new HealthCheckConfig
+        {
+            Active = MapActiveHealthCheck(options.Active),
+            Passive = MapPassiveHealthCheck(options.Passive),
+            AvailableDestinationsPolicy = options.AvailableDestinationsPolicy
+        };
+    }
+
+    private static ActiveHealthCheckConfig? MapActiveHealthCheck(KyrolusActiveHealthCheckOptions? options)
+    {
+        if (options is null)
+        {
+            return null;
+        }
+
+        return new ActiveHealthCheckConfig
+        {
+            Enabled = options.Enabled,
+            Interval = options.Interval,
+            Timeout = options.Timeout,
+            Policy = options.Policy,
+            Path = NormalizeHealthCheckPath(options.Path)
+        };
+    }
+
+    private static PassiveHealthCheckConfig? MapPassiveHealthCheck(KyrolusPassiveHealthCheckOptions? options)
+    {
+        if (options is null)
+        {
+            return null;
+        }
+
+        return new PassiveHealthCheckConfig
+        {
+            Enabled = options.Enabled,
+            Policy = options.Policy,
+            ReactivationPeriod = options.ReactivationPeriod
+        };
+    }
+
+    private static SessionAffinityConfig? MapSessionAffinity(KyrolusSessionAffinityOptions? options)
+    {
+        if (options is null)
+        {
+            return null;
+        }
+
+        return new SessionAffinityConfig
+        {
+            Enabled = options.Enabled,
+            Policy = options.Policy,
+            FailurePolicy = options.FailurePolicy,
+            AffinityKeyName = options.AffinityKeyName ?? ".KyrolusGateway.Affinity",
+            Cookie = MapSessionAffinityCookie(options.Cookie)
+        };
+    }
+
+    private static HttpClientConfig? MapHttpClient(KyrolusHttpClientOptions? options)
+    {
+        if (options is null)
+        {
+            return null;
+        }
+
+        return new HttpClientConfig
+        {
+            DangerousAcceptAnyServerCertificate = options.DangerousAcceptAnyServerCertificate,
+            MaxConnectionsPerServer = options.MaxConnectionsPerServer,
+            EnableMultipleHttp2Connections = options.EnableMultipleHttp2Connections
+        };
+    }
+
+    private static ForwarderRequestConfig MapForwarderRequest(KyrolusGatewayCluster c)
+    {
+        return new ForwarderRequestConfig
+        {
+            ActivityTimeout = c.HttpRequestTimeout ?? TimeSpan.FromSeconds(60),
+            AllowResponseBuffering = c.AllowResponseBuffering,
+            Version = c.HttpClient?.DefaultVersion,
+            VersionPolicy = c.HttpClient?.VersionPolicy
+        };
     }
 
     private void LoadCluster(IEnumerable<IConfigurationSection> configurationSections)
     {
         foreach (var clusterSec in configurationSections)
         {
-            var clusterId = clusterSec.Key;
-            var loadBalancingPolicy = clusterSec["LoadBalancingPolicy"];
-            var destinations = new Dictionary<string, KyrolusGatewayDestination>(StringComparer.OrdinalIgnoreCase);
-
-            var destinationsSec = clusterSec.GetSection("Destinations");
-            foreach (var destSec in destinationsSec.GetChildren())
-            {
-                var address = destSec["Address"];
-                if (!string.IsNullOrWhiteSpace(address))
-                    destinations[destSec.Key] = new KyrolusGatewayDestination(address);
-            }
-
-            KyrolusHealthCheckOptions? healthCheck = null;
-            var healthCheckSec = clusterSec.GetSection("HealthCheck");
-            if (healthCheckSec.Exists())
-            {
-                KyrolusActiveHealthCheckOptions? active = null;
-                var activeSec = healthCheckSec.GetSection("Active");
-                if (activeSec.Exists())
-                {
-                    active = new KyrolusActiveHealthCheckOptions
-                    {
-                        Enabled = bool.TryParse(activeSec["Enabled"], out var en) && en,
-                        Interval = TimeSpan.TryParse(activeSec["Interval"], out var iv) ? iv : null,
-                        Timeout = TimeSpan.TryParse(activeSec["Timeout"], out var to) ? to : null,
-                        Policy = activeSec["Policy"],
-                        Path = activeSec["Path"]
-                    };
-                }
-
-                KyrolusPassiveHealthCheckOptions? passive = null;
-                var passiveSec = healthCheckSec.GetSection("Passive");
-                if (passiveSec.Exists())
-                {
-                    passive = new KyrolusPassiveHealthCheckOptions
-                    {
-                        Enabled = bool.TryParse(passiveSec["Enabled"], out var pen) && pen,
-                        Policy = passiveSec["Policy"],
-                        ReactivationPeriod = TimeSpan.TryParse(passiveSec["ReactivationPeriod"], out var rp) ? rp : null
-                    };
-                }
-
-                healthCheck = new KyrolusHealthCheckOptions
-                {
-                    Active = active,
-                    Passive = passive,
-                    AvailableDestinationsPolicy = healthCheckSec["AvailableDestinationsPolicy"]
-                };
-            }
-
-            KyrolusSessionAffinityOptions? sessionAffinity = null;
-            var affinitySec = clusterSec.GetSection("SessionAffinity");
-            if (affinitySec.Exists())
-            {
-                KyrolusSessionAffinityCookieOptions? cookieOptions = null;
-                var cookieSec = affinitySec.GetSection("Cookie");
-                if (cookieSec.Exists())
-                {
-                    cookieOptions = new KyrolusSessionAffinityCookieOptions
-                    {
-                        Path = cookieSec["Path"] ?? "/",
-                        Domain = cookieSec["Domain"],
-                        HttpOnly = !bool.TryParse(cookieSec["HttpOnly"], out var ho) || ho,
-                        SecurePolicy = cookieSec["SecurePolicy"] ?? "SameAsRequest",
-                        SameSite = cookieSec["SameSite"] ?? "Lax",
-                        Expiration = TimeSpan.TryParse(cookieSec["Expiration"], out var exp) ? exp : null,
-                        MaxAge = TimeSpan.TryParse(cookieSec["MaxAge"], out var ma) ? ma : null,
-                        IsEssential = !bool.TryParse(cookieSec["IsEssential"], out var ess) || ess
-                    };
-                }
-
-                sessionAffinity = new KyrolusSessionAffinityOptions
-                {
-                    Enabled = bool.TryParse(affinitySec["Enabled"], out var aen) && aen,
-                    Policy = affinitySec["Policy"],
-                    FailurePolicy = affinitySec["FailurePolicy"],
-                    AffinityKeyName = affinitySec["AffinityKeyName"],
-                    Cookie = cookieOptions
-                };
-            }
-
-            TimeSpan? httpTimeout = null;
-            var httpRequestSec = clusterSec.GetSection("HttpRequest");
-            if (httpRequestSec.Exists() && TimeSpan.TryParse(httpRequestSec["Timeout"], out var toVal))
-            {
-                httpTimeout = toVal;
-            }
-            else if (TimeSpan.TryParse(clusterSec["HttpRequestTimeout"], out TimeSpan directTo))
-            {
-                httpTimeout = directTo;
-            }
-
-            var allowBuffering = bool.TryParse(clusterSec["AllowResponseBuffering"], out var arb) ? arb : (bool?)null;
-
-            Version? defaultVer = null;
-            HttpVersionPolicy? vPolicy = null;
-
-            var httpClientSec = clusterSec.GetSection("HttpClient");
-            if (httpClientSec.Exists())
-            {
-                if (Version.TryParse(httpClientSec["DefaultVersion"], out var pv))
-                {
-                    defaultVer = pv;
-                }
-
-                if (Enum.TryParse<HttpVersionPolicy>(httpClientSec["VersionPolicy"], true, out var pp))
-                {
-                    vPolicy = pp;
-                }
-            }
-
-            if (httpRequestSec.Exists())
-            {
-                if (defaultVer == null && Version.TryParse(httpRequestSec["Version"], out var pv))
-                {
-                    defaultVer = pv;
-                }
-
-                if (vPolicy == null && Enum.TryParse<HttpVersionPolicy>(httpRequestSec["VersionPolicy"], true, out var pp))
-                {
-                    vPolicy = pp;
-                }
-            }
-
-            KyrolusHttpClientOptions? httpClientOptions = null;
-            if (httpClientSec.Exists() || defaultVer != null || vPolicy != null)
-            {
-                httpClientOptions = new KyrolusHttpClientOptions
-                {
-                    DangerousAcceptAnyServerCertificate = bool.TryParse(httpClientSec["DangerousAcceptAnyServerCertificate"], out var sc) && sc,
-                    MaxConnectionsPerServer = int.TryParse(httpClientSec["MaxConnectionsPerServer"], out var mc) ? mc : null,
-                    EnableMultipleHttp2Connections = bool.TryParse(httpClientSec["EnableMultipleHttp2Connections"], out var em) ? em : null,
-                    DefaultVersion = defaultVer,
-                    VersionPolicy = vPolicy
-                };
-            }
-
-            _clusters[clusterId] = new KyrolusGatewayCluster
-            {
-                ClusterId = clusterId,
-                Destinations = destinations,
-                LoadBalancingPolicy = loadBalancingPolicy,
-                HealthCheck = healthCheck,
-                SessionAffinity = sessionAffinity,
-                HttpRequestTimeout = httpTimeout,
-                HttpClient = httpClientOptions,
-                AllowResponseBuffering = allowBuffering
-            };
-            _configClusterIds.Add(clusterId);
+            var cluster = ParseCluster(clusterSec);
+            _clusters[cluster.ClusterId] = cluster;
+            _configClusterIds.Add(cluster.ClusterId);
         }
+    }
+
+    private static KyrolusGatewayCluster ParseCluster(IConfigurationSection clusterSec)
+    {
+        var clusterId = clusterSec.Key;
+        var destinations = ParseDestinations(clusterSec.GetSection("Destinations"));
+        var healthCheck = ParseHealthCheck(clusterSec.GetSection("HealthCheck"));
+        var sessionAffinity = ParseSessionAffinity(clusterSec.GetSection("SessionAffinity"));
+        var httpRequestSec = clusterSec.GetSection("HttpRequest");
+        var httpTimeout = ParseHttpTimeout(clusterSec, httpRequestSec);
+        var allowBuffering = bool.TryParse(clusterSec["AllowResponseBuffering"], out var arb) ? arb : (bool?)null;
+        var httpClientOptions = ParseHttpClient(clusterSec.GetSection("HttpClient"), httpRequestSec);
+
+        return new KyrolusGatewayCluster
+        {
+            ClusterId = clusterId,
+            Destinations = destinations,
+            LoadBalancingPolicy = KyrolusLoadBalancingPolicy.From(clusterSec["LoadBalancingPolicy"]),
+            HealthCheck = healthCheck,
+            SessionAffinity = sessionAffinity,
+            HttpRequestTimeout = httpTimeout,
+            HttpClient = httpClientOptions,
+            AllowResponseBuffering = allowBuffering
+        };
+    }
+
+    private static Dictionary<string, KyrolusGatewayDestination> ParseDestinations(IConfigurationSection destinationsSec)
+    {
+        var destinations = new Dictionary<string, KyrolusGatewayDestination>(StringComparer.OrdinalIgnoreCase);
+        foreach (var destSec in destinationsSec.GetChildren())
+        {
+            var address = destSec["Address"];
+            if (!string.IsNullOrWhiteSpace(address))
+            {
+                destinations[destSec.Key] = new KyrolusGatewayDestination(address);
+            }
+        }
+        return destinations;
+    }
+
+    private static KyrolusHealthCheckOptions? ParseHealthCheck(IConfigurationSection healthCheckSec)
+    {
+        if (!healthCheckSec.Exists())
+        {
+            return null;
+        }
+
+        KyrolusActiveHealthCheckOptions? active = null;
+        var activeSec = healthCheckSec.GetSection("Active");
+        if (activeSec.Exists())
+        {
+            active = new KyrolusActiveHealthCheckOptions
+            {
+                Enabled = bool.TryParse(activeSec["Enabled"], out var en) && en,
+                Interval = TimeSpan.TryParse(activeSec["Interval"], CultureInfo.InvariantCulture, out var iv) ? iv : null,
+                Timeout = TimeSpan.TryParse(activeSec["Timeout"], CultureInfo.InvariantCulture, out var to) ? to : null,
+                Policy = KyrolusActiveHealthCheckPolicy.From(activeSec["Policy"]) ?? KyrolusActiveHealthCheckPolicy.ConsecutiveFailures,
+                Path = activeSec["Path"]
+            };
+        }
+
+        KyrolusPassiveHealthCheckOptions? passive = null;
+        var passiveSec = healthCheckSec.GetSection("Passive");
+        if (passiveSec.Exists())
+        {
+            passive = new KyrolusPassiveHealthCheckOptions
+            {
+                Enabled = bool.TryParse(passiveSec["Enabled"], out var pen) && pen,
+                Policy = KyrolusPassiveHealthCheckPolicy.From(passiveSec["Policy"]) ?? KyrolusPassiveHealthCheckPolicy.TransportFailureRate,
+                ReactivationPeriod = TimeSpan.TryParse(passiveSec["ReactivationPeriod"], CultureInfo.InvariantCulture, out var rp) ? rp : null
+            };
+        }
+
+        return new KyrolusHealthCheckOptions
+        {
+            Active = active,
+            Passive = passive,
+            AvailableDestinationsPolicy = KyrolusAvailableDestinationsPolicy.From(healthCheckSec["AvailableDestinationsPolicy"]) ?? KyrolusAvailableDestinationsPolicy.HealthyOrUnspecified
+        };
+    }
+
+    private static KyrolusSessionAffinityOptions? ParseSessionAffinity(IConfigurationSection affinitySec)
+    {
+        if (!affinitySec.Exists())
+        {
+            return null;
+        }
+
+        KyrolusSessionAffinityCookieOptions? cookieOptions = null;
+        var cookieSec = affinitySec.GetSection("Cookie");
+        if (cookieSec.Exists())
+        {
+            cookieOptions = new KyrolusSessionAffinityCookieOptions
+            {
+                Path = cookieSec["Path"] ?? "/",
+                Domain = cookieSec["Domain"],
+                HttpOnly = !bool.TryParse(cookieSec["HttpOnly"], out var ho) || ho,
+                SecurePolicy = cookieSec["SecurePolicy"] ?? "SameAsRequest",
+                SameSite = cookieSec["SameSite"] ?? "Lax",
+                Expiration = TimeSpan.TryParse(cookieSec["Expiration"], CultureInfo.InvariantCulture, out var exp) ? exp : null,
+                MaxAge = TimeSpan.TryParse(cookieSec["MaxAge"], CultureInfo.InvariantCulture, out var ma) ? ma : null,
+                IsEssential = !bool.TryParse(cookieSec["IsEssential"], out var ess) || ess
+            };
+        }
+
+        return new KyrolusSessionAffinityOptions
+        {
+            Enabled = bool.TryParse(affinitySec["Enabled"], out var aen) && aen,
+            Policy = affinitySec["Policy"],
+            FailurePolicy = affinitySec["FailurePolicy"],
+            AffinityKeyName = affinitySec["AffinityKeyName"],
+            Cookie = cookieOptions
+        };
+    }
+
+    private static TimeSpan? ParseHttpTimeout(IConfigurationSection clusterSec, IConfigurationSection httpRequestSec)
+    {
+        if (httpRequestSec.Exists() && TimeSpan.TryParse(httpRequestSec["Timeout"], CultureInfo.InvariantCulture, out var toVal))
+        {
+            return toVal;
+        }
+        if (TimeSpan.TryParse(clusterSec["HttpRequestTimeout"], CultureInfo.InvariantCulture, out TimeSpan directTo))
+        {
+            return directTo;
+        }
+        return null;
+    }
+
+    private static KyrolusHttpClientOptions? ParseHttpClient(IConfigurationSection httpClientSec, IConfigurationSection httpRequestSec)
+    {
+        var (defaultVer, vPolicy) = ResolveHttpVersionAndPolicy(httpClientSec, httpRequestSec);
+
+        if (!httpClientSec.Exists() && defaultVer is null && vPolicy is null)
+        {
+            return null;
+        }
+
+        return CreateHttpClientOptions(httpClientSec, defaultVer, vPolicy);
+    }
+
+    private static (Version? Version, HttpVersionPolicy? Policy) ResolveHttpVersionAndPolicy(
+        IConfigurationSection httpClientSec,
+        IConfigurationSection httpRequestSec)
+    {
+        var version = TryParseVersion(httpClientSec["DefaultVersion"]) ?? TryParseVersion(httpRequestSec["Version"]);
+        var policy = TryParsePolicy(httpClientSec["VersionPolicy"]) ?? TryParsePolicy(httpRequestSec["VersionPolicy"]);
+        return (version, policy);
+    }
+
+    private static Version? TryParseVersion(string? value) =>
+        Version.TryParse(value, out var v) ? v : null;
+
+    private static HttpVersionPolicy? TryParsePolicy(string? value) =>
+        Enum.TryParse<HttpVersionPolicy>(value, true, out var p) ? p : null;
+
+    private static KyrolusHttpClientOptions CreateHttpClientOptions(
+        IConfigurationSection httpClientSec,
+        Version? defaultVer,
+        HttpVersionPolicy? vPolicy)
+    {
+        return new KyrolusHttpClientOptions
+        {
+            DangerousAcceptAnyServerCertificate = bool.TryParse(httpClientSec["DangerousAcceptAnyServerCertificate"], out var sc) && sc,
+            MaxConnectionsPerServer = int.TryParse(httpClientSec["MaxConnectionsPerServer"], CultureInfo.InvariantCulture, out var mc) ? mc : null,
+            EnableMultipleHttp2Connections = bool.TryParse(httpClientSec["EnableMultipleHttp2Connections"], out var em) ? em : null,
+            DefaultVersion = defaultVer,
+            VersionPolicy = vPolicy
+        };
     }
 
     private static string? NormalizeHealthCheckPath(string? path)
@@ -741,125 +833,151 @@ public sealed class KyrolusDynamicInMemoryRouteConfigProvider : IProxyConfigProv
     {
         foreach (var routeSec in routesSection)
         {
-            var routeId = routeSec.Key;
-            var clusterId = routeSec["ClusterId"] ?? string.Empty;
-            var matchSec = routeSec.GetSection("Match");
-            var path = matchSec["Path"] ?? string.Empty;
-
-            var methods = matchSec.GetSection("Methods").GetChildren().Select(c => c.Value).OfType<string>().ToList();
-            var hosts = matchSec.GetSection("Hosts").GetChildren().Select(c => c.Value).OfType<string>().ToList();
-
-            List<KyrolusRouteHeader>? headers = null;
-            var headersSec = matchSec.GetSection("Headers");
-            if (headersSec.Exists())
-            {
-                headers = [];
-                foreach (var hItem in headersSec.GetChildren())
-                {
-                    var name = hItem["Name"] ?? hItem.Key;
-                    var values = hItem.GetSection("Values").GetChildren().Select(c => c.Value).OfType<string>().ToList();
-                    var mode = hItem["Mode"] ?? "ExactHeader";
-                    var isCaseSensitive = bool.TryParse(hItem["IsCaseSensitive"], out var cs) && cs;
-                    headers.Add(new KyrolusRouteHeader
-                    {
-                        Name = name,
-                        Values = values.Count > 0 ? values : null,
-                        Mode = mode,
-                        IsCaseSensitive = isCaseSensitive
-                    });
-                }
-            }
-
-            List<KyrolusRouteQueryParameter>? queryParams = null;
-            var queryParamsSec = matchSec.GetSection("QueryParameters");
-            if (queryParamsSec.Exists())
-            {
-                queryParams = [];
-                foreach (var qItem in queryParamsSec.GetChildren())
-                {
-                    var name = qItem["Name"] ?? qItem.Key;
-                    var values = qItem.GetSection("Values").GetChildren().Select(c => c.Value).OfType<string>().ToList();
-                    var mode = qItem["Mode"] ?? "Exact";
-                    var isCaseSensitive = bool.TryParse(qItem["IsCaseSensitive"], out var cs) && cs;
-                    queryParams.Add(new KyrolusRouteQueryParameter
-                    {
-                        Name = name,
-                        Values = values.Count > 0 ? values : null,
-                        Mode = mode,
-                        IsCaseSensitive = isCaseSensitive
-                    });
-                }
-            }
-
-            var metadataSec = routeSec.GetSection("Metadata");
-            var metadata = metadataSec.GetChildren().ToDictionary(c => c.Key, c => c.Value ?? string.Empty);
-
-            var authPolicy = routeSec["AuthorizationPolicy"];
-            var corsPolicy = routeSec["CorsPolicy"];
-            var rateLimiterPolicy = routeSec["RateLimiterPolicy"];
-            var outputCachePolicy = routeSec["OutputCachePolicy"];
-            var timeout = TimeSpan.TryParse(routeSec["Timeout"], out var parsedTimeout) ? parsedTimeout : (TimeSpan?)null;
-            var maxRequestBodySize = long.TryParse(routeSec["MaxRequestBodySize"], out var parsedSize) ? parsedSize : (long?)null;
-            var order = int.TryParse(routeSec["Order"], out var parsedOrder) ? parsedOrder : (int?)null;
-            var requireTenant = bool.TryParse(routeSec["RequireTenant"], out var parsedRt) && parsedRt;
-            var allowedContentTypes = routeSec.GetSection("AllowedContentTypes").GetChildren().Select(c => c.Value).OfType<string>().ToList();
-
-            KyrolusIpFilterOptions? ipFilter = null;
-            var ipFilterSec = routeSec.GetSection("IpFilter");
-            if (ipFilterSec.Exists())
-            {
-                var allowed = ipFilterSec.GetSection("AllowedIpsOrCidrs").GetChildren().Select(c => c.Value).OfType<string>().ToList();
-                var blocked = ipFilterSec.GetSection("BlockedIpsOrCidrs").GetChildren().Select(c => c.Value).OfType<string>().ToList();
-                if (allowed.Count > 0 || blocked.Count > 0)
-                {
-                    ipFilter = new KyrolusIpFilterOptions
-                    {
-                        AllowedIpsOrCidrs = allowed.Count > 0 ? allowed : null,
-                        BlockedIpsOrCidrs = blocked.Count > 0 ? blocked : null
-                    };
-                }
-            }
-
-            List<IReadOnlyDictionary<string, string>>? transformsList = null;
-            var transformsSec = routeSec.GetSection("Transforms");
-            if (transformsSec.Exists())
-            {
-                transformsList = [];
-                foreach (var transformItem in transformsSec.GetChildren())
-                {
-                    var dict = transformItem.GetChildren().ToDictionary(c => c.Key, c => c.Value ?? string.Empty);
-                    if (dict.Count > 0)
-                        transformsList.Add(dict);
-                }
-            }
-
-            _routes[routeId] = new KyrolusGatewayRoute
-            {
-                RouteId = routeId,
-                ClusterId = clusterId,
-                Match = new KyrolusGatewayRouteMatch
-                {
-                    Path = path,
-                    Methods = methods.Count > 0 ? methods : null,
-                    Hosts = hosts.Count > 0 ? hosts : null,
-                    Headers = headers is { Count: > 0 } ? headers : null,
-                    QueryParameters = queryParams is { Count: > 0 } ? queryParams : null
-                },
-                Metadata = metadata.Count > 0 ? metadata : null,
-                AuthorizationPolicy = authPolicy,
-                CorsPolicy = corsPolicy,
-                RateLimiterPolicy = rateLimiterPolicy,
-                OutputCachePolicy = outputCachePolicy,
-                Timeout = timeout,
-                MaxRequestBodySize = maxRequestBodySize,
-                Order = order,
-                RequireTenant = requireTenant,
-                AllowedContentTypes = allowedContentTypes.Count > 0 ? allowedContentTypes : null,
-                IpFilter = ipFilter,
-                Transforms = transformsList
-            };
-            _configRouteIds.Add(routeId);
+            var route = ParseRoute(routeSec);
+            _routes[route.RouteId] = route;
+            _configRouteIds.Add(route.RouteId);
         }
+    }
+
+    private static KyrolusGatewayRoute ParseRoute(IConfigurationSection routeSec)
+    {
+        var routeId = routeSec.Key;
+        var clusterId = routeSec["ClusterId"] ?? string.Empty;
+        var matchSec = routeSec.GetSection("Match");
+        var path = matchSec["Path"] ?? string.Empty;
+
+        var methods = matchSec.GetSection("Methods").GetChildren().Select(c => c.Value).OfType<string>().ToList();
+        var hosts = matchSec.GetSection("Hosts").GetChildren().Select(c => c.Value).OfType<string>().ToList();
+        var headers = ParseRouteHeaders(matchSec.GetSection("Headers"));
+        var queryParams = ParseRouteQueryParams(matchSec.GetSection("QueryParameters"));
+
+        var metadataSec = routeSec.GetSection("Metadata");
+        var metadata = metadataSec.GetChildren().ToDictionary(c => c.Key, c => c.Value ?? string.Empty);
+
+        var timeout = TimeSpan.TryParse(routeSec["Timeout"], CultureInfo.InvariantCulture, out var parsedTimeout) ? parsedTimeout : (TimeSpan?)null;
+        var maxRequestBodySize = long.TryParse(routeSec["MaxRequestBodySize"], CultureInfo.InvariantCulture, out var parsedSize) ? parsedSize : (long?)null;
+        var order = int.TryParse(routeSec["Order"], CultureInfo.InvariantCulture, out var parsedOrder) ? parsedOrder : (int?)null;
+        var requireTenant = bool.TryParse(routeSec["RequireTenant"], out var parsedRt) && parsedRt;
+        var allowedContentTypes = routeSec.GetSection("AllowedContentTypes").GetChildren().Select(c => c.Value).OfType<string>().ToList();
+
+        var ipFilter = ParseIpFilter(routeSec.GetSection("IpFilter"));
+        var transformsList = ParseTransforms(routeSec.GetSection("Transforms"));
+
+        return new KyrolusGatewayRoute
+        {
+            RouteId = routeId,
+            ClusterId = clusterId,
+            Match = new KyrolusGatewayRouteMatch
+            {
+                Path = path,
+                Methods = methods.Count > 0 ? methods : null,
+                Hosts = hosts.Count > 0 ? hosts : null,
+                Headers = headers,
+                QueryParameters = queryParams
+            },
+            Metadata = metadata.Count > 0 ? metadata : null,
+            AuthorizationPolicy = routeSec["AuthorizationPolicy"],
+            CorsPolicy = routeSec["CorsPolicy"],
+            RateLimiterPolicy = routeSec["RateLimiterPolicy"],
+            OutputCachePolicy = routeSec["OutputCachePolicy"],
+            Timeout = timeout,
+            MaxRequestBodySize = maxRequestBodySize,
+            Order = order,
+            RequireTenant = requireTenant,
+            AllowedContentTypes = allowedContentTypes.Count > 0 ? allowedContentTypes : null,
+            IpFilter = ipFilter,
+            Transforms = transformsList?.Select(KyrolusGatewayTransform.From).ToList()
+        };
+    }
+
+    private static List<KyrolusRouteHeader>? ParseRouteHeaders(IConfigurationSection headersSec)
+    {
+        if (!headersSec.Exists())
+        {
+            return null;
+        }
+
+        var headers = new List<KyrolusRouteHeader>();
+        foreach (var hItem in headersSec.GetChildren())
+        {
+            var name = hItem["Name"] ?? hItem.Key;
+            var values = hItem.GetSection("Values").GetChildren().Select(c => c.Value).OfType<string>().ToList();
+            var mode = hItem["Mode"] ?? "ExactHeader";
+            var isCaseSensitive = bool.TryParse(hItem["IsCaseSensitive"], out var cs) && cs;
+            headers.Add(new KyrolusRouteHeader
+            {
+                Name = name,
+                Values = values.Count > 0 ? values : null,
+                Mode = mode,
+                IsCaseSensitive = isCaseSensitive
+            });
+        }
+        return headers;
+    }
+
+    private static List<KyrolusRouteQueryParameter>? ParseRouteQueryParams(IConfigurationSection queryParamsSec)
+    {
+        if (!queryParamsSec.Exists())
+        {
+            return null;
+        }
+
+        var queryParams = new List<KyrolusRouteQueryParameter>();
+        foreach (var qItem in queryParamsSec.GetChildren())
+        {
+            var name = qItem["Name"] ?? qItem.Key;
+            var values = qItem.GetSection("Values").GetChildren().Select(c => c.Value).OfType<string>().ToList();
+            var mode = qItem["Mode"] ?? "Exact";
+            var isCaseSensitive = bool.TryParse(qItem["IsCaseSensitive"], out var cs) && cs;
+            queryParams.Add(new KyrolusRouteQueryParameter
+            {
+                Name = name,
+                Values = values.Count > 0 ? values : null,
+                Mode = mode,
+                IsCaseSensitive = isCaseSensitive
+            });
+        }
+        return queryParams;
+    }
+
+    private static KyrolusIpFilterOptions? ParseIpFilter(IConfigurationSection ipFilterSec)
+    {
+        if (!ipFilterSec.Exists())
+        {
+            return null;
+        }
+
+        var allowed = ipFilterSec.GetSection("AllowedIpsOrCidrs").GetChildren().Select(c => c.Value).OfType<string>().ToList();
+        var blocked = ipFilterSec.GetSection("BlockedIpsOrCidrs").GetChildren().Select(c => c.Value).OfType<string>().ToList();
+        if (allowed.Count == 0 && blocked.Count == 0)
+        {
+            return null;
+        }
+
+        return new KyrolusIpFilterOptions
+        {
+            AllowedIpsOrCidrs = allowed.Count > 0 ? allowed : null,
+            BlockedIpsOrCidrs = blocked.Count > 0 ? blocked : null
+        };
+    }
+
+    private static List<IReadOnlyDictionary<string, string>>? ParseTransforms(IConfigurationSection transformsSec)
+    {
+        if (!transformsSec.Exists())
+        {
+            return null;
+        }
+
+        var transformsList = new List<IReadOnlyDictionary<string, string>>();
+        foreach (var transformItem in transformsSec.GetChildren())
+        {
+            var dict = transformItem.GetChildren().ToDictionary(c => c.Key, c => c.Value ?? string.Empty);
+            if (dict.Count > 0)
+            {
+                transformsList.Add(dict);
+            }
+        }
+        return transformsList.Count > 0 ? transformsList : null;
     }
 
     /// <summary>

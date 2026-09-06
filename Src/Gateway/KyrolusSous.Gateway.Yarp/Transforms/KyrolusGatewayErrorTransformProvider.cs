@@ -7,13 +7,13 @@ namespace KyrolusSous.Gateway.Yarp.Transforms;
 public sealed class KyrolusGatewayErrorTransformProvider : ITransformProvider
 {
     private static readonly byte[] BadGatewayBytes =
-        """{"title":"Bad Gateway","status":502,"detail":"The gateway failed to establish a connection to the upstream service or received an invalid response."}"""u8.ToArray();
+        """{"type":"https://httpstatuses.com/502","title":"Bad Gateway","status":502,"detail":"The gateway failed to establish a connection to the upstream service or received an invalid response."}"""u8.ToArray();
 
     private static readonly byte[] ServiceUnavailableBytes =
-        """{"title":"Service Unavailable","status":503,"detail":"The upstream service is currently unavailable or overloaded. Please try again later."}"""u8.ToArray();
+        """{"type":"https://httpstatuses.com/503","title":"Service Unavailable","status":503,"detail":"The upstream service is currently unavailable or overloaded. Please try again later."}"""u8.ToArray();
 
     private static readonly byte[] GatewayTimeoutBytes =
-        """{"title":"Gateway Timeout","status":504,"detail":"The upstream service did not respond within the configured gateway activity timeout."}"""u8.ToArray();
+        """{"type":"https://httpstatuses.com/504","title":"Gateway Timeout","status":504,"detail":"The upstream service did not respond within the configured gateway activity timeout."}"""u8.ToArray();
 
     /// <inheritdoc />
     public void ValidateRoute(TransformRouteValidationContext context) { }

@@ -16,10 +16,11 @@ public static class ServiceCollectionExtensions
     /// <b>Registered Components:</b><br/>
     /// <list type="bullet">
     /// <item><description><see cref="IProxyConfigProvider"/> and <see cref="IKyrolusDynamicRouteProvider"/> (singleton in-memory provider).</description></item>
-    /// <item><description><see cref="KyrolusPathTraversalTransformProvider"/>: Path traversal and null-byte injection defense.</description></item>
-    /// <item><description><see cref="KyrolusIpFilterTransformProvider"/>: IP filtering and CIDR blocking.</description></item>
     /// <item><description><see cref="KyrolusHeaderLimitsTransformProvider"/>: Header buffer overflow and DoS defense (HTTP 431).</description></item>
     /// <item><description><see cref="KyrolusPayloadSizeTransformProvider"/>: Early payload size enforcement (HTTP 413).</description></item>
+    /// <item><description><see cref="KyrolusRequestSmugglingTransformProvider"/>: HTTP request smuggling defense (CWE-444).</description></item>
+    /// <item><description><see cref="KyrolusPathTraversalTransformProvider"/>: Path traversal and null-byte injection defense.</description></item>
+    /// <item><description><see cref="KyrolusIpFilterTransformProvider"/>: IP filtering and CIDR blocking.</description></item>
     /// <item><description><see cref="KyrolusMethodOverrideTransformProvider"/>: HTTP method spoofing and verb tampering defense.</description></item>
     /// <item><description><see cref="KyrolusClientCertTransformProvider"/>: mTLS client certificate spoofing defense.</description></item>
     /// <item><description><see cref="KyrolusCorrelationTransformProvider"/>: Distributed tracing (<c>X-Correlation-ID</c>).</description></item>
@@ -49,31 +50,10 @@ public static class ServiceCollectionExtensions
     /// app.MapReverseProxy();
     /// </code>
     /// </example>
-    public static IServiceCollection AddKyrolusYarpGateway(
-        this IServiceCollection services,
+    public static IServiceCollection AddKyrolusYarpGateway(this IServiceCollection services,
         Action<KyrolusDynamicInMemoryRouteConfigProvider>? configure = null)
-    {
-        var provider = new KyrolusDynamicInMemoryRouteConfigProvider();
-        configure?.Invoke(provider);
+            => services.AddTransforms(new KyrolusDynamicInMemoryRouteConfigProvider(), configure);
 
-        services.AddSingleton<IProxyConfigProvider>(provider);
-        services.AddSingleton<IKyrolusDynamicRouteProvider>(provider);
-        services.AddSingleton<ITransformProvider, KyrolusPathTraversalTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusIpFilterTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusHeaderLimitsTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusPayloadSizeTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusMethodOverrideTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusClientCertTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusCorrelationTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusContentTypeTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusTenantRoutingTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusSecurityHeadersTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusTelemetryHeadersTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusGatewayErrorTransformProvider>();
-        services.AddReverseProxy();
-
-        return services;
-    }
 
     /// <summary>
     /// Registers Kyrolus YARP Gateway, loading routes and clusters from the specified <see cref="IConfiguration"/> section
@@ -112,33 +92,36 @@ public static class ServiceCollectionExtensions
         Action<KyrolusDynamicInMemoryRouteConfigProvider>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-
         var provider = new KyrolusDynamicInMemoryRouteConfigProvider();
-
         var section = configuration.GetSection(sectionName);
-        if (section.Exists())
-        {
-            provider.LoadFromConfiguration(section);
-        }
+        if (section.Exists()) provider.LoadFromConfiguration(section);
+        return services.AddTransforms(provider, configure);
+    }
 
+
+    private static IServiceCollection AddTransformProvider<T>(this IServiceCollection services) where T : class, ITransformProvider
+    => services.AddSingleton<ITransformProvider, T>();
+
+    private static IServiceCollection AddTransforms(this IServiceCollection services, KyrolusDynamicInMemoryRouteConfigProvider provider, Action<KyrolusDynamicInMemoryRouteConfigProvider>? configure = null)
+    {
         configure?.Invoke(provider);
 
-        services.AddSingleton<IProxyConfigProvider>(provider);
-        services.AddSingleton<IKyrolusDynamicRouteProvider>(provider);
-        services.AddSingleton<ITransformProvider, KyrolusPathTraversalTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusIpFilterTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusHeaderLimitsTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusPayloadSizeTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusMethodOverrideTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusClientCertTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusCorrelationTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusContentTypeTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusTenantRoutingTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusSecurityHeadersTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusTelemetryHeadersTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusGatewayErrorTransformProvider>();
-        services.AddReverseProxy();
-
+        services.AddSingleton<IProxyConfigProvider>(provider)
+                .AddSingleton<IKyrolusDynamicRouteProvider>(provider)
+                .AddTransformProvider<KyrolusHeaderLimitsTransformProvider>()
+                .AddTransformProvider<KyrolusPayloadSizeTransformProvider>()
+                .AddTransformProvider<KyrolusRequestSmugglingTransformProvider>()
+                .AddTransformProvider<KyrolusPathTraversalTransformProvider>()
+                .AddTransformProvider<KyrolusIpFilterTransformProvider>()
+                .AddTransformProvider<KyrolusMethodOverrideTransformProvider>()
+                .AddTransformProvider<KyrolusClientCertTransformProvider>()
+                .AddTransformProvider<KyrolusCorrelationTransformProvider>()
+                .AddTransformProvider<KyrolusContentTypeTransformProvider>()
+                .AddTransformProvider<KyrolusTenantRoutingTransformProvider>()
+                .AddTransformProvider<KyrolusSecurityHeadersTransformProvider>()
+                .AddTransformProvider<KyrolusTelemetryHeadersTransformProvider>()
+                .AddTransformProvider<KyrolusGatewayErrorTransformProvider>()
+                .AddReverseProxy();
         return services;
     }
 }

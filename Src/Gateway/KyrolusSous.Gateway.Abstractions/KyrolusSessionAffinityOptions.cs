@@ -15,12 +15,12 @@ public sealed record KyrolusSessionAffinityOptions
     /// <summary>
     /// Gets or sets the affinity mechanism policy name (e.g., <c>"Cookie"</c> or <c>"CustomHeader"</c>).
     /// </summary>
-    public string? Policy { get; init; } = "Cookie";
+    public KyrolusSessionAffinityPolicy? Policy { get; init; } = KyrolusSessionAffinityPolicy.Cookie;
 
     /// <summary>
     /// Gets or sets the strategy to use if the affinitized destination becomes unavailable (e.g., <c>"Redistribute"</c>).
     /// </summary>
-    public string? FailurePolicy { get; init; } = "Redistribute";
+    public KyrolusSessionAffinityFailurePolicy? FailurePolicy { get; init; } = KyrolusSessionAffinityFailurePolicy.Redistribute;
 
     /// <summary>
     /// Gets or sets the name of the cookie or header used to store the affinity token.

@@ -18,9 +18,9 @@ public sealed record KyrolusRouteHeader
 
     /// <summary>
     /// Gets the comparison mode (<c>"ExactHeader"</c>, <c>"HeaderPrefix"</c>, <c>"Exists"</c>, <c>"NotExists"</c>).
-    /// Defaults to <c>"ExactHeader"</c>.
+    /// Defaults to <see cref="KyrolusHeaderMatchMode.ExactHeader"/>.
     /// </summary>
-    public string? Mode { get; init; } = "ExactHeader";
+    public KyrolusHeaderMatchMode? Mode { get; init; } = KyrolusHeaderMatchMode.ExactHeader;
 
     /// <summary>
     /// Gets whether the header value comparison is case-sensitive. Defaults to <c>false</c>.

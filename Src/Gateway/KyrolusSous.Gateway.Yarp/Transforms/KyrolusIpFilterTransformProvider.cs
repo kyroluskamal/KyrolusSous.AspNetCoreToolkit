@@ -7,10 +7,34 @@ namespace KyrolusSous.Gateway.Yarp.Transforms;
 public sealed class KyrolusIpFilterTransformProvider : ITransformProvider
 {
     private static readonly byte[] ForbiddenResponseBytes =
-        """{"title":"Forbidden","status":403,"detail":"Access from your IP address is restricted."}"""u8.ToArray();
+        """{"type":"https://httpstatuses.com/403","title":"Forbidden","status":403,"detail":"Access from your IP address is restricted."}"""u8.ToArray();
 
     /// <inheritdoc />
-    public void ValidateRoute(TransformRouteValidationContext context) { }
+    public void ValidateRoute(TransformRouteValidationContext context)
+    {
+        if (context.Route.Metadata is null)
+        {
+            return;
+        }
+
+        ValidateIpFilterEntries(context, "Kyrolus:IpFilter:Allowed");
+        ValidateIpFilterEntries(context, "Kyrolus:IpFilter:Blocked");
+    }
+
+    private static void ValidateIpFilterEntries(TransformRouteValidationContext context, string metadataKey)
+    {
+        if (context.Route.Metadata?.TryGetValue(metadataKey, out var raw) == true && !string.IsNullOrWhiteSpace(raw))
+        {
+            var parts = raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var part in parts)
+            {
+                if (!IPNetwork.TryParse(part, out _) && !IPAddress.TryParse(part, out _))
+                {
+                    context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid IP or CIDR in metadata '{metadataKey}': '{part}'."));
+                }
+            }
+        }
+    }
 
     /// <inheritdoc />
     public void ValidateCluster(TransformClusterValidationContext context) { }
@@ -46,43 +70,41 @@ public sealed class KyrolusIpFilterTransformProvider : ITransformProvider
             }
 
             var remoteIp = transformContext.HttpContext.Connection.RemoteIpAddress;
-            if (remoteIp is null)
-            {
-                // Fail-Closed: If an allowlist is enforced, unidentifiable clients cannot be granted access
-                if (allowedList.Count > 0)
-                {
-                    transformContext.HttpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
-                    transformContext.HttpContext.Response.ContentType = "application/problem+json";
-                    await transformContext.HttpContext.Response.Body.WriteAsync(ForbiddenResponseBytes, transformContext.HttpContext.RequestAborted);
-                    return;
-                }
-
-                return;
-            }
-
-            if (remoteIp.IsIPv4MappedToIPv6)
-            {
-                remoteIp = remoteIp.MapToIPv4();
-            }
-
-            // 1. Check if explicitly blocked
-            if (blockedList.Count > 0 && MatchesAny(remoteIp, blockedList))
+            if (IsRequestForbidden(remoteIp, allowedList, blockedList))
             {
                 transformContext.HttpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
                 transformContext.HttpContext.Response.ContentType = "application/problem+json";
                 await transformContext.HttpContext.Response.Body.WriteAsync(ForbiddenResponseBytes, transformContext.HttpContext.RequestAborted);
-                return;
-            }
-
-            // 2. Check if allowlist is enforced and IP is not allowed
-            if (allowedList.Count > 0 && !MatchesAny(remoteIp, allowedList))
-            {
-                transformContext.HttpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
-                transformContext.HttpContext.Response.ContentType = "application/problem+json";
-                await transformContext.HttpContext.Response.Body.WriteAsync(ForbiddenResponseBytes, transformContext.HttpContext.RequestAborted);
-                return;
             }
         });
+    }
+
+    private static bool IsRequestForbidden(IPAddress? remoteIp, List<IPNetwork> allowedList, List<IPNetwork> blockedList)
+    {
+        if (remoteIp is null)
+        {
+            // Fail-Closed: If an allowlist is enforced, unidentifiable clients cannot be granted access
+            return allowedList.Count > 0;
+        }
+
+        if (remoteIp.IsIPv4MappedToIPv6)
+        {
+            remoteIp = remoteIp.MapToIPv4();
+        }
+
+        // 1. Check if explicitly blocked
+        if (blockedList.Count > 0 && MatchesAny(remoteIp, blockedList))
+        {
+            return true;
+        }
+
+        // 2. Check if allowlist is enforced and IP is not allowed
+        if (allowedList.Count > 0 && !MatchesAny(remoteIp, allowedList))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private static List<IPNetwork> ParseNetworks(string? raw)
@@ -110,16 +132,6 @@ public sealed class KyrolusIpFilterTransformProvider : ITransformProvider
         return list;
     }
 
-    private static bool MatchesAny(IPAddress ip, List<IPNetwork> networks)
-    {
-        foreach (var net in networks)
-        {
-            if (net.Contains(ip))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    private static bool MatchesAny(IPAddress ip, List<IPNetwork> networks) =>
+        networks.Any(net => net.Contains(ip));
 }

@@ -47,6 +47,24 @@ public sealed class KyrolusSecurityHeadersOptions
     public string? StrictTransportSecurity { get; set; } = "max-age=31536000; includeSubDomains";
 
     /// <summary>
+    /// Gets or sets the value for X-Permitted-Cross-Domain-Policies header. Defaults to <c>"none"</c>.
+    /// Defends against Cross-Domain Policy File Injection (CWE-942).
+    /// </summary>
+    public string? PermittedCrossDomainPolicies { get; set; } = "none";
+
+    /// <summary>
+    /// Gets or sets the value for Cross-Origin-Opener-Policy (COOP) header. Defaults to <c>"same-origin"</c>.
+    /// Isolates browsing context and defends against cross-window leaks and Spectre attacks.
+    /// </summary>
+    public string? CrossOriginOpenerPolicy { get; set; } = "same-origin";
+
+    /// <summary>
+    /// Gets or sets the value for Cross-Origin-Resource-Policy (CORP) header. Defaults to <c>"same-site"</c>.
+    /// Defends against cross-origin data inclusion and XS-Leaks.
+    /// </summary>
+    public string? CrossOriginResourcePolicy { get; set; } = "same-site";
+
+    /// <summary>
     /// Gets or sets whether server information disclosure headers (e.g. Server, X-Powered-By, X-AspNet-Version)
     /// should be automatically stripped from outbound HTTP responses. Defaults to <c>true</c>.
     /// </summary>

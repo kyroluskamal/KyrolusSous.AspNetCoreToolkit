@@ -33,7 +33,7 @@ namespace KyrolusSous.Gateway.Yarp.Configuration;
 public sealed class KyrolusClusterBuilder
 {
     private readonly string _clusterId;
-    private string? _loadBalancingPolicy;
+    private KyrolusLoadBalancingPolicy? _loadBalancingPolicy;
     private KyrolusHealthCheckOptions? _healthCheck;
     private KyrolusSessionAffinityOptions? _sessionAffinity;
     private TimeSpan? _httpRequestTimeout;
@@ -56,13 +56,24 @@ public sealed class KyrolusClusterBuilder
     /// Sets the load balancing policy algorithm for distributing traffic among the cluster destinations.
     /// </summary>
     /// <param name="policy">
-    /// The policy name. Use strongly-typed constants from <see cref="KyrolusLoadBalancingPolicies"/> (e.g. <c>RoundRobin</c>, <c>LeastRequests</c>, <c>Random</c>, <c>PowerOfTwoChoices</c>) or a custom registered policy name.
+    /// The policy algorithm. Use standard policies from <see cref="KyrolusLoadBalancingPolicy"/> (e.g. <c>RoundRobin</c>, <c>LeastRequests</c>, <c>Random</c>, <c>PowerOfTwoChoices</c>) or a custom registered policy name.
     /// </param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusClusterBuilder WithLoadBalancing(KyrolusLoadBalancingPolicy policy)
+    {
+        _loadBalancingPolicy = policy;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the load balancing policy algorithm for distributing traffic among the cluster destinations by raw policy name.
+    /// </summary>
+    /// <param name="policy">The policy name or custom registered policy name.</param>
     /// <returns>The builder instance for fluent chaining.</returns>
     public KyrolusClusterBuilder WithLoadBalancing(string policy)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(policy);
-        _loadBalancingPolicy = policy;
+        _loadBalancingPolicy = KyrolusLoadBalancingPolicy.From(policy);
         return this;
     }
 
@@ -83,13 +94,13 @@ public sealed class KyrolusClusterBuilder
     /// <param name="path">The HTTP path to query (e.g. <c>"/healthz"</c> or <c>"/api/health"</c>).</param>
     /// <param name="interval">The probing interval. Defaults to 10 seconds.</param>
     /// <param name="timeout">The probe timeout. Defaults to 5 seconds.</param>
-    /// <param name="policy">The health check policy name (use <see cref="KyrolusHealthCheckPolicies.ConsecutiveFailures"/> or custom).</param>
+    /// <param name="policy">The health check policy algorithm (use <see cref="KyrolusActiveHealthCheckPolicy.ConsecutiveFailures"/> or custom).</param>
     /// <returns>The builder instance for fluent chaining.</returns>
     public KyrolusClusterBuilder WithActiveHealthCheck(
         string path,
         TimeSpan? interval = null,
         TimeSpan? timeout = null,
-        string? policy = null)
+        KyrolusActiveHealthCheckPolicy? policy = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         _healthCheck = (_healthCheck ?? new KyrolusHealthCheckOptions()) with
@@ -100,7 +111,7 @@ public sealed class KyrolusClusterBuilder
                 Path = path,
                 Interval = interval ?? TimeSpan.FromSeconds(10),
                 Timeout = timeout ?? TimeSpan.FromSeconds(5),
-                Policy = policy ?? KyrolusHealthCheckPolicies.ConsecutiveFailures
+                Policy = policy ?? KyrolusActiveHealthCheckPolicy.ConsecutiveFailures
             }
         };
         return this;
@@ -111,11 +122,11 @@ public sealed class KyrolusClusterBuilder
     /// The gateway monitors real proxied requests and temporarily marks destinations unhealthy if they return 5xx errors or connection failures.
     /// </summary>
     /// <param name="reactivationPeriod">The duration before an unhealthy destination is restored to traffic rotation. Defaults to 30 seconds.</param>
-    /// <param name="policy">The passive policy name (use <see cref="KyrolusHealthCheckPolicies.TransportFailureRate"/> or custom).</param>
+    /// <param name="policy">The passive policy algorithm (use <see cref="KyrolusPassiveHealthCheckPolicy.TransportFailureRate"/> or custom).</param>
     /// <returns>The builder instance for fluent chaining.</returns>
     public KyrolusClusterBuilder WithPassiveHealthCheck(
         TimeSpan? reactivationPeriod = null,
-        string? policy = null)
+        KyrolusPassiveHealthCheckPolicy? policy = null)
     {
         _healthCheck = (_healthCheck ?? new KyrolusHealthCheckOptions()) with
         {
@@ -123,7 +134,7 @@ public sealed class KyrolusClusterBuilder
             {
                 Enabled = true,
                 ReactivationPeriod = reactivationPeriod ?? TimeSpan.FromSeconds(30),
-                Policy = policy ?? KyrolusHealthCheckPolicies.TransportFailureRate
+                Policy = policy ?? KyrolusPassiveHealthCheckPolicy.TransportFailureRate
             }
         };
         return this;
@@ -188,6 +199,79 @@ public sealed class KyrolusClusterBuilder
     }
 
     /// <summary>
+    /// Sets the default HTTP protocol version and version policy for outbound requests to this cluster.
+    /// Essential for gRPC services (HTTP/2 with <see cref="HttpVersionPolicy.RequestVersionExact"/>) and HTTP/3.
+    /// </summary>
+    /// <param name="version">The HTTP version (e.g. <c>HttpVersion.Version20</c> or <c>HttpVersion.Version30</c>).</param>
+    /// <param name="policy">The HTTP version policy (e.g. <see cref="HttpVersionPolicy.RequestVersionExact"/> or <see cref="HttpVersionPolicy.RequestVersionOrHigher"/>). Defaults to <see cref="HttpVersionPolicy.RequestVersionOrHigher"/>.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusClusterBuilder WithHttpVersion(Version version, HttpVersionPolicy policy = HttpVersionPolicy.RequestVersionOrHigher)
+    {
+        ArgumentNullException.ThrowIfNull(version);
+        _httpClient = (_httpClient ?? new KyrolusHttpClientOptions()) with
+        {
+            DefaultVersion = version,
+            VersionPolicy = policy
+        };
+        return this;
+    }
+
+    /// <summary>
+    /// Configures whether to bypass SSL/TLS server certificate validation when connecting to backend destinations in this cluster.
+    /// <para>
+    /// <b>Security Warning:</b> Enable ONLY in local development, testing, or internal isolated Docker environments with self-signed certificates.
+    /// Never enable in production.
+    /// </para>
+    /// </summary>
+    /// <param name="accept">Whether to accept any server certificate. Defaults to <c>true</c>.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusClusterBuilder WithDangerousAcceptAnyServerCertificate(bool accept = true)
+    {
+        _httpClient = (_httpClient ?? new KyrolusHttpClientOptions()) with
+        {
+            DangerousAcceptAnyServerCertificate = accept
+        };
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the maximum number of concurrent HTTP/1.1 connections allowed per backend destination server.
+    /// Defends against socket exhaustion and resource starvation.
+    /// </summary>
+    /// <param name="maxConnections">Maximum concurrent connections per destination.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusClusterBuilder WithMaxConnectionsPerServer(int maxConnections)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxConnections);
+        _httpClient = (_httpClient ?? new KyrolusHttpClientOptions()) with
+        {
+            MaxConnectionsPerServer = maxConnections
+        };
+        return this;
+    }
+
+    /// <summary>
+    /// Configures whether multiple HTTP/2 connections to the same backend server are permitted.
+    /// Recommended for high-throughput gRPC and HTTP/2 microservices.
+    /// </summary>
+    /// <param name="enable">Whether multiple HTTP/2 connections are allowed. Defaults to <c>true</c>.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusClusterBuilder WithMultipleHttp2Connections(bool enable = true)
+    {
+        _httpClient = (_httpClient ?? new KyrolusHttpClientOptions()) with
+        {
+            EnableMultipleHttp2Connections = enable
+        };
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the HTTP request / activity timeout duration for outbound calls to backend destinations in this cluster.
+    /// Alias for <see cref="WithTimeout(TimeSpan)"/>.
+    /// </summary>
+    public KyrolusClusterBuilder WithHttpRequestTimeout(TimeSpan timeout) => WithTimeout(timeout);
+
+    /// <summary>
     /// Configures whether response bodies from backend destinations should be buffered before delivery to the client.
     /// Set to <c>false</c> for real-time streaming, WebSockets, Server-Sent Events (SSE), and large file downloads.
     /// </summary>
@@ -196,6 +280,13 @@ public sealed class KyrolusClusterBuilder
         _allowResponseBuffering = enable;
         return this;
     }
+
+    /// <summary>
+    /// Configures whether response bodies from backend destinations should be buffered before delivery to the client.
+    /// Set to <c>false</c> for real-time streaming, WebSockets, Server-Sent Events (SSE), and large file downloads.
+    /// Alias for <see cref="WithResponseBuffering(bool)"/>.
+    /// </summary>
+    public KyrolusClusterBuilder WithAllowResponseBuffering(bool allow = true) => WithResponseBuffering(allow);
 
     /// <summary>
     /// Adds a physical backend destination endpoint (replica) to the cluster using an address URI string.

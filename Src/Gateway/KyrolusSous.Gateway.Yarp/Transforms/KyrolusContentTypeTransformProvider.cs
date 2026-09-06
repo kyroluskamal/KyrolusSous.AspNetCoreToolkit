@@ -7,10 +7,24 @@ namespace KyrolusSous.Gateway.Yarp.Transforms;
 public sealed class KyrolusContentTypeTransformProvider : ITransformProvider
 {
     private static readonly byte[] UnsupportedMediaTypeBytes =
-        """{"title":"Unsupported Media Type","status":415,"detail":"The request content type is not supported."}"""u8.ToArray();
+        """{"type":"https://httpstatuses.com/415","title":"Unsupported Media Type","status":415,"detail":"The request content type is not supported."}"""u8.ToArray();
 
     /// <inheritdoc />
-    public void ValidateRoute(TransformRouteValidationContext context) { }
+    public void ValidateRoute(TransformRouteValidationContext context)
+    {
+        if (context.Route.Metadata?.TryGetValue("Kyrolus:ContentType:Allowed", out var raw) == true && !string.IsNullOrWhiteSpace(raw))
+        {
+            var parts = raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var part in parts)
+            {
+                var slashIndex = part.IndexOf('/');
+                if (slashIndex <= 0 || slashIndex >= part.Length - 1)
+                {
+                    context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid MIME type in 'Kyrolus:ContentType:Allowed': '{part}'. Expected format 'type/subtype'."));
+                }
+            }
+        }
+    }
 
     /// <inheritdoc />
     public void ValidateCluster(TransformClusterValidationContext context) { }
@@ -65,13 +79,6 @@ public sealed class KyrolusContentTypeTransformProvider : ITransformProvider
     {
         // Strip charset or boundary if present (e.g., "application/json; charset=utf-8" -> "application/json")
         var mime = contentType.Split(';', StringSplitOptions.TrimEntries)[0];
-        foreach (var allowed in allowedTypes)
-        {
-            if (string.Equals(mime, allowed, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-        return false;
+        return allowedTypes.Any(allowed => string.Equals(mime, allowed, StringComparison.OrdinalIgnoreCase));
     }
 }

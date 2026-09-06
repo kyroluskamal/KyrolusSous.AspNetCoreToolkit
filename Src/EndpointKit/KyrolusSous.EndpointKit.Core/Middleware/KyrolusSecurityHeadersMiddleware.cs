@@ -101,6 +101,21 @@ public sealed class KyrolusSecurityHeadersMiddleware
         {
             headers["Strict-Transport-Security"] = options.StrictTransportSecurity;
         }
+
+        if (!string.IsNullOrEmpty(options.PermittedCrossDomainPolicies) && !headers.ContainsKey("X-Permitted-Cross-Domain-Policies"))
+        {
+            headers["X-Permitted-Cross-Domain-Policies"] = options.PermittedCrossDomainPolicies;
+        }
+
+        if (!string.IsNullOrEmpty(options.CrossOriginOpenerPolicy) && !headers.ContainsKey("Cross-Origin-Opener-Policy"))
+        {
+            headers["Cross-Origin-Opener-Policy"] = options.CrossOriginOpenerPolicy;
+        }
+
+        if (!string.IsNullOrEmpty(options.CrossOriginResourcePolicy) && !headers.ContainsKey("Cross-Origin-Resource-Policy"))
+        {
+            headers["Cross-Origin-Resource-Policy"] = options.CrossOriginResourcePolicy;
+        }
     }
 
     private static void StripDisclosedHeaders(IHeaderDictionary headers, KyrolusSecurityHeadersOptions options)

@@ -7,10 +7,19 @@ namespace KyrolusSous.Gateway.Yarp.Transforms;
 public sealed class KyrolusPayloadSizeTransformProvider : ITransformProvider
 {
     private static readonly byte[] PayloadTooLargeBytes =
-        """{"title":"Payload Too Large","status":413,"detail":"The request body size exceeds the maximum permitted limit for this route."}"""u8.ToArray();
+        """{"type":"https://httpstatuses.com/413","title":"Payload Too Large","status":413,"detail":"The request body size exceeds the maximum permitted limit for this route."}"""u8.ToArray();
 
     /// <inheritdoc />
-    public void ValidateRoute(TransformRouteValidationContext context) { }
+    public void ValidateRoute(TransformRouteValidationContext context)
+    {
+        if (context.Route.Metadata is { } metadata &&
+            metadata.TryGetValue("Kyrolus:Payload:MaxSize", out var maxRaw) &&
+            !string.IsNullOrWhiteSpace(maxRaw) &&
+            (!long.TryParse(maxRaw, out var parsedMax) || parsedMax <= 0))
+        {
+            context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid metadata 'Kyrolus:Payload:MaxSize' value '{maxRaw}'. Must be a positive integer greater than 0."));
+        }
+    }
 
     /// <inheritdoc />
     public void ValidateCluster(TransformClusterValidationContext context) { }
@@ -42,6 +51,12 @@ public sealed class KyrolusPayloadSizeTransformProvider : ITransformProvider
             if (transformContext.HttpContext.Response.HasStarted)
             {
                 return;
+            }
+
+            var maxBodySizeFeature = transformContext.HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
+            if (maxBodySizeFeature is { IsReadOnly: false })
+            {
+                maxBodySizeFeature.MaxRequestBodySize = limit;
             }
 
             var contentLength = transformContext.HttpContext.Request.ContentLength;

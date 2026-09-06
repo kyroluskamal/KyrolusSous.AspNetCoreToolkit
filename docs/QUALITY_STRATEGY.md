@@ -102,11 +102,11 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Auth.TokenRevocation - Unit | unit | 20 | none | yes |
 | Auth.Tokens - Unit | unit | 13 | none | yes |
 | RabbitMQ - Unit | unit | 38 | none | yes |
-| EndpointKit - Unit | unit | 88 | none | yes |
+| EndpointKit - Unit | unit | 101 | none | yes |
 | DataProtection - Unit | unit | 33 | none | yes |
 | Payments - Unit | unit | 57 | none | yes |
 | Localization - Unit | unit | 53 | none | yes |
-| **Total** | | **2729** | | |
+| **Total** | | **2742** | | |
 
 <!-- END:GENERATED:test-suites -->
 

@@ -75,14 +75,6 @@ public sealed class KyrolusCorrelationTransformProvider : ITransformProvider
             return false;
         }
 
-        foreach (var c in value)
-        {
-            if (!char.IsAsciiLetterOrDigit(c) && c != '-' && c != '_')
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return value.All(c => char.IsAsciiLetterOrDigit(c) || c == '-' || c == '_');
     }
 }

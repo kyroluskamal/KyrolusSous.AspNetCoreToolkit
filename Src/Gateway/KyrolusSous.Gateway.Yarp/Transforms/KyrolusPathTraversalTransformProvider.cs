@@ -7,7 +7,7 @@ namespace KyrolusSous.Gateway.Yarp.Transforms;
 public sealed class KyrolusPathTraversalTransformProvider : ITransformProvider
 {
     private static readonly byte[] BadRequestBytes =
-        """{"title":"Bad Request","status":400,"detail":"Path traversal or invalid characters detected in the request path."}"""u8.ToArray();
+        """{"type":"https://httpstatuses.com/400","title":"Bad Request","status":400,"detail":"Path traversal or invalid characters detected in the request path or query."}"""u8.ToArray();
 
     /// <inheritdoc />
     public void ValidateRoute(TransformRouteValidationContext context) { }
@@ -28,9 +28,11 @@ public sealed class KyrolusPathTraversalTransformProvider : ITransformProvider
                 return;
             }
 
-            var rawPath = transformContext.HttpContext.Request.Path.Value;
+            var request = transformContext.HttpContext.Request;
+            var rawPath = request.Path.Value;
+            var queryString = request.QueryString.Value;
 
-            if (ContainsPathTraversal(rawPath))
+            if (ContainsPathTraversal(rawPath) || ContainsPathTraversal(queryString))
             {
                 transformContext.HttpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
                 transformContext.HttpContext.Response.ContentType = "application/problem+json";
@@ -39,7 +41,7 @@ public sealed class KyrolusPathTraversalTransformProvider : ITransformProvider
         });
     }
 
-    private static bool ContainsPathTraversal(string? path)
+    internal static bool ContainsPathTraversal(string? path)
     {
         if (string.IsNullOrEmpty(path))
         {
@@ -61,19 +63,55 @@ public sealed class KyrolusPathTraversalTransformProvider : ITransformProvider
             return true;
         }
 
-        // 3. Defend against encoded dot segments (%2e%2e, %2e., .%2e)
-        if (path.Contains("%2e", StringComparison.OrdinalIgnoreCase))
+        // 3. Defend against encoded dot segments and mixed slash encodings (..%2f, %2e%2e, ..%5c)
+        if (path.Contains("..%2f", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("..%5c", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("%2f..", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("%5c..", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("%2e%2e", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("%2e.", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains(".%2e", StringComparison.OrdinalIgnoreCase))
         {
-            if (path.Contains("%2e%2e", StringComparison.OrdinalIgnoreCase) ||
-                path.Contains("%2e.", StringComparison.OrdinalIgnoreCase) ||
-                path.Contains(".%2e", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
+            return true;
         }
 
         // 4. Defend against Windows/IIS backslash traversal bypasses
         if (path.Contains(@"\..\") || path.EndsWith(@"\..") || path.Contains(@"\"))
+        {
+            return true;
+        }
+
+        // 5. Defend against Semicolon / Matrix Parameter Traversal bypasses (CVE-2020-5410 / CVE-2018-1271)
+        if (path.Contains("..;", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains(";..", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("/..;/", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("/;../", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("/.;/", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("..%3b", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("%3b..", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // 6. Deep inspection on unescaped content to catch double-encoded or alternate bypasses
+        try
+        {
+            var unescaped = Uri.UnescapeDataString(path);
+            if (unescaped.Contains('\0') ||
+                unescaped.Contains("/../", StringComparison.Ordinal) ||
+                unescaped.EndsWith("/..", StringComparison.Ordinal) ||
+                unescaped.StartsWith("../", StringComparison.Ordinal) ||
+                unescaped.Contains("..;", StringComparison.Ordinal) ||
+                unescaped.Contains(";..", StringComparison.Ordinal) ||
+                unescaped.Contains("/..;/", StringComparison.Ordinal) ||
+                unescaped.Contains("/;../", StringComparison.Ordinal) ||
+                unescaped.Contains("/.;/", StringComparison.Ordinal) ||
+                unescaped.Contains(@"\"))
+            {
+                return true;
+            }
+        }
+        catch
         {
             return true;
         }
