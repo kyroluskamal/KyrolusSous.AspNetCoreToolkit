@@ -66,4 +66,15 @@ public sealed record KyrolusGatewayCluster
     /// Defends against hung connections, thread pool starvation, and cascading microservice failures.
     /// </summary>
     public TimeSpan? HttpRequestTimeout { get; init; }
+
+    /// <summary>
+    /// Gets optional HTTP client configuration for outbound calls to backend cluster destinations (e.g. SSL bypass, connection limits).
+    /// </summary>
+    public KyrolusHttpClientOptions? HttpClient { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether responses from backend destinations should be buffered before delivery to the client.
+    /// Set to <c>false</c> for real-time streaming, WebSockets, Server-Sent Events (SSE), and large file downloads.
+    /// </summary>
+    public bool? AllowResponseBuffering { get; init; }
 }

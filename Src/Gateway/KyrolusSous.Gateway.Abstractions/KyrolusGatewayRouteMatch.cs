@@ -44,4 +44,16 @@ public sealed record KyrolusGatewayRouteMatch
     /// If null or empty, the route matches requests on any host.
     /// </summary>
     public IReadOnlyList<string>? Hosts { get; init; }
+
+    /// <summary>
+    /// Gets the optional list of HTTP request header matching rules (e.g. for canary releases or API versioning).
+    /// All specified header rules must match for the route to be selected.
+    /// </summary>
+    public IReadOnlyList<KyrolusRouteHeader>? Headers { get; init; }
+
+    /// <summary>
+    /// Gets the optional list of HTTP query string parameter matching rules.
+    /// All specified query parameter rules must match for the route to be selected.
+    /// </summary>
+    public IReadOnlyList<KyrolusRouteQueryParameter>? QueryParameters { get; init; }
 }

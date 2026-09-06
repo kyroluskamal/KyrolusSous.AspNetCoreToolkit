@@ -27,4 +27,9 @@ public sealed record KyrolusSessionAffinityOptions
     /// Defaults to <c>".KyrolusGateway.Affinity"</c>.
     /// </summary>
     public string? AffinityKeyName { get; init; } = ".KyrolusGateway.Affinity";
+
+    /// <summary>
+    /// Gets or sets the hardened security options for the session affinity cookie.
+    /// </summary>
+    public KyrolusSessionAffinityCookieOptions? Cookie { get; init; }
 }

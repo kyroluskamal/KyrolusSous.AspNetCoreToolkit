@@ -18,16 +18,54 @@ public sealed class KyrolusSecurityHeadersMiddleware
         _options = options?.Value ?? new KyrolusSecurityHeadersOptions();
     }
 
+    private static readonly string[] DisclosedServerHeaders =
+    [
+        "Server",
+        "X-Powered-By",
+        "X-AspNet-Version",
+        "X-AspNetMvc-Version",
+        "X-SourceFiles",
+        "X-Generated-By",
+        "X-Backend-Server",
+        "X-Backend-Host",
+        "X-Runtime"
+    ];
+
     public async Task InvokeAsync(HttpContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        ApplySecurityHeaders(context.Response.Headers, _options);
+        context.Response.OnStarting(state =>
+        {
+            var (ctx, opts) = ((HttpContext, KyrolusSecurityHeadersOptions))state;
+            var respHeaders = ctx.Response.Headers;
+
+            ApplySecurityHeaders(respHeaders, opts, ctx.Request.IsHttps);
+
+            if (opts.RemoveServerHeaders)
+            {
+                StripDisclosedHeaders(respHeaders, opts);
+            }
+
+            return Task.CompletedTask;
+        }, (context, _options));
+
+        ApplySecurityHeaders(context.Response.Headers, _options, context.Request.IsHttps);
+
+        if (_options.RemoveServerHeaders)
+        {
+            StripDisclosedHeaders(context.Response.Headers, _options);
+        }
 
         await _next(context).ConfigureAwait(false);
+
+        if (_options.RemoveServerHeaders && !context.Response.HasStarted)
+        {
+            StripDisclosedHeaders(context.Response.Headers, _options);
+        }
     }
 
-    private static void ApplySecurityHeaders(IHeaderDictionary headers, KyrolusSecurityHeadersOptions options)
+    private static void ApplySecurityHeaders(IHeaderDictionary headers, KyrolusSecurityHeadersOptions options, bool isHttps)
     {
         if (!string.IsNullOrEmpty(options.ContentTypeOptions) && !headers.ContainsKey("X-Content-Type-Options"))
         {
@@ -57,6 +95,27 @@ public sealed class KyrolusSecurityHeadersMiddleware
         if (!string.IsNullOrEmpty(options.PermissionsPolicy) && !headers.ContainsKey("Permissions-Policy"))
         {
             headers["Permissions-Policy"] = options.PermissionsPolicy;
+        }
+
+        if (isHttps && !string.IsNullOrEmpty(options.StrictTransportSecurity) && !headers.ContainsKey("Strict-Transport-Security"))
+        {
+            headers["Strict-Transport-Security"] = options.StrictTransportSecurity;
+        }
+    }
+
+    private static void StripDisclosedHeaders(IHeaderDictionary headers, KyrolusSecurityHeadersOptions options)
+    {
+        for (var i = 0; i < DisclosedServerHeaders.Length; i++)
+        {
+            headers.Remove(DisclosedServerHeaders[i]);
+        }
+
+        if (options.CustomHeadersToRemove.Count > 0)
+        {
+            foreach (var customHeader in options.CustomHeadersToRemove)
+            {
+                headers.Remove(customHeader);
+            }
         }
     }
 }

@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using KyrolusSous.Auth.TokenRevocation;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
@@ -230,4 +232,122 @@ public class TokenRevocationTests
         var isAllowed = await blacklist.IsUserTokenRevokedAsync(userId, cutoff.AddMinutes(1));
         isAllowed.ShouldBeFalse();
     }
+
+    [Fact(DisplayName = "Middleware Allows Unauthenticated Request")]
+    public async Task Middleware_AllowsUnauthenticatedRequest()
+    {
+        var nextCalled = false;
+        var middleware = new KyrolusTokenRevocationMiddleware(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        });
+
+        var context = new DefaultHttpContext();
+
+        await middleware.InvokeAsync(context);
+
+        nextCalled.ShouldBeTrue();
+        context.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+    }
+
+    [Fact(DisplayName = "Middleware Allows Valid Authenticated Request")]
+    public async Task Middleware_AllowsValidAuthenticatedRequest()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IKyrolusTokenBlacklist>(_blacklist);
+        var sp = services.BuildServiceProvider();
+
+        var nextCalled = false;
+        var middleware = new KyrolusTokenRevocationMiddleware(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        });
+
+        var context = new DefaultHttpContext
+        {
+            RequestServices = sp,
+            User = new ClaimsPrincipal(new ClaimsIdentity([
+                new Claim("jti", "valid-active-jti"),
+                new Claim("sub", "user-active")
+            ], "Bearer"))
+        };
+
+        await middleware.InvokeAsync(context);
+
+        nextCalled.ShouldBeTrue();
+        context.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+    }
+
+    [Fact(DisplayName = "Middleware Rejects Revoked Token With 401 Unauthorized")]
+    public async Task Middleware_RejectsRevokedToken_With401Unauthorized()
+    {
+        var jti = "revoked-edge-jti";
+        await _blacklist.RevokeTokenAsync(jti, DateTimeOffset.UtcNow.AddMinutes(10));
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IKyrolusTokenBlacklist>(_blacklist);
+        var sp = services.BuildServiceProvider();
+
+        var nextCalled = false;
+        var middleware = new KyrolusTokenRevocationMiddleware(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        });
+
+        var context = new DefaultHttpContext
+        {
+            RequestServices = sp,
+            User = new ClaimsPrincipal(new ClaimsIdentity([
+                new Claim("jti", jti),
+                new Claim("sub", "user-revoked")
+            ], "Bearer"))
+        };
+        context.Response.Body = new MemoryStream();
+
+        await middleware.InvokeAsync(context);
+
+        nextCalled.ShouldBeFalse();
+        context.Response.StatusCode.ShouldBe(StatusCodes.Status401Unauthorized);
+        context.Response.ContentType.ShouldBe("application/problem+json");
+        context.Response.Headers.ContainsKey("WWW-Authenticate").ShouldBeTrue();
+        context.Response.Headers["WWW-Authenticate"].ToString().ShouldContain("invalid_token");
+    }
+
+    [Fact(DisplayName = "ApplicationBuilder UseKyrolusTokenRevocation Wires Middleware Correctly")]
+    public async Task ApplicationBuilder_UseKyrolusTokenRevocation_WiresMiddlewareCorrectly()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IKyrolusTokenBlacklist>(_blacklist);
+        var sp = services.BuildServiceProvider();
+
+        var builder = new ApplicationBuilder(sp);
+        builder.UseKyrolusTokenRevocation();
+        builder.Run(context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status200OK;
+            return Task.CompletedTask;
+        });
+
+        var pipeline = builder.Build();
+
+        var revokedJti = "piped-revoked-token";
+        await _blacklist.RevokeTokenAsync(revokedJti, DateTimeOffset.UtcNow.AddMinutes(5));
+
+        var context = new DefaultHttpContext
+        {
+            RequestServices = sp,
+            User = new ClaimsPrincipal(new ClaimsIdentity([
+                new Claim("jti", revokedJti)
+            ], "Bearer"))
+        };
+        context.Response.Body = new MemoryStream();
+
+        await pipeline(context);
+
+        context.Response.StatusCode.ShouldBe(StatusCodes.Status401Unauthorized);
+    }
 }
+

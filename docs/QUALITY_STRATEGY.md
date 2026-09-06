@@ -95,18 +95,18 @@ what the CI workflow builds its job matrix from - so a suite cannot silently dro
 | Auth.MagicLink - Unit | unit | 14 | none | yes |
 | Auth.Marten - Unit | unit | 7 | none | yes |
 | Auth.Mfa - Unit | unit | 14 | none | yes |
-| Auth.MultiTenancy - Unit | unit | 13 | none | yes |
+| Auth.MultiTenancy - Unit | unit | 16 | none | yes |
 | Auth.Permissions - Unit | unit | 11 | none | yes |
 | Auth.Security - Unit | unit | 15 | none | yes |
 | Auth.Sessions - Unit | unit | 14 | none | yes |
-| Auth.TokenRevocation - Unit | unit | 16 | none | yes |
+| Auth.TokenRevocation - Unit | unit | 20 | none | yes |
 | Auth.Tokens - Unit | unit | 13 | none | yes |
 | RabbitMQ - Unit | unit | 38 | none | yes |
-| EndpointKit - Unit | unit | 73 | none | yes |
+| EndpointKit - Unit | unit | 88 | none | yes |
 | DataProtection - Unit | unit | 33 | none | yes |
 | Payments - Unit | unit | 57 | none | yes |
 | Localization - Unit | unit | 53 | none | yes |
-| **Total** | | **2707** | | |
+| **Total** | | **2729** | | |
 
 <!-- END:GENERATED:test-suites -->
 

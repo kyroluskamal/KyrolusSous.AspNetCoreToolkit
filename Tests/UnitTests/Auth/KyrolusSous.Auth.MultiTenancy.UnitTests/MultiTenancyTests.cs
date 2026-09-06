@@ -202,6 +202,67 @@ public class MultiTenancyTests
         result.ShouldBeNull();
     }
 
+    [Fact(DisplayName = "DI Registration With Default Options Prioritizes Claim Over Subdomain And Blocks Header Spoofing")]
+    public async Task DiRegistration_WithDefaultOptions_PrioritizesClaim_AndBlocksHeaderSpoofing()
+    {
+        var services = new ServiceCollection();
+        services.AddKyrolusMultiTenancy(); // Default options: AllowHeaderResolution = false
+        var sp = services.BuildServiceProvider();
+
+        var resolver = sp.GetRequiredService<IKyrolusTenantResolver>();
+
+        // Context has: Authenticated Claim + Subdomain + Forged Header
+        var context = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity([
+                new Claim("tenant_id", "claim-authoritative-tenant")
+            ], "Bearer"))
+        };
+        context.Request.Host = new HostString("subdomain-tenant.example.com");
+        context.Request.Headers["X-Tenant-Id"] = "forged-header-tenant";
+
+        var resolvedTenant = await resolver.ResolveTenantIdAsync(context);
+
+        // Claim MUST win, forged header must be ignored!
+        resolvedTenant.ShouldBe("claim-authoritative-tenant");
+    }
+
+    [Fact(DisplayName = "DI Registration With AllowHeaderResolution Enables Header Resolver When No Claim Or Subdomain")]
+    public async Task DiRegistration_WithAllowHeaderResolution_EnablesHeaderResolver()
+    {
+        var services = new ServiceCollection();
+        services.AddKyrolusMultiTenancy(options =>
+        {
+            options.AllowHeaderResolution = true;
+            options.HeaderName = "X-Custom-Tenant";
+        });
+        var sp = services.BuildServiceProvider();
+
+        var resolver = sp.GetRequiredService<IKyrolusTenantResolver>();
+
+        var context = new DefaultHttpContext();
+        context.Request.Host = new HostString("localhost");
+        context.Request.Headers["X-Custom-Tenant"] = "trusted-s2s-tenant";
+
+        var resolvedTenant = await resolver.ResolveTenantIdAsync(context);
+        resolvedTenant.ShouldBe("trusted-s2s-tenant");
+    }
+
+    [Theory(DisplayName = "Subdomain Resolver Safely Filters Reserved Subdomains")]
+    [InlineData("api.example.com", null)]
+    [InlineData("admin.example.com", null)]
+    [InlineData("staging.example.com", null)]
+    [InlineData("tenant-beta.example.com", "tenant-beta")]
+    public async Task SubdomainResolver_SafelyFilters_ReservedSubdomains(string host, string? expected)
+    {
+        var resolver = new KyrolusSubdomainTenantResolver();
+        var context = new DefaultHttpContext();
+        context.Request.Host = new HostString(host);
+
+        var result = await resolver.ResolveTenantIdAsync(context);
+        result.ShouldBe(expected);
+    }
+
     private sealed class ThrowingTenantResolver : IKyrolusTenantResolver
     {
         public ValueTask<string?> ResolveTenantIdAsync(HttpContext httpContext)

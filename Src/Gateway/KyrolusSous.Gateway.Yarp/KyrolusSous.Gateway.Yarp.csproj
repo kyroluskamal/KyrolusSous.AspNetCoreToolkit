@@ -11,6 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="..\KyrolusSous.Gateway.Abstractions\KyrolusSous.Gateway.Abstractions.csproj" />
     <ProjectReference Include="..\..\Auth\KyrolusSous.Auth.TokenRevocation\KyrolusSous.Auth.TokenRevocation.csproj" />
+    <ProjectReference Include="..\..\Auth\KyrolusSous.Auth.MultiTenancy\KyrolusSous.Auth.MultiTenancy.csproj" />
   </ItemGroup>
 
   <ItemGroup>

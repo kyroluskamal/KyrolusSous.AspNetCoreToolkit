@@ -25,8 +25,22 @@ public class KyrolusTelemetryHeadersTransformProvider : ITransformProvider
     /// <param name="context">The transform builder context.</param>
     public void Apply(TransformBuilderContext context)
     {
+        var metadata = context.Route?.Metadata;
+        if (metadata != null &&
+            metadata.TryGetValue("Kyrolus:SuppressTelemetryHeader", out var suppress) &&
+            bool.TryParse(suppress, out var shouldSuppress) &&
+            shouldSuppress)
+        {
+            return;
+        }
+
         context.AddResponseTransform(transformContext =>
         {
+            if (transformContext.HttpContext.Response.HasStarted)
+            {
+                return ValueTask.CompletedTask;
+            }
+
             transformContext.HttpContext.Response.Headers["X-Kyrolus-Gateway"] = "Active";
             return ValueTask.CompletedTask;
         });

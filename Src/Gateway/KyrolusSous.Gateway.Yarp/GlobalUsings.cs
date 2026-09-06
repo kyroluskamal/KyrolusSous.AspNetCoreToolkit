@@ -8,3 +8,7 @@ global using Yarp.ReverseProxy.Transforms;
 global using Yarp.ReverseProxy.Transforms.Builder;
 global using Microsoft.Extensions.Primitives;
 global using System.Net;
+global using System.Security.Claims;
+global using KyrolusSous.Auth.MultiTenancy;
+global using Microsoft.AspNetCore.Http;
+global using Yarp.ReverseProxy.Forwarder;

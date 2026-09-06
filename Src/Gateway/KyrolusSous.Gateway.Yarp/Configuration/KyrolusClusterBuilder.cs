@@ -37,6 +37,8 @@ public sealed class KyrolusClusterBuilder
     private KyrolusHealthCheckOptions? _healthCheck;
     private KyrolusSessionAffinityOptions? _sessionAffinity;
     private TimeSpan? _httpRequestTimeout;
+    private KyrolusHttpClientOptions? _httpClient;
+    private bool? _allowResponseBuffering;
     private readonly Dictionary<string, KyrolusGatewayDestination> _destinations = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<KyrolusGatewayRoute> _routes = [];
 
@@ -75,6 +77,59 @@ public sealed class KyrolusClusterBuilder
     }
 
     /// <summary>
+    /// Configures active health check probing for cluster destinations.
+    /// The gateway sends periodic HTTP GET requests to the specified endpoint to ensure destination instances are healthy.
+    /// </summary>
+    /// <param name="path">The HTTP path to query (e.g. <c>"/healthz"</c> or <c>"/api/health"</c>).</param>
+    /// <param name="interval">The probing interval. Defaults to 10 seconds.</param>
+    /// <param name="timeout">The probe timeout. Defaults to 5 seconds.</param>
+    /// <param name="policy">The health check policy name (use <see cref="KyrolusHealthCheckPolicies.ConsecutiveFailures"/> or custom).</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusClusterBuilder WithActiveHealthCheck(
+        string path,
+        TimeSpan? interval = null,
+        TimeSpan? timeout = null,
+        string? policy = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        _healthCheck = (_healthCheck ?? new KyrolusHealthCheckOptions()) with
+        {
+            Active = new KyrolusActiveHealthCheckOptions
+            {
+                Enabled = true,
+                Path = path,
+                Interval = interval ?? TimeSpan.FromSeconds(10),
+                Timeout = timeout ?? TimeSpan.FromSeconds(5),
+                Policy = policy ?? KyrolusHealthCheckPolicies.ConsecutiveFailures
+            }
+        };
+        return this;
+    }
+
+    /// <summary>
+    /// Configures passive health check observation for cluster destinations.
+    /// The gateway monitors real proxied requests and temporarily marks destinations unhealthy if they return 5xx errors or connection failures.
+    /// </summary>
+    /// <param name="reactivationPeriod">The duration before an unhealthy destination is restored to traffic rotation. Defaults to 30 seconds.</param>
+    /// <param name="policy">The passive policy name (use <see cref="KyrolusHealthCheckPolicies.TransportFailureRate"/> or custom).</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusClusterBuilder WithPassiveHealthCheck(
+        TimeSpan? reactivationPeriod = null,
+        string? policy = null)
+    {
+        _healthCheck = (_healthCheck ?? new KyrolusHealthCheckOptions()) with
+        {
+            Passive = new KyrolusPassiveHealthCheckOptions
+            {
+                Enabled = true,
+                ReactivationPeriod = reactivationPeriod ?? TimeSpan.FromSeconds(30),
+                Policy = policy ?? KyrolusHealthCheckPolicies.TransportFailureRate
+            }
+        };
+        return this;
+    }
+
+    /// <summary>
     /// Configures session affinity (sticky sessions) for cluster destinations.
     /// </summary>
     public KyrolusClusterBuilder WithSessionAffinity(KyrolusSessionAffinityOptions options)
@@ -85,11 +140,60 @@ public sealed class KyrolusClusterBuilder
     }
 
     /// <summary>
+    /// Configures session affinity (sticky sessions) for cluster destinations with custom policy, failure policy, and hardened cookie options.
+    /// </summary>
+    /// <param name="policy">The affinity mechanism policy name (e.g., <c>"Cookie"</c> or <c>"HashCookie"</c>). Defaults to <c>"Cookie"</c>.</param>
+    /// <param name="failurePolicy">The strategy when an affinitized destination is down (<c>"Redistribute"</c> or <c>"Return503Error"</c>). Defaults to <c>"Redistribute"</c>.</param>
+    /// <param name="keyName">The name of the cookie or header used for affinity tokens.</param>
+    /// <param name="configureCookie">Optional configuration delegate for session affinity cookie security settings.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusClusterBuilder WithSessionAffinity(
+        string policy = "Cookie",
+        string failurePolicy = "Redistribute",
+        string? keyName = null,
+        Action<KyrolusSessionAffinityCookieOptions>? configureCookie = null)
+    {
+        var cookieOptions = new KyrolusSessionAffinityCookieOptions();
+        configureCookie?.Invoke(cookieOptions);
+
+        _sessionAffinity = new KyrolusSessionAffinityOptions
+        {
+            Enabled = true,
+            Policy = policy,
+            FailurePolicy = failurePolicy,
+            AffinityKeyName = keyName ?? ".KyrolusGateway.Affinity",
+            Cookie = cookieOptions
+        };
+
+        return this;
+    }
+
+    /// <summary>
     /// Sets the HTTP request / activity timeout duration for outbound calls to backend destinations in this cluster.
     /// </summary>
     public KyrolusClusterBuilder WithTimeout(TimeSpan timeout)
     {
         _httpRequestTimeout = timeout;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the outbound HTTP client settings (e.g. SSL bypass, connection limits) for communication with backend destinations.
+    /// </summary>
+    public KyrolusClusterBuilder WithHttpClient(KyrolusHttpClientOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        _httpClient = options;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures whether response bodies from backend destinations should be buffered before delivery to the client.
+    /// Set to <c>false</c> for real-time streaming, WebSockets, Server-Sent Events (SSE), and large file downloads.
+    /// </summary>
+    public KyrolusClusterBuilder WithResponseBuffering(bool enable)
+    {
+        _allowResponseBuffering = enable;
         return this;
     }
 
@@ -136,6 +240,10 @@ public sealed class KyrolusClusterBuilder
         ArgumentException.ThrowIfNullOrWhiteSpace(routeId);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
+        var normalizedMethods = httpMethods.Length > 0
+            ? httpMethods.Where(m => !string.IsNullOrWhiteSpace(m)).Select(m => m.Trim().ToUpperInvariant()).ToArray()
+            : null;
+
         _routes.Add(new KyrolusGatewayRoute
         {
             RouteId = routeId,
@@ -143,7 +251,7 @@ public sealed class KyrolusClusterBuilder
             Match = new KyrolusGatewayRouteMatch
             {
                 Path = path,
-                Methods = httpMethods.Length > 0 ? httpMethods : null
+                Methods = normalizedMethods is { Length: > 0 } ? normalizedMethods : null
             }
         });
 
@@ -169,6 +277,11 @@ public sealed class KyrolusClusterBuilder
         ArgumentException.ThrowIfNullOrWhiteSpace(routeId);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
+        var normalizedMethods = methods?
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Select(m => m.Trim().ToUpperInvariant())
+            .ToList();
+
         _routes.Add(new KyrolusGatewayRoute
         {
             RouteId = routeId,
@@ -176,7 +289,7 @@ public sealed class KyrolusClusterBuilder
             Match = new KyrolusGatewayRouteMatch
             {
                 Path = path,
-                Methods = methods,
+                Methods = normalizedMethods is { Count: > 0 } ? normalizedMethods : null,
                 Hosts = hosts
             },
             Metadata = metadata
@@ -218,7 +331,9 @@ public sealed class KyrolusClusterBuilder
             LoadBalancingPolicy = _loadBalancingPolicy,
             HealthCheck = _healthCheck,
             SessionAffinity = _sessionAffinity,
-            HttpRequestTimeout = _httpRequestTimeout
+            HttpRequestTimeout = _httpRequestTimeout,
+            HttpClient = _httpClient,
+            AllowResponseBuffering = _allowResponseBuffering
         };
 
         return (cluster, _routes.AsReadOnly());

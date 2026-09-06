@@ -1,11 +1,14 @@
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace KyrolusSous.Auth.MultiTenancy;
 
+/// <summary>
+/// ASP.NET Core endpoint filter that enforces tenant presence and tenancy boundary authorization.
+/// </summary>
 public sealed class KyrolusTenantEndpointFilter : IEndpointFilter
 {
+    /// <inheritdoc />
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
     {
         var httpContext = context.HttpContext;
@@ -36,16 +39,5 @@ public sealed class KyrolusTenantEndpointFilter : IEndpointFilter
         }
 
         return await next(context);
-    }
-}
-
-public static class MultiTenancyEndpointExtensions
-{
-    /// <summary>
-    /// Enforces that the endpoint must be called within a valid tenant context and the user belongs to the tenant.
-    /// </summary>
-    public static RouteHandlerBuilder RequireTenant(this RouteHandlerBuilder builder)
-    {
-        return builder.AddEndpointFilter(new KyrolusTenantEndpointFilter());
     }
 }

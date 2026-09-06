@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace KyrolusSous.EndpointKit.Core.BaseKyrolusModule;
+
 public static class KyrolusExtensions
 {
 

@@ -1,25 +1,28 @@
 namespace KyrolusSous.Gateway.Yarp.Transforms;
 
 /// <summary>
-/// YARP transform provider that resolves multi-tenant identity using a hardened multi-source fallback strategy
-/// (Explicit Request Header -&gt; Subdomain Extraction) and injects the validated <c>X-Tenant-ID</c> header into proxied requests.
+/// YARP transform provider that enforces multi-tenant boundary isolation and defends against tenant spoofing attacks.
+/// Resolves tenant identity using <see cref="IKyrolusTenantResolver"/> and securely injects the validated <c>X-Tenant-ID</c>
+/// into proxied upstream requests while stripping untrusted client-supplied tenant headers.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Multi-Tenancy Resolution Hierarchy:</b><br/>
-/// <list type="number">
-/// <item><description><b>Explicit Header Priority</b>: Checks if the caller supplied <c>X-Tenant-ID</c> or <c>X-Tenant-Id</c>. If valid, this takes precedence.</description></item>
-/// <item><description><b>Subdomain Fallback</b>: If no header is present, extracts the leading subdomain segment from the request host, safely ignoring IP addresses, localhost, and reserved infrastructure prefixes (<c>www</c>, <c>api</c>, <c>admin</c>, <c>app</c>, <c>staging</c>, etc.).</description></item>
-/// <item><description><b>Sanitization</b>: Verifies character sets (alphanumeric, dashes, underscores, dots) and maximum length (64 chars) to prevent header injection.</description></item>
-/// </list>
+/// <b>Tenant Spoofing Defense:</b><br/>
+/// External callers cannot bypass tenant boundaries by injecting arbitrary <c>X-Tenant-ID</c> headers.
+/// The gateway strips unverified client tenant headers from the proxy request and injects only the tenant verified
+/// by authenticated JWT claims or authoritative domain routing.
 /// </para>
 /// </remarks>
 public sealed class KyrolusTenantRoutingTransformProvider : ITransformProvider
 {
-    private static readonly HashSet<string> ReservedSubdomains = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "www", "api", "admin", "app", "mail", "staging", "dev", "test", "gateway", "proxy"
-    };
+    private static readonly byte[] TenantRequiredResponseBytes =
+        """{"title":"Unauthorized","status":401,"detail":"A valid tenant context is required to access this route."}"""u8.ToArray();
+
+    private static readonly IKyrolusTenantResolver DefaultFallbackResolver = new KyrolusCompositeTenantResolver(
+    [
+        new KyrolusClaimTenantResolver(),
+        new KyrolusSubdomainTenantResolver()
+    ]);
 
     /// <inheritdoc />
     public void ValidateRoute(TransformRouteValidationContext context) { }
@@ -33,55 +36,71 @@ public sealed class KyrolusTenantRoutingTransformProvider : ITransformProvider
     /// <param name="context">The transform builder context.</param>
     public void Apply(TransformBuilderContext context)
     {
-        context.AddRequestTransform(transformContext =>
+        var routeMetadata = context.Route?.Metadata;
+        var requireTenant = routeMetadata != null &&
+                            routeMetadata.TryGetValue("Kyrolus:Tenant:Required", out var req) &&
+                            bool.TryParse(req, out var isReq) && isReq;
+
+        context.AddRequestTransform(async transformContext =>
         {
+            if (transformContext.HttpContext.Response.HasStarted)
+            {
+                return;
+            }
+
             var httpContext = transformContext.HttpContext;
+
+            // 1. Defend against tenant spoofing: strip any untrusted incoming tenant headers
+            transformContext.ProxyRequest.Headers.Remove("X-Tenant-ID");
+            transformContext.ProxyRequest.Headers.Remove("X-Tenant-Id");
+
+            // 2. Resolve verified tenant from ambient context or resolver
             string? resolvedTenant = null;
-
-            // 1. First priority: Check if incoming request already contains an explicit X-Tenant-ID or X-Tenant-Id header
-            if (httpContext.Request.Headers.TryGetValue("X-Tenant-ID", out var headerVal) ||
-                httpContext.Request.Headers.TryGetValue("X-Tenant-Id", out headerVal))
+            var tenantContext = httpContext.RequestServices?.GetService<IKyrolusTenantContext>();
+            if (tenantContext is { HasTenant: true })
             {
-                var candidate = headerVal.ToString().Trim();
-                if (IsValidTenantIdentifier(candidate))
-                {
-                    resolvedTenant = candidate;
-                }
+                resolvedTenant = tenantContext.TenantId;
+            }
+            else
+            {
+                var resolver = httpContext.RequestServices?.GetService<IKyrolusTenantResolver>()
+                            ?? DefaultFallbackResolver;
+
+                resolvedTenant = await resolver.ResolveTenantIdAsync(httpContext);
             }
 
-            // 2. Second priority: Extract from subdomain if not an IP, not localhost, and not a reserved name
-            if (resolvedTenant is null)
+            // 3. Enforce tenant presence if this route strictly requires a tenant
+            if (requireTenant && (string.IsNullOrWhiteSpace(resolvedTenant) || !IsValidTenantIdentifier(resolvedTenant)))
             {
-                var host = httpContext.Request.Host.Host;
-                if (!string.IsNullOrWhiteSpace(host) &&
-                    !host.Equals("localhost", StringComparison.OrdinalIgnoreCase) &&
-                    !IPAddress.TryParse(host, out _))
-                {
-                    var parts = host.Split('.');
-                    if (parts.Length >= 3 && !ReservedSubdomains.Contains(parts[0]))
-                    {
-                        var candidate = parts[0].Trim();
-                        if (IsValidTenantIdentifier(candidate))
-                        {
-                            resolvedTenant = candidate;
-                        }
-                    }
-                }
+                httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                httpContext.Response.ContentType = "application/problem+json";
+                await httpContext.Response.Body.WriteAsync(TenantRequiredResponseBytes, httpContext.RequestAborted);
+                return;
             }
 
-            // 3. Inject into ProxyRequest headers if resolved
-            if (!string.IsNullOrWhiteSpace(resolvedTenant))
+            // 4. Inject the authoritative, sanitized tenant ID into upstream request headers
+            if (!string.IsNullOrWhiteSpace(resolvedTenant) && IsValidTenantIdentifier(resolvedTenant))
             {
-                transformContext.ProxyRequest.Headers.Remove("X-Tenant-ID");
                 transformContext.ProxyRequest.Headers.Add("X-Tenant-ID", resolvedTenant);
             }
-
-            return ValueTask.CompletedTask;
         });
     }
 
-    private static bool IsValidTenantIdentifier(string value) =>
-        !string.IsNullOrWhiteSpace(value) &&
-        value.Length <= 64 &&
-        value.All(c => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c is '-' or '_' or '.');
+    private static bool IsValidTenantIdentifier(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 64)
+        {
+            return false;
+        }
+
+        foreach (var c in value)
+        {
+            if (!char.IsAsciiLetterOrDigit(c) && c != '-' && c != '_' && c != '.')
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }

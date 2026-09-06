@@ -85,4 +85,59 @@ public sealed class KyrolusSecurityHeadersMiddlewareTests
         options.FrameOptions.ShouldBe("SAMEORIGIN");
         options.ContentTypeOptions.ShouldBe("nosniff");
     }
+
+    [Fact(DisplayName = "KyrolusSecurityHeadersMiddleware: Injects HSTS when request is HTTPS")]
+    public async Task SecurityHeadersMiddleware_InjectsHsts_WhenHttps()
+    {
+        RequestDelegate next = ctx => Task.CompletedTask;
+
+        var middleware = new KyrolusSecurityHeadersMiddleware(next);
+        var context = new DefaultHttpContext();
+        context.Request.Scheme = "https";
+
+        await middleware.InvokeAsync(context);
+
+        context.Response.Headers["Strict-Transport-Security"].ToString().ShouldBe("max-age=31536000; includeSubDomains");
+    }
+
+    [Fact(DisplayName = "KyrolusSecurityHeadersMiddleware: Does not inject HSTS when request is plain HTTP")]
+    public async Task SecurityHeadersMiddleware_DoesNotInjectHsts_WhenHttp()
+    {
+        RequestDelegate next = ctx => Task.CompletedTask;
+
+        var middleware = new KyrolusSecurityHeadersMiddleware(next);
+        var context = new DefaultHttpContext();
+        context.Request.Scheme = "http";
+
+        await middleware.InvokeAsync(context);
+
+        context.Response.Headers.ContainsKey("Strict-Transport-Security").ShouldBeFalse();
+    }
+
+    [Fact(DisplayName = "KyrolusSecurityHeadersMiddleware: Strips disclosed server headers")]
+    public async Task SecurityHeadersMiddleware_StripsDisclosedServerHeaders()
+    {
+        RequestDelegate next = ctx =>
+        {
+            ctx.Response.Headers["Server"] = "Kestrel/10.0";
+            ctx.Response.Headers["X-Powered-By"] = "ASP.NET";
+            ctx.Response.Headers["X-AspNet-Version"] = "10.0.1";
+            return Task.CompletedTask;
+        };
+
+        var options = Options.Create(new KyrolusSecurityHeadersOptions
+        {
+            RemoveServerHeaders = true
+        });
+
+        var middleware = new KyrolusSecurityHeadersMiddleware(next, options);
+        var context = new DefaultHttpContext();
+        context.Response.Headers["Server"] = "Kestrel";
+        context.Response.Headers["X-Powered-By"] = "ASP.NET";
+
+        await middleware.InvokeAsync(context);
+
+        context.Response.Headers.ContainsKey("Server").ShouldBeFalse();
+        context.Response.Headers.ContainsKey("X-Powered-By").ShouldBeFalse();
+    }
 }

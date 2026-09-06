@@ -3,9 +3,6 @@ namespace KyrolusSous.Gateway.Abstractions;
 /// <summary>
 /// Represents a single physical backend destination endpoint (replica) belonging to a service cluster.
 /// </summary>
-/// <param name="Address">
-/// The absolute base URI of the target backend service replica (e.g., <c>http://10.0.1.20:5001</c> or <c>https://orders-service:5001</c>).
-/// </param>
 /// <remarks>
 /// <para>
 /// <b>What is a Destination?</b><br/>
@@ -32,4 +29,30 @@ namespace KyrolusSous.Gateway.Abstractions;
 /// cluster.AddDestination("node1", "http://10.0.1.50:5000");
 /// </code>
 /// </example>
-public sealed record KyrolusGatewayDestination(string Address);
+public sealed record KyrolusGatewayDestination
+{
+    /// <summary>
+    /// Gets the validated absolute base URI of the target backend service replica (e.g., <c>http://10.0.1.20:5001</c>).
+    /// </summary>
+    public string Address { get; init; }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="KyrolusGatewayDestination"/> class with security validation.
+    /// </summary>
+    /// <param name="address">The absolute base URI of the target backend service replica.</param>
+    /// <exception cref="ArgumentException">Thrown if the address is not a valid absolute HTTP or HTTPS URI.</exception>
+    public KyrolusGatewayDestination(string address)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(address);
+
+        if (!Uri.TryCreate(address, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new ArgumentException(
+                $"Destination address '{address}' is invalid. It must be a valid absolute URI starting with 'http://' or 'https://'.",
+                nameof(address));
+        }
+
+        Address = address;
+    }
+}

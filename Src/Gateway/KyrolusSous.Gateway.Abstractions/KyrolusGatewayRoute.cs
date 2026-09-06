@@ -76,6 +76,12 @@ public sealed record KyrolusGatewayRoute
     public string? RateLimiterPolicy { get; init; }
 
     /// <summary>
+    /// Gets the ASP.NET Core output caching policy name applied to this route.
+    /// Enables response caching at the gateway edge to reduce load on backend services.
+    /// </summary>
+    public string? OutputCachePolicy { get; init; }
+
+    /// <summary>
     /// Gets the timeout duration allocated for processing requests matching this route.
     /// </summary>
     public TimeSpan? Timeout { get; init; }
@@ -84,4 +90,34 @@ public sealed record KyrolusGatewayRoute
     /// Gets the list of route-level request/response transforms (e.g. PathRemovePrefix, PathPrefix, PathSet).
     /// </summary>
     public IReadOnlyList<IReadOnlyDictionary<string, string>>? Transforms { get; init; }
+
+    /// <summary>
+    /// Gets the maximum allowed request body size in bytes for this route.
+    /// Defends against denial-of-service (DoS) and memory exhaustion attacks via oversized payloads.
+    /// </summary>
+    public long? MaxRequestBodySize { get; init; }
+
+    /// <summary>
+    /// Gets the evaluation order priority for this route. Lower numerical values have higher matching precedence.
+    /// Resolves ambiguity when multiple overlapping routes match the incoming request.
+    /// </summary>
+    public int? Order { get; init; }
+
+    /// <summary>
+    /// Gets optional IP allowlist and blocklist filtering options for this route.
+    /// Requests from non-allowed or blocked IPs are rejected with HTTP 403 Forbidden.
+    /// </summary>
+    public KyrolusIpFilterOptions? IpFilter { get; init; }
+
+    /// <summary>
+    /// Gets whether this route strictly requires an authenticated multi-tenant context.
+    /// If true and tenant resolution yields no valid tenant, the Gateway immediately rejects the request with HTTP 401 Unauthorized.
+    /// </summary>
+    public bool RequireTenant { get; init; }
+
+    /// <summary>
+    /// Gets the optional list of allowed HTTP request Content-Type MIME types (e.g. <c>"application/json"</c>).
+    /// Requests with non-empty bodies bearing any other Content-Type are rejected at the edge with HTTP 415 Unsupported Media Type.
+    /// </summary>
+    public IReadOnlyList<string>? AllowedContentTypes { get; init; }
 }

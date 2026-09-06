@@ -16,10 +16,18 @@ public static class ServiceCollectionExtensions
     /// <b>Registered Components:</b><br/>
     /// <list type="bullet">
     /// <item><description><see cref="IProxyConfigProvider"/> and <see cref="IKyrolusDynamicRouteProvider"/> (singleton in-memory provider).</description></item>
+    /// <item><description><see cref="KyrolusPathTraversalTransformProvider"/>: Path traversal and null-byte injection defense.</description></item>
+    /// <item><description><see cref="KyrolusIpFilterTransformProvider"/>: IP filtering and CIDR blocking.</description></item>
+    /// <item><description><see cref="KyrolusHeaderLimitsTransformProvider"/>: Header buffer overflow and DoS defense (HTTP 431).</description></item>
+    /// <item><description><see cref="KyrolusPayloadSizeTransformProvider"/>: Early payload size enforcement (HTTP 413).</description></item>
+    /// <item><description><see cref="KyrolusMethodOverrideTransformProvider"/>: HTTP method spoofing and verb tampering defense.</description></item>
+    /// <item><description><see cref="KyrolusClientCertTransformProvider"/>: mTLS client certificate spoofing defense.</description></item>
     /// <item><description><see cref="KyrolusCorrelationTransformProvider"/>: Distributed tracing (<c>X-Correlation-ID</c>).</description></item>
-    /// <item><description><see cref="KyrolusSecurityHeadersTransformProvider"/>: Edge protection headers (<c>nosniff</c>, <c>DENY</c>).</description></item>
+    /// <item><description><see cref="KyrolusContentTypeTransformProvider"/>: Payload Content-Type validation and filtering.</description></item>
     /// <item><description><see cref="KyrolusTenantRoutingTransformProvider"/>: Multi-tenant resolution with reserved subdomains filtering.</description></item>
+    /// <item><description><see cref="KyrolusSecurityHeadersTransformProvider"/>: Edge protection headers (<c>nosniff</c>, <c>DENY</c>).</description></item>
     /// <item><description><see cref="KyrolusTelemetryHeadersTransformProvider"/>: Gateway telemetry header injection.</description></item>
+    /// <item><description><see cref="KyrolusGatewayErrorTransformProvider"/>: Uniform ProblemDetails for 502/503/504 errors.</description></item>
     /// <item><description>YARP core reverse proxy engine via <c>AddReverseProxy()</c>.</description></item>
     /// </list>
     /// </para>
@@ -50,10 +58,18 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IProxyConfigProvider>(provider);
         services.AddSingleton<IKyrolusDynamicRouteProvider>(provider);
+        services.AddSingleton<ITransformProvider, KyrolusPathTraversalTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusIpFilterTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusHeaderLimitsTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusPayloadSizeTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusMethodOverrideTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusClientCertTransformProvider>();
         services.AddSingleton<ITransformProvider, KyrolusCorrelationTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusSecurityHeadersTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusContentTypeTransformProvider>();
         services.AddSingleton<ITransformProvider, KyrolusTenantRoutingTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusSecurityHeadersTransformProvider>();
         services.AddSingleton<ITransformProvider, KyrolusTelemetryHeadersTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusGatewayErrorTransformProvider>();
         services.AddReverseProxy();
 
         return services;
@@ -109,10 +125,18 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IProxyConfigProvider>(provider);
         services.AddSingleton<IKyrolusDynamicRouteProvider>(provider);
+        services.AddSingleton<ITransformProvider, KyrolusPathTraversalTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusIpFilterTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusHeaderLimitsTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusPayloadSizeTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusMethodOverrideTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusClientCertTransformProvider>();
         services.AddSingleton<ITransformProvider, KyrolusCorrelationTransformProvider>();
-        services.AddSingleton<ITransformProvider, KyrolusSecurityHeadersTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusContentTypeTransformProvider>();
         services.AddSingleton<ITransformProvider, KyrolusTenantRoutingTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusSecurityHeadersTransformProvider>();
         services.AddSingleton<ITransformProvider, KyrolusTelemetryHeadersTransformProvider>();
+        services.AddSingleton<ITransformProvider, KyrolusGatewayErrorTransformProvider>();
         services.AddReverseProxy();
 
         return services;

@@ -30,10 +30,21 @@ public sealed class KyrolusCorrelationTransformProvider : ITransformProvider
     {
         context.AddRequestTransform(transformContext =>
         {
+            if (transformContext.HttpContext.Response.HasStarted)
+            {
+                return ValueTask.CompletedTask;
+            }
+
             var rawHeader = transformContext.HttpContext.Request.Headers[HeaderName].ToString();
-            var correlationId = IsValidCorrelationId(rawHeader)
-                ? rawHeader
-                : Guid.NewGuid().ToString("N");
+            if (!IsValidCorrelationId(rawHeader))
+            {
+                var requestId = transformContext.HttpContext.Request.Headers["X-Request-ID"].ToString();
+                rawHeader = IsValidCorrelationId(requestId) ? requestId : null;
+            }
+
+            var correlationId = rawHeader
+                ?? System.Diagnostics.Activity.Current?.TraceId.ToString()
+                ?? Guid.NewGuid().ToString("N");
 
             transformContext.HttpContext.Items[CorrelationContextItemKey] = correlationId;
 
@@ -44,6 +55,11 @@ public sealed class KyrolusCorrelationTransformProvider : ITransformProvider
 
         context.AddResponseTransform(transformContext =>
         {
+            if (transformContext.HttpContext.Response.HasStarted)
+            {
+                return ValueTask.CompletedTask;
+            }
+
             if (transformContext.HttpContext.Items.TryGetValue(CorrelationContextItemKey, out var val) && val is string correlationId)
             {
                 transformContext.HttpContext.Response.Headers[HeaderName] = correlationId;
