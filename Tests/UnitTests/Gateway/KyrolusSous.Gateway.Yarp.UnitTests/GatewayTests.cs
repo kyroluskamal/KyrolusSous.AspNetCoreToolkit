@@ -1,10 +1,12 @@
 using KyrolusSous.Gateway.Abstractions;
 using KyrolusSous.Gateway.Yarp;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using Xunit;
 using Yarp.ReverseProxy.Configuration;
+using Yarp.ReverseProxy.Transforms;
 using Yarp.ReverseProxy.Transforms.Builder;
 
 namespace KyrolusSous.Gateway.Yarp.UnitTests;
@@ -277,5 +279,66 @@ public sealed class GatewayTests
         KyrolusGatewayHttpMethods.Options.ShouldBe("OPTIONS");
         KyrolusGatewayHttpMethods.Trace.ShouldBe("TRACE");
         KyrolusGatewayHttpMethods.Connect.ShouldBe("CONNECT");
+    }
+
+    [Fact(DisplayName = "Tenant Routing Transform Prioritizes Explicit Header Over Subdomain")]
+    public async Task TenantRoutingTransform_PrioritizesHeader_OverSubdomain()
+    {
+        var provider = new KyrolusTenantRoutingTransformProvider();
+        var builderContext = new TransformBuilderContext();
+        provider.Apply(builderContext);
+
+        builderContext.RequestTransforms.Count.ShouldBe(1);
+        var transform = builderContext.RequestTransforms[0];
+
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Host = new HostString("client.example.com");
+        httpContext.Request.Headers["X-Tenant-ID"] = "explicit-tenant";
+
+        var proxyRequest = new HttpRequestMessage();
+        var transformContext = new RequestTransformContext
+        {
+            HttpContext = httpContext,
+            ProxyRequest = proxyRequest
+        };
+
+        await transform.ApplyAsync(transformContext);
+        proxyRequest.Headers.GetValues("X-Tenant-ID").ShouldContain("explicit-tenant");
+    }
+
+    [Theory(DisplayName = "Tenant Routing Transform Resolves Subdomain Or Ignores Reserved Names")]
+    [InlineData("tenant-alpha.example.com", "tenant-alpha")]
+    [InlineData("api.example.com", null)]
+    [InlineData("www.example.com", null)]
+    [InlineData("192.168.1.10", null)]
+    [InlineData("localhost", null)]
+    public async Task TenantRoutingTransform_ResolvesSubdomain_OrIgnoresReserved(string host, string? expectedTenant)
+    {
+        var provider = new KyrolusTenantRoutingTransformProvider();
+        var builderContext = new TransformBuilderContext();
+        provider.Apply(builderContext);
+
+        var transform = builderContext.RequestTransforms[0];
+
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Host = new HostString(host);
+
+        var proxyRequest = new HttpRequestMessage();
+        var transformContext = new RequestTransformContext
+        {
+            HttpContext = httpContext,
+            ProxyRequest = proxyRequest
+        };
+
+        await transform.ApplyAsync(transformContext);
+
+        if (expectedTenant is not null)
+        {
+            proxyRequest.Headers.GetValues("X-Tenant-ID").ShouldContain(expectedTenant);
+        }
+        else
+        {
+            proxyRequest.Headers.Contains("X-Tenant-ID").ShouldBeFalse();
+        }
     }
 }
