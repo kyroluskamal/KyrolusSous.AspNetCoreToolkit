@@ -1,5 +1,7 @@
 using KyrolusSous.Gateway.Abstractions;
-using KyrolusSous.Gateway.Yarp;
+using KyrolusSous.Gateway.Yarp.Configuration;
+using KyrolusSous.Gateway.Yarp.Extensions;
+using KyrolusSous.Gateway.Yarp.Transforms;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

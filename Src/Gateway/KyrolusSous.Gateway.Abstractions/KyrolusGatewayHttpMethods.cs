@@ -4,6 +4,19 @@ namespace KyrolusSous.Gateway.Abstractions;
 /// Provides standard HTTP method constants for gateway route matching rules.
 /// Eliminates magic strings and ensures compile-time safety and IntelliSense autocompletion.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>Use in Route Matching:</b><br/>
+/// By default, a gateway route matches all HTTP verbs unless constrained by specifying one or more allowed methods.
+/// Passing these constants to <see cref="KyrolusGatewayRouteMatch.Methods"/> ensures strict verb isolation.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Limiting a child route to GET and POST verbs:
+/// cluster.AddRoute("invoices-query", "/api/invoices", KyrolusGatewayHttpMethods.Get, KyrolusGatewayHttpMethods.Post);
+/// </code>
+/// </example>
 public static class KyrolusGatewayHttpMethods
 {
     /// <summary>

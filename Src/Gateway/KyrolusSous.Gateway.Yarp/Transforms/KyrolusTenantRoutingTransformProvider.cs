@@ -1,14 +1,19 @@
-using System.Net;
-using Yarp.ReverseProxy.Transforms;
-using Yarp.ReverseProxy.Transforms.Builder;
-
-namespace KyrolusSous.Gateway.Yarp;
+namespace KyrolusSous.Gateway.Yarp.Transforms;
 
 /// <summary>
-/// Resolves tenant information with multi-source fallback (Request Header -> Subdomain)
-/// and injects the validated X-Tenant-ID header into the proxied backend request.
-/// Safely ignores IP addresses, localhost, and reserved subdomains (api, www, admin, app, etc.).
+/// YARP transform provider that resolves multi-tenant identity using a hardened multi-source fallback strategy
+/// (Explicit Request Header -&gt; Subdomain Extraction) and injects the validated <c>X-Tenant-ID</c> header into proxied requests.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>Multi-Tenancy Resolution Hierarchy:</b><br/>
+/// <list type="number">
+/// <item><description><b>Explicit Header Priority</b>: Checks if the caller supplied <c>X-Tenant-ID</c> or <c>X-Tenant-Id</c>. If valid, this takes precedence.</description></item>
+/// <item><description><b>Subdomain Fallback</b>: If no header is present, extracts the leading subdomain segment from the request host, safely ignoring IP addresses, localhost, and reserved infrastructure prefixes (<c>www</c>, <c>api</c>, <c>admin</c>, <c>app</c>, <c>staging</c>, etc.).</description></item>
+/// <item><description><b>Sanitization</b>: Verifies character sets (alphanumeric, dashes, underscores, dots) and maximum length (64 chars) to prevent header injection.</description></item>
+/// </list>
+/// </para>
+/// </remarks>
 public sealed class KyrolusTenantRoutingTransformProvider : ITransformProvider
 {
     private static readonly HashSet<string> ReservedSubdomains = new(StringComparer.OrdinalIgnoreCase)
@@ -16,9 +21,16 @@ public sealed class KyrolusTenantRoutingTransformProvider : ITransformProvider
         "www", "api", "admin", "app", "mail", "staging", "dev", "test", "gateway", "proxy"
     };
 
+    /// <inheritdoc />
     public void ValidateRoute(TransformRouteValidationContext context) { }
+
+    /// <inheritdoc />
     public void ValidateCluster(TransformClusterValidationContext context) { }
 
+    /// <summary>
+    /// Attaches the tenant resolution and header injection transform to the YARP transform pipeline.
+    /// </summary>
+    /// <param name="context">The transform builder context.</param>
     public void Apply(TransformBuilderContext context)
     {
         context.AddRequestTransform(transformContext =>
