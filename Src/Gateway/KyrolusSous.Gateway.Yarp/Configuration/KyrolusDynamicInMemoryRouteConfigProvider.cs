@@ -26,7 +26,7 @@ public sealed class KyrolusDynamicInMemoryRouteConfigProvider : IProxyConfigProv
     private readonly Dictionary<string, KyrolusGatewayCluster> _clusters = new(StringComparer.OrdinalIgnoreCase);
 
     private CancellationTokenSource _changeTokenSource = new();
-    private volatile KyrolusCustomProxyConfig _currentConfig = null!;
+    private volatile KyrolusCustomProxyConfig _currentConfig;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="KyrolusDynamicInMemoryRouteConfigProvider"/> class.

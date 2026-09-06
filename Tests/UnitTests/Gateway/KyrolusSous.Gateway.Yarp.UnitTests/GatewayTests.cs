@@ -76,7 +76,7 @@ public sealed class GatewayTests
         cluster.ClusterId.ShouldBe("invoices-cluster");
         cluster.LoadBalancingPolicy.ShouldBe(KyrolusLoadBalancingPolicies.RoundRobin);
         cluster.Destinations.ShouldNotBeNull();
-        cluster.Destinations!.Count.ShouldBe(2);
+        cluster.Destinations.Count.ShouldBe(2);
 
         config.Routes.Count.ShouldBe(3);
         foreach (var route in config.Routes)
@@ -552,9 +552,9 @@ public sealed class GatewayTests
         route.RateLimiterPolicy.ShouldBe("StrictCatalogLimiter");
         route.Timeout.ShouldBe(TimeSpan.FromSeconds(15));
         route.Metadata.ShouldNotBeNull();
-        route.Metadata!["Tier"].ShouldBe("Gold");
+        route.Metadata["Tier"].ShouldBe("Gold");
         route.Transforms.ShouldNotBeNull();
-        route.Transforms!.Count.ShouldBe(1);
+        route.Transforms.Count.ShouldBe(1);
         route.Transforms[0]["PathRemovePrefix"].ShouldBe("/api");
     }
 
@@ -598,21 +598,21 @@ public sealed class GatewayTests
 
         cluster.LoadBalancingPolicy.ShouldBe(KyrolusLoadBalancingPolicies.LeastRequests);
         cluster.HttpRequest.ShouldNotBeNull();
-        cluster.HttpRequest!.ActivityTimeout.ShouldBe(TimeSpan.FromSeconds(45));
+        cluster.HttpRequest.ActivityTimeout.ShouldBe(TimeSpan.FromSeconds(45));
 
         cluster.HealthCheck.ShouldNotBeNull();
-        cluster.HealthCheck!.Active.ShouldNotBeNull();
-        cluster.HealthCheck.Active!.Enabled.ShouldBe(true);
+        cluster.HealthCheck.Active.ShouldNotBeNull();
+        cluster.HealthCheck.Active.Enabled.ShouldBe(true);
         cluster.HealthCheck.Active.Path.ShouldBe("/healthz");
         cluster.HealthCheck.Active.Interval.ShouldBe(TimeSpan.FromSeconds(10));
         cluster.HealthCheck.Active.Timeout.ShouldBe(TimeSpan.FromSeconds(3));
 
         cluster.HealthCheck.Passive.ShouldNotBeNull();
-        cluster.HealthCheck.Passive!.Enabled.ShouldBe(true);
+        cluster.HealthCheck.Passive.Enabled.ShouldBe(true);
         cluster.HealthCheck.Passive.ReactivationPeriod.ShouldBe(TimeSpan.FromMinutes(2));
 
         cluster.SessionAffinity.ShouldNotBeNull();
-        cluster.SessionAffinity!.Enabled.ShouldBe(true);
+        cluster.SessionAffinity.Enabled.ShouldBe(true);
         cluster.SessionAffinity.Policy.ShouldBe("Cookie");
         cluster.SessionAffinity.FailurePolicy.ShouldBe("Redistribute");
         cluster.SessionAffinity.AffinityKeyName.ShouldBe("PaymentSessionCookie");
@@ -652,12 +652,12 @@ public sealed class GatewayTests
         var proxyConfig = provider.GetConfig();
         var cluster = proxyConfig.Clusters.Single(c => c.ClusterId == "auth-cluster");
         cluster.HttpRequest.ShouldNotBeNull();
-        cluster.HttpRequest!.ActivityTimeout.ShouldBe(TimeSpan.FromSeconds(20));
+        cluster.HttpRequest.ActivityTimeout.ShouldBe(TimeSpan.FromSeconds(20));
         cluster.HealthCheck.ShouldNotBeNull();
-        cluster.HealthCheck!.Active!.Enabled.ShouldBe(true);
+        cluster.HealthCheck.Active!.Enabled.ShouldBe(true);
         cluster.HealthCheck.Active.Path.ShouldBe("/health");
         cluster.SessionAffinity.ShouldNotBeNull();
-        cluster.SessionAffinity!.Enabled.ShouldBe(true);
+        cluster.SessionAffinity.Enabled.ShouldBe(true);
         cluster.SessionAffinity.AffinityKeyName.ShouldBe("AuthAffinity");
 
         var route = proxyConfig.Routes.Single(r => r.RouteId == "auth-route");
@@ -666,7 +666,7 @@ public sealed class GatewayTests
         route.RateLimiterPolicy.ShouldBe("AuthRateLimit");
         route.Timeout.ShouldBe(TimeSpan.FromSeconds(10));
         route.Transforms.ShouldNotBeNull();
-        route.Transforms!.Count.ShouldBe(1);
+        route.Transforms.Count.ShouldBe(1);
         route.Transforms[0]["PathRemovePrefix"].ShouldBe("/api");
     }
 }
