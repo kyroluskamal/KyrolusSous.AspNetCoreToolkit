@@ -17,18 +17,18 @@ public sealed class KyrolusHeaderLimitsTransformProvider : ITransformProvider
     {
         if (context.Route.Metadata is { } metadata)
         {
-            if (metadata.TryGetValue("Kyrolus:Headers:MaxCount", out var maxCountRaw) &&
+            if (metadata.TryGetValue(KyrolusGatewayMetadataKeys.Headers.MaxCount, out var maxCountRaw) &&
                 !string.IsNullOrWhiteSpace(maxCountRaw) &&
                 (!int.TryParse(maxCountRaw, out var parsedCount) || parsedCount <= 0))
             {
-                context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid metadata 'Kyrolus:Headers:MaxCount' value '{maxCountRaw}'. Must be a positive integer."));
+                context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid metadata '{KyrolusGatewayMetadataKeys.Headers.MaxCount}' value '{maxCountRaw}'. Must be a positive integer."));
             }
 
-            if (metadata.TryGetValue("Kyrolus:Headers:MaxTotalLength", out var maxLengthRaw) &&
+            if (metadata.TryGetValue(KyrolusGatewayMetadataKeys.Headers.MaxTotalLength, out var maxLengthRaw) &&
                 !string.IsNullOrWhiteSpace(maxLengthRaw) &&
                 (!int.TryParse(maxLengthRaw, out var parsedLength) || parsedLength <= 0))
             {
-                context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid metadata 'Kyrolus:Headers:MaxTotalLength' value '{maxLengthRaw}'. Must be a positive integer."));
+                context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid metadata '{KyrolusGatewayMetadataKeys.Headers.MaxTotalLength}' value '{maxLengthRaw}'. Must be a positive integer."));
             }
         }
     }
@@ -46,7 +46,7 @@ public sealed class KyrolusHeaderLimitsTransformProvider : ITransformProvider
 
         var maxCount = DefaultMaxHeaderCount;
         if (metadata != null &&
-            metadata.TryGetValue("Kyrolus:Headers:MaxCount", out var maxCountRaw) &&
+            metadata.TryGetValue(KyrolusGatewayMetadataKeys.Headers.MaxCount, out var maxCountRaw) &&
             int.TryParse(maxCountRaw, out var parsedCount) && parsedCount > 0)
         {
             maxCount = parsedCount;
@@ -54,7 +54,7 @@ public sealed class KyrolusHeaderLimitsTransformProvider : ITransformProvider
 
         var maxLength = DefaultMaxTotalHeaderLength;
         if (metadata != null &&
-            metadata.TryGetValue("Kyrolus:Headers:MaxTotalLength", out var maxLengthRaw) &&
+            metadata.TryGetValue(KyrolusGatewayMetadataKeys.Headers.MaxTotalLength, out var maxLengthRaw) &&
             int.TryParse(maxLengthRaw, out var parsedLength) && parsedLength > 0)
         {
             maxLength = parsedLength;

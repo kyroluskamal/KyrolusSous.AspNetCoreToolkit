@@ -121,6 +121,5 @@ public readonly record struct KyrolusHttpMethod : IEquatable<string>, IComparabl
     /// <summary>
     /// Implicitly converts a string to a <see cref="KyrolusHttpMethod"/>.
     /// </summary>
-    public static implicit operator KyrolusHttpMethod(string? value) =>
-        From(value) ?? Get;
+    public static implicit operator KyrolusHttpMethod(string? value) => From(value) ?? Get;
 }

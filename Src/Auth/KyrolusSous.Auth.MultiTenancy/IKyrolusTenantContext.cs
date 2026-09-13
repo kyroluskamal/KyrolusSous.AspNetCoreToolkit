@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace KyrolusSous.Auth.MultiTenancy;
 
 /// <summary>
@@ -18,5 +20,6 @@ public interface IKyrolusTenantContext
     /// <summary>
     /// Gets a value indicating whether a valid tenant identifier is present.
     /// </summary>
+    [MemberNotNullWhen(true, nameof(TenantId))]
     bool HasTenant => !string.IsNullOrWhiteSpace(TenantId);
 }

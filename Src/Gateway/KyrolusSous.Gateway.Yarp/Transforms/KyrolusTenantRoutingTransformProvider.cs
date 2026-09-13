@@ -28,11 +28,11 @@ public sealed class KyrolusTenantRoutingTransformProvider : ITransformProvider
     public void ValidateRoute(TransformRouteValidationContext context)
     {
         if (context.Route.Metadata is { } metadata &&
-            metadata.TryGetValue("Kyrolus:Tenant:Required", out var req) &&
+            metadata.TryGetValue(KyrolusGatewayMetadataKeys.Tenant.Required, out var req) &&
             !string.IsNullOrWhiteSpace(req) &&
             !bool.TryParse(req, out _))
         {
-            context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid metadata 'Kyrolus:Tenant:Required' value '{req}'. Expected 'true' or 'false'."));
+            context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid metadata '{KyrolusGatewayMetadataKeys.Tenant.Required}' value '{req}'. Expected 'true' or 'false'."));
         }
     }
 
@@ -47,7 +47,7 @@ public sealed class KyrolusTenantRoutingTransformProvider : ITransformProvider
     {
         var routeMetadata = context.Route?.Metadata;
         var requireTenant = routeMetadata != null &&
-                            routeMetadata.TryGetValue("Kyrolus:Tenant:Required", out var req) &&
+                            routeMetadata.TryGetValue(KyrolusGatewayMetadataKeys.Tenant.Required, out var req) &&
                             bool.TryParse(req, out var isReq) && isReq;
 
         context.AddRequestTransform(async transformContext =>

@@ -262,7 +262,7 @@ public sealed class KyrolusRouteBuilder
     public KyrolusRouteBuilder WithRequireTenant(bool require = true)
     {
         _requireTenant = require;
-        _metadata["Kyrolus:Tenant:Required"] = require ? TrueLiteral : FalseLiteral;
+        _metadata[KyrolusGatewayMetadataKeys.Tenant.Required] = require ? TrueLiteral : FalseLiteral;
         return this;
     }
 
@@ -277,7 +277,7 @@ public sealed class KyrolusRouteBuilder
         if (allowedContentTypes is { Length: > 0 })
         {
             _allowedContentTypes = [.. allowedContentTypes];
-            _metadata["Kyrolus:ContentType:Allowed"] = string.Join(",", allowedContentTypes);
+            _metadata[KyrolusGatewayMetadataKeys.ContentType.Allowed] = string.Join(",", allowedContentTypes);
         }
         return this;
     }
@@ -422,7 +422,7 @@ public sealed class KyrolusRouteBuilder
     public KyrolusRouteBuilder WithStreaming(TimeSpan? timeout = null)
     {
         _timeout = timeout ?? TimeSpan.FromHours(1);
-        _metadata["Kyrolus:Streaming:Enabled"] = TrueLiteral;
+        _metadata[KyrolusGatewayMetadataKeys.Streaming.Enabled] = TrueLiteral;
         return this;
     }
 
@@ -434,7 +434,7 @@ public sealed class KyrolusRouteBuilder
     /// <returns>The builder instance for fluent chaining.</returns>
     public KyrolusRouteBuilder WithBlockDangerousVerbs(bool block = true)
     {
-        _metadata["Kyrolus:Verbs:BlockDangerous"] = block ? TrueLiteral : FalseLiteral;
+        _metadata[KyrolusGatewayMetadataKeys.Verbs.BlockDangerous] = block ? TrueLiteral : FalseLiteral;
         return this;
     }
 
@@ -604,7 +604,7 @@ public sealed class KyrolusRouteBuilder
     /// <returns>The builder instance for fluent chaining.</returns>
     public KyrolusRouteBuilder WithSuppressTelemetryHeader(bool suppress = true)
     {
-        _metadata["Kyrolus:SuppressTelemetryHeader"] = suppress ? TrueLiteral : FalseLiteral;
+        _metadata[KyrolusGatewayMetadataKeys.Telemetry.SuppressHeader] = suppress ? TrueLiteral : FalseLiteral;
         return this;
     }
 
@@ -616,7 +616,7 @@ public sealed class KyrolusRouteBuilder
     /// <returns>The builder instance for fluent chaining.</returns>
     public KyrolusRouteBuilder WithAllowMethodOverride(bool allow = true)
     {
-        _metadata["Kyrolus:MethodOverride:Allowed"] = allow ? TrueLiteral : FalseLiteral;
+        _metadata[KyrolusGatewayMetadataKeys.MethodOverride.Allowed] = allow ? TrueLiteral : FalseLiteral;
         return this;
     }
 
@@ -628,7 +628,7 @@ public sealed class KyrolusRouteBuilder
     /// <returns>The builder instance for fluent chaining.</returns>
     public KyrolusRouteBuilder WithClientCertForwarding(bool enable = true)
     {
-        _metadata["Kyrolus:ClientCert:Forward"] = enable ? TrueLiteral : FalseLiteral;
+        _metadata[KyrolusGatewayMetadataKeys.ClientCert.Forward] = enable ? TrueLiteral : FalseLiteral;
         return this;
     }
 
@@ -641,7 +641,7 @@ public sealed class KyrolusRouteBuilder
     public KyrolusRouteBuilder WithContentSecurityPolicy(string csp)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(csp);
-        _metadata["Kyrolus:SecurityHeaders:CSP"] = csp;
+        _metadata[KyrolusGatewayMetadataKeys.SecurityHeaders.Csp] = csp;
         return this;
     }
 
@@ -653,7 +653,7 @@ public sealed class KyrolusRouteBuilder
     public KyrolusRouteBuilder WithFrameOptions(string frameOptions)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(frameOptions);
-        _metadata["Kyrolus:SecurityHeaders:FrameOptions"] = frameOptions;
+        _metadata[KyrolusGatewayMetadataKeys.SecurityHeaders.FrameOptions] = frameOptions;
         return this;
     }
 
@@ -665,7 +665,7 @@ public sealed class KyrolusRouteBuilder
     public KyrolusRouteBuilder WithReferrerPolicy(string policy)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(policy);
-        _metadata["Kyrolus:SecurityHeaders:ReferrerPolicy"] = policy;
+        _metadata[KyrolusGatewayMetadataKeys.SecurityHeaders.ReferrerPolicy] = policy;
         return this;
     }
 
@@ -853,7 +853,7 @@ public sealed class KyrolusRouteBuilder
                 AllowedIpsOrCidrs = allowedIpsOrCidrs.ToList().AsReadOnly(),
                 BlockedIpsOrCidrs = existingBlocked
             };
-            _metadata["Kyrolus:IpFilter:Allowed"] = string.Join(",", allowedIpsOrCidrs);
+            _metadata[KyrolusGatewayMetadataKeys.IpFilter.Allowed] = string.Join(",", allowedIpsOrCidrs);
         }
         return this;
     }
@@ -874,7 +874,7 @@ public sealed class KyrolusRouteBuilder
                 AllowedIpsOrCidrs = existingAllowed,
                 BlockedIpsOrCidrs = blockedIpsOrCidrs.ToList().AsReadOnly()
             };
-            _metadata["Kyrolus:IpFilter:Blocked"] = string.Join(",", blockedIpsOrCidrs);
+            _metadata[KyrolusGatewayMetadataKeys.IpFilter.Blocked] = string.Join(",", blockedIpsOrCidrs);
         }
         return this;
     }
@@ -890,11 +890,11 @@ public sealed class KyrolusRouteBuilder
     {
         if (maxCount > 0)
         {
-            _metadata["Kyrolus:Headers:MaxCount"] = maxCount.ToString();
+            _metadata[KyrolusGatewayMetadataKeys.Headers.MaxCount] = maxCount.ToString();
         }
         if (maxTotalLengthBytes > 0)
         {
-            _metadata["Kyrolus:Headers:MaxTotalLength"] = maxTotalLengthBytes.ToString();
+            _metadata[KyrolusGatewayMetadataKeys.Headers.MaxTotalLength] = maxTotalLengthBytes.ToString();
         }
         return this;
     }
@@ -907,7 +907,7 @@ public sealed class KyrolusRouteBuilder
     public KyrolusRouteBuilder WithHsts(string hstsValue)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(hstsValue);
-        _metadata["Kyrolus:SecurityHeaders:HSTS"] = hstsValue;
+        _metadata[KyrolusGatewayMetadataKeys.SecurityHeaders.Hsts] = hstsValue;
         return this;
     }
 

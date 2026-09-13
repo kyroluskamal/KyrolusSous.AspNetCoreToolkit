@@ -27,7 +27,7 @@ public class KyrolusTelemetryHeadersTransformProvider : ITransformProvider
     {
         var metadata = context.Route?.Metadata;
         if (metadata != null &&
-            metadata.TryGetValue("Kyrolus:SuppressTelemetryHeader", out var suppress) &&
+            metadata.TryGetValue(KyrolusGatewayMetadataKeys.Telemetry.SuppressHeader, out var suppress) &&
             bool.TryParse(suppress, out var shouldSuppress) &&
             shouldSuppress)
         {

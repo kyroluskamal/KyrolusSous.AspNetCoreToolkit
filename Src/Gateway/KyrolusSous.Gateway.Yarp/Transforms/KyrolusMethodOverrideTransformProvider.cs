@@ -19,11 +19,11 @@ public sealed class KyrolusMethodOverrideTransformProvider : ITransformProvider
     /// <inheritdoc />
     public void ValidateRoute(TransformRouteValidationContext context)
     {
-        if (context.Route.Metadata?.TryGetValue("Kyrolus:MethodOverride:Allowed", out var val) == true &&
+        if (context.Route.Metadata?.TryGetValue(KyrolusGatewayMetadataKeys.MethodOverride.Allowed, out var val) == true &&
             !string.IsNullOrWhiteSpace(val) &&
             !bool.TryParse(val, out _))
         {
-            context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid metadata 'Kyrolus:MethodOverride:Allowed' value '{val}'. Expected 'true' or 'false'."));
+            context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid metadata '{KyrolusGatewayMetadataKeys.MethodOverride.Allowed}' value '{val}'. Expected 'true' or 'false'."));
         }
     }
 
@@ -59,7 +59,7 @@ public sealed class KyrolusMethodOverrideTransformProvider : ITransformProvider
 
     private static bool IsOverrideAllowed(IReadOnlyDictionary<string, string>? metadata) =>
         metadata != null &&
-        metadata.TryGetValue("Kyrolus:MethodOverride:Allowed", out var val) &&
+        metadata.TryGetValue(KyrolusGatewayMetadataKeys.MethodOverride.Allowed, out var val) &&
         bool.TryParse(val, out var isAllowed) && isAllowed;
 
     private static async ValueTask ProcessMethodOverrideAsync(

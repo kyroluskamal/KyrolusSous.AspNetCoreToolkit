@@ -13,8 +13,13 @@
     <ProjectReference Include="..\KyrolusSous.CQRS.Abstractions\KyrolusSous.CQRS.Abstractions.csproj" />
     <ProjectReference Include="..\..\Mediator\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj" />
     <ProjectReference Include="..\..\Repositories\KyrolusSous.Repositories.EF.Abstractions\KyrolusSous.Repositories.EF.Abstractions.csproj" />
+    <ProjectReference Include="..\KyrolusSous.CQRS.Saga\KyrolusSous.CQRS.Saga.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- ModelBuilder.Entity(...).ToTable(...) (KyrolusSagaModelBuilderExtensions) is a relational-only
+         mapping API; Microsoft.EntityFrameworkCore alone (pulled in transitively via
+         Repositories.EF.Abstractions) does not include it. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
   </ItemGroup>
 </Project>
 

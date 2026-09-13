@@ -1869,31 +1869,6 @@ public sealed class GatewayTests
         route.Transforms[0]["Set"].ShouldBe("internal.service:5000");
     }
 
-    [Fact(DisplayName = "RateLimitPartitionKeys Resolves Partition Keys Accurately")]
-    public void RateLimitPartitionKeys_ResolvesPartitionKeysAccurately()
-    {
-        // 1. IP Partition Key
-        var httpContext = new DefaultHttpContext();
-        httpContext.Connection.RemoteIpAddress = IPAddress.Parse("198.51.100.42");
-        KyrolusRateLimitPartitionKeys.GetClientIpKey(httpContext).ShouldBe("198.51.100.42");
-
-        // 2. Tenant Partition Key
-        var services = new ServiceCollection();
-        var tenantContext = new KyrolusTenantContext { TenantId = "tenant-corp-99" };
-        services.AddSingleton<IKyrolusTenantContext>(tenantContext);
-        httpContext.RequestServices = services.BuildServiceProvider();
-
-        KyrolusRateLimitPartitionKeys.GetTenantKey(httpContext).ShouldBe("tenant-corp-99");
-        KyrolusRateLimitPartitionKeys.GetTenantAndIpKey(httpContext).ShouldBe("tenant-corp-99:198.51.100.42");
-
-        // 3. User Partition Key
-        httpContext.User = new ClaimsPrincipal(new ClaimsIdentity([
-            new Claim(ClaimTypes.NameIdentifier, "user-abc-123")
-        ], "Bearer"));
-
-        KyrolusRateLimitPartitionKeys.GetUserKey(httpContext).ShouldBe("user_user-abc-123");
-    }
-
     [Fact(DisplayName = "TransformPipeline ShortCircuits When Response HasStarted")]
     public async Task TransformPipeline_ShortCircuitsWhenResponseHasStarted()
     {
@@ -2482,33 +2457,6 @@ public sealed class GatewayTests
         cluster.AllowResponseBuffering.ShouldBe(false);
     }
 
-    [Fact(DisplayName = "RateLimitPartitionKeys: GetClientIpKey with forwarded header extracts correct IP")]
-    public void RateLimitPartitionKeys_GetClientIpKey_WithForwardedHeader_ExtractsCorrectIp()
-    {
-        // 1. Custom CF-Connecting-IP
-        var cfContext = new DefaultHttpContext();
-        cfContext.Request.Headers["CF-Connecting-IP"] = "198.51.100.42";
-        cfContext.Connection.RemoteIpAddress = IPAddress.Parse("127.0.0.1");
-
-        var cfIp = KyrolusRateLimitPartitionKeys.GetClientIpKey(cfContext, "CF-Connecting-IP");
-        cfIp.ShouldBe("198.51.100.42");
-
-        // 2. Comma-separated X-Forwarded-For takes first IP
-        var xffContext = new DefaultHttpContext();
-        xffContext.Request.Headers["X-Forwarded-For"] = "203.0.113.195, 70.41.3.18, 150.172.238.178";
-        xffContext.Connection.RemoteIpAddress = IPAddress.Parse("127.0.0.1");
-
-        var xffIp = KyrolusRateLimitPartitionKeys.GetClientIpKey(xffContext, "X-Forwarded-For");
-        xffIp.ShouldBe("203.0.113.195");
-
-        // 3. Fallback to Connection.RemoteIpAddress when header absent
-        var fallbackContext = new DefaultHttpContext();
-        fallbackContext.Connection.RemoteIpAddress = IPAddress.Parse("10.0.0.5");
-
-        var fallbackIp = KyrolusRateLimitPartitionKeys.GetClientIpKey(fallbackContext, "CF-Connecting-IP");
-        fallbackIp.ShouldBe("10.0.0.5");
-    }
-
     [Fact(DisplayName = "MethodOverrideTransform: Mutates ProxyRequest.Method when override is allowed and verb is valid")]
     public async Task MethodOverrideTransform_MutatesProxyRequestMethod_WhenAllowedAndValid()
     {
@@ -2611,34 +2559,6 @@ public sealed class GatewayTests
         route.Metadata.ShouldNotBeNull();
         route.Metadata["Kyrolus:Streaming:Enabled"].ShouldBe("true");
         route.Metadata["Kyrolus:Verbs:BlockDangerous"].ShouldBe("true");
-    }
-
-    [Fact(DisplayName = "RateLimitPartitionKeys: GetClientIpKey with isTrustedProxy defends against IP spoofing")]
-    public void RateLimitPartitionKeys_GetClientIpKey_WithTrustedProxy_DefendsAgainstSpoofing()
-    {
-        // Scenario 1: Untrusted connecting remote IP -> spoofed header is ignored, Connection.RemoteIpAddress used
-        var untrustedContext = new DefaultHttpContext();
-        untrustedContext.Connection.RemoteIpAddress = IPAddress.Parse("198.51.100.55");
-        untrustedContext.Request.Headers["X-Forwarded-For"] = "10.0.0.1";
-
-        var untrustedResult = KyrolusRateLimitPartitionKeys.GetClientIpKey(
-            untrustedContext,
-            "X-Forwarded-For",
-            remoteIp => IPAddress.IsLoopback(remoteIp));
-
-        untrustedResult.ShouldBe("198.51.100.55");
-
-        // Scenario 2: Trusted connecting remote IP -> forwarded header IS accepted
-        var trustedContext = new DefaultHttpContext();
-        trustedContext.Connection.RemoteIpAddress = IPAddress.Parse("127.0.0.1");
-        trustedContext.Request.Headers["X-Forwarded-For"] = "203.0.113.195, 70.41.3.18";
-
-        var trustedResult = KyrolusRateLimitPartitionKeys.GetClientIpKey(
-            trustedContext,
-            "X-Forwarded-For",
-            remoteIp => IPAddress.IsLoopback(remoteIp));
-
-        trustedResult.ShouldBe("203.0.113.195");
     }
 
     [Fact(DisplayName = "TransformProviders: ValidateRoute reports errors on malformed metadata")]

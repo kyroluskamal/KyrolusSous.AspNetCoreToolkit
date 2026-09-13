@@ -13,11 +13,11 @@ public sealed class KyrolusPayloadSizeTransformProvider : ITransformProvider
     public void ValidateRoute(TransformRouteValidationContext context)
     {
         if (context.Route.Metadata is { } metadata &&
-            metadata.TryGetValue("Kyrolus:Payload:MaxSize", out var maxRaw) &&
+            metadata.TryGetValue(KyrolusGatewayMetadataKeys.Payload.MaxSize, out var maxRaw) &&
             !string.IsNullOrWhiteSpace(maxRaw) &&
             (!long.TryParse(maxRaw, out var parsedMax) || parsedMax <= 0))
         {
-            context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid metadata 'Kyrolus:Payload:MaxSize' value '{maxRaw}'. Must be a positive integer greater than 0."));
+            context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid metadata '{KyrolusGatewayMetadataKeys.Payload.MaxSize}' value '{maxRaw}'. Must be a positive integer greater than 0."));
         }
     }
 
@@ -33,7 +33,7 @@ public sealed class KyrolusPayloadSizeTransformProvider : ITransformProvider
         var maxBodySize = context.Route?.MaxRequestBodySize;
 
         if (maxBodySize is null && context.Route?.Metadata != null &&
-            context.Route.Metadata.TryGetValue("Kyrolus:Payload:MaxSize", out var maxRaw) &&
+            context.Route.Metadata.TryGetValue(KyrolusGatewayMetadataKeys.Payload.MaxSize, out var maxRaw) &&
             long.TryParse(maxRaw, out var parsedMax) && parsedMax > 0)
         {
             maxBodySize = parsedMax;

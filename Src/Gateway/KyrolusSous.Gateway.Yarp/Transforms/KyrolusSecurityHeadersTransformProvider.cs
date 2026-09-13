@@ -45,10 +45,10 @@ public sealed class KyrolusSecurityHeadersTransformProvider : ITransformProvider
     public void Apply(TransformBuilderContext context)
     {
         var metadata = context.Route?.Metadata;
-        var customCsp = GetMetadataValue(metadata, "Kyrolus:SecurityHeaders:CSP");
-        var customFrameOptions = GetMetadataValue(metadata, "Kyrolus:SecurityHeaders:FrameOptions");
-        var customReferrerPolicy = GetMetadataValue(metadata, "Kyrolus:SecurityHeaders:ReferrerPolicy");
-        var customHsts = GetMetadataValue(metadata, "Kyrolus:SecurityHeaders:HSTS");
+        var customCsp = GetMetadataValue(metadata, KyrolusGatewayMetadataKeys.SecurityHeaders.Csp);
+        var customFrameOptions = GetMetadataValue(metadata, KyrolusGatewayMetadataKeys.SecurityHeaders.FrameOptions);
+        var customReferrerPolicy = GetMetadataValue(metadata, KyrolusGatewayMetadataKeys.SecurityHeaders.ReferrerPolicy);
+        var customHsts = GetMetadataValue(metadata, KyrolusGatewayMetadataKeys.SecurityHeaders.Hsts);
 
         context.AddResponseTransform(transformContext =>
         {

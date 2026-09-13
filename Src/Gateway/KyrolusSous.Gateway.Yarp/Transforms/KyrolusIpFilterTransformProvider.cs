@@ -17,8 +17,8 @@ public sealed class KyrolusIpFilterTransformProvider : ITransformProvider
             return;
         }
 
-        ValidateIpFilterEntries(context, "Kyrolus:IpFilter:Allowed");
-        ValidateIpFilterEntries(context, "Kyrolus:IpFilter:Blocked");
+        ValidateIpFilterEntries(context, KyrolusGatewayMetadataKeys.IpFilter.Allowed);
+        ValidateIpFilterEntries(context, KyrolusGatewayMetadataKeys.IpFilter.Blocked);
     }
 
     private static void ValidateIpFilterEntries(TransformRouteValidationContext context, string metadataKey)
@@ -51,8 +51,8 @@ public sealed class KyrolusIpFilterTransformProvider : ITransformProvider
             return;
         }
 
-        metadata.TryGetValue("Kyrolus:IpFilter:Allowed", out var allowedRaw);
-        metadata.TryGetValue("Kyrolus:IpFilter:Blocked", out var blockedRaw);
+        metadata.TryGetValue(KyrolusGatewayMetadataKeys.IpFilter.Allowed, out var allowedRaw);
+        metadata.TryGetValue(KyrolusGatewayMetadataKeys.IpFilter.Blocked, out var blockedRaw);
 
         if (string.IsNullOrWhiteSpace(allowedRaw) && string.IsNullOrWhiteSpace(blockedRaw))
         {

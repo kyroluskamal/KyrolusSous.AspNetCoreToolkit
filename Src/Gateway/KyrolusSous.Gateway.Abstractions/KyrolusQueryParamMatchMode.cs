@@ -32,11 +32,18 @@ public readonly record struct KyrolusQueryParamMatchMode : IEquatable<string>
     /// Matches if the query parameter value does NOT contain the expected substring.
     /// </summary>
     public static KyrolusQueryParamMatchMode NotContains { get; } = new("NotContains");
-
+    private static readonly IReadOnlyList<string> AllModes =
+    [
+        Exact.Value,
+        Prefix.Value,
+        Exists.Value,
+        Contains.Value,
+        NotContains.Value
+    ];
     /// <summary>
     /// Gets the raw string match mode value. Defaults to <c>"Exact"</c>.
     /// </summary>
-    public string Value => _value ?? "Exact";
+    public string Value => _value ?? Exact.Value;
 
     private KyrolusQueryParamMatchMode(string value)
     {
@@ -57,19 +64,12 @@ public readonly record struct KyrolusQueryParamMatchMode : IEquatable<string>
     /// </summary>
     public static KyrolusQueryParamMatchMode? From(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(value)) return null;
 
         var trimmed = value.Trim();
-        if (string.Equals(trimmed, "Exact", StringComparison.OrdinalIgnoreCase)) return Exact;
-        if (string.Equals(trimmed, "Prefix", StringComparison.OrdinalIgnoreCase)) return Prefix;
-        if (string.Equals(trimmed, "Exists", StringComparison.OrdinalIgnoreCase)) return Exists;
-        if (string.Equals(trimmed, "Contains", StringComparison.OrdinalIgnoreCase)) return Contains;
-        if (string.Equals(trimmed, "NotContains", StringComparison.OrdinalIgnoreCase)) return NotContains;
-
-        return Custom(trimmed);
+        return AllModes.Contains(trimmed, StringComparer.OrdinalIgnoreCase)
+            ? new KyrolusQueryParamMatchMode(trimmed)
+            : Custom(trimmed);
     }
 
     /// <inheritdoc />

@@ -19,11 +19,15 @@ public readonly record struct KyrolusAuthorizationPolicy : IEquatable<string>
     /// Standard YARP reserved keyword (<c>"default"</c>).
     /// </summary>
     public static KyrolusAuthorizationPolicy Default { get; } = new("default");
-
+    private static readonly IReadOnlyList<string> AllPolicies =
+    [
+        Anonymous.Value,
+        Default.Value
+    ];
     /// <summary>
     /// Gets the raw string policy name.
     /// </summary>
-    public string Value => _value ?? "default";
+    public string Value => _value ?? Default.Value;
 
     private KyrolusAuthorizationPolicy(string value)
     {
@@ -47,9 +51,9 @@ public readonly record struct KyrolusAuthorizationPolicy : IEquatable<string>
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
         var trimmed = value.Trim();
-        if (string.Equals(trimmed, "anonymous", StringComparison.OrdinalIgnoreCase)) return Anonymous;
-        if (string.Equals(trimmed, "default", StringComparison.OrdinalIgnoreCase)) return Default;
-        return Custom(trimmed);
+        return AllPolicies.Contains(trimmed, StringComparer.OrdinalIgnoreCase)
+             ? new KyrolusAuthorizationPolicy(trimmed)
+             : Custom(trimmed);
     }
 
     /// <inheritdoc />

@@ -27,11 +27,17 @@ public readonly record struct KyrolusHeaderMatchMode : IEquatable<string>
     /// Matches if the request header is absent from the incoming request.
     /// </summary>
     public static KyrolusHeaderMatchMode NotExists { get; } = new("NotExists");
-
+    private static readonly IReadOnlyList<string> AllModes =
+    [
+        ExactHeader.Value,
+        HeaderPrefix.Value,
+        Exists.Value,
+        NotExists.Value
+    ];
     /// <summary>
     /// Gets the raw string match mode value. Defaults to <c>"ExactHeader"</c>.
     /// </summary>
-    public string Value => _value ?? "ExactHeader";
+    public string Value => _value ?? AllModes[0];
 
     private KyrolusHeaderMatchMode(string value)
     {
@@ -52,18 +58,12 @@ public readonly record struct KyrolusHeaderMatchMode : IEquatable<string>
     /// </summary>
     public static KyrolusHeaderMatchMode? From(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(value)) return null;
 
         var trimmed = value.Trim();
-        if (string.Equals(trimmed, "ExactHeader", StringComparison.OrdinalIgnoreCase)) return ExactHeader;
-        if (string.Equals(trimmed, "HeaderPrefix", StringComparison.OrdinalIgnoreCase)) return HeaderPrefix;
-        if (string.Equals(trimmed, "Exists", StringComparison.OrdinalIgnoreCase)) return Exists;
-        if (string.Equals(trimmed, "NotExists", StringComparison.OrdinalIgnoreCase)) return NotExists;
-
-        return Custom(trimmed);
+        return AllModes.Contains(trimmed, StringComparer.OrdinalIgnoreCase)
+            ? new KyrolusHeaderMatchMode(trimmed)
+            : Custom(trimmed);
     }
 
     /// <inheritdoc />

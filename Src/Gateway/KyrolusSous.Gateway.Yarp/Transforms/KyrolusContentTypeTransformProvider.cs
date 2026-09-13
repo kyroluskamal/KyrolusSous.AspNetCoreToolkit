@@ -12,7 +12,7 @@ public sealed class KyrolusContentTypeTransformProvider : ITransformProvider
     /// <inheritdoc />
     public void ValidateRoute(TransformRouteValidationContext context)
     {
-        if (context.Route.Metadata?.TryGetValue("Kyrolus:ContentType:Allowed", out var raw) == true && !string.IsNullOrWhiteSpace(raw))
+        if (context.Route.Metadata?.TryGetValue(KyrolusGatewayMetadataKeys.ContentType.Allowed, out var raw) == true && !string.IsNullOrWhiteSpace(raw))
         {
             var parts = raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             foreach (var part in parts)
@@ -20,7 +20,7 @@ public sealed class KyrolusContentTypeTransformProvider : ITransformProvider
                 var slashIndex = part.IndexOf('/');
                 if (slashIndex <= 0 || slashIndex >= part.Length - 1)
                 {
-                    context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid MIME type in 'Kyrolus:ContentType:Allowed': '{part}'. Expected format 'type/subtype'."));
+                    context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid MIME type in '{KyrolusGatewayMetadataKeys.ContentType.Allowed}': '{part}'. Expected format 'type/subtype'."));
                 }
             }
         }
@@ -36,7 +36,7 @@ public sealed class KyrolusContentTypeTransformProvider : ITransformProvider
     public void Apply(TransformBuilderContext context)
     {
         var metadata = context.Route?.Metadata;
-        if (metadata is null || !metadata.TryGetValue("Kyrolus:ContentType:Allowed", out var allowedRaw) || string.IsNullOrWhiteSpace(allowedRaw))
+        if (metadata is null || !metadata.TryGetValue(KyrolusGatewayMetadataKeys.ContentType.Allowed, out var allowedRaw) || string.IsNullOrWhiteSpace(allowedRaw))
         {
             return;
         }

@@ -19,11 +19,11 @@ public sealed class KyrolusClientCertTransformProvider : ITransformProvider
     /// <inheritdoc />
     public void ValidateRoute(TransformRouteValidationContext context)
     {
-        if (context.Route.Metadata?.TryGetValue("Kyrolus:ClientCert:Forward", out var val) == true &&
+        if (context.Route.Metadata?.TryGetValue(KyrolusGatewayMetadataKeys.ClientCert.Forward, out var val) == true &&
             !string.IsNullOrWhiteSpace(val) &&
             !bool.TryParse(val, out _))
         {
-            context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid metadata 'Kyrolus:ClientCert:Forward' value '{val}'. Expected 'true' or 'false'."));
+            context.Errors.Add(new ArgumentException($"Route '{context.Route.RouteId}' has invalid metadata '{KyrolusGatewayMetadataKeys.ClientCert.Forward}' value '{val}'. Expected 'true' or 'false'."));
         }
     }
 
@@ -38,7 +38,7 @@ public sealed class KyrolusClientCertTransformProvider : ITransformProvider
     {
         var metadata = context.Route?.Metadata;
         var forwardClientCert = metadata != null &&
-                                metadata.TryGetValue("Kyrolus:ClientCert:Forward", out var val) &&
+                                metadata.TryGetValue(KyrolusGatewayMetadataKeys.ClientCert.Forward, out var val) &&
                                 bool.TryParse(val, out var isForward) && isForward;
 
         context.AddRequestTransform(transformContext =>

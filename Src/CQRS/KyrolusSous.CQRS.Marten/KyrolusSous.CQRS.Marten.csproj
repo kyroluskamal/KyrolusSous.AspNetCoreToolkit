@@ -13,6 +13,7 @@
     <ProjectReference Include="..\KyrolusSous.CQRS.Abstractions\KyrolusSous.CQRS.Abstractions.csproj" />
     <ProjectReference Include="..\..\Mediator\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj" />
     <ProjectReference Include="..\..\Repositories\KyrolusSous.Repositories.Marten.Abstractions\KyrolusSous.Repositories.Marten.Abstractions.csproj" />
+    <ProjectReference Include="..\KyrolusSous.CQRS.Saga\KyrolusSous.CQRS.Saga.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Command\SoftDelete\" />

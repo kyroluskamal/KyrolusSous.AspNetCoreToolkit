@@ -7,6 +7,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Mediator\KyrolusSous.Mediator.Abstractions\KyrolusSous.Mediator.Abstractions.csproj" />
+    <ProjectReference Include="..\KyrolusSous.CQRS.Abstractions\KyrolusSous.CQRS.Abstractions.csproj" />
+    <ProjectReference Include="..\KyrolusSous.CQRS.Caching\KyrolusSous.CQRS.Caching.csproj" />
+    <ProjectReference Include="..\..\Validation\KyrolusSous.Validation.Abstractions\KyrolusSous.Validation.Abstractions.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />

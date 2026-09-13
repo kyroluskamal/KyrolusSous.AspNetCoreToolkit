@@ -19,10 +19,12 @@ namespace KyrolusSous.Gateway.Yarp.Configuration;
 /// </remarks>
 public sealed class KyrolusDynamicInMemoryRouteConfigProvider : IProxyConfigProvider, IKyrolusDynamicRouteProvider, IDisposable
 {
-    private readonly object _syncLock = new();
+    private readonly Lock _syncLock = new();
     private readonly Dictionary<string, KyrolusGatewayRoute> _routes = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, KyrolusGatewayCluster> _clusters = new(StringComparer.OrdinalIgnoreCase);
+    // These sets track which routes and clusters were loaded from configuration sections, so that they can be removed if the configuration changes.
     private readonly HashSet<string> _configRouteIds = new(StringComparer.OrdinalIgnoreCase);
+    // These sets track which routes and clusters were loaded from configuration sections, so that they can be removed if the configuration changes.
     private readonly HashSet<string> _configClusterIds = new(StringComparer.OrdinalIgnoreCase);
 
     private CancellationTokenSource _changeTokenSource = new();
@@ -459,22 +461,22 @@ public sealed class KyrolusDynamicInMemoryRouteConfigProvider : IProxyConfigProv
         {
             if (r.IpFilter.AllowedIpsOrCidrs is { Count: > 0 } allowed)
             {
-                metadata["Kyrolus:IpFilter:Allowed"] = string.Join(",", allowed);
+                metadata[KyrolusGatewayMetadataKeys.IpFilter.Allowed] = string.Join(",", allowed);
             }
             if (r.IpFilter.BlockedIpsOrCidrs is { Count: > 0 } blocked)
             {
-                metadata["Kyrolus:IpFilter:Blocked"] = string.Join(",", blocked);
+                metadata[KyrolusGatewayMetadataKeys.IpFilter.Blocked] = string.Join(",", blocked);
             }
         }
 
         if (r.RequireTenant)
         {
-            metadata["Kyrolus:Tenant:Required"] = "true";
+            metadata[KyrolusGatewayMetadataKeys.Tenant.Required] = "true";
         }
 
         if (r.AllowedContentTypes is { Count: > 0 } allowedTypes)
         {
-            metadata["Kyrolus:ContentType:Allowed"] = string.Join(",", allowedTypes);
+            metadata[KyrolusGatewayMetadataKeys.ContentType.Allowed] = string.Join(",", allowedTypes);
         }
 
         return metadata.Count > 0 ? metadata : null;
