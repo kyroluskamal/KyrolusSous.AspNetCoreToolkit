@@ -42,7 +42,8 @@ public static class KyrolusRateLimitingServiceCollectionExtensions
         where TResolver : class, IKyrolusPartitionKeyResolver
     {
         ArgumentNullException.ThrowIfNull(services);
-        services.AddSingleton<IKyrolusPartitionKeyResolver, TResolver>();
+        services.AddSingleton<TResolver>();
+        services.AddSingleton<IKyrolusPartitionKeyResolver>(sp => sp.GetRequiredService<TResolver>());
         return services;
     }
 }
