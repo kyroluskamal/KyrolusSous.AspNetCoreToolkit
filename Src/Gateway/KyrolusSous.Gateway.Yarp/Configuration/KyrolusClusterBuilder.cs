@@ -78,6 +78,13 @@ public sealed class KyrolusClusterBuilder
     }
 
     /// <summary>
+    /// Configures the cluster to use weighted load balancing, distributing traffic proportionally according to each destination's configured weight.
+    /// Ideal for canary releases, progressive rollouts, and heterogeneous server hardware.
+    /// </summary>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusClusterBuilder WithWeightedLoadBalancing() => WithLoadBalancing(KyrolusLoadBalancingPolicies.Weighted);
+
+    /// <summary>
     /// Configures health check monitoring policies (active probes and passive observation) for cluster destinations.
     /// </summary>
     public KyrolusClusterBuilder WithHealthCheck(KyrolusHealthCheckOptions options)
@@ -302,6 +309,25 @@ public sealed class KyrolusClusterBuilder
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationId);
         ArgumentException.ThrowIfNullOrWhiteSpace(address);
         _destinations[destinationId] = new KyrolusGatewayDestination(address);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a physical backend destination endpoint (replica) to the cluster with a custom traffic distribution weight for weighted load balancing and canary releases.
+    /// </summary>
+    /// <param name="destinationId">A unique identifier for this destination node (e.g., <c>"canary"</c>, <c>"node2"</c>).</param>
+    /// <param name="address">The absolute base URI of the target backend service replica (e.g., <c>"http://10.0.1.11:5000"</c>).</param>
+    /// <param name="weight">The traffic distribution weight (must be greater than 0). Defaults to 1.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    /// <remarks>
+    /// <b>Important:</b> This is the address of the internal service instance running the application, NOT the public client URL or endpoint path.
+    /// </remarks>
+    public KyrolusClusterBuilder AddDestination(string destinationId, string address, int weight)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(address);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(weight);
+        _destinations[destinationId] = new KyrolusGatewayDestination(address, weight);
         return this;
     }
 

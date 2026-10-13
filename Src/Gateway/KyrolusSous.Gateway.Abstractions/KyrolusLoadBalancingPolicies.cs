@@ -47,4 +47,10 @@ public static class KyrolusLoadBalancingPolicies
     /// Combines the speed of random selection with the load-smoothing benefits of least requests, avoiding the herd effect.
     /// </summary>
     public const string PowerOfTwoChoices = "PowerOfTwoChoices";
+
+    /// <summary>
+    /// Weighted load balancing algorithm. Distributes traffic proportionally according to each destination's configured weight.
+    /// Ideal for heterogeneous server capacities, canary releases, and progressive rollouts.
+    /// </summary>
+    public const string Weighted = "Weighted";
 }

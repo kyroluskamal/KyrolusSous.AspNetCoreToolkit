@@ -42,13 +42,21 @@ public readonly record struct KyrolusLoadBalancingPolicy : IEquatable<string>
     /// Combines the speed of random selection with the load-smoothing benefits of least requests, avoiding the herd effect.
     /// </summary>
     public static KyrolusLoadBalancingPolicy PowerOfTwoChoices { get; } = new(KyrolusLoadBalancingPolicies.PowerOfTwoChoices);
+
+    /// <summary>
+    /// Weighted load balancing algorithm. Distributes traffic proportionally according to each destination's configured weight.
+    /// Ideal for heterogeneous server capacities, canary releases, and progressive rollouts.
+    /// </summary>
+    public static KyrolusLoadBalancingPolicy Weighted { get; } = new(KyrolusLoadBalancingPolicies.Weighted);
+
     private static readonly Dictionary<string, KyrolusLoadBalancingPolicy> KnownPolicies =
                   new(StringComparer.OrdinalIgnoreCase)
                   {
                       [KyrolusLoadBalancingPolicies.RoundRobin] = RoundRobin,
                       [KyrolusLoadBalancingPolicies.LeastRequests] = LeastRequests,
                       [KyrolusLoadBalancingPolicies.Random] = Random,
-                      [KyrolusLoadBalancingPolicies.PowerOfTwoChoices] = PowerOfTwoChoices
+                      [KyrolusLoadBalancingPolicies.PowerOfTwoChoices] = PowerOfTwoChoices,
+                      [KyrolusLoadBalancingPolicies.Weighted] = Weighted
                   };
     /// <summary>
     /// Gets the raw string policy name.

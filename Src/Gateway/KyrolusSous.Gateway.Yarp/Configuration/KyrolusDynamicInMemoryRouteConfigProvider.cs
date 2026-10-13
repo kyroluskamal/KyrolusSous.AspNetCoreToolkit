@@ -490,7 +490,14 @@ public sealed class KyrolusDynamicInMemoryRouteConfigProvider : IProxyConfigProv
             LoadBalancingPolicy = c.LoadBalancingPolicy,
             Destinations = c.Destinations.ToDictionary(
                 kv => kv.Key,
-                kv => new DestinationConfig { Address = kv.Value.Address }),
+                kv => new DestinationConfig
+                {
+                    Address = kv.Value.Address,
+                    Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [KyrolusGatewayMetadataKeys.Weighted.Weight] = kv.Value.Weight.ToString(CultureInfo.InvariantCulture)
+                    }
+                }),
             HealthCheck = MapHealthCheck(c.HealthCheck),
             SessionAffinity = MapSessionAffinity(c.SessionAffinity),
             HttpClient = MapHttpClient(c.HttpClient),

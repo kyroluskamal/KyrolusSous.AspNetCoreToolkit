@@ -934,6 +934,139 @@ public sealed class KyrolusRouteBuilder
     }
 
     /// <summary>
+    /// Configures maintenance mode short-circuiting on this route.
+    /// Inbound requests are immediately terminated at the edge with HTTP 503 (or custom code) and standard ProblemDetails without proxying to upstream services.
+    /// </summary>
+    /// <param name="statusCode">The HTTP status code to return. Defaults to 503 Service Unavailable.</param>
+    /// <param name="message">Optional custom maintenance announcement message.</param>
+    /// <param name="retryAfterSeconds">Optional estimated maintenance duration in seconds to populate the standard <c>Retry-After</c> header.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithMaintenanceMode(int statusCode = 503, string? message = null, int? retryAfterSeconds = null)
+    {
+        _metadata[KyrolusGatewayMetadataKeys.Maintenance.Enabled] = TrueLiteral;
+        _metadata[KyrolusGatewayMetadataKeys.Maintenance.StatusCode] = statusCode.ToString(CultureInfo.InvariantCulture);
+
+        if (!string.IsNullOrWhiteSpace(message))
+        {
+            _metadata[KyrolusGatewayMetadataKeys.Maintenance.Message] = message;
+        }
+
+        if (retryAfterSeconds.HasValue && retryAfterSeconds.Value >= 0)
+        {
+            _metadata[KyrolusGatewayMetadataKeys.Maintenance.RetryAfterSeconds] = retryAfterSeconds.Value.ToString(CultureInfo.InvariantCulture);
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Configures mock response short-circuiting on this route.
+    /// Returns simulated static JSON/text responses directly from the gateway edge for frontend integration and offline testing.
+    /// </summary>
+    /// <param name="responseBody">The static payload body string to return (e.g. JSON document).</param>
+    /// <param name="statusCode">The HTTP status code. Defaults to 200 OK.</param>
+    /// <param name="contentType">The MIME content type. Defaults to <c>"application/json"</c>.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithMockResponse(string responseBody, int statusCode = 200, string contentType = "application/json")
+    {
+        ArgumentNullException.ThrowIfNull(responseBody);
+        _metadata[KyrolusGatewayMetadataKeys.Mock.Enabled] = TrueLiteral;
+        _metadata[KyrolusGatewayMetadataKeys.Mock.StatusCode] = statusCode.ToString(CultureInfo.InvariantCulture);
+        _metadata[KyrolusGatewayMetadataKeys.Mock.ResponseBody] = responseBody;
+        _metadata[KyrolusGatewayMetadataKeys.Mock.ContentType] = string.IsNullOrWhiteSpace(contentType) ? "application/json" : contentType;
+        return this;
+    }
+
+    /// <summary>
+    /// Enforces Edge API Key authentication on this route.
+    /// Requests lacking a valid API key in the specified header or query parameter are rejected with HTTP 401 Unauthorized before reaching backend services.
+    /// </summary>
+    /// <param name="headerName">The HTTP header name containing the API key. Defaults to <c>"X-Api-Key"</c>.</param>
+    /// <param name="allowedKeys">Optional static allowlist of valid API keys for edge verification.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithApiKeyRequired(string headerName = "X-Api-Key", params string[] allowedKeys)
+    {
+        _metadata[KyrolusGatewayMetadataKeys.ApiKey.Required] = TrueLiteral;
+        _metadata[KyrolusGatewayMetadataKeys.ApiKey.HeaderName] = string.IsNullOrWhiteSpace(headerName) ? "X-Api-Key" : headerName;
+
+        if (allowedKeys is { Length: > 0 })
+        {
+            _metadata[KyrolusGatewayMetadataKeys.ApiKey.AllowedKeys] = string.Join(",", allowedKeys.Where(k => !string.IsNullOrWhiteSpace(k)));
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Configures edge response caching for idempotent requests (GET, HEAD) on this route.
+    /// Caches successful upstream responses in memory to dramatically decrease latency and downstream load.
+    /// </summary>
+    /// <param name="durationSeconds">The cache Time-To-Live (TTL) duration in seconds. Defaults to 60.</param>
+    /// <param name="varyByHeaders">Optional HTTP request headers to vary the cache entry by (e.g., <c>"Accept-Language"</c>, <c>"X-Tenant-ID"</c>).</param>
+    /// <param name="varyByQueryKeys">Optional query string parameter keys to vary the cache entry by.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithEdgeCache(int durationSeconds = 60, string[]? varyByHeaders = null, string[]? varyByQueryKeys = null)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(durationSeconds);
+        _metadata[KyrolusGatewayMetadataKeys.Cache.Enabled] = TrueLiteral;
+        _metadata[KyrolusGatewayMetadataKeys.Cache.DurationSeconds] = durationSeconds.ToString(CultureInfo.InvariantCulture);
+
+        if (varyByHeaders is { Length: > 0 })
+        {
+            _metadata[KyrolusGatewayMetadataKeys.Cache.VaryByHeaders] = string.Join(",", varyByHeaders.Where(h => !string.IsNullOrWhiteSpace(h)));
+        }
+
+        if (varyByQueryKeys is { Length: > 0 })
+        {
+            _metadata[KyrolusGatewayMetadataKeys.Cache.VaryByQueryKeys] = string.Join(",", varyByQueryKeys.Where(q => !string.IsNullOrWhiteSpace(q)));
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Configures smart request retry and destination failover parameters for this route.
+    /// Automatically retries failed requests on alternative destinations when transient network failures or 502/503/504 errors occur.
+    /// </summary>
+    /// <param name="maxRetries">Maximum retry attempts. Defaults to 2.</param>
+    /// <param name="backoffMs">Delay in milliseconds between attempts. Defaults to 100.</param>
+    /// <param name="retryableStatusCodes">Optional HTTP status codes eligible for retry. Defaults to 502, 503, 504.</param>
+    /// <param name="idempotentOnly">Whether to restrict retries to idempotent verbs (GET, HEAD, PUT, DELETE). Defaults to <c>true</c>.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithRetryPolicy(
+        int maxRetries = 2,
+        int backoffMs = 100,
+        int[]? retryableStatusCodes = null,
+        bool idempotentOnly = true)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxRetries);
+        ArgumentOutOfRangeException.ThrowIfNegative(backoffMs);
+
+        _metadata[KyrolusGatewayMetadataKeys.Retry.MaxRetries] = maxRetries.ToString(CultureInfo.InvariantCulture);
+        _metadata[KyrolusGatewayMetadataKeys.Retry.BackoffMs] = backoffMs.ToString(CultureInfo.InvariantCulture);
+        _metadata[KyrolusGatewayMetadataKeys.Retry.IdempotentOnly] = idempotentOnly ? TrueLiteral : FalseLiteral;
+
+        if (retryableStatusCodes is { Length: > 0 })
+        {
+            _metadata[KyrolusGatewayMetadataKeys.Retry.RetryableStatusCodes] = string.Join(",", retryableStatusCodes);
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Enables canary header routing on this route, allowing clients to explicitly target specific destinations using the specified header.
+    /// </summary>
+    /// <param name="headerName">The request header containing the target destination identifier. Defaults to <c>"X-Canary-Destination"</c>.</param>
+    /// <returns>The builder instance for fluent chaining.</returns>
+    public KyrolusRouteBuilder WithCanaryHeader(string headerName = "X-Canary-Destination")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(headerName);
+        _metadata[KyrolusGatewayMetadataKeys.Weighted.Weight] = "1";
+        return this;
+    }
+
+    /// <summary>
     /// Builds and returns the configured <see cref="KyrolusGatewayRoute"/> instance.
     /// </summary>
     public KyrolusGatewayRoute Build()

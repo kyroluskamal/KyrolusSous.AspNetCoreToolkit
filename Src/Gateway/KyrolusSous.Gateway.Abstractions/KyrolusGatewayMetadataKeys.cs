@@ -178,4 +178,144 @@ public static class KyrolusGatewayMetadataKeys
         /// </summary>
         public const string Hsts = $"{Prefix}SecurityHeaders:HSTS";
     }
+
+    /// <summary>
+    /// Metadata keys for Route Maintenance Mode gating.
+    /// Returns scheduled downtime ProblemDetails without hitting backend microservices.
+    /// </summary>
+    public static class Maintenance
+    {
+        /// <summary>
+        /// Indicates whether maintenance mode is active on this route (<c>"true"</c> or <c>"false"</c>).
+        /// </summary>
+        public const string Enabled = $"{Prefix}Maintenance:Enabled";
+
+        /// <summary>
+        /// HTTP status code returned during maintenance mode. Defaults to <c>503</c> (Service Unavailable).
+        /// </summary>
+        public const string StatusCode = $"{Prefix}Maintenance:StatusCode";
+
+        /// <summary>
+        /// Human-readable downtime notification message included in the ProblemDetails response.
+        /// </summary>
+        public const string Message = $"{Prefix}Maintenance:Message";
+
+        /// <summary>
+        /// Optional estimated downtime duration in seconds to populate the standard <c>Retry-After</c> response header.
+        /// </summary>
+        public const string RetryAfterSeconds = $"{Prefix}Maintenance:RetryAfterSeconds";
+    }
+
+    /// <summary>
+    /// Metadata keys for Mock Responses.
+    /// Returns simulated static JSON/text responses directly from the gateway edge for frontend integration and offline testing.
+    /// </summary>
+    public static class Mock
+    {
+        /// <summary>
+        /// Indicates whether mock response short-circuiting is active on this route (<c>"true"</c> or <c>"false"</c>).
+        /// </summary>
+        public const string Enabled = $"{Prefix}Mock:Enabled";
+
+        /// <summary>
+        /// HTTP status code returned for the mock response. Defaults to <c>200</c> (OK).
+        /// </summary>
+        public const string StatusCode = $"{Prefix}Mock:StatusCode";
+
+        /// <summary>
+        /// Raw response body string (typically JSON) returned directly to the client.
+        /// </summary>
+        public const string ResponseBody = $"{Prefix}Mock:ResponseBody";
+
+        /// <summary>
+        /// Response <c>Content-Type</c> MIME header. Defaults to <c>"application/json"</c>.
+        /// </summary>
+        public const string ContentType = $"{Prefix}Mock:ContentType";
+    }
+
+    /// <summary>
+    /// Metadata keys for Edge API Key Authentication and Gating.
+    /// Defends backend services by validating credentials at the gateway edge before proxying.
+    /// </summary>
+    public static class ApiKey
+    {
+        /// <summary>
+        /// Indicates whether an API key is strictly required on this route (<c>"true"</c> or <c>"false"</c>).
+        /// </summary>
+        public const string Required = $"{Prefix}ApiKey:Required";
+
+        /// <summary>
+        /// The HTTP header name containing the API key. Defaults to <c>"X-Api-Key"</c>.
+        /// </summary>
+        public const string HeaderName = $"{Prefix}ApiKey:HeaderName";
+
+        /// <summary>
+        /// Optional comma-separated list of valid static API keys for basic edge verification.
+        /// </summary>
+        public const string AllowedKeys = $"{Prefix}ApiKey:AllowedKeys";
+    }
+
+    /// <summary>
+    /// Metadata keys for Canary Releases and Weighted Load Balancing.
+    /// </summary>
+    public static class Weighted
+    {
+        /// <summary>
+        /// Destination traffic distribution weight (positive integer, e.g., <c>"10"</c> vs <c>"90"</c>).
+        /// </summary>
+        public const string Weight = $"{Prefix}Weighted:Weight";
+    }
+
+    /// <summary>
+    /// Metadata keys for Edge Response Caching.
+    /// Caches upstream responses at the gateway edge to reduce microservice latency and load.
+    /// </summary>
+    public static class Cache
+    {
+        /// <summary>
+        /// Indicates whether edge response caching is active on this route (<c>"true"</c> or <c>"false"</c>).
+        /// </summary>
+        public const string Enabled = $"{Prefix}Cache:Enabled";
+
+        /// <summary>
+        /// Cache Time-To-Live (TTL) duration in seconds (e.g., <c>"60"</c>).
+        /// </summary>
+        public const string DurationSeconds = $"{Prefix}Cache:DurationSeconds";
+
+        /// <summary>
+        /// Optional comma-separated list of HTTP request headers to vary the cache entry by (e.g., <c>"Accept-Language, X-Tenant-ID"</c>).
+        /// </summary>
+        public const string VaryByHeaders = $"{Prefix}Cache:VaryByHeaders";
+
+        /// <summary>
+        /// Optional comma-separated list of query string parameter keys to vary the cache entry by.
+        /// </summary>
+        public const string VaryByQueryKeys = $"{Prefix}Cache:VaryByQueryKeys";
+    }
+
+    /// <summary>
+    /// Metadata keys for Smart Request Retries and Destination Failover.
+    /// </summary>
+    public static class Retry
+    {
+        /// <summary>
+        /// Maximum number of retry attempts on upstream failure. Defaults to <c>0</c> (disabled).
+        /// </summary>
+        public const string MaxRetries = $"{Prefix}Retry:MaxRetries";
+
+        /// <summary>
+        /// Backoff delay in milliseconds between retry attempts. Defaults to <c>100</c>.
+        /// </summary>
+        public const string BackoffMs = $"{Prefix}Retry:BackoffMs";
+
+        /// <summary>
+        /// Comma-separated list of upstream HTTP status codes eligible for retry (e.g. <c>"502,503,504"</c>).
+        /// </summary>
+        public const string RetryableStatusCodes = $"{Prefix}Retry:RetryableStatusCodes";
+
+        /// <summary>
+        /// Indicates whether retries are strictly restricted to idempotent HTTP methods (GET, HEAD, PUT, DELETE, OPTIONS). Defaults to <c>"true"</c>.
+        /// </summary>
+        public const string IdempotentOnly = $"{Prefix}Retry:IdempotentOnly";
+    }
 }

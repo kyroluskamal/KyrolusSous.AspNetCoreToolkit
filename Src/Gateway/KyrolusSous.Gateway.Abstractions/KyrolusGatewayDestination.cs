@@ -37,13 +37,22 @@ public sealed record KyrolusGatewayDestination
     public string Address { get; init; }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="KyrolusGatewayDestination"/> class with security validation.
+    /// Gets the relative traffic distribution weight for weighted load balancing and canary deployments.
+    /// Defaults to <c>1</c>. Higher values receive proportionally more traffic.
+    /// </summary>
+    public int Weight { get; init; } = 1;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="KyrolusGatewayDestination"/> class with security validation and optional traffic weight.
     /// </summary>
     /// <param name="address">The absolute base URI of the target backend service replica.</param>
+    /// <param name="weight">The relative traffic distribution weight (must be greater than 0). Defaults to 1.</param>
     /// <exception cref="ArgumentException">Thrown if the address is not a valid absolute HTTP or HTTPS URI.</exception>
-    public KyrolusGatewayDestination(string address)
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if weight is less than or equal to 0.</exception>
+    public KyrolusGatewayDestination(string address, int weight = 1)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(address);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(weight);
 
         if (!Uri.TryCreate(address, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
@@ -54,5 +63,6 @@ public sealed record KyrolusGatewayDestination
         }
 
         Address = address;
+        Weight = weight;
     }
 }

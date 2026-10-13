@@ -29,6 +29,9 @@ public static class ServiceCollectionExtensions
     /// <item><description><see cref="KyrolusSecurityHeadersTransformProvider"/>: Edge protection headers (<c>nosniff</c>, <c>DENY</c>).</description></item>
     /// <item><description><see cref="KyrolusTelemetryHeadersTransformProvider"/>: Gateway telemetry header injection.</description></item>
     /// <item><description><see cref="KyrolusGatewayErrorTransformProvider"/>: Uniform ProblemDetails for 502/503/504 errors.</description></item>
+    /// <item><description><see cref="KyrolusMockAndMaintenanceTransformProvider"/>: Maintenance mode (503) and Mock responses (200) short-circuiting.</description></item>
+    /// <item><description><see cref="KyrolusApiKeyTransformProvider"/>: Edge API key perimeter gating and verification.</description></item>
+    /// <item><description><see cref="KyrolusWeightedLoadBalancingPolicy"/>: Weighted load balancing and canary traffic splitting.</description></item>
     /// <item><description>YARP core reverse proxy engine via <c>AddReverseProxy()</c>.</description></item>
     /// </list>
     /// </para>
@@ -121,6 +124,9 @@ public static class ServiceCollectionExtensions
                 .AddTransformProvider<KyrolusSecurityHeadersTransformProvider>()
                 .AddTransformProvider<KyrolusTelemetryHeadersTransformProvider>()
                 .AddTransformProvider<KyrolusGatewayErrorTransformProvider>()
+                .AddTransformProvider<KyrolusMockAndMaintenanceTransformProvider>()
+                .AddTransformProvider<KyrolusApiKeyTransformProvider>()
+                .AddSingleton<ILoadBalancingPolicy, KyrolusWeightedLoadBalancingPolicy>()
                 .AddReverseProxy();
         return services;
     }

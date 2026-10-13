@@ -11,4 +11,6 @@ global using System.Net;
 global using KyrolusSous.Auth.MultiTenancy;
 global using Microsoft.AspNetCore.Http;
 global using Yarp.ReverseProxy.Forwarder;
+global using Yarp.ReverseProxy.LoadBalancing;
+global using Yarp.ReverseProxy.Model;
 global using System.Globalization;
